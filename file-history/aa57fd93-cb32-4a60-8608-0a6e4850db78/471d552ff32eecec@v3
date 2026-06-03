@@ -1,0 +1,21 @@
+[Unit]
+# PAI Pulse — Linux systemd --user unit. Ported from com.pai.pulse.plist.
+# Installed by manage.sh (which substitutes __BUN_PATH__) to
+# ~/.config/systemd/user/pulse.service. Requires `loginctl enable-linger`.
+Description=PAI Pulse
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.claude/PAI/PULSE
+ExecStart=__BUN_PATH__ run pulse.ts
+Restart=always
+RestartSec=30
+Environment=HOME=%h
+Environment=PATH=%h/.bun/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+StandardOutput=append:%h/.claude/PAI/PULSE/logs/pulse-stdout.log
+StandardError=append:%h/.claude/PAI/PULSE/logs/pulse-stderr.log
+
+[Install]
+WantedBy=default.target

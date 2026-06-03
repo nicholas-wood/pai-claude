@@ -1,0 +1,303 @@
+# Home Box - Thin-Client Runbook
+
+> The Linux laptop is the sole PAI host. The Mac and phone are thin clients that reach it
+> over Tailscale and drive `claude` remotely. No file sync, one source of truth.
+> Remote access is `rc` (remote claude), not Telegram. Telegram is demoted to outbound notifications only.
+>
+> Status: PLAN. Nothing here is built yet - this is the build sheet for when the laptop arrives.
+> Grounded in the live launchd plists, the cadence runner, and a macOS-ism scan of `~/.claude` (2026-06-03).
+
+---
+
+## The model
+
+```
+   Linux laptop ("box")                      Mac / iPhone (thin clients)
+   ────────────────────                      ───────────────────────────
+   ~/.claude  (the ONLY PAI)                 nothing local to keep in sync
+   Pulse :31337  (systemd)        ◄── Tailscale ──►   rc  → mosh + tmux → claude
+   cadence timers (systemd)                  VS Code Remote-SSH (heavy work)
+   claude CLI + agents                       browser → http://box:31337 (Pulse)
+   rclone OneDrive mount
+```
+
+Single source of truth on the box. The Mac stops being a PAI host and becomes a terminal onto one. The cost of this is a single point of failure (covered in Backup / DR) - accepted deliberately in exchange for never reconciling two divergent `~/.claude` trees again.
+
+**Naming.** Below I assume the Linux user is `nick`, home is `/home/nick`, and the Tailscale MagicDNS name is `box`. Adjust if different. Everything uses `$HOME` / `%h` so the literal path rarely matters.
+
+---
+
+## What "claude rc" is
+
+`rc` is a one-word command on the Mac and phone that drops you straight into a live `claude` on the box:
+
+- It `mosh`es to the box over Tailscale (mosh, not plain ssh, because it survives laptop sleep, wifi changes, and tethering - the exact things that made the Telegram round-trip feel flaky).
+- It attaches a **persistent `tmux` session** named `pai`, creating it if absent. The session lives on the box, so closing the lid on the Mac or locking the phone does not kill the work. Reconnect and you are exactly where you left off.
+- Inside that session you run `claude` against `~/.claude`. Same CLI you use now, just hosted remotely.
+
+That is the whole trick: the agent runs on the always-on box; `rc` is just a durable window onto it. It replaces Telegram as the primary interface. (VS Code Remote-SSH and the Pulse web UI are the other two windows; Telegram stays only for push digests.)
+
+### Native option: `claude remote-control` (use it alongside, not instead)
+
+Claude Code has a native remote feature, `claude remote-control`: it runs `claude` in server mode that registers with Anthropic's API, so the **claude.ai/code web UI and the mobile app attach to the session running on your box** - your files, your MCP, your config. Good native phone experience. But it does not replace the backbone:
+
+- It ends when the `claude` process stops, and a reboot starts a fresh session with no reattach. No persistence across reboots.
+- It routes through Anthropic's API (box needs outbound internet; not pure-private over the tailnet).
+- Research preview as of mid-2026.
+
+**The win is combining them: run `claude remote-control` inside the persistent tmux session.** tmux keeps the terminal alive, which neutralises remote-control's "dies on close" limitation, and you get the native mobile app on top. Net access layers:
+
+- **Mac:** `rc` (mosh + tmux) - private, survives reboots, primary.
+- **Phone, quick steer:** claude.ai/code mobile app via remote-control - native app, accepts the reboot + API-routing trade.
+- **Phone, full control:** Blink + mosh + the same tmux session - pure-private when you want it.
+
+Sources: Claude Code docs - Remote Control, Claude Code on the web, Headless mode (checked 2026-06-03).
+
+---
+
+## Phase 0 - Box base packages
+
+```bash
+sudo apt update && sudo apt install -y \
+  git curl ripgrep fd-find bat tmux mosh xclip restic
+
+# bun (Nick's standard - never npm)
+curl -fsSL https://bun.sh/install | bash      # → ~/.bun/bin/bun
+
+# Claude Code CLI
+curl -fsSL https://claude.ai/install.sh | bash   # or: bun add -g @anthropic-ai/claude-code
+```
+
+Note `fd-find` installs as `fdfind` on Debian/Ubuntu and `bat` as `batcat`; symlink them to `fd`/`bat` to match Nick's muscle memory:
+```bash
+mkdir -p ~/.local/bin
+ln -sf $(which fdfind) ~/.local/bin/fd
+ln -sf $(which batcat) ~/.local/bin/bat
+```
+
+---
+
+## Phase 1 - Tailscale + remote shell
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up --ssh        # --ssh lets you SSH in over the tailnet with no key management
+sudo tailscale set --hostname box
+```
+
+Then on the Mac and phone: install Tailscale, sign into the same tailnet, confirm `tailscale status` lists `box`. MagicDNS gives you `box` as a hostname for free.
+
+- iPhone shell client: **Blink Shell** (best mosh + Tailscale support) or Termius.
+- Keep the box awake on lid-close: `sudo systemctl mask sleep.target suspend.target` (a laptop-as-server wants no suspend), or set it in your DE power settings. This is what makes "always on" true.
+
+---
+
+## Phase 2 - The `rc` command
+
+On the **Mac** (`~/.zshrc`) and any other client:
+
+```bash
+# rc = remote claude: durable mosh+tmux window onto the box
+rc() {
+  mosh box -- tmux new-session -A -s pai -c "$HOME/.claude"
+}
+# variant that boots straight into claude (auto-restarts the pane if claude exits)
+rcc() {
+  mosh box -- tmux new-session -A -s pai -c "$HOME/.claude" \
+    'while true; do claude; echo "claude exited - enter to relaunch, ctrl-c to drop to shell"; read; done'
+}
+```
+
+`tmux new-session -A -s pai` attaches if `pai` exists, creates it otherwise - so `rc` is idempotent and you always land in the same session. On the phone, the equivalent is a Blink host entry that runs `tmux new -A -s pai`.
+
+Detach without killing: `Ctrl-b d`. The session (and any running agent) keeps going on the box.
+
+**Native mobile path.** To get the claude.ai/code mobile app attaching to this same box, run remote-control inside the tmux session instead of (or alongside) plain `claude`:
+```bash
+claude remote-control     # registers with Anthropic API; attach from claude.ai/code web + mobile
+```
+Because it runs inside the persistent tmux, it no longer dies on disconnect. It does still reset on a box reboot and routes through Anthropic, so it is the convenience layer, not the backbone. `rc` over mosh stays the source of truth.
+
+---
+
+## Phase 3 - PAI runtime on the box
+
+```bash
+# the crown jewels - clone from your private remote (see Backup/DR for setting this up)
+git clone git@github.com:<you>/life-os.git ~/.claude      # or your chosen remote
+
+cd ~/.claude/PAI/PULSE && bun install
+cd ~/.claude/PAI/PULSE/Observability && bun install && bun run build   # next build → out/
+
+# secrets - never committed; restore from password manager / OneDrive
+cat > ~/.claude/.env <<'EOF'
+ELEVENLABS_API_KEY=...
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_ALLOWED_USERS=...
+EOF
+chmod 600 ~/.claude/.env
+
+# authenticate the CLI once interactively (over rc), then it persists
+claude   # complete OAuth login, or export ANTHROPIC_API_KEY in your shell profile
+```
+
+**Casing gotcha (confirmed on first box clone).** The canonical directory is `PAI/PULSE` (uppercase - that is what git tracks, what the launchd plist and `pulse.ts` use). macOS is case-insensitive so `Pulse` and `PULSE` resolve to the same place and the difference is invisible; Linux is case-sensitive and only `PULSE` exists. Every script, unit, and command must say `PULSE`. (Lesson learned the hard way: an earlier edit "corrected" `PULSE`→`Pulse`, which looked fine on the Mac and broke `bun install`/`manage.sh` on the box.)
+
+---
+
+## Phase 4 - Services (systemd user units, ported from the launchd plists)
+
+**These units now exist as version-controlled files** in `~/.claude/PAI/PULSE/linux/` (`pulse.service`, `pai-cadence-daily.{service,timer}`, `pai-cadence-weekly.{service,timer}`), and `manage.sh` installs them. So on the box the whole of Phase 4 is:
+
+```bash
+sudo loginctl enable-linger "$USER"        # CRITICAL: user services run at boot, no login needed
+cd ~/.claude/PAI/PULSE
+./manage.sh install                        # installs + starts pulse.service, verifies :31337
+./linux/install-cadence.sh                 # installs the daily + weekly cadence timers
+./manage.sh status && systemctl --user list-timers 'pai-cadence-*'
+```
+
+The unit definitions below are reference for what those installers write.
+
+**`pulse.service`** (replaces `com.pai.pulse`, `KeepAlive` → `Restart=always`):
+```ini
+[Unit]
+Description=PAI Pulse
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.claude/PAI/PULSE
+ExecStart=%h/.bun/bin/bun run pulse.ts
+Restart=always
+RestartSec=30
+Environment=HOME=%h
+Environment=PATH=%h/.bun/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+StandardOutput=append:%h/.claude/PAI/PULSE/logs/pulse-stdout.log
+StandardError=append:%h/.claude/PAI/PULSE/logs/pulse-stderr.log
+
+[Install]
+WantedBy=default.target
+```
+
+**`pai-cadence-daily.service` + `.timer`** (weekdays 06:30):
+```ini
+# pai-cadence-daily.service
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.claude/PAI/USER/Routines
+ExecStart=%h/.bun/bin/bun %h/.claude/PAI/USER/Routines/run-cadence.ts daily
+Environment=HOME=%h
+Environment=PATH=%h/.bun/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+```
+```ini
+# pai-cadence-daily.timer
+[Timer]
+OnCalendar=Mon..Fri 06:30
+Persistent=true
+[Install]
+WantedBy=timers.target
+```
+
+**`pai-cadence-weekly.timer`** is identical with `ExecStart=... run-cadence.ts weekly` and `OnCalendar=Mon 07:00`.
+
+`Persistent=true` is the systemd answer to "the box was asleep at 06:30" - it fires the missed run on wake. launchd did this implicitly; systemd needs it stated.
+
+(Enable is handled by `manage.sh install` and `install-cadence.sh` above.)
+
+**Do NOT port these** (Mac-only, useless headless): `com.pai.voice-server.plist`, the MenuBar app, `lib/imessage-send.ts`, `statusline-command.sh`. Voice output has nowhere to go on a headless box - see Phase 5.
+
+---
+
+## Phase 5 - macOS-ism patches
+
+The scan flagged these as the files with Darwin-only calls. The cadence runner and `Inference.ts` are clean and need nothing. The rest split into "patch" and "disable":
+
+| File | Issue | Action |
+|------|-------|--------|
+| `Pulse/start-pulse.sh`, `Pulse/manage.sh` | `launchctl`, `/opt/homebrew`, `stat -f` | Patch: `systemctl --user`, `$HOME/.bun`, `stat -c`. Add a `--linux` branch or fork the script. |
+| `Pulse/VoiceServer/voice.ts` | `afplay`/`say` playback | DONE - `playAudio()` is now platform-gated: macOS plays via `afplay`, Linux silences. Set `PAI_AUDIO_PLAYER=<binary>` to re-enable (e.g. route box audio elsewhere). |
+| `Pulse/lib/imessage-send.ts` | `osascript` iMessage | Disable. Mac-only API. Telegram covers outbound. |
+| `Pulse/MenuBar/install.sh` | macOS menubar app | Skip entirely. |
+| `statusline-command.sh` | `/opt/homebrew`, BSD `stat` | Patch only if you want the statusline over `rc`; low priority. |
+| `Pulse/lib.ts` | likely `open`/`pbcopy` paths | Patch as encountered: `open`→`xdg-open`, `pbcopy`→`xclip -selection clipboard`. |
+
+**Already patched (cross-platform, won't break the live Mac):** `manage.sh` and `start-pulse.sh` branch on `uname -s` (launchd on Darwin, `systemctl --user` on Linux), and all paths use the canonical `PULSE` casing. `voice.ts` playback is platform-gated and silent on the box. These changes are live in the repo; the Mac keeps using its Darwin paths unchanged.
+
+General sed rule for the remaining low-priority ones (`statusline-command.sh`, `lib.ts`) when you hit them: BSD `stat -f` → GNU `stat -c`, `sed -i ''` → `sed -i`, `open` → `xdg-open`.
+
+---
+
+## Phase 6 - Telegram: demote to notifications only
+
+Telegram stays as a one-way digest channel (the cadence runner already posts to it over `fetch` - works on Linux as-is). Turn off the inbound side that was the source of this morning's friction:
+
+- Stop relying on the Telegram task-runner as an interface. `rc` is the interface now.
+- In `Pulse/modules/telegram.ts`, you can leave the bot polling for push, or disable inbound handling entirely. Recommendation: leave the outbound `sendMessage` path, gate or remove the `looksLikeTask` detached-runner block so inbound messages do not spawn agents. One channel for input (`rc`), one for push (Telegram).
+
+---
+
+## Phase 7 - Backup / DR (this is the price of single-source-of-truth)
+
+The box being the only host means its loss = total PAI loss until rebuilt. Mitigation:
+
+1. **Two knowledge repos push to private GitHub** (decided): `~/Documents/workspace` is the `life-os` repo (`github.com/nicholas-wood/life-os` - working docs, this runbook, project notes), and `~/.claude` becomes its own private repo on the box. Both are kept current by the daily **`git-autocommit` Pulse job** (`PAI/TOOLS/GitAutoCommit.ts`, 23:30): it commits the day's changes and pushes whenever the repo is ahead, so a single-host crash never loses more than a day. `.gitignore` must exclude `.env`, `MEMORY/SECURITY/`, tokens, and Observability `out/`/`node_modules` (life-os already excludes `**/code/`, `*-wt/`, and secrets). The job's allowlist deliberately excludes code repos and the ~64 `lifesaveroncall-wt` worktrees - those keep normal manual git discipline. Use a deploy key or fine-grained PAT on the box scoped to those repos.
+2. **Secrets out-of-band.** `.env` lives in a password manager (1Password/Bitwarden) and/or the OneDrive mount, never in git. Document the three keys: `ELEVENLABS_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USERS`.
+3. **Nightly snapshot** with restic to the OneDrive mount or an external disk:
+   `restic backup ~/.claude --exclude .env --exclude node_modules --exclude out` on a `pai-backup.timer`.
+4. **Mac as cold standby.** Keep a read-only `git clone` of the repo on the Mac. If the box dies, you can `claude` locally from the clone within minutes while you rebuild - degraded, but not stranded.
+5. **Product data is already safe.** AccessBuddy/LifesaverOnCall live on GCP, not the box. The box hosts the *operating layer*, not the products.
+
+Recovery = this runbook + `git clone` + restore `.env`. Aim to be able to rebuild from bare metal in under an hour.
+
+### rclone OneDrive mount
+```bash
+rclone config                 # add a "onedrive" remote (OAuth)
+mkdir -p ~/OneDrive
+# as a systemd user service: rclone-onedrive.service
+#   ExecStart=rclone mount onedrive: %h/OneDrive --vfs-cache-mode writes
+```
+Replaces the native macOS OneDrive client. Mount on demand or as a service; `--vfs-cache-mode writes` is the safe default for editing files in place.
+
+---
+
+## Cutover sequence
+
+1. Box base + Tailscale + mosh, confirm `rc` from the Mac lands in a tmux shell.  ✅ checkpoint: `rc` works.
+2. Clone `~/.claude`, `bun install` (Pulse + Observability), restore `.env`, `claude` auth.  ✅ checkpoint: `claude` runs over `rc`.
+3. (Done in repo) scripts/units use canonical `PULSE` casing and branch for Linux.  ✅ checkpoint: `bun run pulse.ts` starts clean.
+4. Install systemd units, `enable-linger`, enable timers.  ✅ checkpoint: `systemctl --user list-timers` shows daily/weekly; Pulse survives a reboot.
+5. Browser to `http://box:31337` over Tailscale.  ✅ checkpoint: Pulse + TELOS page render.
+6. Demote Telegram to push-only; first cadence digest arrives at 06:30.  ✅ checkpoint: digest in Telegram, generated on the box.
+7. Stand up git remote + restic timer + Mac cold-standby clone.  ✅ checkpoint: a test `restic restore` works.
+
+Each checkpoint is a stop-and-verify gate. Do not advance on assumption.
+
+---
+
+## Open decisions for Nick
+
+- ~~Linux distro~~ - **decided: Ubuntu LTS.**
+- ~~Git remote~~ - **decided: private GitHub.** Deploy key on the box, secrets stay out of the repo.
+- ~~"claude rc" definition~~ - **resolved: mosh+tmux backbone + `claude remote-control` for the native mobile app.**
+- ~~Voice~~ - **decided: silenced on the box** (done in `voice.ts`; re-enable later via `PAI_AUDIO_PLAYER`).
+- **Keep the Mac fully capable as fallback, or let it decay to pure client?** Recommend keeping it install-capable (it costs nothing) so the cold-standby is real. This also keeps the door open for the Mac mini path below.
+
+---
+
+## Path back to a Mac mini
+
+The whole point of building cross-platform rather than Linux-only: moving the host back to a Mac (mini or otherwise) is a migration, not a rebuild. Nothing in the codebase is Linux-only - the scripts detect the OS and the Darwin branches are the same ones running on this Mac today.
+
+**To bring the host back to a Mac mini:**
+
+1. **Restore the tree.** On the mini: install bun, claude CLI, `git clone` the private `~/.claude` repo, restore `.env`, `claude` auth. (Same as Phase 0-3, macOS flavour: brew instead of apt, OneDrive native client instead of rclone.)
+2. **Services flip automatically.** `cd ~/.claude/PAI/PULSE && ./manage.sh install` - on Darwin it writes the launchd plist to `~/Library/LaunchAgents` and loads it. The cadence: re-add the two launchd plists (`com.pai.cadence.daily/weekly.plist`) to `~/Library/LaunchAgents` and `launchctl load` them - they were never deleted, they live in `~/Library/LaunchAgents` on whichever Mac is host. No systemd, no linger.
+3. **Voice returns by itself.** `voice.ts` sees `darwin` and plays via `afplay` again. No edit.
+4. **Remote access still works.** Tailscale + mosh + tmux + `rc` are identical on macOS (it has a real terminal); `claude remote-control` is cross-platform. The mini can even keep being driven headless over `rc` the same way the Linux box was.
+5. **Decommission the Linux box** only after the mini passes the Cutover verification checklist above. Run both in parallel for a day, confirm the mini's cadence digest lands, then retire the laptop.
+
+**What does NOT carry over and must be redone on the mini:** the `loginctl enable-linger` step (macOS has no equivalent - launchd `KeepAlive` handles always-on), the rclone OneDrive mount (use the native macOS OneDrive app instead), and `sleep.target` masking (use macOS Energy Saver / `caffeinate` or "prevent sleep when display off").
+
+The single source of truth (`~/.claude` in private GitHub) is the pivot point. Whichever machine has the clone + `.env` + `manage.sh install` is the host. Migration = move that, verify, retire the old one.
