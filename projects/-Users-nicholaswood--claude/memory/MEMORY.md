@@ -13,3 +13,4 @@
 - [Working docs in workspace](feedback-working-docs-in-workspace.md) — full working docs go in ~/Documents/workspace/<project>/; PAI/USER/PROJECTS is index cards only
 - [PAI host repo gitignore](reference-pai-host-repo-gitignore.md) — ~/.claude→pai-claude, workspace→life-os; secret paths to ignore; .gitignore has no inline comments
 - [Pulse dir casing](reference-pulse-dir-casing.md) — Pulse dir is canonically PAI/PULSE (uppercase); never write Pulse; Mac hides the mismatch, Linux box breaks
+- [Home box is live host](project-home-box-live.md) — Ubuntu box is the live PAI host (2026-06-03); Mac is cold standby; access via dashboard/Claude app/rc
