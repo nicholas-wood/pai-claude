@@ -1,0 +1,2 @@
+- [Claude tree migrated from Mac](project-claude-tree-migrated-from-mac.md) — stale /Users paths break PAI + plugins on Linux; grep before debugging
+- [Outreach message tone](feedback-outreach-message-tone.md) — warm "Hi X, I applied but wanted to say hi" open + collaborative close; not terse
