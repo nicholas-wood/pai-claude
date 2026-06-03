@@ -12,8 +12,12 @@
 *.p12
 
 # Claude Code runtime churn (machine-local; may contain chat-leaked secrets)
-# full session transcripts
-/projects/
+# full session transcripts — ignore everything under projects/ EXCEPT the
+# persistent per-project memory directories, which we version-control.
+/projects/**
+!/projects/*/
+!/projects/*/memory/
+!/projects/*/memory/**
 /shell-snapshots/
 /todos/
 /statsig/
