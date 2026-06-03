@@ -390,9 +390,6 @@ async function playAudio(audioBuffer: ArrayBuffer, volume: number = FALLBACK_VOL
 
 async function showDesktopNotification(title: string, message: string): Promise<void> {
   if (!voiceConfig.desktopNotifications) return
-  // macOS-only (osascript). On a headless Linux box there is no desktop to
-  // notify, so skip silently rather than erroring every notification.
-  if (process.platform !== "darwin") return
 
   try {
     const escapedTitle = escapeForAppleScript(title)

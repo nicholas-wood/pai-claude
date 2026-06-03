@@ -30,7 +30,7 @@ import { existsSync, readFileSync } from "fs"
 
 const HOME = process.env.HOME ?? ""
 const PAI_DIR = join(HOME, ".claude", "PAI")
-const PULSE_DIR = join(PAI_DIR, "Pulse")
+const PULSE_DIR = join(PAI_DIR, "PULSE")
 const STATE_PATH = join(PULSE_DIR, "state", "state.json")
 const RATINGS_PATH = join(PAI_DIR, "MEMORY", "LEARNING", "SIGNALS", "ratings.jsonl")
 const DA_DIR = join(PAI_DIR, "USER", "DA")

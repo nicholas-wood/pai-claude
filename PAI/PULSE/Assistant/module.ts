@@ -67,7 +67,7 @@ let _health: DAHealthStatus = {
 
 export async function startDA(config: DAModuleConfig): Promise<void> {
   const { name, source } = detectPrimaryDA()
-  const tasksDir = join(PAI_DIR, "Pulse", "state", "da")
+  const tasksDir = join(PAI_DIR, "PULSE", "state", "da")
 
   _health = {
     status: name ? "ok" : "degraded",

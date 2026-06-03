@@ -20,7 +20,7 @@ import { existsSync, readFileSync, writeFileSync } from "fs"
 
 const HOME = process.env.HOME ?? ""
 const PAI_DIR = join(HOME, ".claude", "PAI")
-const TASKS_DIR = join(PAI_DIR, "Pulse", "state", "da")
+const TASKS_DIR = join(PAI_DIR, "PULSE", "state", "da")
 const TASKS_PATH = join(TASKS_DIR, "scheduled-tasks.jsonl")
 const HISTORY_PATH = join(TASKS_DIR, "task-history.jsonl")
 
