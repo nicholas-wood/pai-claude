@@ -1,0 +1,37 @@
+End to end verified: `pushed ... (1 commit[s])`, commit `07ace51` is on GitHub, and `main...origin/main` is back in sync. 
+
+**Git auto-commit: done and verified.**
+- `PAI/TOOLS/GitAutoCommit.ts` - allowlist (life-os now, `~/.claude` later), secret guard, pushes when ahead even if the tree is clean, always exits 0 so it can't trip Pulse's breaker.
+- Pulse job `git-autocommit` daily 23:30, registered (jobs went 10 → 11), Pulse boots clean.
+- Both the clean no-op case and the real commit+push case proven.
+- Runbook DR section updated to cover both knowledge repos and this job.
+
+---
+
+Now the home box. The useful headline first: because the cross-platform work is already done (`manage.sh`/`start-pulse.sh`/`voice.ts` branch on OS, `Pulse/linux/` units exist, `GitAutoCommit` travels as a Pulse job), **box setup is now mostly clone-and-run, not build.**
+
+# Home box setup - step by step
+
+## Prep on the Mac (do before touching the box)
+`~/.claude` is not a git repo yet and it is the thing the box clones. Make it one first.
+1. Create a private GitHub repo (e.g. `nicholas-wood/pai-claude`).
+2. On the Mac:
+   ```bash
+   cd ~/.claude
+   printf '%s\n' '.env' 'MEMORY/SECURITY/' '**/node_modules/' 'PAI/Pulse/Observability/out/' 'PAI/Pulse/Observability/.next/' '*.log' 'PAI/Pulse/state/' > .gitignore
+   git init && git add -A && git commit -m "initial PAI host snapshot"
+   git remote add origin git@github.com:nicholas-wood/pai-claude.git && git push -u origin main
+   ```
+3. Sanity check no secret was committed: `git -C ~/.claude ls-files | grep -i '\.env$'` returns nothing.
+
+## On the box (Ubuntu LTS)
+4. **Base packages**
+   ```bash
+   sudo apt update && sudo apt install -y git curl ripgrep fd-find bat tmux mosh xclip restic rclone
+   curl -fsSL https://bun.sh/install | bash
+   curl -fsSL https://claude.ai/install.sh | bash
+   mkdir -p ~/.local/bin && ln -sf $(which fdfind) ~/.local/bin/fd && ln -sf $(which batcat) ~/.local/bin/bat
+   ```
+5. **Tailscale + always-on**
+   ```bash
+   cu

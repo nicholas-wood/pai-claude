@@ -1,0 +1,71 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E3F2FD', 'primaryTextColor': '#1565C0', 'primaryBorderColor': '#1565C0', 'lineColor': '#424242', 'secondaryColor': '#E8F5E9', 'tertiaryColor': '#FFF3E0', 'fontSize': '13px', 'fontFamily': 'Segoe UI, sans-serif'}, 'flowchart': {'curve': 'basis', 'padding': 20, 'nodeSpacing': 40, 'rankSpacing': 55, 'htmlLabels': true, 'useMaxWidth': false}}}%%
+
+flowchart TD
+    UF(["User Feedback"])
+    TM(["Team Member"])
+
+    UF --> TRIAGE
+    TM -.->|"Direct entry"| CANDIDATE
+    TM -.->|"Direct entry"| REFINEMENT
+    TM -.->|"If in project scope"| TODO
+
+    TRIAGE{"TRIAGE\nDev Team classifies"}
+
+    TRIAGE -->|"Urgent Bug"| HIB_ASSIGN
+    TRIAGE -->|"Needs State Rep Input"| REFINEMENT
+    TRIAGE -->|"Support Request"| SUPPORT_ASSIGN
+    TRIAGE -->|"Ready for Consideration"| CANDIDATE
+
+    HIB_ASSIGN["Assign to\nHigh Impact Bugs Project"]
+    HIB_ASSIGN -->|"Notify Management Group"| TODO
+
+    SUPPORT_ASSIGN["Assign to\nSupport Requests Project"]
+    SUPPORT_ASSIGN -->|"Assign State Rep"| REFINEMENT
+
+    REFINEMENT["REFINEMENT\nState Rep provides info\n5 business day SLA"]
+
+    REFINEMENT -->|"Info received\nProduct Team moves"| CANDIDATE
+    REFINEMENT -->|"Support - no dev change\nState Rep resolves"| DONE
+
+    CANDIDATE["CANDIDATE\nWeekly LIMSOC Extended Standup\nProduct Team decides"]
+
+    CANDIDATE -->|"Will do"| TODO
+    CANDIDATE -->|"Could do"| BACKLOG_STATE
+    CANDIDATE -->|"Should not do"| CANCELLED_STATE
+
+    BACKLOG_STATE["BACKLOG\nProduct Team / Tech Lead\nmoves when ready"]
+    BACKLOG_STATE -->|"Any time"| TODO
+
+    TODO["TODO\nMust be in a project"]
+    IP["IN PROGRESS\nDev self-assigns"]
+    QA["IN QA\nDev code review"]
+    PR["PRODUCT REVIEW\nProduct Team reviews"]
+    ER["EXTERNAL REVIEW\nState Rep stakeholders"]
+
+    TODO -->|"Dev picks up"| IP
+    IP -->|"Dev moves"| QA
+    QA -->|"Reviewer moves"| PR
+    PR -->|"Product Team moves"| ER
+    ER -->|"State Rep approves\nProduct Team moves"| DONE
+
+    ER -.->|"Bug found - back to Dev"| IP
+    ER -.->|"Functional issue - back to Product"| PR
+
+    DONE["DONE\nTicket complete"]
+    CANCELLED_STATE["CANCELLED\nWill not proceed"]
+
+    style UF fill:#F5F5F5,stroke:#616161,stroke-width:2px,color:#212121
+    style TM fill:#F5F5F5,stroke:#616161,stroke-width:2px,color:#212121
+    style TRIAGE fill:#E3F2FD,stroke:#1565C0,stroke-width:3px,color:#0D47A1
+    style HIB_ASSIGN fill:#FFCDD2,stroke:#C62828,stroke-width:2px,color:#B71C1C
+    style TODO fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D47A1
+    style IP fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D47A1
+    style QA fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D47A1
+    style CANDIDATE fill:#E8F5E9,stroke:#2E7D32,stroke-width:3px,color:#1B5E20
+    style PR fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#1B5E20
+    style BACKLOG_STATE fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#1B5E20
+    style REFINEMENT fill:#FFF3E0,stroke:#E65100,stroke-width:3px,color:#BF360C
+    style ER fill:#FFF3E0,stroke:#E65100,stroke-width:2px,color:#BF360C
+    style SUPPORT_ASSIGN fill:#FFF3E0,stroke:#E65100,stroke-width:2px,color:#BF360C
+    style DONE fill:#E0E0E0,stroke:#424242,stroke-width:3px,color:#212121
+    style CANCELLED_STATE fill:#FFCDD2,stroke:#C62828,stroke-width:2px,color:#B71C1C

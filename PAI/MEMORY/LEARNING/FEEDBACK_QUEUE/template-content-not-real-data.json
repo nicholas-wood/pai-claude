@@ -1,0 +1,24 @@
+{
+  "slug": "template-content-not-real-data",
+  "theme": "Acting on template/placeholder content as if it were real data",
+  "rootCause": "Analysis or recommendations based on boilerplate or placeholder text rather than the user's actual state.",
+  "proposedRuleName": "feedback-template-content-not-real-data",
+  "proposedRuleBody": "Analysis or recommendations based on boilerplate or placeholder text rather than the user's actual state.\n\n**Why:** Evidence from 6 signal(s) across 1 session(s) and 3 project(s). Recurring root cause: Acting on template/placeholder content as if it were real data.\n\n**How to apply:** Before analysing or making recommendations about a user's context, confirm you are reading their actual populated data, not a sample or template file. Look for placeholder markers like {{PLACEHOLDER}}, (sample), or skeleton comments.\n\n**Evidence examples:**\n- \"# Implicit Low Rating Captured: 3/10\"\n- \"# Implicit Low Rating Captured: 3/10\"\n- \"FAILURE: previous answer was based on template content not\"",
+  "evidenceCount": 6,
+  "sessions": [
+    "aa57fd93-cb32-4a60-8608-0a6e4850db78"
+  ],
+  "projects": [
+    "failure:2026-06-02-170734_LEARNING_sen",
+    "failure:2026-06-02-164557_LEARNING_sen",
+    "migrate-pai"
+  ],
+  "topExamples": [
+    "# Implicit Low Rating Captured: 3/10",
+    "# Implicit Low Rating Captured: 3/10",
+    "FAILURE: previous answer was based on template content not"
+  ],
+  "dedupNote": "NEW -- no existing rule covers this theme.",
+  "queuedAt": "2026-06-03T00:09:07.400Z",
+  "status": "pending"
+}

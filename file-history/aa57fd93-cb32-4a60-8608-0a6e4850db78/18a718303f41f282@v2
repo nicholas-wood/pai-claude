@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.pai.cadence.weekly</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/nicholaswood/.bun/bin/bun</string>
+    <string>/Users/nicholaswood/.claude/PAI/USER/Routines/run-cadence.ts</string>
+    <string>weekly</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>/Users/nicholaswood</string>
+    <key>PATH</key>
+    <string>/Users/nicholaswood/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>WorkingDirectory</key>
+  <string>/Users/nicholaswood/.claude/PAI/USER/Routines</string>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key><integer>1</integer>
+    <key>Hour</key><integer>7</integer>
+    <key>Minute</key><integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/nicholaswood/.claude/PAI/MEMORY/STATE/cadence/logs/weekly.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/nicholaswood/.claude/PAI/MEMORY/STATE/cadence/logs/weekly.err.log</string>
+</dict>
+</plist>

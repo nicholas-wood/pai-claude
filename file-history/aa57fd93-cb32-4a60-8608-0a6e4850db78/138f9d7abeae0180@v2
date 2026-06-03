@@ -1,0 +1,91 @@
+#!/usr/bin/env bun
+/**
+ * run-cadence.ts - the local engine for Nick's operating cadence (the retired `life` project's job).
+ *
+ * Reads every active project ISA's open Criteria + the PROJECTS index, asks the PAI Inference
+ * tool (Opus, no nested `claude` session) to synthesise, and writes a dated digest. Optionally
+ * posts to Slack if PAI_SLACK_WEBHOOK is set.
+ *
+ * Usage:  bun run-cadence.ts daily     (weekday top-five)
+ *         bun run-cadence.ts weekly    (Monday review)
+ *
+ * Invoked by launchd (com.pai.cadence.daily / com.pai.cadence.weekly). Runs outside any Claude
+ * session, so calling Inference.ts is safe (no CLAUDECODE nesting).
+ */
+import { readFileSync, readdirSync, mkdirSync, writeFileSync, existsSync } from "fs";
+import { join } from "path";
+
+const HOME = process.env.HOME!;
+const WORKSPACE = join(HOME, "Documents/workspace");
+const PROJECTS_INDEX = join(HOME, ".claude/PAI/USER/PROJECTS/PROJECTS.md");
+const INFERENCE = join(HOME, ".claude/PAI/TOOLS/Inference.ts");
+const OUT_DIR = join(HOME, ".claude/PAI/MEMORY/STATE/cadence");
+const SLACK_CHANNEL = "<#1510982640612937858>";
+
+const mode = (process.argv[2] || "daily").toLowerCase();
+if (mode !== "daily" && mode !== "weekly") {
+  console.error("usage: bun run-cadence.ts daily|weekly");
+  process.exit(1);
+}
+
+// Collect open Criteria from every active (non-retired, non-completed) project ISA.
+function collectProjects(): string {
+  const dirs = readdirSync(WORKSPACE, { withFileTypes: true }).filter((d) => d.isDirectory());
+  const blocks: string[] = [];
+  for (const d of dirs) {
+    const isa = join(WORKSPACE, d.name, "ISA.md");
+    if (!existsSync(isa)) continue;
+    const text = readFileSync(isa, "utf8");
+    const phase = (text.match(/^phase:\s*(.+)$/m)?.[1] || "").trim();
+    if (phase === "retired" || phase === "completed") continue;
+    const open = text
+      .split("\n")
+      .filter((l) => l.trim().startsWith("- [ ] ISC-"))
+      .map((l) => "    " + l.trim());
+    if (open.length === 0) continue;
+    blocks.push(`### ${d.name} (phase: ${phase})\n${open.join("\n")}`);
+  }
+  return blocks.join("\n\n");
+}
+
+const projectsContext = collectProjects();
+const indexText = existsSync(PROJECTS_INDEX) ? readFileSync(PROJECTS_INDEX, "utf8") : "";
+
+const SYSTEM = `You are Jarvis, Nick's DA, running his standing operating cadence (the role the retired 'life' project used to hold). You orchestrate and report only - you do NOT execute project work; executable tasks delegate to each project's registered agents. There is no competing orchestrator; this cadence IS the orchestration layer. Synthesise, never enumerate. Australian English. No em dashes. Executive tone, no fluff. Recommendation first.`;
+
+const DAILY = `Below are the open Criteria across Nick's active projects, plus the project index. Produce TODAY'S FIVE highest-leverage actions - ranked, five maximum, fewer if fewer are genuinely high-leverage. Each line: the action, the project it serves, and the goal it advances. Do not list everything; choose. If little is high-leverage today, say so honestly.\n\n=== PROJECT INDEX ===\n${indexText}\n\n=== OPEN CRITERIA BY PROJECT ===\n${projectsContext}`;
+
+const WEEKLY = `Below are the open Criteria across Nick's active projects, plus the project index. Produce a WEEKLY REVIEW: for each project, one line on what is open and whether it is moving, stalled, or newly unblocked (infer from criteria). Surface the open loops that look oldest or most stuck. Recommend the week's THREE TO FIVE priorities, ranked, each tied to a project and goal. Synthesise, do not enumerate.\n\n=== PROJECT INDEX ===\n${indexText}\n\n=== OPEN CRITERIA BY PROJECT ===\n${projectsContext}`;
+
+const userPrompt = mode === "daily" ? DAILY : WEEKLY;
+
+const proc = Bun.spawnSync(["bun", INFERENCE, "--level", "smart", SYSTEM, userPrompt], {
+  stdout: "pipe",
+  stderr: "pipe",
+});
+const digest = new TextDecoder().decode(proc.stdout).trim();
+const err = new TextDecoder().decode(proc.stderr).trim();
+if (!digest) {
+  console.error("Inference returned no output. stderr:\n" + err);
+  process.exit(1);
+}
+
+// Write the dated digest (primary delivery).
+mkdirSync(OUT_DIR, { recursive: true });
+const stamp = new Date().toISOString().slice(0, 10);
+const title = mode === "daily" ? "Daily Top-Five" : "Weekly Review";
+const outPath = join(OUT_DIR, `${mode}-${stamp}.md`);
+writeFileSync(outPath, `# ${title} - ${stamp}\n\n${digest}\n`);
+console.log("Wrote " + outPath);
+
+// Optional Slack delivery (only if a webhook is configured; channel ${SLACK_CHANNEL} per the cadence spec).
+const webhook = process.env.PAI_SLACK_WEBHOOK;
+if (webhook) {
+  await fetch(webhook, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: `*${title} - ${stamp}*\n${digest}` }),
+  }).then(() => console.log("Posted to Slack")).catch((e) => console.error("Slack post failed:", e));
+} else {
+  console.log(`Slack delivery skipped (set PAI_SLACK_WEBHOOK to enable; target channel ${SLACK_CHANNEL}).`);
+}

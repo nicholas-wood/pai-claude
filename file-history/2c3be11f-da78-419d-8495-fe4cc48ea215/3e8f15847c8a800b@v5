@@ -1,0 +1,21 @@
+# References (external systems)
+
+Pointers to where source data and finals live outside this folder.
+
+## Pocketsmith
+- System of record for transactions, budgets, and forecasts.
+- API token not yet wired; add the credential reference here once provisioned (do not store secrets in the repo).
+
+## OneDrive `04_Finance`
+- `onedrive://OneDrive-Personal/04_Finance/` - finals: statements, tax documents, invoices, signed items.
+
+## Budget spreadsheet (source of truth for burn + categories)
+- Google Sheet: https://docs.google.com/spreadsheets/d/10HUfeQlJzj5dFv7BB1x8zzpF9b8KgZzeY8Q0NRhmc6s/edit
+- Access: link-restricted as at 2026-06-02. To pull it, either wire a Google Drive connector or have Nick set "anyone with the link can view" (then CSV export at `/export?format=csv` works).
+- Use it to extract the monthly burn ceiling and savings rate into `~/.claude/PAI/USER/TELOS/IDEAL_STATE/MONEY.md`.
+
+## Ideal financial state
+- `~/.claude/PAI/USER/TELOS/IDEAL_STATE/MONEY.md` - the targets the accountant works toward (net wealth $1M by 35, 6-month runway, zero-based budget, super/investing shift).
+
+## This workspace
+- `artifacts/` - reconciliation summaries, budget reviews, runway notes (markdown working layer).

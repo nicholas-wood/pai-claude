@@ -1,0 +1,109 @@
+---
+project: life
+effort: E3
+phase: retired
+progress: superseded-by-DA-and-personal
+mode: build
+started: 2026-06-02
+updated: 2026-06-02
+---
+
+# Life — Project ISA
+
+> **RETIRED 2026-06-02.** This was never a project, it was an operating cadence. Its orchestration function (weekly review, daily top-five, open-loop tracking, roster management) is now the DA's standing job - see `~/.claude/PAI/USER/Routines/weekly-review.md` and `TELOS/IDEAL_STATE/RHYTHMS.md`. Its personal-admin threads (EV decision, home automation) are owned by the `personal` project, which already carried them. The `life/agents/chief-of-staff` history is preserved here for reference but is superseded by the DA. Kept for the record; not an active project.
+
+> Project ISA (system of record). Lives in the workspace per PAI doctrine. Supersedes the `context/{facts,state,references,feedback}.md` foundation pattern: those files fold into the sections below and are retained as detailed appendices until fully absorbed. The `USER/PROJECTS/life.md` entry in PAI is the lightweight index that points here.
+
+## Problem
+
+Nick operates across a wide and heterogeneous portfolio — career pivot, three live businesses (Access Buddy, LIMSOC, Lifesaver on Call), two lifesaving volunteer roles, health and fitness, and personal admin (home automation, EV decision, rental property, finances). Without a standing management layer, cross-project visibility collapses into inbox chaos: nothing is sequenced, open loops accumulate, and high-leverage actions stay buried under low-priority noise. Weekly rhythm breaks down, and the DA acts on whatever is loudest rather than what matters most.
+
+## Vision
+
+A disciplined personal-operations layer that keeps Nick's life organised, prioritised, and moving. The layer runs weekly reviews as an anchor ritual, distils daily priorities to five or fewer high-leverage actions, tracks open loops across every active front, and surfaces what matters without enumerating everything. Orchestration of the agent roster (create, combine, retire) happens here. All executable work delegates to project-specific agents; this layer holds the consolidated view and the decision log. Status is always one request away.
+
+## Out of Scope
+
+- Execution of project-level work (writing, building, research, comms) -- that stays in the owning workspace project.
+- Replacing or duplicating the primary DA (Jarvis). The life-ops layer is a management persona Jarvis routes through, not a competing orchestrator.
+- Chief-of-staff agent harness -- see Decisions below; this role is superseded by the PAI DA.
+- Business-level strategy for individual projects -- those live in `accessbuddy/`, `limsoc-national-ims/`, `lifesaveroncall/`, `career/`, etc.
+- Gym programming and training specifics -- those live in `gym/`.
+- Low-frequency one-off personal topics -- those live in `personal/`.
+
+## Principles
+
+- Orchestration, not execution: every concrete task goes to an agent; the life-ops layer delegates, decides, and reports.
+- Synthesise, do not enumerate: five prioritised next actions beat a twenty-item list.
+- Direct over diplomatic: name drift, avoidance, and slippage honestly; do not soften into hedging.
+- Read the project before surfacing anything about it: cross-project state lives in each project's own `context/state.md`.
+- Structure earns its place: add agents and process only when a need recurs, not in anticipation.
+- Finals to OneDrive: PDFs and signed docs follow the `onedrive://` convention; markdown working notes stay in `artifacts/`.
+
+## Constraints
+
+- **Portfolio scope (fixed):** career pivot, Access Buddy, LIMSOC, Lifesaver on Call, LSV Comms Officer role, gym/health, personal admin (home automation, EV decision, rental, finances).
+- **Output channel:** status reports and notifications route to Slack channel `<#1510982640612937858>` -- never in primary chat, never via Slack DM.
+- **Daily priority cap:** five items maximum; more is noise.
+- **Connectors available (live as MCP tools):** GitHub, Gmail, Google Calendar, Google Drive, Notion.
+- **OneDrive taxonomy:** `onedrive://OneDrive-Personal/` (00_Inbox, 01_Personal, 02_Career, 03_Consulting, 04_Finance, 05_Property, 06_Lifesaving, 09_Reference); org docs under `onedrive://OneDrive-LIFESAVINGVICTORIALIMITED/` and `onedrive://OneDrive-SurfLifeSavingAustralia/`.
+- **Decision authority:** act on reversible/routine decisions and log them; flag decisions with material cost or external commitment in the next status report; stop and ask on irreversible or goal-contradicting forks.
+- Australian English, no em dashes, throughout all output.
+
+## Goal
+
+The life-ops layer runs as a reliable weekly-cadence management surface: each week begins with a grounded review of all active fronts, distils to a short prioritised action set, and ends with open loops cleared or delegated. Nick can request a status update at any moment and receive a consolidated single view of every task in flight, key decisions made on his behalf, and any blockers. The agent roster is managed deliberately -- created when needed, retired when quiet.
+
+## Criteria
+
+- [ ] ISC-1: Weekly review ritual runs consistently -- anchor event for each week's priorities.
+- [ ] ISC-2: Daily priorities capped at five items; synthesised, not enumerated from raw inbox.
+- [ ] ISC-3: Task register in `context/state.md` is current at all times -- status report is instant on demand.
+- [ ] ISC-4: Every executable task delegated to the right project agent; none executed directly by the orchestration layer.
+- [ ] ISC-5: Decision log maintained in `context/state.md` -- each entry includes date, decision, rationale, and whether flagged to Nick.
+- [ ] ISC-6: Status reports route to Slack `<#1510982640612937858>` -- no leakage to primary chat or DM.
+- [ ] ISC-7: Agent roster managed deliberately -- agents created only when recurring need is established, retired when quiet.
+- [ ] ISC-8: EV decision reached via scenario-based total cost of ownership and timing/risk analysis. [gap: analysis not yet conducted]
+- [ ] ISC-9: Home automation automations documented and stable in Home Assistant. [gap: full automation inventory not captured in sources]
+- [ ] ISC-10: Anti: orchestration layer does not execute work directly -- zero first-person task completions outside delegation, status, and decisions.
+- [ ] ISC-11: Anti: primary DA (Jarvis) is not duplicated -- no competing orchestrator running in parallel.
+
+## Test Strategy
+
+| isc | type | check | threshold | tool |
+|-----|------|-------|-----------|------|
+| ISC-1 | process | weekly review artefact present in `artifacts/` | one file per week, dated | file check |
+| ISC-2 | process | daily priority list length | 5 or fewer items | count |
+| ISC-3 | process | `context/state.md` last-updated timestamp vs. date of last delegation | within 24 hours | file read |
+| ISC-4 | process | zero tasks in state.md with owner = "CoS" or blank | no unowned tasks | state.md audit |
+| ISC-6 | process | status report artefacts reference Slack channel only | no chat-channel references | grep |
+| ISC-10 | process | orchestration layer outputs are delegation briefs, decisions, or reports only | no execution outputs | session review |
+
+## Features
+
+| name | satisfies | depends_on | parallelisable |
+|------|-----------|------------|----------------|
+| Weekly review cadence | ISC-1, ISC-2 | ISC-3 (state current) | no (anchor ritual) |
+| Task register maintenance | ISC-3, ISC-4, ISC-5 | - | yes |
+| EV decision analysis | ISC-8 | cross-project state reads | yes |
+| Home automation inventory | ISC-9 | Home Assistant access | yes |
+| Roster management protocol | ISC-7 | per-project agent inventory | yes |
+
+## Decisions
+
+- 2026-06-02: **Chief-of-staff agent superseded by the PAI DA (Jarvis).** The original `life/agents/chief-of-staff` was designed as a management persona that the primary DA would route through -- not a second brain but an orchestration layer running inside Jarvis. Per the PAI convergence decision, this role is now directly fulfilled by the DA itself. The `life/agents/chief-of-staff` directory and the harness pointer at `life/.claude/agents/life-chief-of-staff.md` are retired/transitional. No new chief-of-staff harness pointer is created. Orchestration, weekly reviews, delegation, and cross-project status are now DA responsibilities. The persona intent and operating model documented in `agents/chief-of-staff/claude.md` and `memory.md` are preserved as reference; the Slack output routing rule (`<#1510982640612937858>`) carries forward.
+- 2026-06-02: Project converted to PAI project-ISA model. `context/` foundation folds into this ISA; files retained as appendices until fully absorbed.
+- 2026-06-02: **`life-coach` agent added** (base general) alongside the retired chief-of-staff. Scope: micro-habits and improvement paths -- accountability check-ins and streak tracking. It reinforces behaviours that `gym/` and `career/` own and does not run those projects; it coordinates through the orchestration role now fulfilled by the DA. Has its own `context/` habits tracker. Registered in `overview.md`, `CLAUDE.md`, and via the harness pointer `life/.claude/agents/life-life-coach.md`. Per ISC-7 this is a deliberate roster addition for a recurring need (habit accountability), not a pre-built org chart.
+- [gap: no recorded decision on EV purchase timing or fleet Polestar opportunity]
+- [gap: no recorded decision on home automation expansion or scope freeze]
+
+## Changelog
+
+- conjectured: a flat `context/{facts,state,references,feedback}.md` set is adequate project memory for an orchestration layer. refuted_by: the ISA twelve-section format carries the same content plus testable Criteria, Test Strategy, a decision log, and a verification trail the flat files lacked. learned: the ISA is a superset of the context pattern even for non-code projects. criterion_now: project record is the ISA; `context/` is appendix-only.
+- conjectured: a dedicated Chief of Staff agent distinct from the DA reduces cognitive load by separating orchestration from execution. refuted_by: the original design already acknowledged "one brain, not two competing orchestrators" -- the DA routing through a persona is equivalent to the DA directly performing the role. learned: the chief-of-staff persona intent is preserved; the separate agent layer adds overhead without adding capability. criterion_now: DA fulfils the orchestration role directly.
+
+## Verification
+
+- ISC-10 (anti): by design, `context/state.md` contains no completed task entries executed by the orchestration layer itself -- seeded 2026-06-01 with all tasks blank. Anti-criterion holds at inception.
+- ISC-11 (anti): DA supersession decision recorded above. No competing orchestrator created. Anti-criterion holds at conversion.
+- ISC-3: `context/state.md` last verified 2026-06-02 -- task register seeded; no tasks yet delegated (standing commitments only, cross-referenced to `career/context/state.md`).

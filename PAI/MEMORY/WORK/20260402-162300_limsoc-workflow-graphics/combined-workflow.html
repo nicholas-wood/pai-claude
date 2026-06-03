@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { margin: 0; padding: 0; background: white; font-family: 'Segoe UI', Helvetica, Arial, sans-serif; }
+</style>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 1900" width="960" height="1900">
+  <defs>
+    <marker id="arrowDown" markerWidth="8" markerHeight="6" refX="4" refY="3" orient="90">
+      <polygon points="0 0, 8 3, 0 6" fill="#546E7A"/>
+    </marker>
+    <marker id="arrowRight" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="0">
+      <polygon points="0 0, 8 3, 0 6" fill="#B0BEC5"/>
+    </marker>
+    <marker id="arrowReturn" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#B0BEC5"/>
+    </marker>
+  </defs>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- TITLE -->
+  <!-- ═══════════════════════════════════════ -->
+  <text x="480" y="38" text-anchor="middle" font-size="20" font-weight="bold" fill="#263238" letter-spacing="0.5">LIMSOC Ticket Workflow</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- COLUMN HEADERS -->
+  <!-- ═══════════════════════════════════════ -->
+  <text x="100" y="72" text-anchor="middle" font-size="10" font-weight="bold" fill="#78909C" letter-spacing="1.5">STATUS</text>
+  <text x="700" y="72" text-anchor="middle" font-size="10" font-weight="bold" fill="#78909C" letter-spacing="1.5">DETAILS</text>
+  <line x1="40" y1="82" x2="920" y2="82" stroke="#E0E0E0" stroke-width="1"/>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 1: TRIAGE  (y=100)                -->
+  <!-- ═══════════════════════════════════════ -->
+  <g>
+    <!-- Status box - Blue (Dev Team) -->
+    <rect x="40" y="100" width="120" height="44" rx="6" fill="#1565C0" stroke="#0D47A1" stroke-width="1.5"/>
+    <text x="100" y="127" text-anchor="middle" font-size="14" font-weight="bold" fill="white">TRIAGE</text>
+
+    <!-- Details -->
+    <text x="440" y="108" font-size="11" fill="#455A64">&#8226;  All user feedback enters here</text>
+    <text x="440" y="124" font-size="11" fill="#455A64">&#8226;  Dev Team classifies into one of four paths:</text>
+    <text x="452" y="140" font-size="11" fill="#1565C0">1. Urgent bug → assign to High Impact Bugs project → straight to TODO</text>
+    <text x="452" y="156" font-size="11" fill="#1565C0">2. Needs state rep input → Refinement (assign State Rep)</text>
+    <text x="452" y="172" font-size="11" fill="#1565C0">3. Support request → assign to Support Requests project → Refinement</text>
+    <text x="452" y="188" font-size="11" fill="#1565C0">4. Ready for consideration → straight to Candidate</text>
+    <text x="440" y="206" font-size="11" fill="#455A64">&#8226;  Team members can create tickets directly into any state</text>
+    <text x="440" y="222" font-size="11" fill="#E65100" font-weight="600">&#8226;  Urgent bugs: notify LIMSOC Stakeholder Group</text>
+  </g>
+
+  <!-- Row separator -->
+  <line x1="40" y1="242" x2="920" y2="242" stroke="#E0E0E0" stroke-width="1"/>
+
+  <!-- Arrow down from Triage -->
+  <line x1="100" y1="144" x2="100" y2="264" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowDown)"/>
+  <text x="110" y="255" font-size="9" fill="#1565C0">Dev Team moves</text>
+
+  <!-- Skip arrows on left side -->
+  <!-- Urgent bug: Triage → TODO -->
+  <path d="M 40 130 C 18 130, 18 560, 40 560" stroke="#B0BEC5" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#arrowReturn)"/>
+  <text x="14" y="370" text-anchor="middle" font-size="8" fill="#90A4AE" transform="rotate(-90, 14, 370)">Urgent bug → TODO</text>
+
+  <!-- Support no dev: Refinement → Done -->
+  <path d="M 40 310 C 6 310, 6 1140, 40 1140" stroke="#B0BEC5" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#arrowReturn)"/>
+  <text x="2" y="730" text-anchor="middle" font-size="8" fill="#90A4AE" transform="rotate(-90, 2, 730)">Support (no dev change) → Done</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 2: REFINEMENT  (y=270)            -->
+  <!-- ═══════════════════════════════════════ -->
+  <g>
+    <!-- Orange (State Rep) -->
+    <rect x="40" y="270" width="120" height="44" rx="6" fill="#E65100" stroke="#BF360C" stroke-width="1.5"/>
+    <text x="100" y="297" text-anchor="middle" font-size="14" font-weight="bold" fill="white">REFINEMENT</text>
+
+    <!-- Details -->
+    <text x="440" y="282" font-size="11" fill="#455A64">&#8226;  Ticket assigned to appropriate State Representative</text>
+    <text x="440" y="298" font-size="11" fill="#455A64">&#8226;  State Rep provides comment, clarification, or additional information</text>
+    <text x="440" y="314" font-size="11" fill="#E65100" font-weight="600">&#8226;  5 business day SLA for response</text>
+    <text x="440" y="330" font-size="11" fill="#455A64">&#8226;  Support requests with no dev change required → resolve straight to Done</text>
+    <text x="440" y="346" font-size="11" fill="#455A64">&#8226;  Once info received, Product Team moves to Candidate</text>
+  </g>
+
+  <line x1="40" y1="366" x2="920" y2="366" stroke="#E0E0E0" stroke-width="1"/>
+
+  <!-- Arrow down -->
+  <line x1="100" y1="314" x2="100" y2="388" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowDown)"/>
+  <text x="110" y="380" font-size="9" fill="#2E7D32">Product Team moves</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 3: CANDIDATE  (y=394)             -->
+  <!-- ═══════════════════════════════════════ -->
+  <g>
+    <!-- Green (Product Team) -->
+    <rect x="40" y="394" width="120" height="44" rx="6" fill="#2E7D32" stroke="#1B5E20" stroke-width="1.5"/>
+    <text x="100" y="421" text-anchor="middle" font-size="14" font-weight="bold" fill="white">CANDIDATE</text>
+
+    <!-- Details -->
+    <text x="440" y="398" font-size="11" fill="#455A64">&#8226;  Worked through in the Weekly LIMSOC Extended Standup</text>
+    <text x="440" y="414" font-size="11" fill="#455A64">&#8226;  Product Team decides priority and assigns ticket to a project</text>
+    <text x="440" y="430" font-size="11" fill="#455A64">&#8226;  Three outcomes:</text>
+    <text x="452" y="446" font-size="11" fill="#2E7D32">→ TODO (will do) — ticket assigned to project, ready for dev</text>
+    <text x="452" y="462" font-size="11" fill="#2E7D32">→ Backlog (could do) — parked, assigned to project</text>
+    <text x="452" y="478" font-size="11" fill="#2E7D32">→ Cancelled (should not do)</text>
+    <text x="440" y="496" font-size="11" fill="#455A64">&#8226;  Tickets already in agreed project scope can bypass Candidate</text>
+    <text x="452" y="512" font-size="11" fill="#78909C">At discretion of Product Team or Tech Lead → direct to TODO</text>
+  </g>
+
+  <!-- Three branches from Candidate -->
+  <!-- Main path: down to TODO -->
+  <line x1="100" y1="438" x2="100" y2="556" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowDown)"/>
+  <text x="110" y="505" font-size="9" fill="#2E7D32">Will do</text>
+  <text x="110" y="515" font-size="9" fill="#2E7D32">Product Team moves</text>
+
+  <!-- Branch right to Backlog -->
+  <line x1="160" y1="416" x2="210" y2="416" stroke="#546E7A" stroke-width="1.5"/>
+  <line x1="210" y1="416" x2="210" y2="538" stroke="#546E7A" stroke-width="1.5" marker-end="url(#arrowDown)"/>
+  <text x="220" y="480" font-size="9" fill="#78909C">Could do</text>
+
+  <!-- Branch right to Cancelled -->
+  <line x1="210" y1="470" x2="310" y2="470" stroke="#546E7A" stroke-width="1.5"/>
+  <line x1="310" y1="470" x2="310" y2="538" stroke="#546E7A" stroke-width="1.5" marker-end="url(#arrowDown)"/>
+  <text x="320" y="510" font-size="9" fill="#78909C">Should not do</text>
+
+  <line x1="40" y1="530" x2="920" y2="530" stroke="#E0E0E0" stroke-width="1"/>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 4: BACKLOG + CANCELLED  (y=544)   -->
+  <!-- ═══════════════════════════════════════ -->
+  <g>
+    <!-- Backlog - Green (Product Team) -->
+    <rect x="170" y="544" width="110" height="40" rx="6" fill="#2E7D32" stroke="#1B5E20" stroke-width="1.5"/>
+    <text x="225" y="569" text-anchor="middle" font-size="13" font-weight="bold" fill="white">BACKLOG</text>
+
+    <!-- Cancelled - Grey -->
+    <rect x="300" y="544" width="110" height="40" rx="6" fill="#78909C" stroke="#546E7A" stroke-width="1.5"/>
+    <text x="355" y="569" text-anchor="middle" font-size="13" font-weight="bold" fill="white">CANCELLED</text>
+
+    <!-- Details -->
+    <text x="440" y="556" font-size="11" fill="#455A64">&#8226;  Backlog: tickets that could be done, not prioritised now</text>
+    <text x="440" y="572" font-size="11" fill="#455A64">&#8226;  Backlog → TODO at any time (Product Team or Tech Lead)</text>
+    <text x="440" y="588" font-size="11" fill="#455A64">&#8226;  Cancelled: tickets that should not proceed (terminal state)</text>
+  </g>
+
+  <!-- Backlog → TODO arrow -->
+  <path d="M 170 564 C 140 564, 130 564, 100 584" stroke="#B0BEC5" stroke-width="1.5" stroke-dasharray="5,3" fill="none"/>
+  <line x1="100" y1="584" x2="100" y2="618" stroke="#B0BEC5" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrowReturn)"/>
+
+  <line x1="40" y1="608" x2="920" y2="608" stroke="#E0E0E0" stroke-width="1"/>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 5: TODO  (y=624)                  -->
+  <!-- ═══════════════════════════════════════ -->
+  <g>
+    <!-- Blue (Dev Team) -->
+    <rect x="40" y="624" width="120" height="44" rx="6" fill="#1565C0" stroke="#0D47A1" stroke-width="1.5"/>
+    <text x="100" y="651" text-anchor="middle" font-size="14" font-weight="bold" fill="white">TODO</text>
+
+    <!-- Details -->
+    <text x="440" y="634" font-size="11" fill="#E65100" font-weight="600">&#8226;  Ticket must be assigned to a project before entering TODO</text>
+    <text x="440" y="650" font-size="11" fill="#455A64">&#8226;  All five project types shown (see Project Categories below)</text>
+    <text x="440" y="666" font-size="11" fill="#455A64">&#8226;  Urgent bugs arrive here directly from Triage (bypass Refinement + Candidate)</text>
+    <text x="440" y="682" font-size="11" fill="#455A64">&#8226;  Backlog items arrive here when promoted by Product Team / Tech Lead</text>
+  </g>
+
+  <line x1="40" y1="700" x2="920" y2="700" stroke="#E0E0E0" stroke-width="1"/>
+
+  <!-- Arrow down -->
+  <line x1="100" y1="668" x2="100" y2="722" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowDown)"/>
+  <text x="110" y="715" font-size="9" fill="#1565C0">Dev self-assigns</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 6: IN PROGRESS  (y=728)           -->
+  <!-- ═══════════════════════════════════════ -->
+  <g>
+    <rect x="40" y="728" width="120" height="44" rx="6" fill="#1565C0" stroke="#0D47A1" stroke-width="1.5"/>
+    <text x="100" y="748" text-anchor="middle" font-size="12" font-weight="bold" fill="white">IN PROGRESS</text>
+
+    <text x="440" y="746" font-size="11" fill="#455A64">&#8226;  Dev picks up the ticket and begins work</text>
+    <text x="440" y="762" font-size="11" fill="#455A64">&#8226;  Returns here if bug found at External Review</text>
+  </g>
+
+  <line x1="40" y1="782" x2="920" y2="782" stroke="#E0E0E0" stroke-width="1"/>
+
+  <line x1="100" y1="772" x2="100" y2="804" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowDown)"/>
+  <text x="110" y="798" font-size="9" fill="#1565C0">Dev moves</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 7: IN QA  (y=810)                 -->
+  <!-- ═══════════════════════════════════════ -->
+  <g>
+    <rect x="40" y="810" width="120" height="44" rx="6" fill="#1565C0" stroke="#0D47A1" stroke-width="1.5"/>
+    <text x="100" y="837" text-anchor="middle" font-size="14" font-weight="bold" fill="white">IN QA</text>
+
+    <text x="440" y="828" font-size="11" fill="#455A64">&#8226;  Dev code review</text>
+    <text x="440" y="844" font-size="11" fill="#455A64">&#8226;  Dev reviewer moves to Product Review when passed</text>
+  </g>
+
+  <line x1="40" y1="868" x2="920" y2="868" stroke="#E0E0E0" stroke-width="1"/>
+
+  <line x1="100" y1="854" x2="100" y2="890" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowDown)"/>
+  <text x="110" y="884" font-size="9" fill="#1565C0">Reviewer moves</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 8: PRODUCT REVIEW  (y=896)        -->
+  <!-- ═══════════════════════════════════════ -->
+  <g>
+    <!-- Green (Product Team) -->
+    <rect x="40" y="896" width="120" height="44" rx="6" fill="#2E7D32" stroke="#1B5E20" stroke-width="1.5"/>
+    <text x="100" y="914" text-anchor="middle" font-size="11" font-weight="bold" fill="white">PRODUCT</text>
+    <text x="100" y="929" text-anchor="middle" font-size="11" font-weight="bold" fill="white">REVIEW</text>
+
+    <text x="440" y="914" font-size="11" fill="#455A64">&#8226;  Product Team reviews from a product perspective</text>
+    <text x="440" y="930" font-size="11" fill="#455A64">&#8226;  Returns here if functional issue found at External Review</text>
+  </g>
+
+  <line x1="40" y1="956" x2="920" y2="956" stroke="#E0E0E0" stroke-width="1"/>
+
+  <line x1="100" y1="940" x2="100" y2="978" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowDown)"/>
+  <text x="110" y="972" font-size="9" fill="#2E7D32">Product Team moves</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 9: EXTERNAL REVIEW  (y=984)       -->
+  <!-- ═══════════════════════════════════════ -->
+  <g>
+    <!-- Orange (State Rep) -->
+    <rect x="40" y="984" width="120" height="44" rx="6" fill="#E65100" stroke="#BF360C" stroke-width="1.5"/>
+    <text x="100" y="1002" text-anchor="middle" font-size="11" font-weight="bold" fill="white">EXTERNAL</text>
+    <text x="100" y="1017" text-anchor="middle" font-size="11" font-weight="bold" fill="white">REVIEW</text>
+
+    <text x="440" y="992" font-size="11" fill="#455A64">&#8226;  State Rep stakeholders review before release</text>
+    <text x="440" y="1008" font-size="11" fill="#455A64">&#8226;  Bug found → back to In Progress (Dev fixes)</text>
+    <text x="440" y="1024" font-size="11" fill="#455A64">&#8226;  Functional issue → back to Product Review (Product Team reassesses)</text>
+    <text x="440" y="1040" font-size="11" fill="#455A64">&#8226;  Approved: State Rep signs off, Product Team moves to Done</text>
+  </g>
+
+  <line x1="40" y1="1060" x2="920" y2="1060" stroke="#E0E0E0" stroke-width="1"/>
+
+  <line x1="100" y1="1028" x2="100" y2="1082" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowDown)"/>
+  <text x="110" y="1076" font-size="9" fill="#2E7D32">Product Team moves</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 10: DONE  (y=1088)                -->
+  <!-- ═══════════════════════════════════════ -->
+  <g>
+    <!-- Dark (terminal) -->
+    <rect x="40" y="1088" width="120" height="44" rx="6" fill="#37474F" stroke="#263238" stroke-width="1.5"/>
+    <text x="100" y="1115" text-anchor="middle" font-size="14" font-weight="bold" fill="white">DONE</text>
+
+    <text x="440" y="1106" font-size="11" fill="#455A64">&#8226;  Terminal state - ticket complete</text>
+    <text x="440" y="1122" font-size="11" fill="#455A64">&#8226;  Support requests with no dev change also arrive here directly from Refinement</text>
+  </g>
+
+  <line x1="40" y1="1148" x2="920" y2="1148" stroke="#E0E0E0" stroke-width="1"/>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- PROJECT SUMMARY (below diagram)        -->
+  <!-- ═══════════════════════════════════════ -->
+  <g transform="translate(40, 1170)">
+    <text x="0" y="18" font-size="14" font-weight="bold" fill="#263238">Project Categories</text>
+    <text x="0" y="36" font-size="11" fill="#78909C">All tickets must be assigned to one of the following project categories before entering TODO.</text>
+
+    <!-- High Impact Bugs -->
+    <circle cx="22" cy="68" r="14" fill="#FFF8E1" stroke="#FFD54F" stroke-width="1"/>
+    <text x="22" y="72" text-anchor="middle" font-size="8" font-weight="bold" fill="#F57F17">HIB</text>
+    <text x="44" y="64" font-size="12" font-weight="600" fill="#37474F">High Impact Bugs</text>
+    <text x="44" y="78" font-size="11" fill="#455A64">Urgent production issues requiring immediate attention. Assigned at Triage,</text>
+    <text x="44" y="92" font-size="11" fill="#455A64">bypass Refinement and Candidate, go straight to TODO. LIMSOC Stakeholder Group notified.</text>
+
+    <!-- Support Requests -->
+    <circle cx="22" cy="128" r="14" fill="#FFF8E1" stroke="#FFD54F" stroke-width="1"/>
+    <text x="22" y="132" text-anchor="middle" font-size="8" font-weight="bold" fill="#F57F17">SR</text>
+    <text x="44" y="124" font-size="12" font-weight="600" fill="#37474F">Support Requests</text>
+    <text x="44" y="138" font-size="11" fill="#455A64">Configuration, data, or operational requests (e.g. missing unit). Assigned at Triage,</text>
+    <text x="44" y="152" font-size="11" fill="#455A64">routed to Refinement for State Rep approval. If no dev change needed, resolve straight to Done.</text>
+
+    <!-- Minor Enhancements -->
+    <circle cx="22" cy="188" r="14" fill="#FFF8E1" stroke="#FFD54F" stroke-width="1"/>
+    <text x="22" y="192" text-anchor="middle" font-size="8" font-weight="bold" fill="#F57F17">ME</text>
+    <text x="44" y="184" font-size="12" font-weight="600" fill="#37474F">Minor Bugs</text>
+    <text x="44" y="198" font-size="11" fill="#455A64">Non-urgent bugs with a workaround or low impact. Assigned during the Candidate process.</text>
+    <text x="44" y="212" font-size="11" fill="#455A64">Go through the standard flow.</text>
+
+    <!-- Minor Enhancements -->
+    <circle cx="22" cy="248" r="14" fill="#FFF8E1" stroke="#FFD54F" stroke-width="1"/>
+    <text x="22" y="252" text-anchor="middle" font-size="8" font-weight="bold" fill="#F57F17">ME</text>
+    <text x="44" y="244" font-size="12" font-weight="600" fill="#37474F">Minor Enhancements</text>
+    <text x="44" y="258" font-size="11" fill="#455A64">Small improvements and tweaks. Assigned during the Candidate process at the Weekly</text>
+    <text x="44" y="272" font-size="11" fill="#455A64">LIMSOC Extended Standup. Go through the standard flow.</text>
+
+    <!-- Initiative Projects -->
+    <circle cx="22" cy="308" r="14" fill="#FFF8E1" stroke="#FFD54F" stroke-width="1"/>
+    <text x="22" y="312" text-anchor="middle" font-size="8" font-weight="bold" fill="#F57F17">IP</text>
+    <text x="44" y="304" font-size="12" font-weight="600" fill="#37474F">Initiative Projects</text>
+    <text x="44" y="318" font-size="11" fill="#455A64">Strategic feature work aligned to the product roadmap. Assigned during the Candidate</text>
+    <text x="44" y="332" font-size="11" fill="#455A64">process. Tickets already in agreed scope can bypass Candidate at Product Team / Tech Lead discretion.</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- LEGEND (bottom)                        -->
+  <!-- ═══════════════════════════════════════ -->
+  <g transform="translate(40, 1530)">
+    <line x1="0" y1="0" x2="880" y2="0" stroke="#E0E0E0" stroke-width="1"/>
+
+    <text x="0" y="24" font-size="10" font-weight="bold" fill="#78909C" letter-spacing="1">LEGEND</text>
+
+    <!-- Ownership colours -->
+    <rect x="0" y="36" width="50" height="20" rx="4" fill="#1565C0"/>
+    <text x="25" y="50" text-anchor="middle" font-size="9" font-weight="bold" fill="white">Status</text>
+    <text x="58" y="50" font-size="10" fill="#546E7A">Dev Team</text>
+
+    <rect x="140" y="36" width="50" height="20" rx="4" fill="#2E7D32"/>
+    <text x="165" y="50" text-anchor="middle" font-size="9" font-weight="bold" fill="white">Status</text>
+    <text x="198" y="50" font-size="10" fill="#546E7A">Product Team</text>
+
+    <rect x="310" y="36" width="50" height="20" rx="4" fill="#E65100"/>
+    <text x="335" y="50" text-anchor="middle" font-size="9" font-weight="bold" fill="white">Status</text>
+    <text x="368" y="50" font-size="10" fill="#546E7A">State Rep</text>
+
+    <rect x="470" y="36" width="50" height="20" rx="4" fill="#37474F"/>
+    <text x="495" y="50" text-anchor="middle" font-size="9" font-weight="bold" fill="white">Status</text>
+    <text x="528" y="50" font-size="10" fill="#546E7A">Terminal</text>
+
+    <rect x="630" y="36" width="50" height="20" rx="4" fill="#78909C"/>
+    <text x="655" y="50" text-anchor="middle" font-size="9" font-weight="bold" fill="white">Status</text>
+    <text x="688" y="50" font-size="10" fill="#546E7A">Terminal / Other</text>
+
+    <!-- Arrow types -->
+    <line x1="0" y1="72" x2="38" y2="72" stroke="#546E7A" stroke-width="2"/>
+    <text x="46" y="76" font-size="10" fill="#546E7A">Main flow</text>
+
+    <line x1="140" y1="72" x2="178" y2="72" stroke="#B0BEC5" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <text x="186" y="76" font-size="10" fill="#546E7A">Shortcut or return path</text>
+
+    <text x="380" y="76" font-size="9" fill="#78909C">Arrow labels indicate who moves the ticket</text>
+  </g>
+
+</svg>
+</body>
+</html>

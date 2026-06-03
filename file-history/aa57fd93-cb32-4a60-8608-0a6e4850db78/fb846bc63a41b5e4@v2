@@ -1,0 +1,14 @@
+# Named Agents
+
+Durable, project-bound agents composed for Nick's projects. These are PAI-native records of agents whose full persona + persistent memory live in their project repo (the `<project>/agents/<name>/` directory) and whose harness pointer lives in `<project>/.claude/agents/`. Unlike one-shot ComposeAgent workers, these persist and learn.
+
+## AccessBuddy (`~/Documents/workspace/accessbuddy/`)
+
+| Agent | Base | Voice | Voice ID | Role |
+|-------|------|-------|----------|------|
+| accessbuddy-architect | Architect | James | ZQe5CZNOzWyzPSCn5a3c | Architecture, data-model, integration design |
+| accessbuddy-feature-dev | Engineer | Charlie | IKne3meq5aSn9XLyUdCD | Member/admin features, request workflow, payments |
+| accessbuddy-infra-ops | Engineer (SRE) | Baron | onwK4e9ZLuTAKqWW03F9 | Terraform, GCP, CI/CD, cost control |
+| accessbuddy-qa-verify | QATester | Marcus | VyLIZAv7aAZFfqb3SAmm | Verification gate, browser/regression testing |
+
+Each shells over its base built-in, reads the project ISA + its own `claude.md`/`memory.md`/`context/` at startup, and voices completion in its assigned voice. Pattern established in the PAI convergence pilot, 2026-06-02.

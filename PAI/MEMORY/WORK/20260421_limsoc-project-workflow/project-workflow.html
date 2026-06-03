@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { margin: 0; padding: 0; background: white; font-family: 'Segoe UI', Helvetica, Arial, sans-serif; }
+</style>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 1920" width="960" height="1920">
+  <defs>
+    <marker id="arrowDown" markerWidth="8" markerHeight="6" refX="4" refY="3" orient="90">
+      <polygon points="0 0, 8 3, 0 6" fill="#546E7A"/>
+    </marker>
+    <marker id="arrowReturn" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#B0BEC5"/>
+    </marker>
+  </defs>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- TITLE -->
+  <!-- ═══════════════════════════════════════ -->
+  <text x="480" y="38" text-anchor="middle" font-size="20" font-weight="bold" fill="#263238" letter-spacing="0.5">LIMSOC Project Delivery Workflow</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- COLUMN HEADERS -->
+  <!-- ═══════════════════════════════════════ -->
+  <text x="100" y="72" text-anchor="middle" font-size="10" font-weight="bold" fill="#78909C" letter-spacing="1.5">PHASE</text>
+  <text x="700" y="72" text-anchor="middle" font-size="10" font-weight="bold" fill="#78909C" letter-spacing="1.5">DETAILS</text>
+  <line x1="40" y1="82" x2="920" y2="82" stroke="#E0E0E0" stroke-width="1"/>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- RETURN PATHS (left side, dotted)       -->
+  <!-- ═══════════════════════════════════════ -->
+
+  <!-- Approval NOT approved → Scoping -->
+  <path d="M 40 538 C 20 538, 20 250, 40 250" stroke="#B0BEC5" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#arrowReturn)"/>
+  <text x="16" y="394" text-anchor="middle" font-size="8" fill="#90A4AE" transform="rotate(-90, 16, 394)">Not approved &#x2192; Scoping</text>
+
+  <!-- V&V fail → Development -->
+  <path d="M 40 886 C 10 886, 10 720, 40 720" stroke="#B0BEC5" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#arrowReturn)"/>
+  <text x="6" y="803" text-anchor="middle" font-size="8" fill="#90A4AE" transform="rotate(-90, 6, 803)">V&amp;V fail &#x2192; Development</text>
+
+  <!-- Final Acceptance rejected → Development -->
+  <path d="M 40 1052 C 2 1052, 2 720, 40 720" stroke="#B0BEC5" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#arrowReturn)"/>
+  <text x="-2" y="886" text-anchor="middle" font-size="8" fill="#90A4AE" transform="rotate(-90, -2, 886)">Rejected &#x2192; Development</text>
+
+  <!-- Scope change: Development → Approval (right side) -->
+  <path d="M 160 720 C 200 720, 200 538, 160 538" stroke="#B0BEC5" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#arrowReturn)"/>
+  <text x="208" y="629" text-anchor="start" font-size="8" fill="#90A4AE">Scope change</text>
+  <text x="208" y="641" text-anchor="start" font-size="8" fill="#90A4AE">&#x2192; re-approval</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 1: STRATEGIC ALIGNMENT  (y=100)    -->
+  <!-- ═══════════════════════════════════════ -->
+  <g>
+    <!-- Green (Product Team) -->
+    <rect x="40" y="100" width="120" height="44" rx="6" fill="#2E7D32" stroke="#1B5E20" stroke-width="1.5"/>
+    <text x="100" y="118" text-anchor="middle" font-size="11" font-weight="bold" fill="white">STRATEGIC</text>
+    <text x="100" y="133" text-anchor="middle" font-size="11" font-weight="bold" fill="white">ALIGNMENT</text>
+
+    <text x="440" y="110" font-size="11" fill="#455A64">&#8226;  Project idea or initiative is raised</text>
+    <text x="440" y="126" font-size="11" fill="#455A64">&#8226;  Discussed at Weekly LIMSOC Extended Standup</text>
+    <text x="440" y="142" font-size="11" fill="#455A64">&#8226;  Strategic fit assessed against product roadmap and organisational goals</text>
+    <text x="440" y="158" font-size="11" fill="#455A64">&#8226;  Initial resource and timeline feasibility considered</text>
+    <text x="440" y="174" font-size="11" fill="#2E7D32" font-weight="600">&#8226;  Outcome: agreed this is something we should pursue</text>
+  </g>
+
+  <!-- Row separator -->
+  <line x1="40" y1="200" x2="920" y2="200" stroke="#E0E0E0" stroke-width="1"/>
+
+  <!-- Arrow down to Scoping -->
+  <line x1="100" y1="144" x2="100" y2="228" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowDown)"/>
+  <text x="110" y="219" font-size="9" fill="#2E7D32">Product Team moves</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 2: SCOPING  (y=228)               -->
+  <!-- ═══════════════════════════════════════ -->
+  <g>
+    <!-- Green (Product Team) -->
+    <rect x="40" y="228" width="120" height="44" rx="6" fill="#2E7D32" stroke="#1B5E20" stroke-width="1.5"/>
+    <text x="100" y="255" text-anchor="middle" font-size="14" font-weight="bold" fill="white">SCOPING</text>
+
+    <text x="440" y="238" font-size="11" fill="#455A64">&#8226;  Feature brief created — problem statement, proposed solution, success criteria</text>
+    <text x="440" y="254" font-size="11" fill="#455A64">&#8226;  User stories and acceptance criteria documented</text>
+    <text x="440" y="270" font-size="11" fill="#455A64">&#8226;  Scope boundaries defined — what is included and excluded</text>
+    <text x="440" y="286" font-size="11" fill="#455A64">&#8226;  Dependencies and integration points identified</text>
+    <text x="440" y="302" font-size="11" fill="#455A64">&#8226;  Stakeholder input gathered where required</text>
+    <text x="440" y="318" font-size="11" fill="#2E7D32" font-weight="600">&#8226;  Target release month assigned (e.g. Sep 2026) — aligned to release train</text>
+  </g>
+
+  <line x1="40" y1="342" x2="920" y2="342" stroke="#E0E0E0" stroke-width="1"/>
+
+  <!-- Arrow down to Technical Assessment -->
+  <line x1="100" y1="272" x2="100" y2="370" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowDown)"/>
+  <text x="110" y="361" font-size="9" fill="#2E7D32">Product Team moves</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 3: TECHNICAL ASSESSMENT  (y=370)   -->
+  <!-- ═══════════════════════════════════════ -->
+  <g>
+    <!-- Blue (Dev Team) -->
+    <rect x="40" y="370" width="120" height="44" rx="6" fill="#1565C0" stroke="#0D47A1" stroke-width="1.5"/>
+    <text x="100" y="388" text-anchor="middle" font-size="11" font-weight="bold" fill="white">TECHNICAL</text>
+    <text x="100" y="403" text-anchor="middle" font-size="11" font-weight="bold" fill="white">ASSESSMENT</text>
+
+    <text x="440" y="380" font-size="11" fill="#455A64">&#8226;  Dev Team reviews the feature brief</text>
+    <text x="440" y="396" font-size="11" fill="#455A64">&#8226;  Architecture approach and design decisions documented</text>
+    <text x="440" y="412" font-size="11" fill="#455A64">&#8226;  Effort estimation and delivery timeline proposed</text>
+    <text x="440" y="428" font-size="11" fill="#455A64">&#8226;  Technical risks and mitigation strategies identified</text>
+    <text x="440" y="444" font-size="11" fill="#455A64">&#8226;  Dependency mapping — upstream and downstream system impacts</text>
+    <text x="440" y="460" font-size="11" fill="#1565C0" font-weight="600">&#8226;  Output: technical assessment attached to feature brief</text>
+  </g>
+
+  <line x1="40" y1="488" x2="920" y2="488" stroke="#E0E0E0" stroke-width="1"/>
+
+  <!-- Arrow down to Approval -->
+  <line x1="100" y1="414" x2="100" y2="516" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowDown)"/>
+  <text x="110" y="507" font-size="9" fill="#1565C0">Dev Team moves</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 4: APPROVAL  (y=516)              -->
+  <!-- ═══════════════════════════════════════ -->
+  <g>
+    <!-- Orange (Stakeholders / Management) -->
+    <rect x="40" y="516" width="120" height="44" rx="6" fill="#E65100" stroke="#BF360C" stroke-width="1.5"/>
+    <text x="100" y="543" text-anchor="middle" font-size="14" font-weight="bold" fill="white">APPROVAL</text>
+
+    <text x="440" y="526" font-size="11" fill="#455A64">&#8226;  Gate check — all five criteria must be met:</text>
+    <text x="452" y="544" font-size="11" fill="#E65100" font-weight="600">1. Clear requirements — brief is complete and unambiguous</text>
+    <text x="452" y="560" font-size="11" fill="#E65100" font-weight="600">2. Strategic alignment — confirmed by Product Team</text>
+    <text x="452" y="576" font-size="11" fill="#E65100" font-weight="600">3. Timeline — aligned to target release month (2nd week)</text>
+    <text x="452" y="592" font-size="11" fill="#E65100" font-weight="600">4. Funding — budget allocated or confirmed</text>
+    <text x="452" y="608" font-size="11" fill="#E65100" font-weight="600">5. Capacity — team availability confirmed</text>
+    <text x="440" y="630" font-size="11" fill="#455A64">&#8226;  Approved &#x2192; moves to Development</text>
+    <text x="440" y="646" font-size="11" fill="#455A64">&#8226;  Not approved &#x2192; returns to Scoping with feedback on gaps</text>
+  </g>
+
+  <line x1="40" y1="670" x2="920" y2="670" stroke="#E0E0E0" stroke-width="1"/>
+
+  <!-- Arrow down to Development -->
+  <line x1="100" y1="560" x2="100" y2="698" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowDown)"/>
+  <text x="110" y="689" font-size="9" fill="#2E7D32">Approved</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 5: DEVELOPMENT  (y=698)           -->
+  <!-- ═══════════════════════════════════════ -->
+  <g>
+    <!-- Blue (Dev Team) -->
+    <rect x="40" y="698" width="120" height="44" rx="6" fill="#1565C0" stroke="#0D47A1" stroke-width="1.5"/>
+    <text x="100" y="718" text-anchor="middle" font-size="12" font-weight="bold" fill="white">DEVELOPMENT</text>
+
+    <text x="440" y="708" font-size="11" fill="#455A64">&#8226;  Active build — Dev Team executes against approved scope</text>
+    <text x="440" y="726" font-size="11" fill="#1565C0" font-weight="600">&#8226;  Weekly check-in meetings — progress, blockers, scope questions</text>
+    <text x="440" y="744" font-size="11" fill="#1565C0" font-weight="600">&#8226;  Bi-weekly stakeholder updates — demo of progress, feedback loop</text>
+    <text x="440" y="762" font-size="11" fill="#1565C0" font-weight="600">&#8226;  Iterative testing throughout — unit, integration, regression</text>
+    <text x="440" y="780" font-size="11" fill="#455A64">&#8226;  Testing cycles may surface issues requiring rework within phase</text>
+    <text x="440" y="798" font-size="11" fill="#455A64">&#8226;  Scope changes require re-approval through the Approval gate</text>
+    <text x="440" y="816" font-size="11" fill="#455A64">&#8226;  Output: feature complete, ready for Verification &amp; Validation</text>
+  </g>
+
+  <line x1="40" y1="836" x2="920" y2="836" stroke="#E0E0E0" stroke-width="1"/>
+
+  <!-- Arrow down to V&V -->
+  <line x1="100" y1="742" x2="100" y2="864" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowDown)"/>
+  <text x="110" y="855" font-size="9" fill="#1565C0">Dev Team moves</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 6: VERIFICATION & VALIDATION (y=864) -->
+  <!-- ═══════════════════════════════════════ -->
+  <g>
+    <!-- Green (Product Team) -->
+    <rect x="40" y="864" width="120" height="44" rx="6" fill="#2E7D32" stroke="#1B5E20" stroke-width="1.5"/>
+    <text x="100" y="882" text-anchor="middle" font-size="10" font-weight="bold" fill="white">VERIFICATION</text>
+    <text x="100" y="897" text-anchor="middle" font-size="10" font-weight="bold" fill="white">&amp; VALIDATION</text>
+
+    <text x="440" y="872" font-size="11" fill="#455A64">&#8226;  Two distinct checks before acceptance:</text>
+    <text x="440" y="892" font-size="11" fill="#2E7D32" font-weight="600">&#8226;  Verification — does the deliverable meet stated requirements?</text>
+    <text x="452" y="908" font-size="11" fill="#455A64">Test against acceptance criteria from the feature brief</text>
+    <text x="452" y="924" font-size="11" fill="#455A64">Regression testing — no existing functionality broken</text>
+    <text x="440" y="944" font-size="11" fill="#2E7D32" font-weight="600">&#8226;  Validation — does it solve the actual problem?</text>
+    <text x="452" y="960" font-size="11" fill="#455A64">Product Team confirms solution addresses the original need</text>
+    <text x="452" y="976" font-size="11" fill="#455A64">End users engaged for validation where appropriate</text>
+    <text x="440" y="996" font-size="11" fill="#455A64">&#8226;  Fail &#x2192; returns to Development for rework</text>
+  </g>
+
+  <line x1="40" y1="1020" x2="920" y2="1020" stroke="#E0E0E0" stroke-width="1"/>
+
+  <!-- Arrow down to Final Acceptance -->
+  <line x1="100" y1="908" x2="100" y2="1048" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowDown)"/>
+  <text x="110" y="1039" font-size="9" fill="#2E7D32">Product Team moves</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 7: FINAL ACCEPTANCE  (y=1048)     -->
+  <!-- ═══════════════════════════════════════ -->
+  <g>
+    <!-- Orange (Stakeholders) -->
+    <rect x="40" y="1048" width="120" height="44" rx="6" fill="#E65100" stroke="#BF360C" stroke-width="1.5"/>
+    <text x="100" y="1066" text-anchor="middle" font-size="11" font-weight="bold" fill="white">FINAL</text>
+    <text x="100" y="1081" text-anchor="middle" font-size="11" font-weight="bold" fill="white">ACCEPTANCE</text>
+
+    <text x="440" y="1058" font-size="11" fill="#455A64">&#8226;  Presented at the Weekly LIMSOC Extended Standup</text>
+    <text x="440" y="1074" font-size="11" fill="#455A64">&#8226;  Stakeholders review the completed feature against original brief</text>
+    <text x="440" y="1090" font-size="11" fill="#455A64">&#8226;  Formal sign-off from relevant stakeholders</text>
+    <text x="440" y="1106" font-size="11" fill="#455A64">&#8226;  Rejected &#x2192; returns to V&amp;V or Development with specific feedback</text>
+    <text x="440" y="1122" font-size="11" fill="#E65100" font-weight="600">&#8226;  Accepted &#x2192; moves to Configuration</text>
+  </g>
+
+  <line x1="40" y1="1146" x2="920" y2="1146" stroke="#E0E0E0" stroke-width="1"/>
+
+  <!-- Arrow down to Configuration -->
+  <line x1="100" y1="1092" x2="100" y2="1174" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowDown)"/>
+  <text x="110" y="1165" font-size="9" fill="#E65100">Stakeholders accept</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 8: CONFIGURATION  (y=1174)        -->
+  <!-- ═══════════════════════════════════════ -->
+  <g>
+    <!-- Blue (Dev Team) -->
+    <rect x="40" y="1174" width="120" height="44" rx="6" fill="#1565C0" stroke="#0D47A1" stroke-width="1.5"/>
+    <text x="100" y="1193" text-anchor="middle" font-size="10" font-weight="bold" fill="white">CONFIG-</text>
+    <text x="100" y="1208" text-anchor="middle" font-size="10" font-weight="bold" fill="white">URATION</text>
+
+    <text x="440" y="1184" font-size="11" fill="#455A64">&#8226;  Environment configuration and deployment preparation</text>
+    <text x="440" y="1200" font-size="11" fill="#455A64">&#8226;  Data migration scripts prepared and tested if required</text>
+    <text x="440" y="1216" font-size="11" fill="#455A64">&#8226;  Feature flags and rollout strategy configured</text>
+    <text x="440" y="1232" font-size="11" fill="#455A64">&#8226;  Pre-release checklist completed</text>
+  </g>
+
+  <line x1="40" y1="1258" x2="920" y2="1258" stroke="#E0E0E0" stroke-width="1"/>
+
+  <!-- Arrow down to Release -->
+  <line x1="100" y1="1218" x2="100" y2="1286" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowDown)"/>
+  <text x="110" y="1277" font-size="9" fill="#1565C0">Dev Team moves</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 9: RELEASE  (y=1286)              -->
+  <!-- ═══════════════════════════════════════ -->
+  <g>
+    <!-- Green (Product Team) -->
+    <rect x="40" y="1286" width="120" height="44" rx="6" fill="#2E7D32" stroke="#1B5E20" stroke-width="1.5"/>
+    <text x="100" y="1313" text-anchor="middle" font-size="14" font-weight="bold" fill="white">RELEASE</text>
+
+    <text x="440" y="1296" font-size="11" fill="#E65100" font-weight="600">&#8226;  Communication plan is mandatory before release</text>
+    <text x="452" y="1314" font-size="11" fill="#455A64">Stakeholder notification — who needs to know, when</text>
+    <text x="452" y="1330" font-size="11" fill="#455A64">Release notes — what changed and why</text>
+    <text x="452" y="1346" font-size="11" fill="#455A64">User training or documentation updated if applicable</text>
+    <text x="452" y="1362" font-size="11" fill="#455A64">Support team briefed on changes and potential impact</text>
+    <text x="440" y="1382" font-size="11" fill="#2E7D32" font-weight="600">&#8226;  Feature releases target the 2nd week of each month</text>
+    <text x="440" y="1398" font-size="11" fill="#455A64">&#8226;  Deployment, post-release monitoring and confirmation</text>
+  </g>
+
+  <line x1="40" y1="1422" x2="920" y2="1422" stroke="#E0E0E0" stroke-width="1"/>
+
+  <!-- Arrow down to Done -->
+  <line x1="100" y1="1330" x2="100" y2="1450" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowDown)"/>
+  <text x="110" y="1441" font-size="9" fill="#2E7D32">Product Team moves</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 10: DONE  (y=1450)                -->
+  <!-- ═══════════════════════════════════════ -->
+  <g>
+    <!-- Dark (terminal) -->
+    <rect x="40" y="1450" width="120" height="44" rx="6" fill="#37474F" stroke="#263238" stroke-width="1.5"/>
+    <text x="100" y="1477" text-anchor="middle" font-size="14" font-weight="bold" fill="white">DONE</text>
+
+    <text x="440" y="1462" font-size="11" fill="#455A64">&#8226;  Project complete — feature delivered and in production</text>
+    <text x="440" y="1478" font-size="11" fill="#455A64">&#8226;  Post-implementation review completed</text>
+    <text x="440" y="1494" font-size="11" fill="#455A64">&#8226;  Lessons learned captured for future projects</text>
+  </g>
+
+  <line x1="40" y1="1518" x2="920" y2="1518" stroke="#E0E0E0" stroke-width="1"/>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- DEVELOPMENT CADENCE (below diagram)    -->
+  <!-- ═══════════════════════════════════════ -->
+  <g transform="translate(40, 1540)">
+    <text x="0" y="18" font-size="14" font-weight="bold" fill="#263238">Development Phase Cadence</text>
+    <text x="0" y="36" font-size="11" fill="#78909C">Recurring activities throughout the Development phase. These run continuously until the feature is complete.</text>
+
+    <!-- Weekly Check-in -->
+    <circle cx="22" cy="68" r="14" fill="#E3F2FD" stroke="#90CAF9" stroke-width="1"/>
+    <text x="22" y="72" text-anchor="middle" font-size="8" font-weight="bold" fill="#1565C0">WK</text>
+    <text x="44" y="64" font-size="12" font-weight="600" fill="#37474F">Weekly Check-in Meetings</text>
+    <text x="44" y="78" font-size="11" fill="#455A64">Dev Team and Product Team — progress tracking, blocker resolution, scope questions.</text>
+    <text x="44" y="92" font-size="11" fill="#455A64">Held every week for the duration of the Development phase.</text>
+
+    <!-- Bi-weekly Stakeholder Updates -->
+    <circle cx="22" cy="128" r="14" fill="#E3F2FD" stroke="#90CAF9" stroke-width="1"/>
+    <text x="22" y="132" text-anchor="middle" font-size="8" font-weight="bold" fill="#1565C0">2W</text>
+    <text x="44" y="124" font-size="12" font-weight="600" fill="#37474F">Bi-weekly Stakeholder Updates</text>
+    <text x="44" y="138" font-size="11" fill="#455A64">Broader stakeholder group — demo of progress, feedback incorporation, risk escalation.</text>
+    <text x="44" y="152" font-size="11" fill="#455A64">Held every two weeks. Ensures stakeholders are not surprised at Final Acceptance.</text>
+
+    <!-- Testing Cycles -->
+    <circle cx="22" cy="188" r="14" fill="#E3F2FD" stroke="#90CAF9" stroke-width="1"/>
+    <text x="22" y="192" text-anchor="middle" font-size="8" font-weight="bold" fill="#1565C0">QA</text>
+    <text x="44" y="184" font-size="12" font-weight="600" fill="#37474F">Iterative Testing Cycles</text>
+    <text x="44" y="198" font-size="11" fill="#455A64">Continuous testing throughout — unit, integration, and regression. Each cycle may</text>
+    <text x="44" y="212" font-size="11" fill="#455A64">surface issues requiring rework before the feature proceeds to V&amp;V.</text>
+
+    <!-- Release Train -->
+    <circle cx="22" cy="248" r="14" fill="#E8F5E9" stroke="#81C784" stroke-width="1"/>
+    <text x="22" y="252" text-anchor="middle" font-size="8" font-weight="bold" fill="#2E7D32">RT</text>
+    <text x="44" y="244" font-size="12" font-weight="600" fill="#37474F">Monthly Release Train</text>
+    <text x="44" y="258" font-size="11" fill="#455A64">Feature releases target the 2nd week of each month. Each feature is assigned a</text>
+    <text x="44" y="272" font-size="11" fill="#455A64">target release month during Scoping (e.g. September 2026).</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- LEGEND (bottom)                        -->
+  <!-- ═══════════════════════════════════════ -->
+  <g transform="translate(40, 1840)">
+    <line x1="0" y1="0" x2="880" y2="0" stroke="#E0E0E0" stroke-width="1"/>
+
+    <text x="0" y="24" font-size="10" font-weight="bold" fill="#78909C" letter-spacing="1">LEGEND</text>
+
+    <!-- Ownership colours -->
+    <rect x="0" y="36" width="50" height="20" rx="4" fill="#1565C0"/>
+    <text x="25" y="50" text-anchor="middle" font-size="9" font-weight="bold" fill="white">Phase</text>
+    <text x="58" y="50" font-size="10" fill="#546E7A">Dev Team</text>
+
+    <rect x="140" y="36" width="50" height="20" rx="4" fill="#2E7D32"/>
+    <text x="165" y="50" text-anchor="middle" font-size="9" font-weight="bold" fill="white">Phase</text>
+    <text x="198" y="50" font-size="10" fill="#546E7A">Product Team</text>
+
+    <rect x="310" y="36" width="50" height="20" rx="4" fill="#E65100"/>
+    <text x="335" y="50" text-anchor="middle" font-size="9" font-weight="bold" fill="white">Phase</text>
+    <text x="368" y="50" font-size="10" fill="#546E7A">Stakeholders</text>
+
+    <rect x="470" y="36" width="50" height="20" rx="4" fill="#37474F"/>
+    <text x="495" y="50" text-anchor="middle" font-size="9" font-weight="bold" fill="white">Phase</text>
+    <text x="528" y="50" font-size="10" fill="#546E7A">Terminal</text>
+
+    <!-- Arrow types -->
+    <line x1="0" y1="72" x2="38" y2="72" stroke="#546E7A" stroke-width="2"/>
+    <text x="46" y="76" font-size="10" fill="#546E7A">Main flow</text>
+
+    <line x1="140" y1="72" x2="178" y2="72" stroke="#B0BEC5" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <text x="186" y="76" font-size="10" fill="#546E7A">Return / rejection path</text>
+
+    <text x="380" y="76" font-size="9" fill="#78909C">Arrow labels indicate who moves the project between phases</text>
+  </g>
+
+</svg>
+</body>
+</html>

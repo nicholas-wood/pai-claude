@@ -1,0 +1,9 @@
+[Unit]
+Description=PAI daily cadence (weekdays 06:30)
+
+[Timer]
+OnCalendar=Mon..Fri 06:30
+Persistent=true
+
+[Install]
+WantedBy=timers.target

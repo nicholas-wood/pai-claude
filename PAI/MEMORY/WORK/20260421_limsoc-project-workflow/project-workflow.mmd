@@ -1,0 +1,218 @@
+%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '13px', 'fontFamily': 'Segoe UI, Helvetica, Arial, sans-serif', 'lineColor': '#546E7A'}, 'flowchart': {'curve': 'basis', 'padding': 18, 'nodeSpacing': 50, 'rankSpacing': 60, 'htmlLabels': true, 'useMaxWidth': false}}}%%
+
+flowchart LR
+    %% ═══════════════════════════════════════
+    %% MAIN PHASE FLOW (horizontal spine)
+    %% ═══════════════════════════════════════
+    STRATEGIC["STRATEGIC\nALIGNMENT"]
+    SCOPING["SCOPING"]
+    TECH_ASSESS["TECHNICAL\nASSESSMENT"]
+    APPROVAL["APPROVAL"]
+    DEVELOPMENT["DEVELOPMENT"]
+    VV["VERIFICATION\n& VALIDATION"]
+    FINAL_ACCEPT["FINAL\nACCEPTANCE"]
+    CONFIG["CONFIGURATION"]
+    RELEASE["RELEASE"]
+    DONE["DONE"]
+
+    STRATEGIC -->|"Product Team moves"| SCOPING
+    SCOPING -->|"Product Team moves"| TECH_ASSESS
+    TECH_ASSESS -->|"Dev Team moves"| APPROVAL
+    APPROVAL -->|"Approved"| DEVELOPMENT
+    DEVELOPMENT -->|"Dev Team moves"| VV
+    VV -->|"Product Team moves"| FINAL_ACCEPT
+    FINAL_ACCEPT -->|"Stakeholders accept"| CONFIG
+    CONFIG -->|"Dev Team moves"| RELEASE
+    RELEASE -->|"Product Team moves"| DONE
+
+    %% ═══════════════════════════════════════
+    %% ENTRY POINTS (above Strategic Alignment)
+    %% ═══════════════════════════════════════
+    ENTRY_ROAD(("Product\nRoadmap"))
+    ENTRY_STAKE(("Stakeholder\nRequest"))
+
+    ENTRY_ROAD --> STRATEGIC
+    ENTRY_STAKE --> STRATEGIC
+
+    %% ═══════════════════════════════════════
+    %% STRATEGIC ALIGNMENT ANNOTATIONS
+    %% ═══════════════════════════════════════
+    STRAT_STANDUP(("Weekly Extended\nStandup"))
+    STRAT_NOTE["Product Team\nassesses strategic fit"]
+
+    STRATEGIC --- STRAT_NOTE
+    STRATEGIC --- STRAT_STANDUP
+
+    %% ═══════════════════════════════════════
+    %% SCOPING ANNOTATIONS
+    %% ═══════════════════════════════════════
+    SCOPE_BRIEF(("Feature Brief\ncreated"))
+    SCOPE_CRITERIA(("User stories &\nacceptance criteria"))
+
+    SCOPING --- SCOPE_BRIEF
+    SCOPING --- SCOPE_CRITERIA
+
+    %% ═══════════════════════════════════════
+    %% TECHNICAL ASSESSMENT ANNOTATIONS
+    %% ═══════════════════════════════════════
+    TECH_ARCH(("Architecture\nreview"))
+    TECH_EST(("Effort estimation\n& timeline"))
+    TECH_RISK(("Risk &\ndependency map"))
+
+    TECH_ASSESS --- TECH_ARCH
+    TECH_ASSESS --- TECH_EST
+    TECH_ASSESS --- TECH_RISK
+
+    %% ═══════════════════════════════════════
+    %% APPROVAL GATE ANNOTATIONS
+    %% ═══════════════════════════════════════
+    GATE_REQ(("1. Clear\nrequirements"))
+    GATE_ALIGN(("2. Strategic\nalignment"))
+    GATE_TIME(("3. Timeline\nagreed"))
+    GATE_FUND(("4. Funding\nconfirmed"))
+    GATE_CAP(("5. Capacity\navailable"))
+
+    APPROVAL --- GATE_REQ
+    APPROVAL --- GATE_ALIGN
+    APPROVAL --- GATE_TIME
+    APPROVAL --- GATE_FUND
+    APPROVAL --- GATE_CAP
+
+    %% Rejection path
+    APPROVAL -.->|"Not approved\nBack to Scoping"| SCOPING
+
+    %% ═══════════════════════════════════════
+    %% DEVELOPMENT ANNOTATIONS
+    %% ═══════════════════════════════════════
+    DEV_WEEKLY(("Weekly\nCheck-in"))
+    DEV_BIWEEKLY(("Bi-weekly\nStakeholder Update"))
+    DEV_TESTING(("Iterative\nTesting Cycles"))
+
+    DEVELOPMENT --- DEV_WEEKLY
+    DEVELOPMENT --- DEV_BIWEEKLY
+    DEVELOPMENT --- DEV_TESTING
+
+    %% Scope change path
+    DEVELOPMENT -.->|"Scope change\nRe-approval required"| APPROVAL
+
+    %% ═══════════════════════════════════════
+    %% V&V ANNOTATIONS
+    %% ═══════════════════════════════════════
+    VV_VERIFY(("Verification\nMeets requirements"))
+    VV_VALIDATE(("Validation\nSolves the problem"))
+
+    VV --- VV_VERIFY
+    VV --- VV_VALIDATE
+
+    %% Rejection path
+    VV -.->|"Fail\nBack to Dev"| DEVELOPMENT
+
+    %% ═══════════════════════════════════════
+    %% FINAL ACCEPTANCE ANNOTATIONS
+    %% ═══════════════════════════════════════
+    FA_STANDUP(("Weekly Extended\nStandup"))
+    FA_SIGNOFF(("Stakeholder\nsign-off"))
+
+    FINAL_ACCEPT --- FA_STANDUP
+    FINAL_ACCEPT --- FA_SIGNOFF
+
+    %% Rejection paths
+    FINAL_ACCEPT -.->|"Rejected\nBack to Dev"| DEVELOPMENT
+
+    %% ═══════════════════════════════════════
+    %% RELEASE ANNOTATIONS
+    %% ═══════════════════════════════════════
+    REL_COMMS(("Communication\nPlan required"))
+    REL_NOTES(("Release notes\n& training"))
+
+    RELEASE --- REL_COMMS
+    RELEASE --- REL_NOTES
+
+    %% ═══════════════════════════════════════
+    %% LEGEND
+    %% ═══════════════════════════════════════
+    subgraph LEGEND [" LEGEND "]
+        direction TB
+        L1["PHASE"] ~~~ L2(("Annotation"))
+        L3["Solid arrow = main flow"] ~~~ L4["Dotted arrow = return or rejection"]
+    end
+
+    %% ═══════════════════════════════════════
+    %% OWNERSHIP
+    %% ═══════════════════════════════════════
+    subgraph OWNERSHIP [" OWNERSHIP "]
+        direction TB
+        O1["Blue = Dev Team"]
+        O2["Green = Product Team"]
+        O3["Orange = Stakeholders"]
+    end
+
+    %% ═══════════════════════════════════════
+    %% STYLES
+    %% ═══════════════════════════════════════
+
+    %% Main phase flow - bold, prominent rectangles
+    style STRATEGIC fill:#2E7D32,stroke:#1B5E20,stroke-width:3px,color:#FFFFFF,font-weight:bold
+    style SCOPING fill:#2E7D32,stroke:#1B5E20,stroke-width:3px,color:#FFFFFF,font-weight:bold
+    style TECH_ASSESS fill:#1565C0,stroke:#0D47A1,stroke-width:3px,color:#FFFFFF,font-weight:bold
+    style APPROVAL fill:#E65100,stroke:#BF360C,stroke-width:3px,color:#FFFFFF,font-weight:bold
+    style DEVELOPMENT fill:#1565C0,stroke:#0D47A1,stroke-width:3px,color:#FFFFFF,font-weight:bold
+    style VV fill:#2E7D32,stroke:#1B5E20,stroke-width:3px,color:#FFFFFF,font-weight:bold
+    style FINAL_ACCEPT fill:#E65100,stroke:#BF360C,stroke-width:3px,color:#FFFFFF,font-weight:bold
+    style CONFIG fill:#1565C0,stroke:#0D47A1,stroke-width:3px,color:#FFFFFF,font-weight:bold
+    style RELEASE fill:#2E7D32,stroke:#1B5E20,stroke-width:3px,color:#FFFFFF,font-weight:bold
+    style DONE fill:#37474F,stroke:#263238,stroke-width:3px,color:#FFFFFF,font-weight:bold
+
+    %% Entry points
+    style ENTRY_ROAD fill:#ECEFF1,stroke:#78909C,stroke-width:2px,color:#37474F
+    style ENTRY_STAKE fill:#ECEFF1,stroke:#78909C,stroke-width:2px,color:#37474F
+
+    %% Strategic Alignment annotations
+    style STRAT_STANDUP fill:#E8F5E9,stroke:#81C784,stroke-width:1px,color:#2E7D32
+    style STRAT_NOTE fill:#E8F5E9,stroke:#81C784,stroke-width:1px,color:#2E7D32
+
+    %% Scoping annotations
+    style SCOPE_BRIEF fill:#E8F5E9,stroke:#81C784,stroke-width:1px,color:#2E7D32
+    style SCOPE_CRITERIA fill:#E8F5E9,stroke:#81C784,stroke-width:1px,color:#2E7D32
+
+    %% Technical Assessment annotations
+    style TECH_ARCH fill:#E3F2FD,stroke:#90CAF9,stroke-width:1px,color:#1565C0
+    style TECH_EST fill:#E3F2FD,stroke:#90CAF9,stroke-width:1px,color:#1565C0
+    style TECH_RISK fill:#E3F2FD,stroke:#90CAF9,stroke-width:1px,color:#1565C0
+
+    %% Approval gate annotations
+    style GATE_REQ fill:#FFF3E0,stroke:#FFB74D,stroke-width:1px,color:#E65100
+    style GATE_ALIGN fill:#FFF3E0,stroke:#FFB74D,stroke-width:1px,color:#E65100
+    style GATE_TIME fill:#FFF3E0,stroke:#FFB74D,stroke-width:1px,color:#E65100
+    style GATE_FUND fill:#FFF3E0,stroke:#FFB74D,stroke-width:1px,color:#E65100
+    style GATE_CAP fill:#FFF3E0,stroke:#FFB74D,stroke-width:1px,color:#E65100
+
+    %% Development annotations
+    style DEV_WEEKLY fill:#E3F2FD,stroke:#90CAF9,stroke-width:1px,color:#1565C0
+    style DEV_BIWEEKLY fill:#E3F2FD,stroke:#90CAF9,stroke-width:1px,color:#1565C0
+    style DEV_TESTING fill:#E3F2FD,stroke:#90CAF9,stroke-width:1px,color:#1565C0
+
+    %% V&V annotations
+    style VV_VERIFY fill:#E8F5E9,stroke:#81C784,stroke-width:1px,color:#2E7D32
+    style VV_VALIDATE fill:#E8F5E9,stroke:#81C784,stroke-width:1px,color:#2E7D32
+
+    %% Final Acceptance annotations
+    style FA_STANDUP fill:#FFF3E0,stroke:#FFB74D,stroke-width:1px,color:#E65100
+    style FA_SIGNOFF fill:#FFF3E0,stroke:#FFB74D,stroke-width:1px,color:#E65100
+
+    %% Release annotations
+    style REL_COMMS fill:#FFEBEE,stroke:#E53935,stroke-width:1px,color:#B71C1C
+    style REL_NOTES fill:#E8F5E9,stroke:#81C784,stroke-width:1px,color:#2E7D32
+
+    %% Legend
+    style LEGEND fill:#FAFAFA,stroke:#BDBDBD,stroke-width:1px,color:#424242
+    style L1 fill:#1565C0,stroke:#0D47A1,stroke-width:2px,color:#FFFFFF
+    style L2 fill:#E3F2FD,stroke:#90CAF9,stroke-width:1px,color:#1565C0
+    style L3 fill:#FAFAFA,stroke:#BDBDBD,stroke-width:0px,color:#616161
+    style L4 fill:#FAFAFA,stroke:#BDBDBD,stroke-width:0px,color:#616161
+
+    %% Ownership
+    style OWNERSHIP fill:#FAFAFA,stroke:#BDBDBD,stroke-width:1px,color:#424242
+    style O1 fill:#1565C0,stroke:#0D47A1,stroke-width:1px,color:#FFFFFF
+    style O2 fill:#2E7D32,stroke:#1B5E20,stroke-width:1px,color:#FFFFFF
+    style O3 fill:#E65100,stroke:#BF360C,stroke-width:1px,color:#FFFFFF

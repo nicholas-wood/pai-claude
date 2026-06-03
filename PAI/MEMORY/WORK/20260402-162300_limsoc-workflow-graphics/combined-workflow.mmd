@@ -1,0 +1,166 @@
+%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '13px', 'fontFamily': 'Segoe UI, Helvetica, Arial, sans-serif', 'lineColor': '#546E7A'}, 'flowchart': {'curve': 'basis', 'padding': 18, 'nodeSpacing': 50, 'rankSpacing': 60, 'htmlLabels': true, 'useMaxWidth': false}}}%%
+
+flowchart LR
+    %% ═══════════════════════════════════════
+    %% MAIN STATUS FLOW (horizontal spine)
+    %% ═══════════════════════════════════════
+    TRIAGE["TRIAGE"]
+    REFINEMENT["REFINEMENT"]
+    CANDIDATE["CANDIDATE"]
+    TODO["TODO"]
+    IN_PROGRESS["IN PROGRESS"]
+    IN_QA["IN QA"]
+    PRODUCT_REVIEW["PRODUCT\nREVIEW"]
+    EXTERNAL_REVIEW["EXTERNAL\nREVIEW"]
+    DONE["DONE"]
+
+    TRIAGE -->|"Dev Team moves"| REFINEMENT
+    TRIAGE -->|"No rep input needed"| CANDIDATE
+    REFINEMENT -->|"Info received\nProduct Team moves"| CANDIDATE
+    CANDIDATE -->|"Will do\nProduct Team moves"| TODO
+    TODO -->|"Dev self-assigns"| IN_PROGRESS
+    IN_PROGRESS -->|"Dev moves"| IN_QA
+    IN_QA -->|"Reviewer moves"| PRODUCT_REVIEW
+    PRODUCT_REVIEW -->|"Product Team moves"| EXTERNAL_REVIEW
+    EXTERNAL_REVIEW -->|"State Rep approves\nProduct Team moves"| DONE
+
+    %% ═══════════════════════════════════════
+    %% ENTRY POINTS (above Triage)
+    %% ═══════════════════════════════════════
+    ENTRY_UF(("User\nFeedback"))
+    ENTRY_TM(("Team\nMember"))
+
+    ENTRY_UF --> TRIAGE
+    ENTRY_TM -.->|"Direct entry\nto any state"| TRIAGE
+
+    %% ═══════════════════════════════════════
+    %% TRIAGE ANNOTATIONS (below)
+    %% ═══════════════════════════════════════
+    TRIAGE_URG(("Urgent Bug?\nAssign to\nHigh Impact Bugs\nproject"))
+    TRIAGE_SUP(("Support Request?\nAssign to\nSupport Requests\nproject"))
+    TRIAGE_NOTE["Dev Team\nclassifies"]
+
+    TRIAGE --- TRIAGE_NOTE
+    TRIAGE ---|"Urgent"| TRIAGE_URG
+    TRIAGE ---|"Support"| TRIAGE_SUP
+    TRIAGE_URG -.->|"Straight to TODO\nNotify Management\nGroup"| TODO
+    TRIAGE_SUP -.->|"Assign State Rep\nfor approval"| REFINEMENT
+
+    %% ═══════════════════════════════════════
+    %% REFINEMENT ANNOTATIONS (below)
+    %% ═══════════════════════════════════════
+    REF_SLA(("Assign State Rep\n5 business day SLA"))
+    REF_SUPPORT(("Support request\nno dev change?\nStraight to Done"))
+
+    REFINEMENT --- REF_SLA
+    REFINEMENT ---|"No dev needed"| REF_SUPPORT
+    REF_SUPPORT -.-> DONE
+
+    %% ═══════════════════════════════════════
+    %% CANDIDATE ANNOTATIONS (below)
+    %% ═══════════════════════════════════════
+    CAND_STANDUP(("Weekly LIMSOC\nExtended Standup"))
+    CAND_BACKLOG(("BACKLOG\nCould do\nProduct Team or\nTech Lead moves\nwhen ready"))
+    CAND_CANCEL(("CANCELLED\nShould not do"))
+
+    CANDIDATE --- CAND_STANDUP
+    CANDIDATE ---|"Could do"| CAND_BACKLOG
+    CANDIDATE ---|"Should not do"| CAND_CANCEL
+    CAND_BACKLOG -.->|"Any time"| TODO
+
+    %% ═══════════════════════════════════════
+    %% TODO ANNOTATIONS (below)
+    %% ═══════════════════════════════════════
+    TODO_GATE(("Must be assigned\nto a project\nbefore entering TODO"))
+    TODO_BYPASS(("Agreed project scope\ncan bypass Candidate\nProduct Team or\nTech Lead discretion"))
+
+    TODO --- TODO_GATE
+    TODO --- TODO_BYPASS
+
+    %% ═══════════════════════════════════════
+    %% PROJECT TYPES (below TODO gate)
+    %% ═══════════════════════════════════════
+    PROJ_HIB(("High Impact\nBugs"))
+    PROJ_SUP(("Support\nRequests"))
+    PROJ_MINOR(("Minor\nEnhancements"))
+    PROJ_INIT(("Initiative\nProjects"))
+
+    TODO_GATE --- PROJ_HIB
+    TODO_GATE --- PROJ_SUP
+    TODO_GATE --- PROJ_MINOR
+    TODO_GATE --- PROJ_INIT
+
+    %% ═══════════════════════════════════════
+    %% EXTERNAL REVIEW REJECTION (above)
+    %% ═══════════════════════════════════════
+    EXTERNAL_REVIEW -.->|"Bug found\nBack to Dev"| IN_PROGRESS
+    EXTERNAL_REVIEW -.->|"Functional issue\nBack to Product"| PRODUCT_REVIEW
+
+    %% ═══════════════════════════════════════
+    %% LEGEND
+    %% ═══════════════════════════════════════
+    subgraph LEGEND [" LEGEND "]
+        direction TB
+        L1["STATUS"] ~~~ L2(("Annotation"))
+        L3["Solid arrow = main flow"] ~~~ L4["Dotted arrow = shortcut or rejection"]
+    end
+
+    %% ═══════════════════════════════════════
+    %% COLOUR KEY
+    %% ═══════════════════════════════════════
+    subgraph OWNERSHIP [" OWNERSHIP "]
+        direction TB
+        O1["Blue = Dev Team"]
+        O2["Green = Product Team"]
+        O3["Orange = State Rep"]
+    end
+
+    %% ═══════════════════════════════════════
+    %% STYLES
+    %% ═══════════════════════════════════════
+
+    %% Main status flow - bold, prominent rectangles
+    style TRIAGE fill:#1565C0,stroke:#0D47A1,stroke-width:3px,color:#FFFFFF,font-weight:bold
+    style REFINEMENT fill:#E65100,stroke:#BF360C,stroke-width:3px,color:#FFFFFF,font-weight:bold
+    style CANDIDATE fill:#2E7D32,stroke:#1B5E20,stroke-width:3px,color:#FFFFFF,font-weight:bold
+    style TODO fill:#1565C0,stroke:#0D47A1,stroke-width:3px,color:#FFFFFF,font-weight:bold
+    style IN_PROGRESS fill:#1565C0,stroke:#0D47A1,stroke-width:3px,color:#FFFFFF,font-weight:bold
+    style IN_QA fill:#1565C0,stroke:#0D47A1,stroke-width:3px,color:#FFFFFF,font-weight:bold
+    style PRODUCT_REVIEW fill:#2E7D32,stroke:#1B5E20,stroke-width:3px,color:#FFFFFF,font-weight:bold
+    style EXTERNAL_REVIEW fill:#E65100,stroke:#BF360C,stroke-width:3px,color:#FFFFFF,font-weight:bold
+    style DONE fill:#37474F,stroke:#263238,stroke-width:3px,color:#FFFFFF,font-weight:bold
+
+    %% Entry points - distinct
+    style ENTRY_UF fill:#ECEFF1,stroke:#78909C,stroke-width:2px,color:#37474F
+    style ENTRY_TM fill:#ECEFF1,stroke:#78909C,stroke-width:2px,color:#37474F
+
+    %% Annotations - circles, lighter, clearly secondary
+    style TRIAGE_URG fill:#FFEBEE,stroke:#E53935,stroke-width:1px,color:#B71C1C
+    style TRIAGE_SUP fill:#FFF3E0,stroke:#FB8C00,stroke-width:1px,color:#E65100
+    style TRIAGE_NOTE fill:#E3F2FD,stroke:#90CAF9,stroke-width:1px,color:#1565C0
+    style REF_SLA fill:#FFF3E0,stroke:#FFB74D,stroke-width:1px,color:#E65100
+    style REF_SUPPORT fill:#FFF3E0,stroke:#FFB74D,stroke-width:1px,color:#E65100
+    style CAND_STANDUP fill:#E8F5E9,stroke:#81C784,stroke-width:1px,color:#2E7D32
+    style CAND_BACKLOG fill:#E8F5E9,stroke:#81C784,stroke-width:1px,color:#2E7D32
+    style CAND_CANCEL fill:#FFEBEE,stroke:#E53935,stroke-width:1px,color:#B71C1C
+    style TODO_GATE fill:#F3E5F5,stroke:#BA68C8,stroke-width:1px,color:#6A1B9A
+    style TODO_BYPASS fill:#F3E5F5,stroke:#BA68C8,stroke-width:1px,color:#6A1B9A
+
+    %% Project types - small circles
+    style PROJ_HIB fill:#FFCDD2,stroke:#E53935,stroke-width:1px,color:#B71C1C
+    style PROJ_SUP fill:#FFE0B2,stroke:#FB8C00,stroke-width:1px,color:#E65100
+    style PROJ_MINOR fill:#C8E6C9,stroke:#66BB6A,stroke-width:1px,color:#2E7D32
+    style PROJ_INIT fill:#BBDEFB,stroke:#42A5F5,stroke-width:1px,color:#1565C0
+
+    %% Legend
+    style LEGEND fill:#FAFAFA,stroke:#BDBDBD,stroke-width:1px,color:#424242
+    style L1 fill:#1565C0,stroke:#0D47A1,stroke-width:2px,color:#FFFFFF
+    style L2 fill:#E3F2FD,stroke:#90CAF9,stroke-width:1px,color:#1565C0
+    style L3 fill:#FAFAFA,stroke:#BDBDBD,stroke-width:0px,color:#616161
+    style L4 fill:#FAFAFA,stroke:#BDBDBD,stroke-width:0px,color:#616161
+
+    %% Ownership
+    style OWNERSHIP fill:#FAFAFA,stroke:#BDBDBD,stroke-width:1px,color:#424242
+    style O1 fill:#1565C0,stroke:#0D47A1,stroke-width:1px,color:#FFFFFF
+    style O2 fill:#2E7D32,stroke:#1B5E20,stroke-width:1px,color:#FFFFFF
+    style O3 fill:#E65100,stroke:#BF360C,stroke-width:1px,color:#FFFFFF

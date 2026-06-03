@@ -1,0 +1,51 @@
+#!/usr/bin/env bun
+// Daily git auto-commit for knowledge/docs repos only. Explicit allowlist.
+import { $ } from "bun"
+
+const HOME = process.env.HOME ?? ""
+// ALLOWLIST: notes/docs/config repos only. NOT code repos, NOT worktrees.
+const REPOS = [
+  `${HOME}/Documents/workspace`,        // life-os
+  // `${HOME}/.claude`,                 // enable once it is a git repo on the box
+]
+const SECRET = /(^|\/)\.env|\.key$|\.pem$|id_rsa|\.secrets\//
+const stamp = new Date().toISOString().slice(0, 16).replace("T", " ")
+const host = (await $`hostname -s`.quiet().text()).trim()
+
+for (const dir of REPOS) {
+  try {
+    await $`git -C ${dir} rev-parse --git-dir`.quiet()
+    // skip if mid-merge/rebase
+    const inMerge = await $`git -C ${dir} rev-parse -q --verify MERGE_HEAD`.quiet().nothrow()
+    if (inMerge.exitCode === 0) { console.log(`SKIP ${dir}: mid-merge`); continue }
+
+    const dirty = (await $`git -C ${dir} status --porcelain`.quiet().text()).trim()
+    if (!dirty) { console.log(`clean ${dir}`); continue }
+
+    await $`git -C ${dir} add -A`.quiet()
+    const staged = (await $`git -C ${dir} diff --cached --name-only`.quiet().text()).trim().split("\n")
+    const leak = staged.find((f) => SECRET.test(f))
+    if (leak) { await $`git -C ${dir} reset`.quiet(); console.log(`ABORT ${dir}: secret staged (${leak})`); continue }
+
+    await $`git -C ${dir} commit -m ${`chore: daily auto-commit ${stamp} (${host})`}`.quiet()
+    const hasUpstream = await $`git -C ${dir} rev-parse --abbrev-ref --symbolic-full-name @{u}`.quiet().nothrow()
+    if (hasUpstream.exitCode === 0) {
+      await $`git -C ${dir} pull --rebase --autostash`.quiet().nothrow()
+      const push = await $`git -C ${dir} push`.quiet().nothrow()
+      console.log(push.exitCode === 0 ? `pushed ${dir}` : `committed (push FAILED, retry next run) ${dir}`)
+    } else {
+      console.log(`committed (no upstream) ${dir}`)
+    }
+  } catch (e) { console.log(`ERROR ${dir}: ${e}`) }
+}
+process.exit(0)   // never fail the Pulse job
+
+      await $`git -C ${dir} pull --rebase --autostash`.quiet().nothrow()
+      const push = await $`git -C ${dir} push`.quiet().nothrow()
+      console.log(push.exitCode === 0 ? `pushed ${dir}` : `committed (push FAILED, retry next run) ${dir}`)
+    } else {
+      console.log(`committed (no upstream) ${dir}`)
+    }
+  } catch (e) { console.log(`ERROR ${dir}: ${e}`) }
+}
+process.exit(0)   // never fail the Pulse job

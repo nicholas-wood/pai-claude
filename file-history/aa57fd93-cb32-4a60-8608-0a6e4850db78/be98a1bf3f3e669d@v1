@@ -1,0 +1,96 @@
+# LIMSOC National IMS
+
+## Status
+Active - primary consulting engagement; most substantial and strategically important project.
+
+## Summary
+Paid independent consulting engagement with SLSA (Surf Life Saving Australia) to drive strategy, architecture, governance, and product direction for LIMSOC - a national-scale, real-time incident management platform serving ~199k members across a ~$100M organisation. Nick's deliverables are executive-grade documents and architecture; client owns the platform code in Bitbucket. Core platform message: "Right information, right people, right time." This is a distinct paid engagement; Nick's volunteer SLCO role is separate and unrelated.
+
+## System Prompt
+When working on this project, treat LIMSOC as a mature, operationally credible, nationally scalable incident management platform built by lifesaving, for lifesaving. Default audience is CEO / exec / CIO / CTO - produce executive-ready output: clear headings, sharp prose, no filler. Always distinguish confirmed facts from working assumptions and inferences explicitly. Maintain consistency across governance, rollout, commercials, architecture, integration, configuration strategy, testing, and disaster recovery language. Frame recommendations in terms of strategic implications, delivery feasibility, operating model, and commercial practicality. Use scenario-based trade-offs and realistic pathways rather than single absolute answers. Anchor every deliverable on the core message: "Right information, right people, right time." For highest-stakes board or CEO documents, escalate the working model to opus.
+
+## Confirmed Facts
+
+### Platform
+- Real-time incident management system built by lifesaving, for lifesaving
+- Supports users across the full operational spectrum: between the flags, club/support ops, comms/dispatch, duty officers, executives/command
+- Surfguard = organisational/membership/roster system of record; LIMSOC = operational system of record
+
+### Technical Stack
+- Cloud: AWS; infrastructure as code via Terraform
+- Data: Multi-AZ Aurora Postgres
+- Edge/CDN: Cloudflare; backups: Azure
+- Observability: Better Uptime, Sentry, Better Stack, OpenTelemetry
+- Environments: Dev / UAT / Prod / Training
+- API-first architecture, asynchronous processing, canonical internal data model
+- Tenant isolation by jurisdiction (state); config-driven operations
+- Offline/low-connectivity resilience ("assisted servicing" model: caching and reconnect resilience)
+
+### Governance
+- Recommended direction: wholly owned subsidiary
+- Product Manager holds final decision rights on backlog and prioritisation
+- LSAG plays advisory role
+- Customer-driven intake model
+- Configurable where conceptually the same; build net-new only where genuinely distinct
+
+### National Architecture
+- Common platform, jurisdictional tenancy boundaries
+- Local feeds stay within tenant boundaries
+- Reusable integrations where the same external platform exists across states
+- Configuration-driven, not duplication
+
+### Rollout
+- Controlled, gated, readiness-based; state rollout staggered
+- Integration readiness and operational acceptance are gates
+- Discovery workshop targeted week of 9 March 2026
+- Nick presented to SLSA in Sydney on 13 March 2026
+
+### Key Capabilities
+- Offline: assisted servicing model, caching/reconnect resilience
+- Interagency: slide-in RHS UI, structured request/acknowledge flows, escalation ladders, SMS acknowledgement, full logging
+- DR: high reliability baseline, fast infrastructure rebuild via Terraform, Azure backups, potential cross-cloud options
+- Testing: current state more manual/targeted E2E; future intent toward stronger unit and integration coverage
+
+### Key Documents (OneDrive)
+- National Rollout Approach.docx
+- LIMSOC National Commercial Breakdown - V2.docx
+- LIMSOC Permission Model Summary
+- EOI/proposal response (sections 3.1.5, 3.1.6, 3.2.6)
+- Governance options paper, low connectivity approach, interagency behaviour spec
+- Integrations summary, data/reporting approach, environment topology diagram
+- DR strategy, testing strategy uplift, national configuration approach
+- CEO-level summary/pack navigation document
+- Season priorities 2025-26 (Markdown source of truth): `~/OneDrive/06_Lifesaving/SLSA/Projects/LIMSOC/limsoc-season-priorities-2025-26.md`
+
+## Commercials
+- Brand: Nicholas Wood - Digital Consulting
+- Current rate: ~$1,000/day; prior rate ~$750/day (earlier negotiations around 40 days at $750/day)
+- 30-day engagement structure discussed at $1,000/day
+- Final invoice covered 10 + 3 days effort (total slightly over 30 originally agreed; no extra cost added)
+- Invoice line items: SLSA briefing pack prep, supporting documents, updated commercial structure proposal, presentation to SLSA in Sydney 13 March 2026
+- Invoicing via Xero; consulting agreement and liability cap language has been discussed
+- Engagement board tracked in Monday.com: https://life-saving-vic.monday.com/boards/18401115686/pulses/11336514141
+- Positioning: strategic/trusted advisor, not freelancer; executive confidence with pragmatic scope control
+
+## Current State
+- Season priorities proposal for 2025-26 authored by Nick (18 projects across 4 focus areas), structured as problem/proposed change/impact per project
+- Document awaiting team buy-in at Extended Standup before full project scoping can proceed
+- Markdown is the source of truth for season priorities; Word doc and PDF generated from it
+- Themes: Simplification, Cohesion, AI Innovation (LIMSOC positioned as agile greenfield vs legacy ESO incumbents)
+- Focus areas:
+  1. Enhance Incident Management (target Sep 2025) - 8 projects including AI brief, simplified creation, notification simplification
+  2. More Information on Front Line (target Sep 2025) - 3 projects including patrol map, implied access
+  3. Volunteer Rostering (target Aug 2025) - 4 projects including team rostering, shift bid
+  4. Data Integrity and Reporting (target Oct 2025) - 3 projects including PDF reporting, AI assistance on incidents and first aid forms
+- No blockers recorded as of latest context
+
+## Key Outputs / Next Steps
+- Secure team endorsement of 2025-26 season priorities at Extended Standup
+- Move endorsed projects into the 10-phase delivery workflow, assigning each a target release month at Scoping
+- Continue national rollout strategy and governance documentation for SLSA executive audience
+- Maintain alignment across governance, commercials, rollout, ownership, configuration, integration, and risk documents
+- Delivery workflow: 10-phase process (Strategic Alignment -> Scoping -> Technical Assessment -> Approval [5-point gate] -> Development -> Verification & Validation -> Final Acceptance -> Configuration -> Release -> Done); monthly release train targeting 2nd week of each month
+- [gap: invoicing status post-13 March 2026 engagement - confirm whether final invoice has been settled]
+- [gap: named SLSA stakeholders/decision-makers not recorded in sources]
+
+<!-- migrated from workspace/limsoc-national-ims + PAI 4.x on 2026-06-02 -->

@@ -1,0 +1,23 @@
+# Finance - Operator Brief
+
+You are operating on Nick's personal and consulting-company finances.
+
+## Before any work
+1. Read `ISA.md` - the project system of record (Problem, Vision, Principles, Constraints, Decisions).
+2. Read `context/facts.md` (ledgers, accounts, settled rules) and `context/state.md` (current cashflow,
+   runway, open reconciliation).
+3. Read `context/references.md` (where finals and source data live) and `context/feedback.md`.
+
+## Agent
+- `accountant` (in `agents/accountant/`, with its own claude.md + memory.md) - owns all money work.
+
+To use it as a harness sub-agent, invoke the pointer in `.claude/agents/`; otherwise operate as the
+persona by reading `agents/accountant/claude.md`.
+
+## Rules
+- Keep personal and Nicholas Wood Digital Consulting (ABN + PTY LTD) ledgers separate; the company has GST.
+- AUD throughout; Australian financial year (1 Jul to 30 Jun).
+- Default deliverable is a summary plus advice, not raw tables.
+- Flag anything that moves money. Analysis and advice only; never move money or commit finals directly.
+- Finals to `onedrive://OneDrive-Personal/04_Finance/`; markdown working notes stay in `artifacts/`.
+- Australian English, no em dashes.

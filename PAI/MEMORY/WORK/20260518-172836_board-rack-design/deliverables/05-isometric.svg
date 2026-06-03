@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2200 -2700 6500 4700" width="1400" height="1010" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrowL" viewBox="0 0 10 10" refX="0" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 10 0 L 0 5 L 10 10 z" fill="#c00"/></marker>
+    <marker id="arrowR" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#c00"/></marker>
+    <marker id="callout" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#04a"/></marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="-2150" y="-2600" font-size="56" font-weight="bold" fill="#222">ISOMETRIC VIEW</text>
+  <text x="-2150" y="-2530" font-size="30" fill="#666">3D reference. Shown with boards loaded, sleds stowed, IRB on top. Drawing not to scale; dimensions in millimetres.</text>
+  <text x="-2150" y="-2490" font-size="28" fill="#666">Quantity: 2 units.</text>
+
+  <!-- Isometric projection: For point (x,y,z), SVG coords are:
+       x_svg = (x - y) * 0.866    (= cos 30°)
+       y_svg = (x + y) * 0.5 - z   (= sin 30° for x+y, minus z for vertical)
+       x runs along the rack length (0 to 3340)
+       y runs across the rack width (0 to 1400)
+       z runs vertical (0 to 2200, plus IRB on top)
+       Origin at front-port-bottom corner. -->
+
+  <!-- Ground "plate" (faint quad) -->
+  <polygon points="0,0 2893,1670 1680,2370 -1212,700" fill="#eef0e6" stroke="#aaa" stroke-width="1.5"/>
+
+  <!-- CASTERS (4 corners, drawn as circles in isometric — approximated as ellipses) -->
+  <g fill="#999" stroke="#222" stroke-width="2">
+    <ellipse cx="0" cy="0" rx="60" ry="30"/>
+    <ellipse cx="-1212" cy="700" rx="60" ry="30"/>
+    <ellipse cx="2893" cy="1670" rx="60" ry="30"/>
+    <ellipse cx="1680" cy="2370" rx="60" ry="30"/>
+  </g>
+
+  <!-- BOTTOM RAILS -->
+  <!-- Front bottom rail: from (0,0,200) to (0,1400,200).  Actually y=0 means port; let's say port side rail goes (0,0,200) to (3340,0,200). Drawing as a beam. -->
+  <!-- Port bottom rail: from (0,0,200) to (3340,0,200) -->
+  <line x1="0" y1="-200" x2="2893" y2="1470" stroke="#222" stroke-width="4"/>
+  <!-- Stbd bottom rail: from (0,1400,200) to (3340,1400,200) -->
+  <line x1="-1212" y1="500" x2="1680" y2="2170" stroke="#222" stroke-width="4"/>
+  <!-- Front bottom rail: from (0,0,200) to (0,1400,200) -->
+  <line x1="0" y1="-200" x2="-1212" y2="500" stroke="#222" stroke-width="4"/>
+  <!-- Rear bottom rail: from (3340,0,200) to (3340,1400,200) -->
+  <line x1="2893" y1="1470" x2="1680" y2="2170" stroke="#222" stroke-width="4"/>
+
+  <!-- UPRIGHTS — 4 per side. Port side at y=0: x positions 30, 1093, 2127, 3290.  Stbd side at y=1400. -->
+  <!-- For each upright, draw a vertical line from (x, y, 200) to (x, y, 2200). In SVG: -->
+  <g stroke="#222" stroke-width="3.5">
+    <!-- Port uprights -->
+    <line x1="26" y1="-185" x2="26" y2="-2185"/>
+    <line x1="947" y1="361" x2="947" y2="-1639"/>
+    <line x1="1842" y1="877" x2="1842" y2="-1123"/>
+    <line x1="2849" y1="1445" x2="2849" y2="-555"/>
+    <!-- Stbd uprights (y=1400) -->
+    <line x1="-1186" y1="715" x2="-1186" y2="-1285"/>
+    <line x1="-265" y1="1261" x2="-265" y2="-739"/>
+    <line x1="630" y1="1777" x2="630" y2="-223"/>
+    <line x1="1637" y1="2345" x2="1637" y2="345"/>
+  </g>
+
+  <!-- TOP FRAME — same rectangle as bottom but at z=2200 -->
+  <line x1="0" y1="-2200" x2="2893" y2="-530" stroke="#222" stroke-width="4"/>
+  <line x1="-1212" y1="-1500" x2="1680" y2="170" stroke="#222" stroke-width="4"/>
+  <line x1="0" y1="-2200" x2="-1212" y2="-1500" stroke="#222" stroke-width="4"/>
+  <line x1="2893" y1="-530" x2="1680" y2="170" stroke="#222" stroke-width="4"/>
+
+  <!-- 5 SHELF LEVELS - show as light horizontal panels (top surface only) at each level -->
+  <!-- Level heights z = 300, 700, 1100, 1500, 1900 -->
+  <g fill="#cdd" stroke="#444" stroke-width="1.5" opacity="0.6">
+    <polygon points="0,-300 2893,1370 1680,2070 -1212,400"/>
+    <polygon points="0,-700 2893,970 1680,1670 -1212,0"/>
+    <polygon points="0,-1100 2893,570 1680,1270 -1212,-400"/>
+    <polygon points="0,-1500 2893,170 1680,870 -1212,-800"/>
+    <polygon points="0,-1900 2893,-230 1680,470 -1212,-1200"/>
+  </g>
+
+  <!-- BOARDS — show one example on top level only (so isometric isn't cluttered). 2 boards side-by-side. -->
+  <!-- Board 1: from (60, 70, 1950) to (3260, 650, 2030) -->
+  <!-- Let me approximate isometric for the board top surface. -->
+  <g fill="#bcd" stroke="#234" stroke-width="2" opacity="0.8">
+    <!-- Top board 1 -->
+    <polygon points="-9,-1985 2823,-356 2321,-66 -511,-1695"/>
+    <!-- Top board 2 -->
+    <polygon points="-441,-1735 2391,-106 1889,184 -943,-1445"/>
+  </g>
+  <text x="1100" y="-1050" text-anchor="middle" font-size="26" fill="#234" font-style="italic" transform="rotate(30 1100 -1050)">boards (top level shown)</text>
+
+  <!-- SLIDE RAILS on top, along long sides -->
+  <g stroke="#a44" stroke-width="5">
+    <!-- Port rail -->
+    <line x1="0" y1="-2200" x2="2789" y2="-590"/>
+    <!-- Stbd rail -->
+    <line x1="-1212" y1="-1500" x2="1576" y2="110"/>
+  </g>
+
+  <!-- SLEDS — 2 sleds in stowed position. From (0, y_sled, 2200) to (3000, y_sled, 2200). Spaced 900 c-to-c, so port sled centerline at y=250, stbd at y=1150. -->
+  <g fill="#fa8" stroke="#a64" stroke-width="2.5">
+    <!-- Port sled (y_sled = 250) - thin polygon strip. -->
+    <polygon points="-217,-2075 2382,-575 2426,-525 -173,-2025"/>
+    <!-- Stbd sled (y_sled = 1150) -->
+    <polygon points="-996,-1625 1603,-125 1647,-75 -952,-1575"/>
+  </g>
+
+  <!-- Front crossbar (links sleds at front) -->
+  <polygon points="-217,-2075 -996,-1625 -952,-1575 -173,-2025" fill="#a64" stroke="#622" stroke-width="2"/>
+
+  <!-- Rear crossbar (at rear roller, 2400 mm from front) -->
+  <polygon points="1862,-875 1083,-425 1127,-375 1906,-825" fill="#a64" stroke="#622" stroke-width="2"/>
+
+  <!-- IRB on top of sleds (centred over rack length, semi-transparent) -->
+  <!-- IRB: 1700 wide x 2100 long, height 600. Position: x from 620 to 2720, y from -150 to 1550 (centred over rack width).  But rack width is 0 to 1400, so IRB y from -150 to 1550 means it overhangs both sides. -->
+  <g fill="#bea" stroke="#363" stroke-width="2.5" opacity="0.75">
+    <!-- IRB top surface -->
+    <polygon points="612,-2204 2431,-1153 1182,-431 -637,-1482"/>
+    <!-- IRB front (sloped down on bow side, simplified) -->
+    <polygon points="612,-2204 -637,-1482 -637,-882 612,-1604"/>
+    <!-- IRB side (port) -->
+    <polygon points="612,-2204 2431,-1153 2431,-553 612,-1604"/>
+  </g>
+  <text x="1000" y="-1500" text-anchor="middle" font-size="44" fill="#363" font-weight="bold" font-style="italic" transform="rotate(30 1000 -1500)">IRB</text>
+
+  <!-- DIAGONAL BRACES on long sides (some) -->
+  <g stroke="#666" stroke-width="2" stroke-dasharray="6 4" opacity="0.55">
+    <!-- Port side, between adjacent uprights, X-braces above lowest -->
+    <line x1="26" y1="-185" x2="947" y2="-1639"/>
+    <line x1="26" y1="-2185" x2="947" y2="361"/>
+    <line x1="947" y1="-1639" x2="1842" y2="877"/>
+    <line x1="947" y1="361" x2="1842" y2="-1123"/>
+    <line x1="1842" y1="877" x2="2849" y2="-555"/>
+    <line x1="1842" y1="-1123" x2="2849" y2="1445"/>
+  </g>
+
+  <!-- WINCH at front-base -->
+  <g fill="#225" stroke="#003" stroke-width="2">
+    <polygon points="-450,30 -350,30 -350,150 -450,150"/>
+  </g>
+  <line x1="-400" y1="100" x2="-700" y2="350" stroke="#04a" stroke-width="1" marker-end="url(#callout)"/>
+  <text x="-720" y="360" text-anchor="end" font-size="26" fill="#04a">winch (12V, 1000 kg WLL)</text>
+
+  <!-- Cable from winch to sled front crossbar -->
+  <line x1="-400" y1="90" x2="-585" y2="-1850" stroke="#08c" stroke-width="2.5"/>
+
+  <!-- CALLOUTS / dimensions -->
+  <!-- Overall L -->
+  <line x1="0" y1="200" x2="2893" y2="1870" stroke="#c00" stroke-width="1.5" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+  <text x="1700" y="1100" font-size="32" fill="#c00" transform="rotate(30 1700 1100)">3340 length</text>
+
+  <!-- Overall W -->
+  <line x1="2993" y1="1530" x2="1780" y2="2230" stroke="#c00" stroke-width="1.5" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+  <text x="2480" y="1830" font-size="32" fill="#c00" transform="rotate(-30 2480 1830)">1400 width</text>
+
+  <!-- Overall H -->
+  <line x1="3050" y1="-530" x2="3050" y2="1670" stroke="#c00" stroke-width="1.5" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+  <text x="3080" y="570" font-size="32" fill="#c00">2200 height</text>
+  <text x="3080" y="610" font-size="22" fill="#c00">(sleds stowed, max for door)</text>
+
+  <!-- Annotation callouts -->
+  <g stroke="#04a" stroke-width="1" fill="none">
+    <line x1="0" y1="-1900" x2="-700" y2="-2100" marker-end="url(#callout)"/>
+    <line x1="947" y1="-700" x2="1500" y2="-200" marker-end="url(#callout)"/>
+    <line x1="1100" y1="-2000" x2="1900" y2="-2400" marker-end="url(#callout)"/>
+    <line x1="0" y1="0" x2="-700" y2="450" marker-end="url(#callout)"/>
+  </g>
+  <text x="-720" y="-2110" text-anchor="end" font-size="24" fill="#04a">5 shelf levels @ 300, 700, 1100, 1500, 1900 mm</text>
+  <text x="1520" y="-180" font-size="24" fill="#04a">cross-pieces (perpendicular to boards)</text>
+  <text x="1920" y="-2400" font-size="24" fill="#04a">sleds + IRB on top (stowed)</text>
+  <text x="-720" y="460" text-anchor="end" font-size="24" fill="#04a">4× casters ø150, locking brake</text>
+
+  <!-- Note: IRB shown only for reference (it's wider than rack, overhangs both sides) -->
+  <text x="-2150" y="1850" font-size="24" fill="#04a" font-style="italic">IRB shown for reference (170 cm wide → overhangs rack each side ≈ 15 cm). IRB present only outside shed.</text>
+  <text x="-2150" y="1880" font-size="24" fill="#04a" font-style="italic">Diagonal X-braces shown dashed for clarity — fitted on both long sides, between adjacent uprights.</text>
+  <text x="-2150" y="1910" font-size="24" fill="#04a" font-style="italic">Drawing is schematic — not all braces, hardware, fasteners shown. Refer to detail sheet (04-sled-winch-detail.svg).</text>
+
+  <!-- Compass / direction indicator -->
+  <g transform="translate(-1800, 1500)">
+    <circle cx="0" cy="0" r="100" fill="#fff" stroke="#222" stroke-width="2"/>
+    <line x1="0" y1="0" x2="86.6" y2="50" stroke="#222" stroke-width="2" marker-end="url(#arrowR)"/>
+    <text x="100" y="60" font-size="22" fill="#222">LENGTH (rear)</text>
+    <line x1="0" y1="0" x2="-86.6" y2="50" stroke="#222" stroke-width="2" marker-end="url(#arrowR)"/>
+    <text x="-100" y="60" text-anchor="end" font-size="22" fill="#222">WIDTH (stbd)</text>
+    <line x1="0" y1="0" x2="0" y2="-90" stroke="#222" stroke-width="2" marker-end="url(#arrowR)"/>
+    <text x="10" y="-100" font-size="22" fill="#222">UP</text>
+  </g>
+</svg>

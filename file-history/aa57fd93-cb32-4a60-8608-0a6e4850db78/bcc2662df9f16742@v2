@@ -1,0 +1,101 @@
+---
+project: personal
+effort: E3
+phase: active
+progress: active-multi-thread
+mode: build
+started: 2026-06-02
+updated: 2026-06-02
+---
+
+# Personal — Project ISA
+
+> Project ISA (system of record). Lives in the workspace per PAI doctrine. Supersedes the `context/{facts,state,references,feedback}.md` foundation pattern: those files fold into the sections below and are retained as stubs until retired. The `USER/PROJECTS/personal.md` entry in PAI is the lightweight index that points here.
+
+## Problem
+
+Nick has several recurring personal threads -- gym/strength training, Hazel dog co-ownership, spare room rental, EV decision, and home automation -- that do not warrant individual project workspaces but still require structured context, decisions, and artefacts. Without a single source of record, context scatters across PAI memory, operator briefs, and ad-hoc files, making it easy for a DA session to start with stale or missing information for any given thread.
+
+## Vision
+
+A single, well-indexed personal workspace where each thread has a clear state record, artefacts are findable, and a DA session can orient within seconds by reading this ISA. Each thread remains self-contained (no cross-contamination) and is elevated to its own project only if it becomes genuinely recurring and complex enough to warrant it.
+
+## Out of Scope
+
+- Dedicated sub-project workspaces for individual threads (unless thread complexity demands it).
+- Gym/strength training detail managed separately -- that thread has its own workspace at `~/Documents/workspace/gym/` and its own full context; this ISA holds the cross-reference only.
+- Jurisdiction-specific legal advice (Hazel agreement, spare room rental are plain-English practical documents, not legal opinions).
+- Formal membership of any app or SaaS platform for co-ownership or rental management.
+- EV hardware specifications or test-drive logistics.
+
+## Principles
+
+- One ISA as the single source of record across all threads; context files are appendix-only.
+- Confirm the active thread before acting -- the threads are distinct and conflating them causes errors.
+- Plain English in all artefacts (agreements, listings, house rules) -- practical and usable in real life.
+- Home automation YAML must be copy-paste ready with state checks and edge cases covered.
+- Do not modify Nick's written content (quotes, clauses) without asking.
+- Sensitive threads (Hazel, spare room) are treated factually and neutrally.
+
+## Constraints
+
+- **Gym thread** defers to `~/Documents/workspace/gym/` for detailed program management. Active shoulder impingement constrains pressing load progression; load prescriptions calibrated by RIR, not aspirational numbers.
+- **Home automation** targets Home Assistant; YAML must be valid HA automation syntax.
+- **Rental and co-ownership documents** are in a Victorian, Australia context.
+- **No agents** active by default. If a thread becomes recurring, use `agent-onboarder` to mint a dedicated agent.
+- Australian English, no em dashes, in all output.
+
+## Goal
+
+Each personal thread has a clear current state, any pending artefacts or decisions are identified, and the DA can orient to any thread in a single read of this ISA plus the relevant artefact file. Done is measured by: all five threads have a documented current state, key gaps are flagged, and no active thread is missing its source artefact.
+
+## Criteria
+
+- [ ] ISC-1: Gym thread -- current block, split, working weights, and active blockers documented and cross-referenced to `~/Documents/workspace/gym/`
+- [ ] ISC-2: Hazel co-ownership agreement -- agreement text drafted, parties and scope confirmed, file in `artifacts/`
+- [ ] ISC-3: Spare room rental -- listing text, screening criteria, and rental terms documented, file in `artifacts/`
+- [ ] ISC-4: EV decision -- TCO and timing analysis complete, decision documented in `artifacts/`
+- [ ] ISC-5: Home automation -- all active automations documented in `artifacts/Home_Automation/` with YAML deployed and tested
+- [ ] ISC-6: Anti: no thread context stored only in PAI memory without a corresponding ISA entry (memory is ephemeral; ISA is the record)
+- [ ] ISC-7: Anti: gym thread load prescriptions never exceed what is warranted by RIR and current shoulder health
+- [ ] ISC-8: ISA is the primary read target on session start; context stubs are retired or point here
+
+## Test Strategy
+
+| isc | type | check | threshold | tool |
+|-----|------|-------|-----------|------|
+| ISC-1 | reference | gym cross-reference points to a readable file | file exists and is non-empty | Read |
+| ISC-2 | artefact | Hazel agreement file present in `artifacts/` | file exists with parties + scope | Read |
+| ISC-3 | artefact | spare room listing + terms file present in `artifacts/` | file exists | Read |
+| ISC-4 | artefact | EV decision analysis file present in `artifacts/` | file exists | Read |
+| ISC-5 | functional | HA YAML parses without error; automations cover defined entity pairs | valid YAML, entity IDs consistent | YAML lint |
+| ISC-6 | process | no thread-critical facts exist only in PAI memory | zero memory-only facts | manual audit |
+
+## Features
+
+| name | satisfies | depends_on | parallelisable |
+|------|-----------|------------|----------------|
+| Hazel agreement draft | ISC-2 | Ruby's input on terms | no |
+| Spare room listing + terms | ISC-3 | Nick's target rent + house rules | no |
+| EV TCO and timing analysis | ISC-4 | Nick's finance preferences | yes |
+| Home automation YAML completion | ISC-5 | HA entity IDs confirmed | yes |
+| Gym cross-reference update | ISC-1 | gym workspace ISA | yes |
+
+## Decisions
+
+- 2026-06-02: Project converted to PAI project-ISA model. `context/` files are retained as stubs; content folded into this ISA and into `USER/PROJECTS/personal.md`. No agents registered (threads do not yet warrant dedicated agents).
+- Gym thread deliberately cross-references `~/Documents/workspace/gym/` rather than duplicating program detail here, to avoid dual-maintenance.
+- Home automation artefact (`artifacts/Home_Automation/ha_automations_new.yaml`) exists and covers synced switch automations for entrance bottom left/right circuits and nightly bedroom lamp schedule.
+- 2026-06-02: Absorbed the retired `life` project's personal-admin threads. EV decision and home automation are owned here (already present as ISC-4 and ISC-5). `life`'s orchestration cadence did not come here - it became a DA rhythm (`USER/Routines/weekly-review.md`, `TELOS/IDEAL_STATE/RHYTHMS.md`). `personal` is now the single record for low-frequency personal threads.
+
+## Changelog
+
+- conjectured: flat `context/{facts,state,references,feedback}.md` is sufficient for multi-thread personal work. refuted_by: context files in this project were empty stubs; actual content lived in PAI memory and `USER/PROJECTS/personal.md`. learned: the ISA is the appropriate single source; context stubs become appendix or retire. criterion_now: ISA is the record; context files point here.
+
+## Verification
+
+- ISC-5 (partial): `artifacts/Home_Automation/ha_automations_new.yaml` exists (2026-04-21). Contains 7 automations: entrance bottom left synced circuit (3 automations), entrance bottom right synced circuit (3 automations), bedroom lamps nightly 8pm-on + re-enable (2 automations). YAML structure confirmed readable 2026-06-02.
+- ISC-2: [gap: Hazel agreement text not found in sources -- agreement scope defined but no drafted document exists in `artifacts/`]
+- ISC-3: [gap: spare room listing and rental terms not found in sources -- no draft document exists in `artifacts/`]
+- ISC-4: [gap: EV/Polestar 2 TCO and timing analysis mentioned in overview but no analysis document found in `artifacts/`]
+- ISC-1: gym cross-reference to `~/Documents/workspace/gym/` confirmed; full program at `~/Documents/workspace/gym/artifacts/legacy-gym/gym-training-program-2026-05-20.md`.

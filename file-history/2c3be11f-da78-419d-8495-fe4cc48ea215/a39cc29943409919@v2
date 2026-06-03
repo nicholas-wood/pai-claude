@@ -1,0 +1,20 @@
+# Finance
+
+Nick's personal financial operations: budgeting, reconciliation, cashflow, and money decisions.
+The goal is to stop doing manual reconciliation and budget reviews by hand and instead get a
+standing agent that watches the data and sends a summary plus advice.
+
+- **Type:** Operations (recurring)
+- **Source data:** Pocketsmith (transactions, budgets, forecasts). Finals and statements live in
+  OneDrive under `04_Finance`.
+
+## Structure
+- `CLAUDE.md` — project operator brief
+- `context/` — shared foundation (accounts, budget structure, current state, references, feedback)
+- `agents/accountant/` — claude.md + memory.md
+- `artifacts/` — budget reviews, cashflow summaries, advice notes (markdown; finals to OneDrive)
+
+## Agents
+| Agent | Scope |
+|---|---|
+| `accountant` | Pocketsmith reconciliation, budget review, cashflow, money advice |

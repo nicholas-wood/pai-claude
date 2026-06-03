@@ -1,0 +1,19 @@
+# Facts (durable memory)
+
+Domain knowledge, data model, conventions, and settled decisions for finance.
+This is the stable layer the accountant relies on. Update when a fact changes, not for daily activity.
+
+## System of record
+- **Pocketsmith** holds transactions, budgets, and forecasts. It is the source of truth for figures.
+- Connection method (API token / export) to be confirmed and recorded in `references.md`.
+
+## Budget structure
+- To be filled from Pocketsmith on first reconciliation (categories, monthly targets, recurring bills).
+
+## Entities
+- Personal finances + Nicholas Wood Digital Consulting (ABN + PTY LTD). Keep personal and company
+  separate; company finances may have their own tax/GST treatment.
+
+## Conventions
+- Currency: AUD. Units: metric. Australian financial year (1 Jul to 30 Jun).
+- Finals (statements, tax docs, invoices) live in OneDrive `04_Finance`; reference via onedrive://.

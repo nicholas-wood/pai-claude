@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-400 -500 4400 2600" width="1300" height="770" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrowL" viewBox="0 0 10 10" refX="0" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 10 0 L 0 5 L 10 10 z" fill="#c00"/></marker>
+    <marker id="arrowR" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#c00"/></marker>
+  </defs>
+
+  <!-- Title block -->
+  <text x="-380" y="-410" font-size="60" font-weight="bold" fill="#222">PLAN VIEW</text>
+  <text x="-380" y="-340" font-size="32" fill="#666">Looking straight down. Sleds shown in STOWED position. Casters and board-zone outlines shown dashed.</text>
+  <text x="-380" y="-295" font-size="32" fill="#666">All dimensions in mm. Quantity: 2 units.</text>
+
+  <!-- Direction labels -->
+  <text x="-150" y="700" font-size="32" fill="#04a" font-style="italic" font-weight="bold">PORT</text>
+  <text x="-150" y="800" font-size="22" fill="#04a" font-style="italic">(long side)</text>
+  <text x="-150" y="2050" font-size="32" fill="#04a" font-style="italic" font-weight="bold">STBD</text>
+  <text x="-150" y="2085" font-size="22" fill="#04a" font-style="italic">(long side)</text>
+  <text x="100" y="-230" text-anchor="middle" font-size="32" fill="#04a" font-style="italic" font-weight="bold">FRONT</text>
+  <text x="100" y="-200" text-anchor="middle" font-size="22" fill="#04a" font-style="italic">(door side, open end)</text>
+  <text x="3240" y="-230" text-anchor="middle" font-size="32" fill="#04a" font-style="italic" font-weight="bold">REAR</text>
+  <text x="3240" y="-200" text-anchor="middle" font-size="22" fill="#04a" font-style="italic">(unload side, open end)</text>
+
+  <!-- Rack external outline (1400 x 3340) -->
+  <rect x="0" y="0" width="3340" height="1400" fill="none" stroke="#222" stroke-width="3"/>
+
+  <!-- Top frame perimeter (50 mm wide all around — long side rails) -->
+  <rect x="0" y="0" width="3340" height="50" fill="#444" stroke="#222" stroke-width="1.5"/>
+  <rect x="0" y="1350" width="3340" height="50" fill="#444" stroke="#222" stroke-width="1.5"/>
+  <!-- Front and rear members of top frame at short ends -->
+  <rect x="0" y="0" width="50" height="1400" fill="#444" stroke="#222" stroke-width="1.5"/>
+  <rect x="3290" y="0" width="50" height="1400" fill="#444" stroke="#222" stroke-width="1.5"/>
+
+  <!-- SLIDE RAILS along inside of long-side top frame (visible from above as red strips) -->
+  <rect x="0" y="50" width="3220" height="50" fill="#f99" stroke="#a44" stroke-width="2"/>
+  <rect x="0" y="1300" width="3220" height="50" fill="#f99" stroke="#a44" stroke-width="2"/>
+  <!-- Pivot brackets at rear of slide rails -->
+  <rect x="3220" y="50" width="80" height="50" fill="#a44" stroke="#622" stroke-width="2"/>
+  <rect x="3220" y="1300" width="80" height="50" fill="#a44" stroke="#622" stroke-width="2"/>
+
+  <!-- SLEDS in stowed position: extend from x=0 to x=3000.  Two sleds parallel.  Width 50 mm each, spaced 900 mm centre-to-centre. -->
+  <!-- Plan-view y of sled centerlines: 250 and 1150 (so 900mm apart). Sleds 50mm wide => 225-275 and 1125-1175. -->
+  <g fill="#fa8" stroke="#a64" stroke-width="2.5">
+    <rect x="0" y="425" width="3000" height="50"/>
+    <rect x="0" y="925" width="3000" height="50"/>
+  </g>
+  <text x="1500" y="465" text-anchor="middle" font-size="22" fill="#a64" font-weight="bold">SLED (port)</text>
+  <text x="1500" y="965" text-anchor="middle" font-size="22" fill="#a64" font-weight="bold">SLED (stbd)</text>
+
+  <!-- FRONT crossbar linking sleds -->
+  <rect x="-20" y="425" width="40" height="550" fill="#a64" stroke="#622" stroke-width="2"/>
+  <text x="0" y="700" text-anchor="middle" font-size="22" fill="#a64" font-style="italic" transform="rotate(-90 0 700)">front crossbar</text>
+
+  <!-- REAR crossbar at rear-roller position (2400 mm rearward of front roller = at x=2400 when stowed) -->
+  <rect x="2380" y="425" width="40" height="550" fill="#a64" stroke="#622" stroke-width="2"/>
+  <text x="2400" y="700" text-anchor="middle" font-size="22" fill="#a64" font-style="italic" transform="rotate(-90 2400 700)">rear crossbar</text>
+
+  <!-- Rollers (drawn as small circles at front + rear of each sled) -->
+  <g fill="#fff" stroke="#622" stroke-width="2">
+    <circle cx="0" cy="450" r="18"/>
+    <circle cx="0" cy="950" r="18"/>
+    <circle cx="2400" cy="450" r="18"/>
+    <circle cx="2400" cy="950" r="18"/>
+  </g>
+
+  <!-- IRB OUTLINE (dashed, semi-transparent) on top of sleds when stowed. IRB 1700 wide x 2100 long. -->
+  <!-- IRB centred over rack: x=620 to 2720 (centred in rack length, but in stowed sled, IRB spans from sled-position 900 to sled-position 3000 = x=900 to 3000 when stowed).  Actually IRB stowed sits on the WHOLE sled — let's centre over the rack. -->
+  <rect x="620" y="-150" width="2100" height="1700" rx="100" fill="none" stroke="#363" stroke-width="3" stroke-dasharray="10 5" opacity="0.6"/>
+  <text x="1670" y="-50" text-anchor="middle" font-size="34" fill="#363" font-style="italic" font-weight="bold">IRB position (stowed, on top)</text>
+  <text x="1670" y="-15" text-anchor="middle" font-size="22" fill="#363" font-style="italic">1700 mm wide × 2100 mm long</text>
+
+  <!-- Note: IRB is WIDER than rack (1700 > 1400) - overhangs each side -->
+  <line x1="620" y1="-150" x2="620" y2="1550" stroke="#363" stroke-width="1" stroke-dasharray="3 4" opacity="0.6"/>
+  <line x1="2720" y1="-150" x2="2720" y2="1550" stroke="#363" stroke-width="1" stroke-dasharray="3 4" opacity="0.6"/>
+
+  <!-- BOARDS underneath (dashed because hidden by sleds, but shown for reference) - 2 boards side-by-side. -->
+  <!-- Each board: 580 wide x 3200 long. Inside board zone of 1220 wide x 3220 long. Centred. -->
+  <g fill="none" stroke="#234" stroke-width="1.5" stroke-dasharray="8 5" opacity="0.5">
+    <rect x="60" y="160" width="3200" height="580"/>
+    <rect x="60" y="660" width="3200" height="580"/>
+  </g>
+  <text x="1660" y="455" text-anchor="middle" font-size="26" fill="#234" font-style="italic" opacity="0.7">board 1 (hidden by sleds above)</text>
+  <text x="1660" y="955" text-anchor="middle" font-size="26" fill="#234" font-style="italic" opacity="0.7">board 2 (hidden by sleds above)</text>
+
+  <!-- Cross-pieces below (dashed - they support the boards) -->
+  <line x1="640" y1="100" x2="640" y2="1350" stroke="#888" stroke-width="2" stroke-dasharray="4 4" opacity="0.5"/>
+  <line x1="2700" y1="100" x2="2700" y2="1350" stroke="#888" stroke-width="2" stroke-dasharray="4 4" opacity="0.5"/>
+
+  <!-- CASTERS at 4 corners (dashed - they're below the rack base) -->
+  <g fill="none" stroke="#444" stroke-width="2" stroke-dasharray="6 4" opacity="0.7">
+    <circle cx="100" cy="100" r="75"/>
+    <circle cx="100" cy="1300" r="75"/>
+    <circle cx="3240" cy="100" r="75"/>
+    <circle cx="3240" cy="1300" r="75"/>
+  </g>
+  <text x="100" y="60" text-anchor="middle" font-size="18" fill="#666" font-style="italic">caster ø150</text>
+  <text x="100" y="1370" text-anchor="middle" font-size="18" fill="#666" font-style="italic">caster ø150</text>
+  <text x="3240" y="60" text-anchor="middle" font-size="18" fill="#666" font-style="italic">caster ø150</text>
+  <text x="3240" y="1370" text-anchor="middle" font-size="18" fill="#666" font-style="italic">caster ø150</text>
+
+  <!-- WINCH position - at front-base, drawn here as a small rectangle indicator -->
+  <rect x="-50" y="650" width="40" height="100" fill="#225" stroke="#003" stroke-width="2"/>
+  <text x="-70" y="710" text-anchor="end" font-size="22" fill="#225" font-weight="bold">winch</text>
+  <text x="-70" y="735" text-anchor="end" font-size="20" fill="#225" font-style="italic">(at base)</text>
+
+  <!-- STABILIZER LEG indicator at rack rear -->
+  <rect x="3340" y="650" width="80" height="100" fill="none" stroke="#634" stroke-width="2" stroke-dasharray="6 4"/>
+  <text x="3360" y="650" font-size="22" fill="#634" font-weight="bold">stabilizer leg</text>
+  <text x="3360" y="625" font-size="20" fill="#634" font-style="italic">(drops down)</text>
+
+  <!-- DIMENSIONS -->
+  <!-- External length -->
+  <g stroke="#c00" stroke-width="1.5" fill="none">
+    <line x1="0" y1="-400" x2="3340" y2="-400" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+    <line x1="0" y1="-150" x2="0" y2="-400" stroke-dasharray="3 4" opacity="0.5"/>
+    <line x1="3340" y1="-150" x2="3340" y2="-400" stroke-dasharray="3 4" opacity="0.5"/>
+  </g>
+  <text x="1670" y="-420" text-anchor="middle" font-size="30" fill="#c00">3340 external length</text>
+
+  <!-- Caster wheelbase length -->
+  <g stroke="#c00" stroke-width="1.5" fill="none">
+    <line x1="100" y1="1600" x2="3240" y2="1600" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+    <line x1="100" y1="1400" x2="100" y2="1600" stroke-dasharray="3 4" opacity="0.5"/>
+    <line x1="3240" y1="1400" x2="3240" y2="1600" stroke-dasharray="3 4" opacity="0.5"/>
+  </g>
+  <text x="1670" y="1640" text-anchor="middle" font-size="30" fill="#c00">3140 wheelbase</text>
+
+  <!-- Board internal length -->
+  <g stroke="#c00" stroke-width="1.5" fill="none">
+    <line x1="60" y1="1730" x2="3260" y2="1730" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+    <line x1="60" y1="1400" x2="60" y2="1730" stroke-dasharray="3 4" opacity="0.5"/>
+    <line x1="3260" y1="1400" x2="3260" y2="1730" stroke-dasharray="3 4" opacity="0.5"/>
+  </g>
+  <text x="1660" y="1770" text-anchor="middle" font-size="26" fill="#c00">3200 board length (envelope 3220 incl. 10 pad ea. end)</text>
+
+  <!-- Sled length -->
+  <g stroke="#c00" stroke-width="1.5" fill="none">
+    <line x1="0" y1="1880" x2="3000" y2="1880" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+    <line x1="0" y1="425" x2="0" y2="1880" stroke-dasharray="3 4" opacity="0.5"/>
+    <line x1="3000" y1="425" x2="3000" y2="1880" stroke-dasharray="3 4" opacity="0.5"/>
+  </g>
+  <text x="1500" y="1920" text-anchor="middle" font-size="26" fill="#c00">3000 sled length</text>
+
+  <!-- Crossbar position (rear) -->
+  <g stroke="#c00" stroke-width="1.5" fill="none">
+    <line x1="0" y1="2030" x2="2400" y2="2030" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+  </g>
+  <text x="1200" y="2070" text-anchor="middle" font-size="22" fill="#c00">2400 (front-to-rear roller spacing)</text>
+
+  <!-- External width (vertical dimension) -->
+  <g stroke="#c00" stroke-width="1.5" fill="none">
+    <line x1="3450" y1="0" x2="3450" y2="1400" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+    <line x1="3340" y1="0" x2="3450" y2="0"/>
+    <line x1="3340" y1="1400" x2="3450" y2="1400"/>
+  </g>
+  <text x="3530" y="710" font-size="30" fill="#c00" transform="rotate(90 3530 710)">1400 external width</text>
+
+  <!-- Caster wheelbase width -->
+  <g stroke="#c00" stroke-width="1.5" fill="none">
+    <line x1="3650" y1="100" x2="3650" y2="1300" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+  </g>
+  <text x="3700" y="710" font-size="28" fill="#c00" transform="rotate(90 3700 710)">1200 wheelbase</text>
+
+  <!-- Internal board width -->
+  <g stroke="#c00" stroke-width="1.5" fill="none">
+    <line x1="3850" y1="160" x2="3850" y2="1240" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+  </g>
+  <text x="3895" y="710" font-size="26" fill="#c00" transform="rotate(90 3895 710)">1220 board zone (1300 between uprights)</text>
+
+  <!-- Sled spacing -->
+  <g stroke="#c00" stroke-width="1.5" fill="none">
+    <line x1="1500" y1="450" x2="1500" y2="950" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+  </g>
+  <text x="1540" y="700" font-size="22" fill="#c00">900 c-to-c</text>
+</svg>

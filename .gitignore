@@ -1,0 +1,41 @@
+# Secrets (never commit)
+.env
+.env.*
+# .claude.json backups contain live PATs/tokens
+/backups/
+.claude.json
+.claude.json.*
+.credentials.json
+.credentials.json.*
+**/*.pem
+**/*.key
+*.p12
+
+# Claude Code runtime churn (machine-local; may contain chat-leaked secrets)
+# full session transcripts
+/projects/
+/shell-snapshots/
+/todos/
+/statsig/
+/history/
+/ide/
+
+# Captured-sensitive memory
+PAI/MEMORY/SECURITY/
+
+# Dependencies / build output
+**/node_modules/
+**/.next/
+**/.turbo/
+**/dist/
+PAI/Pulse/Observability/out/
+
+# Logs / regenerable daemon state
+*.log
+PAI/Pulse/logs/
+PAI/Pulse/state/
+
+# OS / editor noise
+.DS_Store
+**/.DS_Store
+*.swp

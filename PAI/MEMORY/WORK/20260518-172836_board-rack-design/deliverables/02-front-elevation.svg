@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-450 -250 2300 2950" width="800" height="1020" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrowL" viewBox="0 0 10 10" refX="0" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 10 0 L 0 5 L 10 10 z" fill="#c00"/></marker>
+    <marker id="arrowR" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#c00"/></marker>
+  </defs>
+
+  <!-- Title block -->
+  <text x="-440" y="-180" font-size="60" font-weight="bold" fill="#222">FRONT ELEVATION</text>
+  <text x="-440" y="-110" font-size="36" fill="#666">View looking through open short end. Boards slide in/out this opening.</text>
+  <text x="-440" y="-60" font-size="32" fill="#666">All dimensions in mm. Quantity: 2 units.</text>
+
+  <!-- Ground line -->
+  <line x1="-300" y1="2200" x2="1700" y2="2200" stroke="#333" stroke-width="3"/>
+  <line x1="-300" y1="2210" x2="1700" y2="2210" stroke="#333" stroke-width="1"/>
+  <pattern id="ground" x="0" y="0" width="40" height="20" patternUnits="userSpaceOnUse"><line x1="0" y1="20" x2="40" y2="0" stroke="#999" stroke-width="1.5"/></pattern>
+  <rect x="-300" y="2210" width="2000" height="40" fill="url(#ground)"/>
+  <text x="-280" y="2295" font-size="28" fill="#999" font-style="italic">floor</text>
+
+  <!-- Casters (front pair shown) -->
+  <g stroke="#222" stroke-width="3" fill="#bbb">
+    <circle cx="100" cy="2125" r="75"/>
+    <rect x="60" y="2010" width="80" height="40" fill="#999"/>
+    <circle cx="1300" cy="2125" r="75"/>
+    <rect x="1260" y="2010" width="80" height="40" fill="#999"/>
+  </g>
+  <text x="100" y="2168" text-anchor="middle" font-size="20" fill="#222">150 ø</text>
+  <text x="1300" y="2168" text-anchor="middle" font-size="20" fill="#222">150 ø</text>
+
+  <!-- Bottom rail -->
+  <rect x="0" y="2010" width="1400" height="50" fill="none" stroke="#222" stroke-width="3"/>
+
+  <!-- Uprights (only the 2 visible at front face) -->
+  <rect x="0" y="0" width="50" height="2010" fill="#444" stroke="#222" stroke-width="2"/>
+  <rect x="1350" y="0" width="50" height="2010" fill="#444" stroke="#222" stroke-width="2"/>
+
+  <!-- Top frame -->
+  <rect x="0" y="0" width="1400" height="50" fill="#444" stroke="#222" stroke-width="2"/>
+
+  <!-- Slide rails (cross-section visible at top edges) -->
+  <rect x="50" y="0" width="50" height="25" fill="#e88" stroke="#a44" stroke-width="1.5"/>
+  <rect x="1300" y="0" width="50" height="25" fill="#e88" stroke="#a44" stroke-width="1.5"/>
+
+  <!-- Sleds (cross-section through sled - circles for the SHS section, visible at the slide rail height) -->
+  <g fill="#fc8" stroke="#a64" stroke-width="2">
+    <rect x="290" y="-25" width="50" height="50"/>
+    <rect x="1060" y="-25" width="50" height="50"/>
+  </g>
+  <text x="315" y="-45" text-anchor="middle" font-size="22" fill="#a64">sled (port)</text>
+  <text x="1085" y="-45" text-anchor="middle" font-size="22" fill="#a64">sled (stbd)</text>
+
+  <!-- 5 shelves, each with 2 boards side-by-side -->
+  <!-- shelf heights from floor: 300, 700, 1100, 1500, 1900 mm.   y_drawing = 2200 - h - small_offset_for_cross_piece -->
+  <!-- Cross-piece is 40 mm tall, sitting at "resting surface" height. Board sits ON cross-piece (+ 10 mm pad). -->
+  <g>
+    <!-- Level 5 (top): resting surface at 1900 mm above floor, y=2200-1900=300 -->
+    <rect x="50" y="260" width="1300" height="40" fill="#ccc" stroke="#222" stroke-width="2"/>
+    <rect x="60" y="250" width="1300" height="10" fill="#fa8" stroke="#a64" stroke-width="0.5"/>
+    <rect x="80" y="170" width="580" height="80" fill="#bcd" stroke="#234" stroke-width="2"/>
+    <rect x="740" y="170" width="580" height="80" fill="#bcd" stroke="#234" stroke-width="2"/>
+    <text x="370" y="220" text-anchor="middle" font-size="22" fill="#234">board</text>
+    <text x="1030" y="220" text-anchor="middle" font-size="22" fill="#234">board</text>
+
+    <!-- Level 4: resting surface at 1500 mm, y=700 -->
+    <rect x="50" y="660" width="1300" height="40" fill="#ccc" stroke="#222" stroke-width="2"/>
+    <rect x="60" y="650" width="1300" height="10" fill="#fa8" stroke="#a64" stroke-width="0.5"/>
+    <rect x="80" y="570" width="580" height="80" fill="#bcd" stroke="#234" stroke-width="2"/>
+    <rect x="740" y="570" width="580" height="80" fill="#bcd" stroke="#234" stroke-width="2"/>
+
+    <!-- Level 3: resting surface at 1100 mm, y=1100 -->
+    <rect x="50" y="1060" width="1300" height="40" fill="#ccc" stroke="#222" stroke-width="2"/>
+    <rect x="60" y="1050" width="1300" height="10" fill="#fa8" stroke="#a64" stroke-width="0.5"/>
+    <rect x="80" y="970" width="580" height="80" fill="#bcd" stroke="#234" stroke-width="2"/>
+    <rect x="740" y="970" width="580" height="80" fill="#bcd" stroke="#234" stroke-width="2"/>
+
+    <!-- Level 2: resting surface at 700 mm, y=1500 -->
+    <rect x="50" y="1460" width="1300" height="40" fill="#ccc" stroke="#222" stroke-width="2"/>
+    <rect x="60" y="1450" width="1300" height="10" fill="#fa8" stroke="#a64" stroke-width="0.5"/>
+    <rect x="80" y="1370" width="580" height="80" fill="#bcd" stroke="#234" stroke-width="2"/>
+    <rect x="740" y="1370" width="580" height="80" fill="#bcd" stroke="#234" stroke-width="2"/>
+
+    <!-- Level 1 (lowest): resting surface at 300 mm, y=1900 -->
+    <rect x="50" y="1860" width="1300" height="40" fill="#ccc" stroke="#222" stroke-width="2"/>
+    <rect x="60" y="1850" width="1300" height="10" fill="#fa8" stroke="#a64" stroke-width="0.5"/>
+    <rect x="80" y="1770" width="580" height="80" fill="#bcd" stroke="#234" stroke-width="2"/>
+    <rect x="740" y="1770" width="580" height="80" fill="#bcd" stroke="#234" stroke-width="2"/>
+
+    <!-- Fin under board (lowest level only, illustrative) -->
+    <rect x="320" y="1850" width="100" height="250" fill="#789" stroke="#234" stroke-width="1.5" opacity="0.4"/>
+    <text x="370" y="1990" text-anchor="middle" font-size="20" fill="#234" font-style="italic">25 cm fin</text>
+  </g>
+
+  <!-- Right-side vertical dimensions: shelf heights from floor -->
+  <g stroke="#c00" stroke-width="1.5" fill="none">
+    <!-- Extension lines -->
+    <line x1="1400" y1="2200" x2="1700" y2="2200"/>
+    <line x1="1400" y1="1900" x2="1700" y2="1900"/>
+    <line x1="1400" y1="1500" x2="1700" y2="1500"/>
+    <line x1="1400" y1="1100" x2="1700" y2="1100"/>
+    <line x1="1400" y1="700" x2="1700" y2="700"/>
+    <line x1="1400" y1="300" x2="1700" y2="300"/>
+    <line x1="1400" y1="0" x2="1700" y2="0"/>
+    <!-- Dimension lines -->
+    <line x1="1600" y1="2200" x2="1600" y2="1900" marker-start="url(#arrowL)" marker-end="url(#arrowR)" stroke-linecap="round" transform="rotate(0)"/>
+    <line x1="1600" y1="1900" x2="1600" y2="1500" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+    <line x1="1600" y1="1500" x2="1600" y2="1100" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+    <line x1="1600" y1="1100" x2="1600" y2="700" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+    <line x1="1600" y1="700" x2="1600" y2="300" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+    <line x1="1600" y1="300" x2="1600" y2="0" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+  </g>
+  <g font-size="26" fill="#c00" text-anchor="start">
+    <text x="1620" y="2055">300</text>
+    <text x="1620" y="1705">400</text>
+    <text x="1620" y="1305">400</text>
+    <text x="1620" y="905">400</text>
+    <text x="1620" y="505">400</text>
+    <text x="1620" y="155">300</text>
+  </g>
+
+  <!-- Total height dimension on far right -->
+  <g stroke="#c00" stroke-width="1.5">
+    <line x1="1850" y1="2200" x2="1850" y2="0" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+  </g>
+  <text x="1880" y="1100" font-size="28" fill="#c00">2200 max</text>
+  <text x="1880" y="1140" font-size="22" fill="#c00" font-style="italic">(door clearance)</text>
+
+  <!-- Bottom horizontal dimensions: internal width, board widths, gaps -->
+  <g stroke="#c00" stroke-width="1.5">
+    <!-- External width -->
+    <line x1="0" y1="2400" x2="1400" y2="2400" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+    <line x1="0" y1="2200" x2="0" y2="2400"/>
+    <line x1="1400" y1="2200" x2="1400" y2="2400"/>
+    <!-- Internal width -->
+    <line x1="50" y1="2510" x2="1350" y2="2510" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+    <line x1="50" y1="2200" x2="50" y2="2510"/>
+    <line x1="1350" y1="2200" x2="1350" y2="2510"/>
+    <!-- Board widths -->
+    <line x1="80" y1="2620" x2="660" y2="2620" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+    <line x1="80" y1="170" x2="80" y2="2620" stroke-dasharray="3 4" opacity="0.4"/>
+    <line x1="660" y1="170" x2="660" y2="2620" stroke-dasharray="3 4" opacity="0.4"/>
+    <line x1="740" y1="2620" x2="1320" y2="2620" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+    <line x1="740" y1="170" x2="740" y2="2620" stroke-dasharray="3 4" opacity="0.4"/>
+    <line x1="1320" y1="170" x2="1320" y2="2620" stroke-dasharray="3 4" opacity="0.4"/>
+    <!-- Centre gap -->
+    <line x1="660" y1="2620" x2="740" y2="2620" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+  </g>
+  <g font-size="26" fill="#c00">
+    <text x="700" y="2440" text-anchor="middle">1400 external</text>
+    <text x="700" y="2555" text-anchor="middle">1300 between uprights (+ 60 padding each side = 1220 board zone)</text>
+    <text x="370" y="2660" text-anchor="middle">580 board</text>
+    <text x="700" y="2660" text-anchor="middle">60</text>
+    <text x="1030" y="2660" text-anchor="middle">580 board</text>
+  </g>
+
+  <!-- Side labels -->
+  <text x="-380" y="0" font-size="26" fill="#444" font-weight="bold">Top frame</text>
+  <text x="-380" y="30" font-size="22" fill="#666">2200 mm</text>
+  <text x="-380" y="2200" font-size="26" fill="#444" font-weight="bold">Floor</text>
+  <text x="-380" y="2230" font-size="22" fill="#666">0 mm</text>
+
+  <!-- Upright callout -->
+  <line x1="25" y1="1000" x2="-150" y2="1000" stroke="#04a" stroke-width="1"/>
+  <text x="-160" y="1006" text-anchor="end" font-size="22" fill="#04a">upright</text>
+  <text x="-160" y="1032" text-anchor="end" font-size="20" fill="#04a">50×50×3 SHS</text>
+
+  <!-- Note for fin clearance -->
+  <text x="-440" y="2700" font-size="22" fill="#04a">Note: 300 mm floor → lowest resting surface gives 250 mm fin + 50 mm safety clearance for a board's fin to hang free.</text>
+
+  <!-- Note for board envelope -->
+  <text x="-440" y="2750" font-size="22" fill="#04a">Each board envelope = 580 mm board + 1 mm padding all around → 600 mm slot. Two slots + 20 mm centre gap = 1220 mm board zone.</text>
+</svg>

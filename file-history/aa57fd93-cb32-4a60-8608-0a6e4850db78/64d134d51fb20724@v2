@@ -1,0 +1,41 @@
+# Pulse — Linux (home box)
+
+systemd `--user` units for running PAI on the always-on Ubuntu box. The macOS
+host uses launchd (`../com.pai.pulse.plist` + `~/Library/LaunchAgents`); these are
+the Linux equivalents. `../manage.sh` and `../start-pulse.sh` detect the OS and
+use the right one, so the same scripts work on both. Full context:
+`USER/PROJECTS/home-box.md`.
+
+## One-time box setup
+
+```bash
+sudo loginctl enable-linger "$USER"        # services run without an active login
+cd ~/.claude/PAI/Pulse
+./manage.sh install                        # installs + starts pulse.service, verifies :31337
+./linux/install-cadence.sh                 # installs the daily + weekly cadence timers
+```
+
+| Unit | Replaces | Schedule |
+|------|----------|----------|
+| `pulse.service` | `com.pai.pulse` | always-on, `Restart=always` |
+| `pai-cadence-daily.{service,timer}` | `com.pai.cadence.daily` | Mon..Fri 06:30 |
+| `pai-cadence-weekly.{service,timer}` | `com.pai.cadence.weekly` | Mon 07:00 |
+
+`__BUN_PATH__` is substituted at install time. `%h` is systemd's home-dir
+expansion. `Persistent=true` makes a timer fire on wake if the box was asleep
+at the scheduled minute (launchd did this implicitly).
+
+## Operate
+
+```bash
+./manage.sh status
+systemctl --user list-timers 'pai-cadence-*'
+journalctl --user -u pulse.service -n 50
+journalctl --user -u pai-cadence-daily.service -n 50
+```
+
+## Not ported (macOS-only, useless headless)
+
+Voice playback (silenced in `voice.ts` unless `PAI_AUDIO_PLAYER` is set),
+`com.pai.voice-server.plist`, the MenuBar app, `lib/imessage-send.ts`, and the
+statusline. See `USER/PROJECTS/home-box.md` → Phase 5.

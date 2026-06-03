@@ -1,0 +1,200 @@
+#!/bin/bash
+# PAI Pulse — Process Management (cross-platform: macOS launchd / Linux systemd)
+# Usage: manage.sh {start|stop|restart|status|install|uninstall}
+#
+#   macOS (Darwin): launchd via com.pai.pulse.plist in ~/Library/LaunchAgents.
+#   Linux:          systemd --user via ~/.config/systemd/user/pulse.service.
+#
+# The script branches on `uname -s`. Switching hosts (e.g. back to a Mac mini)
+# needs no edits — the Darwin branch reactivates automatically. See
+# USER/PROJECTS/home-box.md → "Path back to a Mac mini".
+
+PAI_OS="$(uname -s)"
+PULSE_DIR="$HOME/.claude/PAI/Pulse"   # on-disk casing (Linux is case-sensitive)
+PID_FILE="$PULSE_DIR/state/pulse.pid"
+STATE_FILE="$PULSE_DIR/state/state.json"
+
+# macOS launchd
+PLIST_NAME="com.pai.pulse"
+PLIST_SRC="$PULSE_DIR/$PLIST_NAME.plist"
+PLIST_DST="$HOME/Library/LaunchAgents/$PLIST_NAME.plist"
+
+# Linux systemd --user
+UNIT_NAME="pulse.service"
+UNIT_SRC="$PULSE_DIR/linux/$UNIT_NAME"
+UNIT_DST="$HOME/.config/systemd/user/$UNIT_NAME"
+
+# Resolve bun's actual location for the service definition. The public plist
+# template ships with `__BUN_PATH__` so the job works for both brew users
+# (/opt/homebrew/bin/bun) and curl-installer users (~/.bun/bin/bun).
+#
+# Order matters. `command -v bun` can resolve to a temporary helper shim
+# inside `/private/tmp/bun-node-*/bun` when this script runs inside `bun
+# install` (the child shell has its own PATH). That path is ephemeral and
+# the service would fail on next boot. Prefer the canonical install
+# locations and fall back to `command -v bun` only if neither exists.
+if [ -x "$HOME/.bun/bin/bun" ]; then
+  BUN_PATH="$HOME/.bun/bin/bun"
+elif [ -x "/opt/homebrew/bin/bun" ]; then
+  BUN_PATH="/opt/homebrew/bin/bun"
+elif [ -x "/usr/local/bin/bun" ]; then
+  BUN_PATH="/usr/local/bin/bun"
+else
+  BUN_PATH="$(command -v bun || echo "$HOME/.bun/bin/bun")"
+fi
+
+# Verify pulse actually binds :31337 within 10s. Shared by both platforms.
+verify_port() {
+  for _ in $(seq 1 20); do
+    sleep 0.5
+    if curl -sS --max-time 1 -o /dev/null -X POST http://localhost:31337/notify \
+         -H "Content-Type: application/json" \
+         -d '{"message":"","voice_enabled":false}' 2>/dev/null; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+case "$1" in
+  start)
+    if [ "$PAI_OS" = "Darwin" ]; then
+      if [ ! -f "$PLIST_DST" ]; then
+        # Substitute __HOME__ + __BUN_PATH__ placeholders (public template);
+        # no-op on plists that already have literal paths.
+        sed -e "s|__HOME__|$HOME|g" -e "s|__BUN_PATH__|$BUN_PATH|g" "$PLIST_SRC" > "$PLIST_DST"
+      fi
+      launchctl load "$PLIST_DST" 2>/dev/null
+    else
+      systemctl --user start "$UNIT_NAME"
+    fi
+    echo "PAI Pulse started"
+    ;;
+
+  stop)
+    if [ "$PAI_OS" = "Darwin" ]; then
+      launchctl unload "$PLIST_DST" 2>/dev/null
+    else
+      systemctl --user stop "$UNIT_NAME" 2>/dev/null
+    fi
+    if [ -f "$PID_FILE" ]; then
+      PID=$(cat "$PID_FILE")
+      kill "$PID" 2>/dev/null
+      echo "PAI Pulse stopped (PID $PID)"
+    else
+      echo "PAI Pulse stopped"
+    fi
+    ;;
+
+  restart)
+    "$0" stop
+    sleep 2
+    "$0" start
+    ;;
+
+  status)
+    if [ -f "$PID_FILE" ]; then
+      PID=$(cat "$PID_FILE")
+      if ps -p "$PID" > /dev/null 2>&1; then
+        UPTIME=$(ps -p "$PID" -o etime= | xargs)
+        echo "PAI Pulse: RUNNING (PID $PID, uptime $UPTIME)"
+      else
+        echo "PAI Pulse: DEAD (stale PID $PID)"
+      fi
+    else
+      echo "PAI Pulse: NOT RUNNING (no PID file)"
+    fi
+
+    if [ -f "$STATE_FILE" ]; then
+      echo ""
+      echo "Last job runs:"
+      # Run from PULSE_DIR so the smol-toml import resolves against Pulse's
+      # node_modules. Skip jobs that are disabled in PULSE.toml so retired jobs
+      # do not linger in the report with stale [FAILING] state (their state.json
+      # entry is harmless dead weight the daemon never updates). Falls back to
+      # printing every entry if the TOML cannot be parsed.
+      ( cd "$PULSE_DIR" && bun -e "
+        const fs = require('fs');
+        const state = JSON.parse(fs.readFileSync('$STATE_FILE', 'utf-8'));
+        let enabled = null;
+        try {
+          const { parse } = await import('smol-toml');
+          const cfg = parse(fs.readFileSync('$PULSE_DIR/PULSE.toml', 'utf-8'));
+          const defs = cfg.job || cfg.jobs || [];
+          enabled = new Set(defs.filter(j => j.enabled !== false).map(j => j.name));
+        } catch (_) { /* fall back to printing all */ }
+        for (const [name, info] of Object.entries(state.jobs)) {
+          if (enabled && !enabled.has(name)) continue;
+          const ago = Math.round((Date.now() - info.lastRun) / 60000);
+          const status = info.consecutiveFailures > 0 ? ' [FAILING x' + info.consecutiveFailures + ']' : '';
+          console.log('  ' + name + ': ' + ago + ' min ago (' + info.lastResult + ')' + status);
+        }
+      " 2>/dev/null )
+    fi
+    ;;
+
+  install)
+    mkdir -p "$PULSE_DIR/state" "$PULSE_DIR/logs"
+
+    if [ "$PAI_OS" = "Darwin" ]; then
+      # Cleanup any prior pulse before installing fresh — prevents the stale-PID
+      # / unbound-port half-dead state where a previous launchd-managed pulse is
+      # alive with open fds but never bound :31337.
+      if [ -f "$PLIST_DST" ]; then
+        launchctl unload "$PLIST_DST" 2>/dev/null || true
+      fi
+      pkill -9 -f "bun.*pulse.ts" 2>/dev/null || true
+      sleep 1
+
+      # Substitute __HOME__ + __BUN_PATH__ placeholders (public template);
+      # no-op on plists that already have literal paths.
+      sed -e "s|__HOME__|$HOME|g" -e "s|__BUN_PATH__|$BUN_PATH|g" "$PLIST_SRC" > "$PLIST_DST"
+      launchctl load "$PLIST_DST"
+    else
+      # Linux: systemd --user. Requires `sudo loginctl enable-linger $USER`
+      # once so the unit runs without an active login (always-on box).
+      mkdir -p "$HOME/.config/systemd/user"
+      systemctl --user stop "$UNIT_NAME" 2>/dev/null || true
+      pkill -9 -f "bun.*pulse.ts" 2>/dev/null || true
+      sleep 1
+
+      # Substitute __BUN_PATH__; HOME and PATH come from the unit's %h / Environment.
+      sed -e "s|__BUN_PATH__|$BUN_PATH|g" "$UNIT_SRC" > "$UNIT_DST"
+      systemctl --user daemon-reload
+      systemctl --user enable --now "$UNIT_NAME"
+
+      if ! loginctl show-user "$USER" 2>/dev/null | grep -q "Linger=yes"; then
+        echo "NOTE: run 'sudo loginctl enable-linger $USER' so Pulse survives logout/reboot." >&2
+      fi
+    fi
+
+    # Verify pulse actually binds :31337 within 10s. Fail loud if not — prior
+    # behavior was silent success even when the daemon never came up.
+    if verify_port; then
+      echo "PAI Pulse installed and verified on port 31337 (bun: $BUN_PATH)"
+      exit 0
+    fi
+
+    echo "ERROR: PAI Pulse installed but port 31337 did not bind within 10s." >&2
+    echo "  Check: tail -50 $PULSE_DIR/logs/pulse-stderr.log" >&2
+    [ "$PAI_OS" = "Darwin" ] || echo "  Or:    journalctl --user -u $UNIT_NAME -n 50" >&2
+    exit 1
+    ;;
+
+  uninstall)
+    if [ "$PAI_OS" = "Darwin" ]; then
+      launchctl unload "$PLIST_DST" 2>/dev/null
+      rm -f "$PLIST_DST"
+    else
+      systemctl --user disable --now "$UNIT_NAME" 2>/dev/null
+      rm -f "$UNIT_DST"
+      systemctl --user daemon-reload
+    fi
+    echo "PAI Pulse uninstalled"
+    ;;
+
+  *)
+    echo "Usage: $0 {start|stop|restart|status|install|uninstall}"
+    exit 1
+    ;;
+esac

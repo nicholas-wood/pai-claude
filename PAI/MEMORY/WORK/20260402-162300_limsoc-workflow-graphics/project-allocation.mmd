@@ -1,0 +1,64 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E3F2FD', 'primaryTextColor': '#1565C0', 'primaryBorderColor': '#1565C0', 'lineColor': '#424242', 'secondaryColor': '#E8F5E9', 'tertiaryColor': '#FFF3E0', 'fontSize': '13px', 'fontFamily': 'Segoe UI, sans-serif'}, 'flowchart': {'curve': 'basis', 'padding': 20, 'nodeSpacing': 40, 'rankSpacing': 55, 'htmlLabels': true, 'useMaxWidth': false}}}%%
+
+flowchart TD
+    TICKET(["New Ticket"])
+
+    TICKET --> TRIAGE_CLASSIFY
+
+    TRIAGE_CLASSIFY{"Triage Classification\nDev Team assesses"}
+
+    TRIAGE_CLASSIFY -->|"Urgent Bug"| P_HIB
+    TRIAGE_CLASSIFY -->|"Support Request"| P_SUPPORT
+    TRIAGE_CLASSIFY -->|"Enhancement or\nFeature Request"| SCOPE_CHECK
+
+    P_HIB["HIGH IMPACT BUGS\nUrgent production issues"]
+    P_SUPPORT["SUPPORT REQUESTS\nConfig, data, non-dev"]
+    P_MINOR["MINOR\nENHANCEMENTS\nSmall improvements"]
+    P_INITIATIVE["INITIATIVE PROJECTS\nStrategic roadmap work"]
+
+    SCOPE_CHECK{"Already in agreed\nproject scope?"}
+
+    SCOPE_CHECK -->|"Yes\nProduct Team or\nTech Lead discretion"| ASSIGN_PROJECT
+    SCOPE_CHECK -->|"No\nNeeds consideration"| CANDIDATE_FLOW
+
+    ASSIGN_PROJECT{"Assign to project"}
+    ASSIGN_PROJECT --> P_MINOR
+    ASSIGN_PROJECT --> P_INITIATIVE
+
+    CANDIDATE_FLOW["CANDIDATE\nWeekly Standup decides\npriority and project"]
+
+    CANDIDATE_FLOW -->|"Approved"| ASSIGN_PROJECT2
+    CANDIDATE_FLOW -->|"Should not do"| CANCELLED_T
+
+    ASSIGN_PROJECT2{"Assign to project"}
+    ASSIGN_PROJECT2 --> P_MINOR
+    ASSIGN_PROJECT2 --> P_INITIATIVE
+
+    P_HIB -->|"Straight to TODO\nNotify Management"| TODO_DIRECT
+    P_SUPPORT --> GATE
+    P_MINOR --> GATE
+    P_INITIATIVE --> GATE
+
+    GATE[["PROJECT GATE\nMust be in a project\nbefore entering TODO"]]
+
+    GATE --> TODO
+
+    TODO_DIRECT["TODO\nBypasses Candidate"]
+    TODO["TODO\nReady for development"]
+
+    CANCELLED_T["CANCELLED\nWill not proceed"]
+
+    style TICKET fill:#F5F5F5,stroke:#616161,stroke-width:2px,color:#212121
+    style TRIAGE_CLASSIFY fill:#E3F2FD,stroke:#1565C0,stroke-width:3px,color:#0D47A1
+    style P_HIB fill:#FFCDD2,stroke:#C62828,stroke-width:3px,color:#B71C1C
+    style P_SUPPORT fill:#FFF3E0,stroke:#E65100,stroke-width:3px,color:#BF360C
+    style P_MINOR fill:#E8F5E9,stroke:#2E7D32,stroke-width:3px,color:#1B5E20
+    style P_INITIATIVE fill:#E3F2FD,stroke:#1565C0,stroke-width:3px,color:#0D47A1
+    style SCOPE_CHECK fill:#F3E5F5,stroke:#6A1B9A,stroke-width:2px,color:#4A148C
+    style ASSIGN_PROJECT fill:#F5F5F5,stroke:#616161,stroke-width:1px,color:#424242
+    style ASSIGN_PROJECT2 fill:#F5F5F5,stroke:#616161,stroke-width:1px,color:#424242
+    style CANDIDATE_FLOW fill:#E8F5E9,stroke:#2E7D32,stroke-width:3px,color:#1B5E20
+    style GATE fill:#F3E5F5,stroke:#6A1B9A,stroke-width:3px,color:#4A148C
+    style TODO_DIRECT fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D47A1
+    style TODO fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D47A1
+    style CANCELLED_T fill:#FFCDD2,stroke:#C62828,stroke-width:2px,color:#B71C1C

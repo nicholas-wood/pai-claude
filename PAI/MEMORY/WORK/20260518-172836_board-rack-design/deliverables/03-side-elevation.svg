@@ -1,0 +1,300 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-300 -400 6100 4000" width="1400" height="920" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrowL" viewBox="0 0 10 10" refX="0" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 10 0 L 0 5 L 10 10 z" fill="#c00"/></marker>
+    <marker id="arrowR" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#c00"/></marker>
+    <marker id="cableArrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#08c"/></marker>
+  </defs>
+
+  <!-- All coords: x = position along rack, y = drawing y. Real height above floor = 3500 - y - extra -->
+  <!-- Use g flip so y in real-world (up positive) -->
+  <g transform="translate(0, 3500) scale(1, -1)">
+
+    <!-- Title block (drawn in real coords then we'll add title outside flip) -->
+
+    <!-- GROUND LINE at y_real=0 -->
+    <line x1="-200" y1="0" x2="6000" y2="0" stroke="#333" stroke-width="3"/>
+
+    <!-- Ground hatching - drawn flipped so we put it below 0 -->
+    <g stroke="#999" stroke-width="1.5">
+      <line x1="-200" y1="-10" x2="-160" y2="-50"/>
+      <line x1="-100" y1="-10" x2="-60" y2="-50"/>
+      <line x1="0" y1="-10" x2="40" y2="-50"/>
+      <line x1="100" y1="-10" x2="140" y2="-50"/>
+      <line x1="200" y1="-10" x2="240" y2="-50"/>
+      <line x1="300" y1="-10" x2="340" y2="-50"/>
+      <line x1="400" y1="-10" x2="440" y2="-50"/>
+      <line x1="500" y1="-10" x2="540" y2="-50"/>
+      <line x1="600" y1="-10" x2="640" y2="-50"/>
+      <line x1="700" y1="-10" x2="740" y2="-50"/>
+      <line x1="800" y1="-10" x2="840" y2="-50"/>
+      <line x1="900" y1="-10" x2="940" y2="-50"/>
+      <line x1="1000" y1="-10" x2="1040" y2="-50"/>
+      <line x1="1100" y1="-10" x2="1140" y2="-50"/>
+      <line x1="1200" y1="-10" x2="1240" y2="-50"/>
+      <line x1="1300" y1="-10" x2="1340" y2="-50"/>
+      <line x1="1400" y1="-10" x2="1440" y2="-50"/>
+      <line x1="1500" y1="-10" x2="1540" y2="-50"/>
+      <line x1="1600" y1="-10" x2="1640" y2="-50"/>
+      <line x1="1700" y1="-10" x2="1740" y2="-50"/>
+      <line x1="1800" y1="-10" x2="1840" y2="-50"/>
+      <line x1="1900" y1="-10" x2="1940" y2="-50"/>
+      <line x1="2000" y1="-10" x2="2040" y2="-50"/>
+      <line x1="2200" y1="-10" x2="2240" y2="-50"/>
+      <line x1="2400" y1="-10" x2="2440" y2="-50"/>
+      <line x1="2600" y1="-10" x2="2640" y2="-50"/>
+      <line x1="2800" y1="-10" x2="2840" y2="-50"/>
+      <line x1="3000" y1="-10" x2="3040" y2="-50"/>
+      <line x1="3200" y1="-10" x2="3240" y2="-50"/>
+      <line x1="3400" y1="-10" x2="3440" y2="-50"/>
+      <line x1="3600" y1="-10" x2="3640" y2="-50"/>
+      <line x1="3800" y1="-10" x2="3840" y2="-50"/>
+      <line x1="4000" y1="-10" x2="4040" y2="-50"/>
+      <line x1="4200" y1="-10" x2="4240" y2="-50"/>
+      <line x1="4400" y1="-10" x2="4440" y2="-50"/>
+      <line x1="4600" y1="-10" x2="4640" y2="-50"/>
+      <line x1="4800" y1="-10" x2="4840" y2="-50"/>
+      <line x1="5000" y1="-10" x2="5040" y2="-50"/>
+      <line x1="5200" y1="-10" x2="5240" y2="-50"/>
+      <line x1="5400" y1="-10" x2="5440" y2="-50"/>
+      <line x1="5600" y1="-10" x2="5640" y2="-50"/>
+      <line x1="5800" y1="-10" x2="5840" y2="-50"/>
+      <line x1="6000" y1="-10" x2="6000" y2="-50"/>
+    </g>
+
+    <!-- CASTERS at y=0, x=100, 1100, 2200, 3240 -->
+    <g stroke="#222" stroke-width="3" fill="#aaa">
+      <circle cx="100" cy="75" r="75"/>
+      <rect x="60" y="150" width="80" height="40" fill="#888"/>
+      <circle cx="1100" cy="75" r="75"/>
+      <rect x="1060" y="150" width="80" height="40" fill="#888"/>
+      <circle cx="2240" cy="75" r="75"/>
+      <rect x="2200" y="150" width="80" height="40" fill="#888"/>
+      <circle cx="3240" cy="75" r="75"/>
+      <rect x="3200" y="150" width="80" height="40" fill="#888"/>
+    </g>
+
+    <!-- BOTTOM RAIL: from x=0 to x=3340, at y=190 to y=240 -->
+    <rect x="0" y="190" width="3340" height="50" fill="none" stroke="#222" stroke-width="3"/>
+
+    <!-- UPRIGHTS: 4 along length, at x positions 30, 1093, 2127, 3290 (centres of 50mm SHS, plotted from x_left=center-25). Real positions: 5, 1068, 2102, 3265 -->
+    <g fill="#444" stroke="#222" stroke-width="2">
+      <rect x="0" y="240" width="50" height="1960"/>
+      <rect x="1063" y="240" width="50" height="1960"/>
+      <rect x="2127" y="240" width="50" height="1960"/>
+      <rect x="3290" y="240" width="50" height="1960"/>
+    </g>
+
+    <!-- TOP FRAME: from x=0 to x=3340 at y=2150 to 2200 -->
+    <rect x="0" y="2150" width="3340" height="50" fill="#444" stroke="#222" stroke-width="2"/>
+
+    <!-- SLIDE RAIL: along top, from x=0 to x=3220 at y=2120 to 2150 -->
+    <rect x="0" y="2120" width="3220" height="30" fill="#e88" stroke="#a44" stroke-width="1.5"/>
+    <!-- Pivot bracket at rear of slide rail -->
+    <path d="M 3220 2120 Q 3260 2120 3290 2140 L 3290 2150 L 3220 2150 Z" fill="#a44" stroke="#622" stroke-width="2"/>
+
+    <!-- 5 SHELVES: cross-pieces at y_real heights. Each level has 2 cross-pieces along the length. -->
+    <!-- Cross-piece x positions: at 660 and 2680 (600 mm from each end of the 3220 board zone, which starts at x=60). Plus 60 padding => cross-pieces are at x=660 and x=2680 mm from rack front (external). -->
+    <!-- Cross-piece is 40 mm wide (perpendicular to board length so just shows as a small square 40x40 in side view), padded -->
+    <!-- BOARDS shown as long horizontal bars at each level -->
+    <g>
+      <!-- Shelf level 5 at y=1900 (resting surface). Cross piece bottom at 1900, top at 1940. Pad at 1940-1950. Board on top from 1950 to 2030 (board thickness 80mm). -->
+      <rect x="640" y="1900" width="40" height="40" fill="#bbb" stroke="#222" stroke-width="1.5"/>
+      <rect x="2660" y="1900" width="40" height="40" fill="#bbb" stroke="#222" stroke-width="1.5"/>
+      <rect x="640" y="1940" width="40" height="10" fill="#fa8"/>
+      <rect x="2660" y="1940" width="40" height="10" fill="#fa8"/>
+      <rect x="60" y="1950" width="3220" height="80" fill="#bcd" stroke="#234" stroke-width="2"/>
+
+      <!-- Shelf level 4 at y=1500 -->
+      <rect x="640" y="1500" width="40" height="40" fill="#bbb" stroke="#222" stroke-width="1.5"/>
+      <rect x="2660" y="1500" width="40" height="40" fill="#bbb" stroke="#222" stroke-width="1.5"/>
+      <rect x="640" y="1540" width="40" height="10" fill="#fa8"/>
+      <rect x="2660" y="1540" width="40" height="10" fill="#fa8"/>
+      <rect x="60" y="1550" width="3220" height="80" fill="#bcd" stroke="#234" stroke-width="2"/>
+
+      <!-- Shelf level 3 at y=1100 -->
+      <rect x="640" y="1100" width="40" height="40" fill="#bbb" stroke="#222" stroke-width="1.5"/>
+      <rect x="2660" y="1100" width="40" height="40" fill="#bbb" stroke="#222" stroke-width="1.5"/>
+      <rect x="640" y="1140" width="40" height="10" fill="#fa8"/>
+      <rect x="2660" y="1140" width="40" height="10" fill="#fa8"/>
+      <rect x="60" y="1150" width="3220" height="80" fill="#bcd" stroke="#234" stroke-width="2"/>
+
+      <!-- Shelf level 2 at y=700 -->
+      <rect x="640" y="700" width="40" height="40" fill="#bbb" stroke="#222" stroke-width="1.5"/>
+      <rect x="2660" y="700" width="40" height="40" fill="#bbb" stroke="#222" stroke-width="1.5"/>
+      <rect x="640" y="740" width="40" height="10" fill="#fa8"/>
+      <rect x="2660" y="740" width="40" height="10" fill="#fa8"/>
+      <rect x="60" y="750" width="3220" height="80" fill="#bcd" stroke="#234" stroke-width="2"/>
+
+      <!-- Shelf level 1 at y=300 -->
+      <rect x="640" y="300" width="40" height="40" fill="#bbb" stroke="#222" stroke-width="1.5"/>
+      <rect x="2660" y="300" width="40" height="40" fill="#bbb" stroke="#222" stroke-width="1.5"/>
+      <rect x="640" y="340" width="40" height="10" fill="#fa8"/>
+      <rect x="2660" y="340" width="40" height="10" fill="#fa8"/>
+      <rect x="60" y="350" width="3220" height="80" fill="#bcd" stroke="#234" stroke-width="2"/>
+
+      <!-- Fin under lowest board, illustrative -->
+      <rect x="2900" y="50" width="100" height="250" fill="#789" stroke="#234" stroke-width="1.5" opacity="0.4"/>
+    </g>
+
+    <!-- DIAGONAL X-BRACING (long side) - between uprights, below lowest shelf and above highest shelf -->
+    <g stroke="#666" stroke-width="2" stroke-dasharray="6 4" fill="none">
+      <!-- Below lowest shelf (240-300) - just 1 bay shown for clarity -->
+      <line x1="50" y1="240" x2="1063" y2="300" opacity="0.5"/>
+      <line x1="50" y1="300" x2="1063" y2="240" opacity="0.5"/>
+      <line x1="1113" y1="240" x2="2127" y2="300" opacity="0.5"/>
+      <line x1="1113" y1="300" x2="2127" y2="240" opacity="0.5"/>
+      <line x1="2177" y1="240" x2="3290" y2="300" opacity="0.5"/>
+      <line x1="2177" y1="300" x2="3290" y2="240" opacity="0.5"/>
+      <!-- Above highest shelf (2030 to 2150) -->
+      <line x1="50" y1="2030" x2="1063" y2="2150" opacity="0.5"/>
+      <line x1="50" y1="2150" x2="1063" y2="2030" opacity="0.5"/>
+      <line x1="1113" y1="2030" x2="2127" y2="2150" opacity="0.5"/>
+      <line x1="1113" y1="2150" x2="2127" y2="2030" opacity="0.5"/>
+      <line x1="2177" y1="2030" x2="3290" y2="2150" opacity="0.5"/>
+      <line x1="2177" y1="2150" x2="3290" y2="2030" opacity="0.5"/>
+    </g>
+
+    <!-- ============================================ -->
+    <!-- SLED STATE 1: STOWED (solid orange line). Sled from x=0 to x=3000, y_top=2200, y_bottom=2150 -->
+    <g fill="#fa8" stroke="#a64" stroke-width="2.5" fill-opacity="0.9">
+      <rect x="0" y="2150" width="3000" height="50"/>
+      <!-- Front crossbar (small mark at sled forward tip) -->
+      <rect x="-5" y="2150" width="10" height="50" fill="#a64"/>
+      <!-- Rear roller (at sled position 2400 from front = x=2400) -->
+      <circle cx="2400" cy="2135" r="25" fill="none" stroke="#a64" stroke-width="2"/>
+      <!-- Front roller -->
+      <circle cx="0" cy="2135" r="25" fill="none" stroke="#a64" stroke-width="2"/>
+    </g>
+    <text x="1500" y="2230" text-anchor="middle" font-size="32" fill="#a64" font-weight="bold">SLED — STOWED (solid)</text>
+
+    <!-- ============================================ -->
+    <!-- SLED STATE 2: SLID BACK 820 mm. Sled from x=820 to x=3820. Front roller at x=820, rear roller at x=3220 (seated in pivot bracket). -->
+    <g fill="none" stroke="#a64" stroke-width="2.5" stroke-dasharray="14 8" opacity="0.85">
+      <rect x="820" y="2240" width="3000" height="50"/>
+      <rect x="815" y="2240" width="10" height="50"/>
+      <circle cx="820" cy="2225" r="25"/>
+      <circle cx="3220" cy="2225" r="25"/>
+    </g>
+    <text x="2320" y="2330" text-anchor="middle" font-size="30" fill="#a64" font-weight="bold" font-style="italic">SLED — SLID BACK 820mm (dashed)</text>
+    <!-- Slide arrow indication -->
+    <g stroke="#0a4" stroke-width="3" fill="none">
+      <line x1="0" y1="2280" x2="820" y2="2280" marker-end="url(#arrowR)" stroke-dasharray="3 4"/>
+    </g>
+    <text x="400" y="2310" text-anchor="middle" font-size="26" fill="#0a4">slide 820</text>
+
+    <!-- ============================================ -->
+    <!-- SLED STATE 3: TILTED at 40 degrees about pivot at (3220, 2200).
+         Sled rear tip: (3220 + 2400*cos40, 2200 - 2400*sin40) = (5058, 657)
+         Sled forward tip: (3220 - 600*cos40, 2200 + 600*sin40) = (2760, 2586) -->
+    <g stroke="#a64" stroke-width="3" stroke-dasharray="2 6" fill="none">
+      <!-- Sled center line from forward tip to rear tip -->
+      <line x1="2760" y1="2586" x2="5058" y2="657"/>
+      <!-- Sled body (parallel lines for the SHS section thickness, 50mm. In perpendicular direction.) -->
+      <!-- For simplicity show as thicker dashed line + a faint rectangle along the angle -->
+    </g>
+    <!-- Sled body as polygon, rotated by 40deg about (3220, 2200) -->
+    <g transform="rotate(-40 3220 2200)" opacity="0.5">
+      <rect x="2620" y="2150" width="3000" height="50" fill="none" stroke="#a64" stroke-width="3" stroke-dasharray="2 6"/>
+    </g>
+
+    <!-- IRB on tilted sled. IRB rests on sled from sled-position 0 (just past pivot) to sled-position 2100. -->
+    <!-- IRB bottom-left at sled coords (300, 50) from forward roller; rotated 40 deg about pivot at (3220, 2200). -->
+    <!-- IRB dimensions: 2100 long x 600 tall in side view. Sits ON the sled (sled top at 2200 in horizontal). -->
+    <g transform="rotate(-40 3220 2200)" opacity="0.85">
+      <rect x="3520" y="2200" width="2100" height="600" rx="80" fill="#bea" stroke="#363" stroke-width="3"/>
+      <text x="4570" y="2570" text-anchor="middle" font-size="60" fill="#363" font-weight="bold" font-style="italic">IRB (2.1m × 0.6m)</text>
+    </g>
+
+    <!-- Pivot point indicator -->
+    <circle cx="3220" cy="2200" r="20" fill="#c00" stroke="#600" stroke-width="2"/>
+    <text x="3260" y="2155" font-size="26" fill="#c00" font-weight="bold">PIVOT</text>
+
+    <!-- WINCH at front-base, x=0, y=300 -->
+    <g fill="#225" stroke="#003" stroke-width="2.5">
+      <rect x="-10" y="280" width="100" height="100" rx="10"/>
+    </g>
+    <text x="40" y="330" text-anchor="middle" font-size="22" fill="#fff" font-weight="bold">WINCH</text>
+
+    <!-- CABLE: from winch (0, 380) to sled forward tip when tilted (2760, 2586) -->
+    <line x1="40" y1="380" x2="2760" y2="2586" stroke="#08c" stroke-width="3" marker-end="url(#cableArrow)"/>
+    <text x="1100" y="1500" font-size="28" fill="#08c" font-weight="bold" transform="rotate(-37 1100 1500)">winch cable</text>
+
+    <!-- STABILIZER LEG, deployed at rack rear -->
+    <g stroke="#634" stroke-width="3" fill="#c79">
+      <rect x="3275" y="0" width="50" height="240"/>
+      <rect x="3245" y="-10" width="110" height="20"/>
+    </g>
+    <text x="3380" y="80" font-size="22" fill="#634" font-weight="bold">stabilizer leg</text>
+    <text x="3380" y="105" font-size="20" fill="#634" font-style="italic">(deploy before slide)</text>
+
+    <!-- Tilt angle indicator (arc) -->
+    <path d="M 3540 2200 A 320 320 0 0 1 3464.9 1990.5" fill="none" stroke="#c00" stroke-width="2"/>
+    <text x="3570" y="2090" font-size="28" fill="#c00" font-weight="bold">40°</text>
+
+    <!-- Front direction indicator -->
+    <g fill="#04a" font-size="24" font-style="italic">
+      <text x="200" y="1050" text-anchor="middle">FRONT</text>
+      <text x="200" y="1080" text-anchor="middle">(door side)</text>
+    </g>
+    <g fill="#04a" font-size="24" font-style="italic">
+      <text x="3200" y="1050" text-anchor="middle">REAR</text>
+      <text x="3200" y="1080" text-anchor="middle">(unload side)</text>
+    </g>
+
+    <!-- DIMENSIONS - horizontal at bottom -->
+    <g stroke="#c00" stroke-width="1.5" fill="none">
+      <!-- External length -->
+      <line x1="0" y1="-180" x2="3340" y2="-180" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+      <line x1="0" y1="190" x2="0" y2="-180" stroke-dasharray="3 4" opacity="0.5"/>
+      <line x1="3340" y1="190" x2="3340" y2="-180" stroke-dasharray="3 4" opacity="0.5"/>
+      <!-- Wheelbase length -->
+      <line x1="100" y1="-280" x2="3240" y2="-280" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+      <line x1="100" y1="0" x2="100" y2="-280" stroke-dasharray="3 4" opacity="0.5"/>
+      <line x1="3240" y1="0" x2="3240" y2="-280" stroke-dasharray="3 4" opacity="0.5"/>
+      <!-- Board internal length -->
+      <line x1="60" y1="-360" x2="3280" y2="-360" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+      <!-- Cross-piece positions -->
+      <line x1="660" y1="-100" x2="660" y2="350" stroke-dasharray="3 4" opacity="0.4"/>
+      <line x1="2700" y1="-100" x2="2700" y2="350" stroke-dasharray="3 4" opacity="0.4"/>
+      <line x1="60" y1="-100" x2="660" y2="-100" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+      <line x1="660" y1="-100" x2="2700" y2="-100" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+      <line x1="2700" y1="-100" x2="3280" y2="-100" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+    </g>
+    <g font-size="28" fill="#c00">
+      <text x="1670" y="-145" text-anchor="middle">3340 external length</text>
+      <text x="1670" y="-245" text-anchor="middle">3140 wheelbase</text>
+      <text x="1670" y="-325" text-anchor="middle">3220 board zone (3.2 m board + 1 mm pad each end → effective 3,222)</text>
+      <text x="360" y="-65" text-anchor="middle" font-size="22">600</text>
+      <text x="1680" y="-65" text-anchor="middle" font-size="22">2040 (fin-free)</text>
+      <text x="2990" y="-65" text-anchor="middle" font-size="22">600</text>
+    </g>
+
+  </g>
+
+  <!-- Title block (above the flip, drawn normally) -->
+  <text x="-280" y="-300" font-size="60" font-weight="bold" fill="#222">SIDE ELEVATION</text>
+  <text x="-280" y="-230" font-size="32" fill="#666">Three sled states overlaid: STOWED (solid), SLID BACK (dashed), TILTED 40° (dotted with IRB).</text>
+  <text x="-280" y="-185" font-size="32" fill="#666">All dimensions in mm. View from port (long) side. Quantity: 2 units.</text>
+
+  <!-- Legend -->
+  <g transform="translate(4400, -300)">
+    <rect x="0" y="0" width="1500" height="280" fill="#fff" stroke="#444" stroke-width="2"/>
+    <text x="20" y="40" font-size="28" font-weight="bold" fill="#222">LEGEND</text>
+    <!-- stowed -->
+    <line x1="20" y1="80" x2="100" y2="80" stroke="#a64" stroke-width="3"/>
+    <text x="115" y="88" font-size="24" fill="#222">Sled — stowed</text>
+    <!-- slid -->
+    <line x1="20" y1="120" x2="100" y2="120" stroke="#a64" stroke-width="3" stroke-dasharray="14 8"/>
+    <text x="115" y="128" font-size="24" fill="#222">Sled — slid back 820 mm</text>
+    <!-- tilted -->
+    <line x1="20" y1="160" x2="100" y2="160" stroke="#a64" stroke-width="3" stroke-dasharray="2 6"/>
+    <text x="115" y="168" font-size="24" fill="#222">Sled — tilted at 40°</text>
+    <!-- cable -->
+    <line x1="20" y1="200" x2="100" y2="200" stroke="#08c" stroke-width="3"/>
+    <text x="115" y="208" font-size="24" fill="#222">Winch cable</text>
+    <!-- pivot -->
+    <circle cx="60" cy="240" r="15" fill="#c00"/>
+    <text x="115" y="248" font-size="24" fill="#222">Pivot point (rear of rack)</text>
+  </g>
+</svg>

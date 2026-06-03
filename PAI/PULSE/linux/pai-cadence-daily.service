@@ -1,0 +1,12 @@
+[Unit]
+# PAI daily cadence (today's five). Ported from com.pai.cadence.daily.plist.
+Description=PAI daily cadence digest
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.claude/PAI/USER/Routines
+ExecStart=__BUN_PATH__ %h/.claude/PAI/USER/Routines/run-cadence.ts daily
+Environment=HOME=%h
+Environment=PATH=%h/.bun/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+StandardOutput=append:%h/.claude/PAI/MEMORY/STATE/cadence/logs/daily.out.log
+StandardError=append:%h/.claude/PAI/MEMORY/STATE/cadence/logs/daily.err.log

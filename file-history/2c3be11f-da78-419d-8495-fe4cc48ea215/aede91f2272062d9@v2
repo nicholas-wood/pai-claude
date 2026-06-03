@@ -1,0 +1,37 @@
+# Life
+
+Nick's personal-operations hub — the "run my life" layer. Unlike `personal/` (a bucket for
+low-frequency one-off topics), `life/` is the standing command centre: weekly reviews, daily
+priorities, follow-ups, and cross-project visibility over career, the three businesses, lifesaving,
+health, and finances.
+
+- **Type:** Operations hub (management & delegation, not a single deliverable)
+- **Orchestration:** the primary DA's standing job (the `chief-of-staff` agent is retired as of
+  2026-06-02, superseded by the DA; history kept in `agents/chief-of-staff/` and `ISA.md`). It
+  delegates, decides on Nick's behalf, manages the roster (create/combine/retire), and reports status +
+  decisions on demand. Does not execute.
+- **Agents:** `life-coach` -- calm accountability partner for micro-habits: check-ins and streak
+  tracking; reinforces behaviours `gym/` and `career/` own without running them.
+
+## What this is NOT
+- Not a replacement for the primary DA (Jarvis / the Algorithm). The orchestration layer is the DA's
+  own standing job, one brain, not two competing orchestrators.
+- Not where business/career *work* happens, that stays in `accessbuddy/`, `limsoc-national-ims/`,
+  `lifesaveroncall/`, `career/`, `gym/`, etc. The orchestration layer *surfaces and sequences* across them.
+
+## Structure
+- `CLAUDE.md` — project operator brief
+- `context/` — foundation: facts (the life portfolio), state (current priorities), references, feedback
+- `agents/chief-of-staff/` — the orchestrator agent (claude.md + memory.md)
+- `artifacts/` — weekly reviews, priority lists, follow-up logs (markdown; finals to OneDrive)
+
+## Related projects it reads across
+| Area | Project | Existing agents |
+|---|---|---|
+| Career / job search | `career/` | interview-prep, positioning |
+| Health / fitness | `gym/` | (trainer) |
+| Access Buddy (SaaS) | `accessbuddy/` | architect, feature-dev, infra-ops, qa-verify |
+| LIMSOC | `limsoc-national-ims/` | commercials, strategy-architect |
+| Lifesaver on Call | `lifesaveroncall/` | architect, feature-dev, infra-ops, security-redteam |
+| LSV Comms Officer role | `lsv-comms-officer/` | (notifications, tracking) |
+| Low-frequency personal | `personal/` | none by default |

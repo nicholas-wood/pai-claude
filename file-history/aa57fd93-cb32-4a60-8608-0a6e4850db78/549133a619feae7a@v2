@@ -1,0 +1,118 @@
+---
+project: accessbuddy
+effort: E4
+phase: active
+progress: live-v1.10.2
+mode: build
+started: 2026-06-02
+updated: 2026-06-02
+---
+
+# AccessBuddy - Project ISA
+
+> Project ISA (system of record). Lives in the repo per PAI doctrine. Supersedes the `context/{facts,state,references,feedback}.md` foundation pattern: those files fold into the sections below and are retained as detailed appendices until fully absorbed. The `USER/PROJECTS/accessbuddy.md` entry in PAI is the lightweight index that points here.
+
+## Problem
+
+Surf lifesaving and sports clubs manage building-access credentials (fobs, keys, access codes) with fragile Google Sheets, AppSheet, and Apps Script systems. These do not scale, have no proper workflow, payment, or audit trail, and break as membership and credential volume grows. South Melbourne Lifesaving Club (SMLSC) is the concrete instance: ~192 members, 354 credentials, previously run off spreadsheets.
+
+## Vision
+
+A multi-tenant SaaS that automates the full credential lifecycle - request, payment, exemption review, approval, programming, pickup, issuance - with a clean member portal, an admin dashboard, real payments, and a complete audit trail. SMLSC runs entirely on it; the platform then commercialises to other surf lifesaving and sports clubs across Australia. Euphoric surprise: a club committee that dreaded credential admin finds the whole lifecycle just works, end to end, with money and audit handled.
+
+## Out of Scope
+
+- Programmatic integration with Integriti Inner Range access hardware (manual programming today; this is Stage 2).
+- Native admin mobile app (Stage 3).
+- Membership-system sync (Stage 4).
+- SaaS billing / platform admin panel and multi-club go-to-market (future stage; not built).
+- Anything that assumes more than one live tenant today (SMLSC is the only one).
+
+## Principles
+
+- Production is production: a real club depends on this. No change ships without understanding its side effects.
+- The workflow narrative comes before the code. Nick thinks in UX outcomes, not implementation.
+- Fail closed on tenancy: multi-tenant isolation must never silently leak across tenants.
+- Cost discipline is a feature: never silently reintroduce removed infrastructure cost.
+- Evidence over assertion: nothing is "done" without a tool-verified check.
+
+## Constraints
+
+- **Stack is settled:** Next.js (App Router) + shadcn on @base-ui/react (NOT Radix); Bun + Hono; Postgres 16 via Drizzle; GCP Cloud Run (australia-southeast1), Cloud SQL, Cloud Storage, Cloud DNS, Secret Manager, Cloud Scheduler, Artifact Registry - all Terraform-managed; Firebase Auth; Stripe Connect Express; Resend; Sentry.
+- **Multi-tenancy via Postgres RLS** (`set_config('app.current_tenant_id', ..., true)`), fail-closed if unset.
+- **Access level lives on `tenantMemberships.accessLevelId`,** never on the credential.
+- **`gcloud run --set-env-vars` REPLACES all env vars** - always `--update-env-vars` (caused a prod outage).
+- **`NEXT_PUBLIC_*` are 8 Docker build args** baked at build time; missing them silently breaks Firebase Auth / Stripe Elements.
+- **`main` = production** (auto-deploys via release-please on `feat:`/`fix:`); `chore:` merges but never deploys.
+- **Version source of truth: `.release-please-manifest.json`** (not the `VERSION` file).
+- **Stripe account type cannot be changed post-onboarding.**
+- Australian English, no em dashes, in all output.
+
+## Goal
+
+AccessBuddy runs SMLSC's entire credential lifecycle in production with payments, audit, and email working end to end, on cost-optimised GCP infrastructure, and is structured to onboard a second tenant without rework. Done is measured by: SMLSC fully cut over and operating, the known production blockers cleared, and the multi-tenant + commercial path unblocked.
+
+## Criteria
+
+- [x] ISC-1: Multi-tenant web app live in production at accessbuddy.com.au (v1.10.2)
+- [x] ISC-2: Firebase Auth working (magic link, OTP, WebAuthn passkey)
+- [x] ISC-3: Full request workflow (SUBMITTED → AWAITING_PAYMENT → AWAITING_EXEMPTION_REVIEW → AWAITING_APPROVAL → AWAITING_PROGRAMMING → PROGRAMMED → AWAITING_PICKUP → ISSUED; ON_HOLD/CANCELLED) implemented
+- [x] ISC-4: Stripe Connect Express with dual webhooks (connect + platform) live
+- [x] ISC-5: Email system (27 events, per-tenant block editor, audit preview) live
+- [x] ISC-6: SMLSC data migrated (192 members, 354 credentials) and KYB complete
+- [x] ISC-7: GCP infrastructure cost-optimised to ~$60-75 AUD/month, full Terraform IaC
+- [x] ISC-8: Cutover Phases A-E complete
+- [ ] ISC-9: `email_configurations` DB migration applied in prod (template admin blocked until then)
+- [ ] ISC-10: Face ID end-to-end verified on prod on a real device (migration 0008)
+- [ ] ISC-11: Phase F pre-cutover end-to-end validation run (sendEmails=false)
+- [ ] ISC-12: Cutover Phases G (cutover day) and H (first 7 days) completed
+- [ ] ISC-13: `STRIPE_PLATFORM_WEBHOOK_SECRET` rotated and moved into Secret Manager
+- [ ] ISC-14: Recipient-override UI exposed in email admin (schema supports it; UI does not)
+- [ ] ISC-15: Orphaned-request fields (`orphanEmail`/`orphanFirstName`/`orphanLastName`) shown in admin UI
+- [ ] ISC-16: BigQuery billing export set up (current cost figures are list-price estimates)
+- [ ] ISC-17: `workflow_dispatch` added to `deploy.yml` (ship non-release commits without an empty trigger)
+- [ ] ISC-18: Anti: no tenant data leaks across the RLS boundary (fail-closed verified)
+- [x] ISC-19: Anti: no `--set-env-vars` used on Cloud Run (only `--update-env-vars`)
+- [ ] ISC-20: Anti: removed infrastructure cost (e.g. Memorystore Redis) is never silently reintroduced
+- [ ] ISC-21: SaaS pricing model for club subscriptions defined [gap: none documented]
+- [ ] ISC-22: Second-club onboarding / go-to-market path defined [gap: none documented]
+
+## Test Strategy
+
+| isc | type | check | threshold | tool |
+|-----|------|-------|-----------|------|
+| ISC-1 | live | GET accessbuddy.com.au returns 200, footer shows v1.10.2 | 200 + version match | curl / Interceptor |
+| ISC-9 | schema | `email_configurations` table exists in prod DB | table present | SELECT |
+| ISC-10 | live | Face ID enrol + sign-in on a real device | passes on device | manual device test |
+| ISC-11 | functional | full workflow run with sendEmails=false | no errors, all states reachable | staged run |
+| ISC-13 | config | secret absent from env, present in Secret Manager | not in env-vars | gcloud + Secret Manager read |
+| ISC-18 | security | query as tenant A cannot read tenant B rows | zero cross-tenant rows | SELECT with RLS context |
+| ISC-19 | process | deploy scripts contain no `--set-env-vars` | zero matches | grep |
+
+## Features
+
+| name | satisfies | depends_on | parallelizable |
+|------|-----------|------------|----------------|
+| email_configurations migration | ISC-9, ISC-14 | - | no (gates template admin) |
+| Phase F validation run | ISC-11 | ISC-9 | no |
+| Cutover G/H | ISC-12 | ISC-11 | no |
+| Secret Manager hardening | ISC-13 | - | yes |
+| Admin UI gaps (recipient override, orphan fields) | ISC-14, ISC-15 | ISC-9 | yes |
+| Billing export + deploy_dispatch | ISC-16, ISC-17 | - | yes |
+| Commercial model (pricing, 2nd-club GTM) | ISC-21, ISC-22 | - | yes |
+
+## Decisions
+
+- 2026-05-05: Cost-optimised infra (Cloud Run min 0/max 10, db-f1-micro, removed Memorystore Redis, Direct VPC egress). Saving ~$110/month. Restoration HCL kept in `docs/COST_OPTIMISATION.md`.
+- 2026-06-02: Project converted to PAI project-ISA model. `context/` foundation folds into this file; retained as appendix until fully absorbed. Four specialist agents rebuilt as PAI-registered subagents (architect/feature-dev/infra-ops/qa-verify) with distinct voices.
+- 2026-06-02: refined: Cato cross-vendor audit returned `concerns`. Acted on: architect restricted to read/design tools (`Read, Grep, Glob, WebSearch, WebFetch`) and qa-verify to `Read, Grep, Glob, Bash, WebFetch` to enforce the design/verify handoff (previously inherited all tools). feature-dev and infra-ops intentionally keep full tools (they write code/infra). Persona+memory files confirmed present; lowercase `claude.md` is deliberate per AGENT_STANDARD (distinct from harness `CLAUDE.md`), not drift.
+
+## Changelog
+
+- conjectured: a flat `context/{facts,state,references,feedback}.md` set is the best project memory format. refuted_by: PAI's twelve-section ISA carries the same content plus testable Criteria, Test Strategy, and a verification trail the flat files lacked. learned: the ISA is a superset of the context pattern. criterion_now: project record is the ISA; `context/` is appendix-only.
+
+## Verification
+
+- ISC-1: live-probe 2026-06-02 - `curl https://accessbuddy.com.au` returned HTTP 200 (site live). Footer version string in-app, not curl-extractable; 200 confirms live.
+- ISC-19: grep 2026-06-02 - no operational `--set-env-vars` in deploy/CI scripts; all matches are rule documentation (ISA, CLAUDE.md, feedback notes). Anti-criterion holds.
+- ISC-2..ISC-8: verified live as at 2026-05-05 (production v1.10.2, SMLSC tenant operational) per the prior state record. Re-confirm via live probe on next deep session.

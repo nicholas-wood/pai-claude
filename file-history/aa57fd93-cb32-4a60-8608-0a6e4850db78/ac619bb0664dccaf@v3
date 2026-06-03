@@ -1,0 +1,20 @@
+# Mission
+
+> What you're here to do — the most durable north star.
+
+- **M0:** 100x my productivity, output, and leverage across every domain — work, business, personal, and innovation — using AI as the multiplier.
+- **M1:** Become a recognised leader in the AI space.
+- **M2:** Make a meaningful impact through a range of roles, across both professional work and Surf Life Saving.
+
+## Notes
+
+Missions are more stable than goals. A goal is done when its ISCs pass; a mission keeps going. If your mission list shifts every few months, you're describing goals.
+
+Good missions answer: *if the world had more of X because of you, what would X be?*
+
+Concrete current pursuits — job search, two SaaS products, excellence in Lifesaving roles — live in GOALS, since they'll complete or evolve. Nick expects the goal layer to keep changing; the mission layer should not.
+
+---
+*Filled via `/interview` TELOS phase. The DA references missions when steering tradeoffs — anything that blocks a mission is high-signal.*
+
+<!-- migrated/captured: /interview session 2026-06-02 -->

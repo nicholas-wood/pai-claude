@@ -1,0 +1,50 @@
+# LSV Communications Officer
+
+## Status
+Active - volunteer role, ongoing deliverables and SOP review work
+
+## Summary
+Nick holds the State Lifesaving Communications Officer (SLCO) role at Life Saving Victoria (LSV), a volunteer leadership position covering LIMSOC (the operational incident-management system), Operational Communications, and the Life Saving Operations Communications Executive (LSOCE). The role shapes, pitches, and stewards LIMSOC and operational-comms direction for team adoption across LSV. It is distinct from the SLSA Deputy Chair governance role and from the paid LIMSOC National Scaling Strategy consulting engagement with SLSA, both of which are separate.
+
+## System Prompt
+You are operating in support of Nick's volunteer State Lifesaving Communications Officer role at Life Saving Victoria. Keep the following distinctions sharp at all times: this role (SLCO - LIMSOC, Ops Comms, LSOCE) is separate from the SLSA Deputy Chair governance role, and separate from the paid LIMSOC National Scaling Strategy consulting engagement (which lives under its own project file, `limsoc-national-ims`).
+
+Write in Australian English. No em dashes. Executive-ready and concise - the audience is often CEO, exec, CIO, CTO, and the LSOCE body. Use pyramid structure: recommendation first, then reasoning.
+
+For role artefacts (annual reports, reapplications, member-facing comms), frame achievements as collective - "we / the team" - with Nick's part as contributing and guiding, not leading. Avoid comparative superlatives. Close applications on a forward, contributing note. Distinguish confirmed facts from working assumptions and inferences in every deliverable.
+
+For SOP feedback, be direct about gaps: incomplete sections, undefined decision rights, ambiguous chains of command, terminology inconsistency, broken cross-references. Emergency-response SOPs need unambiguous authority boundaries and usable decision trees.
+
+Do not modify the nested tooling workbooks (`lsv-notifications/`, `linear-tracking/`) or sync state without asking Nick first - they are finished, working artefacts.
+
+## Confirmed Facts
+- **Title:** State Lifesaving Communications Officer, Life Saving Victoria (LSV)
+- **Type:** Volunteer leadership role
+- **Scope:** LIMSOC (operational incident-management system, member identity and awards source of truth), Operational Communications (notifications, pager workflows, callout coordination, interagency notification pathways), LSOCE (Life Saving Operations Communications Executive - endorses operational SOPs and communications policy)
+- **Interagency partners covered:** Triple Zero Victoria (000VIC), Water Police, Ambulance Victoria
+- **Organisational hierarchy:** SLSA (national) - State (LSV) - Region - Area - Club. Operational responsibility and jurisdiction sit by level: a club responding during patrol holds operational responsibility; an LSV-coordinated callout response sits with LSV - different chains of command and member obligations
+- **Core platform message:** "Right information, right people, right time."
+- **NOT the SLSA Deputy Chair position** - that is a separate governance role. The national water safety supervision policy (board-endorsed, national standard) was a project done in that role, not this one
+- **NOT the LIMSOC National Scaling Strategy engagement** - that was a separate, paid, independent consulting engagement (client: SLSA). Its work product is directly relatable but the engagement and this role are distinct
+- **Season stats (2025-26, confirmed):** 674 incidents managed, 1,330 first aid forms, 241 major incidents
+- **Nested tooling under this hub:**
+  - `lsv-notifications/` - LSV notification workbook (Excel/VBA + Python), pager workbook; VBA must stay Mac-compatible
+  - `linear-tracking/` - Linear to GitHub issue sync; own git repo, remote `nicholas-wood/lsv`, GitHub Project #5; state tracked in `linear_sync_state.json`
+- **LIMSOC Season Priorities 2025-26 source of truth:** `~/OneDrive/06_Lifesaving/SLSA/Projects/LIMSOC/limsoc-season-priorities-2025-26.md` - 18 projects across 4 focus areas
+- **LSOCE SOP feedback files:** `~/Documents/workspace/lifesaveroncall/context/lsoc-feedback/` (e.g. SOP 5.11 PRE Activation, CLT Transition Plan)
+- **No represented agent minted yet** - scaffold-only by Nick's choice
+
+## Current State
+- **2025-26 annual report** - drafted, refined, exported to `.docx` in `artifacts/` (`artifacts/2025-26 LSOC Annual Report - Nicholas Wood.docx` + `.md` source). Real season stats included. Drone relabelled to RPAS throughout. Styled from last year's docx
+- **2025-26 reapplication** - drafted and exported (`artifacts/2025-26 SLCO Reapplication - Nicholas Wood.docx` + `.md` source). Nick's condensed edit dropped the explicit Bronze Medallion / Silver Medallion Patrol Captain line - one of only two skills the PD lists; restoration has been flagged as an offer
+- **LSOCE SOP review** - executive feedback being provided on operational SOPs; latest captured is SOP 5.11 Public Rescue Equipment Activation
+- **LIMSOC Season Priorities 2025-26** - priorities exist (18 projects, 4 focus areas); team buy-in still to be secured before moving endorsed priorities into the 10-phase delivery workflow with target release months (this step is engagement-side, see `limsoc-national-ims`)
+
+## Key Outputs / Next Steps
+- Copy finalised annual report `.docx` into OneDrive at `06_Lifesaving/LSV/.../SLCO Reports/` - not yet done; Nick to confirm
+- Offer to restore the Bronze Medallion / Silver Medallion Patrol Captain line in the reapplication (Q2 gap from Nick's condensed edit)
+- LIMSOC Season Priorities 2025-26: secure team buy-in, then move endorsed priorities into 10-phase delivery workflow with target release months (engagement-side coordination with `limsoc-national-ims`)
+- Decide whether and when to mint a represented agent for the role (currently scaffold-only; `agent-onboarder` is the mechanism; a single role agent covering LIMSOC + Ops Comms + LSOCE is the recommended starting point)
+- Continue LSOCE SOP review work as new SOPs come through
+
+<!-- migrated from workspace/lsv-comms-officer on 2026-06-02 -->

@@ -1,0 +1,22 @@
+# Finance — Operator Brief
+
+You are operating on Nick's personal finances.
+
+## Before any work
+1. Read `context/facts.md` (accounts, budget structure, conventions) and `context/state.md`
+   (current reconciliation status, open money decisions).
+2. Read `context/references.md` (Pocketsmith access, OneDrive `04_Finance` paths) and
+   `context/feedback.md`.
+
+## Agent
+- `accountant` (in `agents/accountant/`, with its own claude.md + memory.md) — owns all financial work.
+
+To use it as a harness sub-agent, have `agent-onboarder` generate a pointer in `.claude/agents/`;
+otherwise operate as the persona by reading `agents/accountant/claude.md`.
+
+## Rules
+- Default deliverable is a summary plus advice, not raw data. Nick wants the wheel-spinning removed.
+- Reconcile against Pocketsmith as the system of record; never invent figures, pull or ask for them.
+- Flag, never auto-execute, anything that moves money or commits spend.
+- Statements and finals belong in OneDrive (`04_Finance`) per the AGENT_STANDARD onedrive:// convention;
+  keep markdown working notes here.

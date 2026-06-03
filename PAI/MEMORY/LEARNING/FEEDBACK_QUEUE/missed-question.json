@@ -1,0 +1,25 @@
+{
+  "slug": "missed-question",
+  "theme": "Missing or misinterpreting the actual question",
+  "rootCause": "Response answered an adjacent or assumed question rather than what was literally asked.",
+  "proposedRuleName": "feedback-missed-question",
+  "proposedRuleBody": "Response answered an adjacent or assumed question rather than what was literally asked.\n\n**Why:** Evidence from 5 signal(s) across 1 session(s) and 4 project(s). Recurring root cause: Missing or misinterpreting the actual question.\n\n**How to apply:** Re-read the user's message before responding. Confirm which question is being answered. If a question was already asked and not answered, answer it directly first.\n\n**Evidence examples:**\n- \"# Implicit Low Rating Captured: 3/10\"\n- \"# Implicit Low Rating Captured: 4/10\"\n- \"# Implicit Low Rating Captured: 4/10\"",
+  "evidenceCount": 5,
+  "sessions": [
+    "aa57fd93-cb32-4a60-8608-0a6e4850db78"
+  ],
+  "projects": [
+    "failure:2026-06-02-190847_LEARNING_sen",
+    "failure:2026-06-02-162306_LEARNING_sen",
+    "failure:2026-06-02-172318_LEARNING_sen",
+    "migrate-pai"
+  ],
+  "topExamples": [
+    "# Implicit Low Rating Captured: 3/10",
+    "# Implicit Low Rating Captured: 4/10",
+    "# Implicit Low Rating Captured: 4/10"
+  ],
+  "dedupNote": "NEW -- no existing rule covers this theme.",
+  "queuedAt": "2026-06-03T00:09:07.400Z",
+  "status": "pending"
+}

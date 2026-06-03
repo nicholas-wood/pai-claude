@@ -1,0 +1,24 @@
+# Finance
+
+Nick's personal and consulting-company finances: reconciliation, budgeting, cashflow, and money advice.
+
+- **Type:** Operations (recurring)
+- **Source of record:** Pocketsmith (transactions, budgets, forecasts). Finals to `onedrive://OneDrive-Personal/04_Finance/`.
+
+## What this is
+The money-management front. Two ledgers kept separate: Nick personally, and Nicholas Wood Digital
+Consulting (ABN + PTY LTD, which has GST). Turns transactions into a picture plus a recommendation,
+and removes the manual reconcile and review work. Cashflow and runway are first-class right now while
+Nick is between roles and job-hunting.
+
+## Structure
+- `CLAUDE.md` - project operator brief
+- `ISA.md` - project system of record (twelve-section ISA)
+- `context/` - shared foundation (facts, state, references, feedback)
+- `agents/accountant/` - claude.md + memory.md
+- `artifacts/` - working notes, reconciliation summaries (markdown; finals to OneDrive)
+
+## Agents
+| Agent | Scope |
+|---|---|
+| `accountant` | Pocketsmith reconciliation, budget review, cashflow and runway, money advice |

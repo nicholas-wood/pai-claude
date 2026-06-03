@@ -1,0 +1,12 @@
+[Unit]
+# PAI weekly review. Ported from com.pai.cadence.weekly.plist.
+Description=PAI weekly cadence review
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.claude/PAI/USER/Routines
+ExecStart=__BUN_PATH__ %h/.claude/PAI/USER/Routines/run-cadence.ts weekly
+Environment=HOME=%h
+Environment=PATH=%h/.bun/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+StandardOutput=append:%h/.claude/PAI/MEMORY/STATE/cadence/logs/weekly.out.log
+StandardError=append:%h/.claude/PAI/MEMORY/STATE/cadence/logs/weekly.err.log

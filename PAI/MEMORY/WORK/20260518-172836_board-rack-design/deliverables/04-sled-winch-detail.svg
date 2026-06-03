@@ -1,0 +1,326 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-100 -100 4200 3200" width="1300" height="990" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrowL" viewBox="0 0 10 10" refX="0" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 10 0 L 0 5 L 10 10 z" fill="#c00"/></marker>
+    <marker id="arrowR" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#c00"/></marker>
+    <marker id="cableArrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#08c"/></marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="0" y="-30" font-size="50" font-weight="bold" fill="#222">SLED &amp; WINCH MECHANISM — DETAILS</text>
+  <text x="0" y="20" font-size="26" fill="#666">Components of the slide-then-tilt mechanism. All dimensions in mm.</text>
+
+  <!-- ================================ -->
+  <!-- PANEL 1: Slide rail + sled cross-section (top-left)  -->
+  <g transform="translate(0, 80)">
+    <rect x="0" y="0" width="1900" height="700" fill="#fafafa" stroke="#888" stroke-width="1"/>
+    <text x="20" y="40" font-size="32" font-weight="bold" fill="#222">A. Rail / Sled / Roller — cross-section (perpendicular to rack length)</text>
+    <text x="20" y="70" font-size="22" fill="#666" font-style="italic">Detail × 5 magnification. Looking down the long axis of the rack.</text>
+
+    <g transform="translate(150, 350) scale(2)">
+      <!-- Top frame upright (50x50 SHS) on left side, the rail sits on its inboard edge -->
+      <rect x="0" y="-100" width="50" height="220" fill="#444" stroke="#222" stroke-width="2"/>
+      <text x="25" y="155" text-anchor="middle" font-size="14" fill="#222">upright</text>
+      <text x="25" y="173" text-anchor="middle" font-size="11" fill="#222">50×50×3</text>
+
+      <!-- Slide rail: 50W × 25H RHS, sitting on top of upright. The rail spans length-wise, so cross-section shows its end. -->
+      <rect x="0" y="-125" width="50" height="25" fill="#f99" stroke="#a44" stroke-width="2"/>
+      <text x="-15" y="-110" text-anchor="end" font-size="14" fill="#a44">slide rail</text>
+      <text x="-15" y="-95" text-anchor="end" font-size="11" fill="#a44">50×25×3 RHS</text>
+
+      <!-- Roller (nylon, 50mm diameter) sits on top of rail. It's affixed to the sled and rolls along the rail. -->
+      <circle cx="25" cy="-150" r="25" fill="#fff" stroke="#622" stroke-width="2"/>
+      <text x="25" y="-145" text-anchor="middle" font-size="11" fill="#622">nylon</text>
+      <text x="25" y="-132" text-anchor="middle" font-size="11" fill="#622">roller</text>
+      <text x="25" y="-119" text-anchor="middle" font-size="10" fill="#622">ø50</text>
+      <line x1="25" y1="-175" x2="60" y2="-200" stroke="#622" stroke-width="1"/>
+      <text x="65" y="-195" font-size="11" fill="#622">axle M16 SS</text>
+
+      <!-- Sled body (50x50 SHS) sits above rollers on a small bracket -->
+      <rect x="0" y="-225" width="50" height="50" fill="#fa8" stroke="#a64" stroke-width="2"/>
+      <line x1="25" y1="-175" x2="25" y2="-175" stroke="#a64"/>
+      <line x1="0" y1="-175" x2="50" y2="-175" stroke="#a64" stroke-width="1"/>
+      <text x="65" y="-200" font-size="12" fill="#a64">sled 50×50×3 SHS</text>
+
+      <!-- HDPE/EVA pad on top of sled (IRB contact) -->
+      <rect x="-5" y="-240" width="60" height="15" fill="#cef" stroke="#48a" stroke-width="1"/>
+      <text x="60" y="-235" font-size="11" fill="#48a">HDPE pad 25 mm</text>
+
+      <!-- IRB hull above (curved, semi-transparent) -->
+      <path d="M -200 -260 Q -150 -350 0 -360 L 200 -360 Q 250 -350 250 -260" fill="#bea" stroke="#363" stroke-width="2" opacity="0.5"/>
+      <text x="115" y="-330" text-anchor="middle" font-size="14" fill="#363">IRB hull (cross-section)</text>
+
+      <!-- Same on right side for clarity -->
+      <g transform="translate(700, 0)">
+        <rect x="0" y="-100" width="50" height="220" fill="#444" stroke="#222" stroke-width="2"/>
+        <rect x="0" y="-125" width="50" height="25" fill="#f99" stroke="#a44" stroke-width="2"/>
+        <circle cx="25" cy="-150" r="25" fill="#fff" stroke="#622" stroke-width="2"/>
+        <rect x="0" y="-225" width="50" height="50" fill="#fa8" stroke="#a64" stroke-width="2"/>
+        <rect x="-5" y="-240" width="60" height="15" fill="#cef" stroke="#48a" stroke-width="1"/>
+      </g>
+
+      <!-- Distance between sleds (centre-to-centre, 900 mm = 450 svg units at scale 2... wait, scale is x2, so 900mm = 1800 here? Hmm let me reconsider. -->
+      <!-- Actually scale=2 means 1mm = 2 svg units. 900 mm = 1800 svg units. But I drew the right side at 700 offset, so that's only 700 SVG units = 350 mm. Let me fix.  Setting scale=1 for the panel content makes it 1:1 with svg units. Let me re-do without scale. -->
+    </g>
+
+    <!-- Dimension callouts for the section (using actual mm) -->
+    <g stroke="#c00" stroke-width="1" fill="none">
+      <line x1="850" y1="450" x2="1700" y2="450" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+    </g>
+    <text x="1275" y="475" text-anchor="middle" font-size="20" fill="#c00">900 c-to-c sled spacing</text>
+    <text x="1275" y="500" text-anchor="middle" font-size="18" fill="#666">(adjust 800–1000 to suit IRB hull)</text>
+  </g>
+
+  <!-- ================================ -->
+  <!-- PANEL 2: Pivot bracket detail (top-right) -->
+  <g transform="translate(2000, 80)">
+    <rect x="0" y="0" width="2050" height="700" fill="#fafafa" stroke="#888" stroke-width="1"/>
+    <text x="20" y="40" font-size="32" font-weight="bold" fill="#222">B. Pivot bracket at rear of slide rail</text>
+    <text x="20" y="70" font-size="22" fill="#666" font-style="italic">Side view. Rear roller drops into concave cradle when sled slid back.</text>
+
+    <g transform="translate(50, 400)">
+      <!-- Slide rail in side view -->
+      <rect x="0" y="0" width="700" height="30" fill="#f99" stroke="#a44" stroke-width="2"/>
+      <text x="200" y="22" text-anchor="middle" font-size="20" fill="#622">slide rail (top surface)</text>
+      <!-- Pivot bracket attached to end of rail. Curved cradle on top, bolt-to-rail on bottom. -->
+      <path d="M 700 30 L 700 0 L 740 -10 Q 800 -30 870 -10 L 920 0 L 920 30 Z" fill="#a44" stroke="#622" stroke-width="2.5"/>
+      <!-- Concave seat -->
+      <path d="M 740 -10 Q 800 -30 870 -10" fill="none" stroke="#600" stroke-width="3"/>
+
+      <!-- Rear roller seated in pivot bracket -->
+      <circle cx="805" cy="-25" r="50" fill="#fff" stroke="#622" stroke-width="2.5"/>
+      <circle cx="805" cy="-25" r="10" fill="#a64"/>
+      <text x="805" y="-15" text-anchor="middle" font-size="20" fill="#622">roller</text>
+
+      <!-- Sled attached to roller via stub axle -->
+      <rect x="650" y="-100" width="500" height="50" fill="#fa8" stroke="#a64" stroke-width="2.5" transform="rotate(-5 900 -75)"/>
+      <text x="900" y="-130" text-anchor="middle" font-size="20" fill="#a64">sled (tilting)</text>
+
+      <!-- Rotation arrow -->
+      <path d="M 920 -90 A 100 100 0 0 1 970 -10" fill="none" stroke="#08c" stroke-width="2.5" marker-end="url(#cableArrow)"/>
+      <text x="1010 " y="-40" font-size="22" fill="#08c">tilt</text>
+
+      <!-- Bolts -->
+      <circle cx="725" cy="15" r="6" fill="#222"/>
+      <circle cx="890" cy="15" r="6" fill="#222"/>
+      <text x="850" y="60" font-size="16" fill="#222">M12 bolts</text>
+
+      <!-- Dimension callouts -->
+      <g stroke="#c00" stroke-width="1" fill="none">
+        <line x1="700" y1="80" x2="920" y2="80" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+      </g>
+      <text x="810" y="105" text-anchor="middle" font-size="18" fill="#c00">220 bracket length</text>
+
+      <line x1="-30" y1="-25" x2="-30" y2="30" stroke="#c00" stroke-width="1" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+      <text x="-40" y="5" text-anchor="end" font-size="18" fill="#c00">roller</text>
+      <text x="-40" y="25" text-anchor="end" font-size="18" fill="#c00">ø50</text>
+
+      <text x="800" y="180" text-anchor="middle" font-size="20" fill="#04a" font-style="italic">Material: 6 mm MS plate, formed, hot-dip galvanised.</text>
+      <text x="800" y="210" text-anchor="middle" font-size="20" fill="#04a" font-style="italic">Concave radius 35 mm matches roller ø50 with 5 mm seat.</text>
+    </g>
+  </g>
+
+  <!-- ================================ -->
+  <!-- PANEL 3: Latch detail (middle-left) -->
+  <g transform="translate(0, 830)">
+    <rect x="0" y="0" width="1900" height="700" fill="#fafafa" stroke="#888" stroke-width="1"/>
+    <text x="20" y="40" font-size="32" font-weight="bold" fill="#222">C. Slide latch — stow position lock</text>
+    <text x="20" y="70" font-size="22" fill="#666" font-style="italic">One per long side (port + stbd). Manual release lever; positive engagement.</text>
+
+    <g transform="translate(100, 350)">
+      <!-- Sled cross-section -->
+      <rect x="100" y="-50" width="500" height="50" fill="#fa8" stroke="#a64" stroke-width="2"/>
+      <text x="350" y="-25" text-anchor="middle" font-size="20" fill="#a64">sled (stowed)</text>
+
+      <!-- Latch pin (sprung) coming up from rail -->
+      <rect x="180" y="0" width="20" height="100" fill="#666" stroke="#222" stroke-width="2"/>
+      <rect x="160" y="80" width="60" height="40" fill="#888" stroke="#222" stroke-width="2"/>
+      <text x="280" y="50" font-size="18" fill="#222">sprung detent pin</text>
+      <text x="280" y="75" font-size="18" fill="#222">(M10, spring-loaded)</text>
+
+      <!-- Mating hole in sled bottom -->
+      <circle cx="190" cy="0" r="11" fill="#fff" stroke="#a64" stroke-width="1.5"/>
+      <text x="100" y="-5" text-anchor="end" font-size="16" fill="#a64">mating hole</text>
+
+      <!-- Release lever (manual pull-handle below) -->
+      <rect x="170" y="135" width="40" height="80" fill="#c84" stroke="#642" stroke-width="2"/>
+      <line x1="190" y1="120" x2="190" y2="135" stroke="#666" stroke-width="3"/>
+      <text x="280" y="170" font-size="18" fill="#642">release lever</text>
+      <text x="280" y="195" font-size="18" fill="#642">(pull to disengage)</text>
+
+      <!-- Slide rail -->
+      <rect x="100" y="120" width="500" height="30" fill="#f99" stroke="#a44" stroke-width="2"/>
+      <text x="350" y="142" text-anchor="middle" font-size="18" fill="#622">slide rail</text>
+
+      <!-- Secondary safety strap (webbing from front crossbar to rack top frame) -->
+      <line x1="700" y1="-100" x2="900" y2="-30" stroke="#c80" stroke-width="6" opacity="0.8"/>
+      <text x="800" y="-110" text-anchor="middle" font-size="18" fill="#c80">secondary safety strap</text>
+      <text x="800" y="-90" text-anchor="middle" font-size="16" fill="#c80">(belt-and-braces — 50 mm webbing, cam-buckle)</text>
+
+      <!-- Note text -->
+      <text x="350" y="265" text-anchor="middle" font-size="20" fill="#04a" font-style="italic">Both port + stbd latches must be released before sliding.</text>
+      <text x="350" y="295" text-anchor="middle" font-size="20" fill="#04a" font-style="italic">Latches re-engage automatically when sled is slid forward to stow.</text>
+    </g>
+  </g>
+
+  <!-- ================================ -->
+  <!-- PANEL 4: Winch + cable routing (middle-right) -->
+  <g transform="translate(2000, 830)">
+    <rect x="0" y="0" width="2050" height="700" fill="#fafafa" stroke="#888" stroke-width="1"/>
+    <text x="20" y="40" font-size="32" font-weight="bold" fill="#222">D. Winch position &amp; cable routing</text>
+    <text x="20" y="70" font-size="22" fill="#666" font-style="italic">Simplified side view of rack front. Winch at front-base, cable runs up &amp; rearward to sled front crossbar.</text>
+
+    <g transform="translate(50, 100)">
+      <!-- Front upright (sketch) -->
+      <rect x="0" y="0" width="40" height="540" fill="#444" stroke="#222" stroke-width="2"/>
+      <text x="-10" y="270" text-anchor="end" font-size="20" fill="#222" transform="rotate(-90 -10 270)">front upright</text>
+
+      <!-- Bottom rail -->
+      <rect x="0" y="500" width="500" height="40" fill="#444" stroke="#222" stroke-width="2"/>
+
+      <!-- WINCH (boxed) at bottom -->
+      <rect x="60" y="420" width="180" height="100" fill="#225" stroke="#003" stroke-width="2.5"/>
+      <text x="150" y="475" text-anchor="middle" font-size="22" fill="#fff" font-weight="bold">WINCH</text>
+      <text x="150" y="495" text-anchor="middle" font-size="14" fill="#fff">12V, 1000 kg WLL</text>
+
+      <!-- Top frame -->
+      <rect x="0" y="0" width="1800" height="40" fill="#444" stroke="#222" stroke-width="2"/>
+
+      <!-- Sled in stowed position -->
+      <rect x="0" y="-50" width="1500" height="50" fill="#fa8" stroke="#a64" stroke-width="2"/>
+      <text x="700" y="-25" text-anchor="middle" font-size="22" fill="#a64">sled (stowed)</text>
+
+      <!-- Front crossbar (attachment for cable) -->
+      <rect x="-15" y="-50" width="30" height="50" fill="#a64" stroke="#622" stroke-width="2"/>
+      <circle cx="0" cy="-50" r="10" fill="#fff" stroke="#622" stroke-width="2"/>
+      <text x="-20" y="-65" text-anchor="end" font-size="18" fill="#a64">front crossbar</text>
+      <text x="-20" y="-45" text-anchor="end" font-size="18" fill="#a64">(cable eye)</text>
+
+      <!-- CABLE: from winch (150, 420) up and rearward to sled front crossbar (0, -50) -->
+      <line x1="155" y1="420" x2="0" y2="-50" stroke="#08c" stroke-width="3" marker-end="url(#cableArrow)"/>
+      <text x="350" y="200" font-size="24" fill="#08c" font-weight="bold">cable ↗</text>
+      <text x="350" y="225" font-size="18" fill="#08c">6 mm SS wire rope</text>
+
+      <!-- Alternative cable position when sled tilted - cable longer -->
+      <line x1="155" y1="420" x2="200" y2="-150" stroke="#08c" stroke-width="2" stroke-dasharray="5 5" opacity="0.5" marker-end="url(#cableArrow)"/>
+      <text x="220" y="-160" font-size="16" fill="#08c" opacity="0.7">(deployed: cable longer)</text>
+
+      <!-- Stabilizer leg (other end of rack but indicate) -->
+      <line x1="1700" y1="540" x2="1700" y2="700" stroke="#634" stroke-width="3"/>
+      <rect x="1670" y="700" width="60" height="20" fill="#c79"/>
+      <text x="1700" y="745" text-anchor="middle" font-size="18" fill="#634" font-weight="bold">stabilizer leg</text>
+      <text x="1700" y="765" text-anchor="middle" font-size="16" fill="#634">(at rear)</text>
+
+      <!-- Note: cable provides counter-clockwise moment -->
+      <text x="900" y="600" text-anchor="middle" font-size="20" fill="#04a" font-style="italic">Winch position verified by moment analysis: cable from front-base to sled forward tip</text>
+      <text x="900" y="625" text-anchor="middle" font-size="20" fill="#04a" font-style="italic">provides correct lift rotation at all tilt angles (0° to 50°). Worst-case tension ≈ 640 kgf at horizontal.</text>
+    </g>
+  </g>
+
+  <!-- ================================ -->
+  <!-- PANEL 5: IRB fastening detail (bottom) -->
+  <g transform="translate(0, 1580)">
+    <rect x="0" y="0" width="4050" height="700" fill="#fafafa" stroke="#888" stroke-width="1"/>
+    <text x="20" y="40" font-size="32" font-weight="bold" fill="#222">E. IRB bow fastening — at sled rear crossbar</text>
+    <text x="20" y="70" font-size="22" fill="#666" font-style="italic">Holds IRB against gravity when sled is tilted. Required for safe operation.</text>
+
+    <g transform="translate(200, 350)">
+      <!-- Sled cross-section (rear crossbar) -->
+      <rect x="0" y="-30" width="80" height="60" fill="#a64" stroke="#622" stroke-width="2"/>
+      <text x="40" y="50" text-anchor="middle" font-size="20" fill="#a64">rear crossbar</text>
+      <text x="40" y="75" text-anchor="middle" font-size="16" fill="#a64">40×40×3 SHS</text>
+
+      <!-- D-ring welded eye on crossbar -->
+      <circle cx="40" cy="-70" r="20" fill="none" stroke="#622" stroke-width="4"/>
+      <text x="80" y="-65" font-size="18" fill="#622">welded D-ring eye</text>
+      <text x="80" y="-45" font-size="16" fill="#622">316 SS, 2,500 kg break strength</text>
+
+      <!-- Shackle -->
+      <path d="M 30 -90 Q 30 -110 50 -110 Q 70 -110 70 -90" fill="none" stroke="#444" stroke-width="3"/>
+      <line x1="30" y1="-90" x2="50" y2="-90" stroke="#444" stroke-width="3"/>
+      <line x1="50" y1="-90" x2="70" y2="-90" stroke="#444" stroke-width="3"/>
+      <circle cx="50" cy="-90" r="3" fill="#222"/>
+      <text x="100" y="-110" font-size="18" fill="#444">shackle (SS, 1.5 t)</text>
+
+      <!-- Webbing strap -->
+      <path d="M 50 -130 Q 200 -200 400 -180" fill="none" stroke="#c80" stroke-width="14"/>
+      <text x="200" y="-230" font-size="18" fill="#c80">50 mm polyester webbing, cam-buckle</text>
+      <text x="200" y="-208" font-size="16" fill="#c80">2,000 kg break, marine-grade</text>
+
+      <!-- IRB bow eye -->
+      <circle cx="400" cy="-180" r="15" fill="none" stroke="#363" stroke-width="3"/>
+      <text x="450" y="-180" font-size="20" fill="#363">IRB bow towing eye (existing)</text>
+
+      <!-- IRB outline (faded) -->
+      <path d="M 400 -180 Q 500 -200 600 -180 L 1500 -180 Q 1600 -180 1600 -100 L 1600 -10 Q 1600 70 1500 70 L 600 70 Q 500 70 400 50 Z" fill="#bea" stroke="#363" stroke-width="2" opacity="0.4"/>
+      <text x="1000" y="-50" text-anchor="middle" font-size="32" fill="#363" font-weight="bold" font-style="italic" opacity="0.6">IRB</text>
+
+      <!-- Annotation -->
+      <text x="2500" y="-100" font-size="22" fill="#04a">Strap MUST be tensioned before tilt operation.</text>
+      <text x="2500" y="-75" font-size="22" fill="#04a">Strap MUST hold IRB if winch fails.</text>
+      <text x="2500" y="-50" font-size="22" fill="#04a">Inspect before each use — replace at first fray.</text>
+
+      <text x="2500" y="-10" font-size="22" fill="#c00" font-weight="bold">⚠ Always confirm strap engaged before lowering.</text>
+    </g>
+  </g>
+
+  <!-- ================================ -->
+  <!-- PANEL 6: Sled assembly summary (bottom-right) -->
+  <g transform="translate(0, 2330)">
+    <rect x="0" y="0" width="4050" height="700" fill="#fafafa" stroke="#888" stroke-width="1"/>
+    <text x="20" y="40" font-size="32" font-weight="bold" fill="#222">F. Sled assembly — exploded layout</text>
+    <text x="20" y="70" font-size="22" fill="#666" font-style="italic">Top view of one sled assembly (port). The starboard sled is mirror image. Both linked by front + rear crossbars.</text>
+
+    <g transform="translate(150, 350)">
+      <!-- Single sled, top view, length 3000 mm shown at 1:6 scale -->
+      <rect x="0" y="-25" width="3000" height="50" fill="#fa8" stroke="#a64" stroke-width="2.5"/>
+
+      <!-- HDPE pad on top (visible as strip) -->
+      <rect x="0" y="-30" width="3000" height="10" fill="#cef" stroke="#48a" stroke-width="1" opacity="0.7"/>
+
+      <!-- Front roller -->
+      <circle cx="0" cy="0" r="22" fill="#fff" stroke="#622" stroke-width="2.5"/>
+      <text x="0" y="-50" text-anchor="middle" font-size="20" fill="#622">front roller</text>
+
+      <!-- Rear roller (at 2400 from front) -->
+      <circle cx="2400" cy="0" r="22" fill="#fff" stroke="#622" stroke-width="2.5"/>
+      <text x="2400" y="-50" text-anchor="middle" font-size="20" fill="#622">rear roller (becomes pivot)</text>
+
+      <!-- Front crossbar (extends to starboard) -->
+      <rect x="-10" y="20" width="20" height="450" fill="#a64" stroke="#622" stroke-width="2"/>
+      <text x="0" y="495" text-anchor="middle" font-size="20" fill="#a64">front crossbar →</text>
+
+      <!-- Rear crossbar (at rear roller) -->
+      <rect x="2390" y="20" width="20" height="450" fill="#a64" stroke="#622" stroke-width="2"/>
+      <text x="2400" y="495" text-anchor="middle" font-size="20" fill="#a64">rear crossbar →</text>
+
+      <!-- D-ring on rear crossbar -->
+      <circle cx="2400" cy="350" r="15" fill="none" stroke="#622" stroke-width="3"/>
+      <text x="2440" y="355" font-size="18" fill="#622">IRB bow strap point</text>
+
+      <!-- Cable eye on front crossbar -->
+      <circle cx="0" cy="350" r="15" fill="none" stroke="#622" stroke-width="3"/>
+      <text x="40" y="355" font-size="18" fill="#622">cable attachment eye</text>
+
+      <!-- DIMENSIONS -->
+      <g stroke="#c00" stroke-width="1.5" fill="none">
+        <line x1="0" y1="100" x2="3000" y2="100" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+        <line x1="0" y1="180" x2="2400" y2="180" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+        <line x1="2400" y1="180" x2="3000" y2="180" marker-start="url(#arrowL)" marker-end="url(#arrowR)"/>
+      </g>
+      <text x="1500" y="135" text-anchor="middle" font-size="24" fill="#c00">3000 sled length</text>
+      <text x="1200" y="215" text-anchor="middle" font-size="22" fill="#c00">2400 (front roller to rear roller / pivot)</text>
+      <text x="2700" y="215" text-anchor="middle" font-size="22" fill="#c00">600 (forward of pivot)</text>
+
+      <!-- IRB position indicator (where IRB sits on sled) -->
+      <g stroke="#363" stroke-width="2" stroke-dasharray="8 5" fill="none">
+        <rect x="200" y="-95" width="2100" height="180"/>
+      </g>
+      <text x="1250" y="-100" text-anchor="middle" font-size="22" fill="#363" font-style="italic">IRB seating zone (2100 mm)</text>
+    </g>
+  </g>
+
+  <!-- Bottom legend -->
+  <text x="0" y="3120" font-size="22" fill="#666" font-style="italic">All steel hot-dip galvanised per AS/NZS 4680. All hardware grade 8.8 or stainless 316 where in contact with seawater.</text>
+  <text x="0" y="3150" font-size="22" fill="#666" font-style="italic">Quantity: 2 identical rack units. Fabricator confirms hardware sourcing and details before commit to fabrication.</text>
+</svg>

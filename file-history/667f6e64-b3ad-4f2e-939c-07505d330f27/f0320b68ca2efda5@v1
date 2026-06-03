@@ -1,0 +1,61 @@
+# Memory -- home-automation-sme
+
+What I have learnt over time. Maintain IN PLACE: when something changes, replace the outdated line --
+do not append a stale duplicate below. This file must always reflect the latest state.
+
+## Voice
+
+(No agent-specific voice notes yet. Follow global PAI rules: Australian English, no em dashes,
+recommendation-first, treat Nick as a capable senior engineer, grounded pushback welcome.)
+
+## Process
+
+- Always orient to existing YAML in `artifacts/Home_Automation/` before writing new automations.
+- Use modern HA schema: `triggers:`/`conditions:`/`actions:` as top-level keys; `trigger:` and `action:` inside list items.
+- Every automation must include `mode:` -- default `single` unless queueing/restart is justified.
+- Synced-switch circuits require three automations per circuit: (1) master-off cascades to children, (2) any child-on activates master, (3) all-children-off deactivates master.
+- Always include `condition: state` guards on the master entity in automations 2 and 3 to avoid feedback loops.
+
+## People
+
+- **Nick:** principal. Senior engineer. Recommendation-first. No hand-holding.
+- **Ruby:** Hazel co-owner (dog thread, not HA). No HA involvement noted.
+
+## Projects
+
+- **personal (workspace project):** HA is one thread in `~/Documents/workspace/personal/`. Artefacts at `~/Documents/workspace/personal/artifacts/Home_Automation/`.
+- **Seeded 2026-06-03:** agent created by agent-onboarder during PAI convergence.
+
+### Known entities (from `ha_automations_new.yaml`, confirmed 2026-06-03)
+
+**Entrance Bottom Left circuit** (controls: bathroom light, bathroom fan, spare bedroom light):
+- `switch.entrance_bottom_left` -- master/virtual circuit switch
+- `switch.bathroom_light`
+- `switch.bathroom_fan`
+- `switch.spare_bedroom_light`
+
+**Entrance Bottom Right circuit** (controls: ensuite light, ensuite fan, bedroom light, bedroom lamps):
+- `switch.entrance_bottom_right` -- master/virtual circuit switch
+- `switch.ensuite_light`
+- `switch.ensuite_fan`
+- `switch.bedroom_light`
+- `light.bedroom_lamps` -- note: this is a `light.` domain entity, not `switch.`
+
+**Standalone:**
+- `light.bedroom_lamps` -- nightly schedule: on at 50% brightness at 20:00; re-enable 1 min after off during 20:00--23:59
+
+### Automation IDs in use (do not reuse)
+- `1744300001002`, `1744300001003`, `1744300001004` (Entrance Bottom Left circuit)
+- `1744300002002`, `1744300002003`, `1744300002004` (Entrance Bottom Right circuit)
+- `1744300003001`, `1744300003002` (Bedroom Lamps schedule)
+
+## Output
+
+- YAML artefacts go to `~/Documents/workspace/personal/artifacts/Home_Automation/`.
+- Tell Nick exactly which file to update and where to paste in HA (Configuration > Automations > import, or `/config/automation/edit/` in UI, or `automations.yaml` file edit depending on his setup).
+- File naming: `ha_automations_new.yaml` is the current primary file -- add new automations as appended list items or create feature-scoped files when scope warrants it.
+
+## Tools
+
+- Read, Bash, Write, Edit for YAML artefacts.
+- WebSearch/WebFetch for HA documentation lookups (docs.home-assistant.io).

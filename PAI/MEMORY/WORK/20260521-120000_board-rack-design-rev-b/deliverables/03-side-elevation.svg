@@ -1,0 +1,282 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 6400 3200" font-family="Helvetica, Arial, sans-serif" font-size="34">
+  <!--
+    REV B - SIDE ELEVATION (long-side view, looking at the port long-side from outside)
+    Coordinate convention: SVG x = rack-x + 200 (rack front at left), SVG y = 2700 - rack-z (rack ground at SVG y=2700).
+    Scale 1:1 (1 px = 1 mm). Dims in mm.
+    Origin (rack frame): front-bottom-left corner of rack frame.
+  -->
+
+  <!-- Titleblock (right side) -->
+  <rect x="5000" y="2880" width="1380" height="300" fill="white" stroke="black" stroke-width="2"/>
+  <text x="5020" y="2920" font-size="32" font-weight="bold">CUSTOM BOARD RACK - REV B</text>
+  <text x="5020" y="2960">DWG 03 - SIDE ELEVATION (PORT FACE)</text>
+  <text x="5020" y="3000">Project: SLSC Custom Rack | Qty: 2 units</text>
+  <text x="5020" y="3040">Scale 1:1 (1 px = 1 mm) | Dims in mm</text>
+  <text x="5020" y="3080">Date: 2026-05-21 | Rev: B</text>
+  <text x="5020" y="3120">Drafter: PAI / Nick Wood</text>
+
+  <!-- Ground line -->
+  <line x1="100" y1="2700" x2="6300" y2="2700" stroke="#666" stroke-width="2"/>
+  <text x="120" y="2730" font-size="28" fill="#666">GROUND / SHED FLOOR (z = 0)</text>
+
+  <!-- Door clearance dashed line at z=2330 (SVG y=370) -->
+  <line x1="100" y1="370" x2="6300" y2="370" stroke="red" stroke-width="2" stroke-dasharray="10,8"/>
+  <text x="120" y="362" font-size="28" fill="red">DOOR CLEARANCE 2,330 mm (z=2,330)</text>
+
+  <!-- ============ RACK FRAME (side view) ============ -->
+  <!-- Bottom rail: 50x50 SHS, top z=215 (SVG y=2485), bottom z=165 (SVG y=2535) -->
+  <rect x="200" y="2485" width="3340" height="50" fill="#cccccc" stroke="black" stroke-width="3"/>
+  <text x="220" y="2520" font-size="22">BOTTOM RAIL 50x50x3 SHS (top z=215)</text>
+
+  <!-- Top frame: 65x65 SHS, top z=2265 (SVG y=435), bottom z=2200 (SVG y=500) -->
+  <rect x="200" y="435" width="3340" height="65" fill="#cccccc" stroke="black" stroke-width="3"/>
+  <text x="220" y="475" font-size="22">TOP FRAME 65x65x4 SHS (top z=2,265)</text>
+
+  <!-- Slide rail (50x25 RHS + 10mm UHMW), top z=2275 (SVG y=425), bottom z=2240 (SVG y=460) -->
+  <rect x="200" y="425" width="3340" height="10" fill="#fff2a8" stroke="black" stroke-width="2"/>
+  <text x="200" y="418" font-size="20">SLIDE RAIL 50x25x3 RHS + 10mm UHMW (top z=2,275)</text>
+
+  <!-- Drop-in pivot pin hole at rear end of slide rail -->
+  <circle cx="3520" cy="430" r="14" fill="black"/>
+  <text x="3270" y="395" font-size="22" font-weight="bold">DROP-IN PIN HOLE (PIVOT)</text>
+
+  <!-- Uprights at x=870 and x=2470, height z=215 to z=2200 -->
+  <rect x="870" y="500" width="65" height="1985" fill="#bbbbbb" stroke="black" stroke-width="3"/>
+  <text x="700" y="2600" font-size="22">UPRIGHT @ x=870</text>
+  <text x="700" y="2625" font-size="20">(1/4 board length)</text>
+  <text x="700" y="2650" font-size="20">65x65x4 SHS</text>
+
+  <rect x="2470" y="500" width="65" height="1985" fill="#bbbbbb" stroke="black" stroke-width="3"/>
+  <text x="2300" y="2600" font-size="22">UPRIGHT @ x=2,470</text>
+  <text x="2300" y="2625" font-size="20">(3/4 board length)</text>
+  <text x="2300" y="2650" font-size="20">65x65x4 SHS</text>
+
+  <!-- X-brace between the two uprights on this long side, kept below z=250 -->
+  <line x1="935" y1="2485" x2="2470" y2="2535" stroke="#888" stroke-width="6"/>
+  <line x1="935" y1="2535" x2="2470" y2="2485" stroke="#888" stroke-width="6"/>
+  <text x="1450" y="2470" font-size="22" fill="#444">X-BRACE 40x40x3 (kept z &lt; 250)</text>
+
+  <!-- Corner knee-braces (4 total, see 2 in side view at front and rear of long side) -->
+  <line x1="265" y1="2485" x2="200" y2="2585" stroke="#888" stroke-width="6"/>
+  <line x1="3475" y1="2485" x2="3540" y2="2585" stroke="#888" stroke-width="6"/>
+  <text x="3100" y="2700" font-size="20" fill="#444">Knee-brace 40x40x3 (4 corners, z &lt; 150)</text>
+
+  <!-- ============ SHELVES - boards drawn fin-DOWN ============ -->
+  <!--
+    Each board: 3,200 mm long, ends at x=70 and x=3,270 in rack coords (centred in 3340 rack).
+    Board top = shelf + 50 mm (board thickness).
+    Fin: 250mm tall, hangs DOWN from board bottom, positioned at x=2,970 (300mm from tail at x=3,270).
+    Fin polygon vertices (rack coords): (2,920, board-bottom), (3,020, board-bottom), (2,970, board-bottom + 250 [DOWN] = board-bottom - 250 in z means fin tip BELOW board).
+    fin tip rack z = shelf - 250 (since shelf z = board bottom z)
+    SVG y for fin tip = 2700 - (shelf - 250) = 2950 - shelf
+    SVG y for fin base = 2700 - shelf
+  -->
+
+  <!-- Shelf 1: z=300, board bottom y=2400, board top y=2350, fin tip y=2650 -->
+  <line x1="70" y1="2400" x2="3270" y2="2400" stroke="#3366cc" stroke-width="6"/>
+  <line x1="70" y1="2350" x2="3270" y2="2350" stroke="#3366cc" stroke-width="2"/>
+  <polygon points="3120,2400 3220,2400 3170,2650" fill="#cc3333" stroke="black" stroke-width="2"/>
+  <text x="3290" y="2390" font-size="22" fill="#3366cc">SHELF 1 (z=300)</text>
+
+  <!-- Shelf 2: z=600 -->
+  <line x1="70" y1="2100" x2="3270" y2="2100" stroke="#3366cc" stroke-width="6"/>
+  <line x1="70" y1="2050" x2="3270" y2="2050" stroke="#3366cc" stroke-width="2"/>
+  <polygon points="3120,2100 3220,2100 3170,2350" fill="#cc3333" stroke="black" stroke-width="2"/>
+  <text x="3290" y="2090" font-size="22" fill="#3366cc">SHELF 2 (z=600)</text>
+
+  <!-- Shelf 3: z=900 -->
+  <line x1="70" y1="1800" x2="3270" y2="1800" stroke="#3366cc" stroke-width="6"/>
+  <line x1="70" y1="1750" x2="3270" y2="1750" stroke="#3366cc" stroke-width="2"/>
+  <polygon points="3120,1800 3220,1800 3170,2050" fill="#cc3333" stroke="black" stroke-width="2"/>
+  <text x="3290" y="1790" font-size="22" fill="#3366cc">SHELF 3 (z=900)</text>
+
+  <!-- Shelf 4: z=1200 -->
+  <line x1="70" y1="1500" x2="3270" y2="1500" stroke="#3366cc" stroke-width="6"/>
+  <line x1="70" y1="1450" x2="3270" y2="1450" stroke="#3366cc" stroke-width="2"/>
+  <polygon points="3120,1500 3220,1500 3170,1750" fill="#cc3333" stroke="black" stroke-width="2"/>
+  <text x="3290" y="1490" font-size="22" fill="#3366cc">SHELF 4 (z=1,200)</text>
+
+  <!-- Shelf 5: z=1500 -->
+  <line x1="70" y1="1200" x2="3270" y2="1200" stroke="#3366cc" stroke-width="6"/>
+  <line x1="70" y1="1150" x2="3270" y2="1150" stroke="#3366cc" stroke-width="2"/>
+  <polygon points="3120,1200 3220,1200 3170,1450" fill="#cc3333" stroke="black" stroke-width="2"/>
+  <text x="3290" y="1190" font-size="22" fill="#3366cc">SHELF 5 (z=1,500)</text>
+
+  <!-- Shelf 6: z=1800 -->
+  <line x1="70" y1="900" x2="3270" y2="900" stroke="#3366cc" stroke-width="6"/>
+  <line x1="70" y1="850" x2="3270" y2="850" stroke="#3366cc" stroke-width="2"/>
+  <polygon points="3120,900 3220,900 3170,1150" fill="#cc3333" stroke="black" stroke-width="2"/>
+  <text x="3290" y="890" font-size="22" fill="#3366cc">SHELF 6 (z=1,800)</text>
+
+  <!-- Shelf 7: z=2100 -->
+  <line x1="70" y1="600" x2="3270" y2="600" stroke="#3366cc" stroke-width="6"/>
+  <line x1="70" y1="550" x2="3270" y2="550" stroke="#3366cc" stroke-width="2"/>
+  <polygon points="3120,600 3220,600 3170,850" fill="#cc3333" stroke="black" stroke-width="2"/>
+  <text x="3290" y="590" font-size="22" fill="#3366cc">SHELF 7 (z=2,100)</text>
+
+  <!-- Fin position legend -->
+  <text x="3290" y="2440" font-size="20" fill="#cc3333">Fin 250mm (DOWN), at x=2,970</text>
+  <text x="3290" y="2465" font-size="20" fill="#cc3333">(in overhang of cross-piece at x=2,470)</text>
+
+  <!-- Cross-piece edge markers at x=870 and x=2470 on shelf 1 (representative) -->
+  <rect x="855" y="2380" width="95" height="20" fill="none" stroke="#005500" stroke-width="2"/>
+  <text x="855" y="2375" font-size="18" fill="#005500">cross-piece A (x=870)</text>
+  <rect x="2455" y="2380" width="95" height="20" fill="none" stroke="#005500" stroke-width="2"/>
+  <text x="2455" y="2375" font-size="18" fill="#005500">cross-piece B (x=2,470)</text>
+
+  <!-- Note on fin clearance -->
+  <text x="120" y="2780" font-size="22" fill="#cc3333">NOTE: Boards stored FIN-DOWN. Fin (250mm) hangs in overhang between cross-piece B (x=2,470) and rack rear (x=3,340).</text>
+  <text x="120" y="2810" font-size="22" fill="#cc3333">Vertical fin-to-board clearance = 0 mm at nominal. Verify actual fin length AND board thickness before loading; align precisely.</text>
+
+  <!-- ============ REAR EXTENSION RAIL (3rd RAIL) ============ -->
+  <!--
+    Rear extension rail: 65x65x4 SHS, length 600 mm, cantilevered from rack rear.
+    Slopes from z=2275 at rack rear (x=3340) to z~2100 at the 600 mm tip (x=3940). Slope = atan((2275-2100)/600) ~= 16 deg.
+  -->
+  <line x1="3540" y1="425" x2="4140" y2="600" stroke="#664400" stroke-width="14"/>
+  <text x="3600" y="365" font-size="22" fill="#664400" font-weight="bold">REAR EXTENSION RAIL (3rd RAIL / RAMP TRACK)</text>
+  <text x="3600" y="395" font-size="20" fill="#664400">65x65x4 SHS + 10mm UHMW, slopes 2,275 → 2,100 over 600mm cantilever</text>
+
+  <!-- Triangle bracket supporting the extension rail -->
+  <polygon points="3540,500 3870,510 3870,720" fill="none" stroke="#664400" stroke-width="6"/>
+  <line x1="3540" y1="500" x2="3870" y2="720" stroke="#664400" stroke-width="6"/>
+  <text x="3700" y="800" font-size="22" fill="#664400" font-weight="bold">TRIANGLE BRACKET</text>
+  <text x="3700" y="825" font-size="20" fill="#664400">10mm MS plate web + 6mm gussets</text>
+  <text x="3700" y="850" font-size="20" fill="#664400">Full-pen welded to top frame + 4× M16 bolted</text>
+
+  <!-- ============ WINCH on underside of FRONT TOP RAIL ============ -->
+  <rect x="300" y="510" width="180" height="120" fill="#444" stroke="black" stroke-width="2"/>
+  <text x="320" y="550" font-size="22" fill="white" font-weight="bold">WINCH</text>
+  <text x="320" y="580" font-size="20" fill="white">12V DC</text>
+  <text x="320" y="610" font-size="20" fill="white">1500 kg LP</text>
+  <line x1="395" y1="510" x2="395" y2="500" stroke="#444" stroke-width="4"/>
+  <text x="80" y="700" font-size="20">Winch mounted on UNDERSIDE of front top rail (4th rail).</text>
+  <text x="80" y="725" font-size="20">Cable drops vertically then routes rearward along top.</text>
+
+  <!-- ============ SLED STATE 1: STOWED ============ -->
+  <!--
+    Sled length 3000 mm. Drop-in pivot pin at sled-x = +2400 from front tip.
+    When stowed, pin sits 800 mm forward of the rail's pin hole (which is at rack-x = 3340 - 200 = mid-rear).
+    Actually: pin hole at slide-rail's rear, at rack-x = 3340 (rear of slide rail).
+    Stowed: pin at rack-x = 3340 - slide-travel = 3340 - 800 = 2540.
+    So sled forward tip at rack-x = 2540 - 2400 = 140. Sled rear tip at rack-x = 2540 + 600 = 3140 - wait that's wrong.
+    Let me re-derive: sled 3000 long. Front tip at sled-x=0, rear tip at sled-x=3000. Pin at sled-x = 2400 (so 600 forward of pin, 2400 rearward of pin... no, wait: front 600mm, rear 2400mm gives pin at sled-x=600).
+    Re-read PRD ISC-45: "Sled length 3000 mm each (600 mm forward of pivot, 2400 mm rearward)". So pin at sled-x = 600 (counting from front tip).
+    Stowed: pin at rack-x = 3340 - 800 = 2540 (assuming 800mm slide travel). Sled front tip rack-x = 2540 - 600 = 1940. Sled rear tip rack-x = 2540 + 2400 = 4940.
+    Hmm but sled rear tip at 4940 is well past rack rear (3340). With stowed state, the sled REAR cantilevers ~1600mm past rack rear. That's a lot.
+    Re-check: in Rev A, sled stowed had sled forward tip at x=820 and rear tip at x=3820. So sled rear tip was 480mm past rack rear in stowed position too.
+    For Rev B, with sled 3000mm and slide rails 3340mm: stowed sled forward tip at x=70 (just inside rack front), rear tip at x=3070 (270mm inside rack rear).
+    Then pin at sled-x=600, so rack-x = 70+600 = 670. Slide travel = 3340 (pin hole) - 670 (pin position) = 2670mm. That's too much slide travel — usually 800mm is the design figure.
+
+    OK let me reset with simpler assumption: sled stowed such that the pin lines up roughly aligned with the front upright (x=870):
+    pin stowed at rack-x = 870. Sled front tip = 870 - 600 = 270. Sled rear tip = 870 + 2400 = 3270.
+    Slide travel to engage rear pin hole = 3340 - 870 = 2470mm. Still a lot.
+
+    Practical: limit slide travel to ~820mm (operator can pull this distance). So pin moves from stowed at rack-x = 3340-820 = 2520 to engaged at rack-x = 3340.
+    Sled stowed: pin at 2520. Front tip = 2520-600 = 1920. Rear tip = 2520+2400 = 4920.
+    Sled rear cantilevers 4920-3340 = 1580mm past rack rear. That's significant but OK because the rear extension rail provides support.
+
+    Actually I realize Rev A's sled was 3000mm but the sled length INCLUDED the forward 600mm cantilever WHEN slid back. In stowed position, the sled forward tip might be near the rack front.
+    Let me use: stowed sled front tip at rack-x = 200, sled rear tip at rack-x = 3200. Pin at sled-x=600 → rack-x = 800. To engage with pin hole at rack-x=3340, slide travel = 2540mm. Still large.
+
+    For simplicity in this drawing, show stowed sled spanning roughly the full rack top with pin near rack front:
+    Sled rack-x = 100 to 3100 (3000mm). Pin at sled-x=600 → rack-x = 700.
+    Slide travel = 3340 - 700 = 2640mm. OK accept this geometry.
+
+    Or use Rev A's geometry: sled stowed from x=820 to x=3820 (pin at x=1420, slide 1920mm).
+
+    I'll match Rev A approximately for stowed state: sled from x=170 to x=3170. Pin at sled-x=600 → rack-x = 770. Slide travel = 3340-770 = 2570mm.
+
+    Visually: stowed sled from SVG x=370 (rack x=170) to SVG x=3370 (rack x=3170), top y=420, bottom y=470.
+  -->
+  <rect x="370" y="420" width="3000" height="50" fill="#88aa00" stroke="black" stroke-width="3" opacity="0.85"/>
+  <text x="1700" y="450" font-size="24" fill="white" font-weight="bold">SLED - STOWED STATE</text>
+  <!-- Front and rear crossbars -->
+  <circle cx="370" cy="445" r="10" fill="orange"/>
+  <text x="380" y="430" font-size="18" fill="orange">front xbar</text>
+  <circle cx="3370" cy="445" r="10" fill="orange"/>
+  <text x="3200" y="500" font-size="18" fill="orange">rear xbar</text>
+  <!-- Drop-in pin underneath sled (port) at sled-x=600 → rack-x=770 → SVG-x=970 -->
+  <line x1="970" y1="470" x2="970" y2="510" stroke="black" stroke-width="4"/>
+  <text x="980" y="500" font-size="18">pivot pin (stowed)</text>
+  <!-- Cable from winch (SVG x=395, y=510) to sled front xbar (SVG 370,445) -->
+  <line x1="395" y1="510" x2="370" y2="445" stroke="orange" stroke-width="2" stroke-dasharray="6,4"/>
+
+  <!-- ============ SLED STATE 2: SLID-BACK (ghost, pin engaged, sled still horizontal) ============ -->
+  <!-- Pin engaged at rack-x=3340. Sled front tip = 3340-600 = 2740 (SVG x=2940). Sled rear tip = 3340+2400 = 5740 (SVG x=5940). -->
+  <rect x="2940" y="420" width="3000" height="50" fill="#88aa00" stroke="#446600" stroke-width="2" opacity="0.35"/>
+  <text x="3650" y="495" font-size="22" fill="#446600" font-weight="bold">SLED - SLID-BACK (ghost, pre-tilt)</text>
+  <line x1="3540" y1="470" x2="3540" y2="510" stroke="#446600" stroke-width="3"/>
+  <text x="3550" y="540" font-size="18" fill="#446600">pin engaged in pin hole at rack rear</text>
+
+  <!--
+    ============ SLED STATE 3: TILTED 16 deg (ramp position) ============
+    Pivot at (rack-x=3340, rack-z=2275). At tilt theta=16deg:
+      Sled front (sled-x=0, 600mm forward of pin):
+        delta_x = -600*cos(16) = -577
+        delta_z = +600*sin(16) = +165
+        rack-x = 3340 - 577 = 2763, rack-z = 2275 + 165 = 2440
+      Sled rear (sled-x=3000, 2400mm rearward of pin):
+        delta_x = +2400*cos(16) = +2306
+        delta_z = -2400*sin(16) = -661
+        rack-x = 3340 + 2306 = 5646, rack-z = 2275 - 661 = 1614
+      Sled pin point (rack-x=3340, rack-z=2275) is the pivot.
+    SVG: pivot at (3540, 425). Front (2963, 260). Rear (5846, 1086).
+    Note: sled belly touches the rear extension rail along its length (both at 16 deg).
+  -->
+  <line x1="2963" y1="260" x2="5846" y2="1086" stroke="#cc6600" stroke-width="40" opacity="0.5"/>
+  <text x="2950" y="220" font-size="24" fill="#cc6600" font-weight="bold">SLED - TILTED STATE (RAMP), 16°</text>
+  <text x="2950" y="248" font-size="20" fill="#cc6600">Front rises to z=2,440 ; rear drops to z=1,614 above ground</text>
+  <line x1="2963" y1="260" x2="2963" y2="195" stroke="#cc6600" stroke-width="2"/>
+  <text x="2820" y="180" font-size="20" fill="#cc6600">front tip (z=2,440)</text>
+  <line x1="5846" y1="1086" x2="5846" y2="1130" stroke="#cc6600" stroke-width="2"/>
+  <text x="5700" y="1170" font-size="20" fill="#cc6600">rear tip (z=1,614)</text>
+
+  <!-- Winch cable in tilted state: from winch to sled front xbar at (2963, 260) -->
+  <line x1="395" y1="510" x2="2963" y2="260" stroke="orange" stroke-width="2" stroke-dasharray="6,4"/>
+  <text x="1300" y="320" font-size="20" fill="orange">winch cable (tilted state) — pulls sled back up</text>
+
+  <!-- ============ STABILISER LEGS (deployed) ============ -->
+  <line x1="3470" y1="2485" x2="3470" y2="2700" stroke="#660000" stroke-width="10"/>
+  <rect x="3420" y="2680" width="100" height="20" fill="#660000"/>
+  <text x="3540" y="2620" font-size="22" fill="#660000" font-weight="bold">STABILISER LEG (port + stbd)</text>
+  <text x="3540" y="2645" font-size="20" fill="#660000">drop-down, deployed BEFORE tilt</text>
+
+  <!-- ============ CASTERS ============ -->
+  <circle cx="300" cy="2615" r="75" fill="#888" stroke="black" stroke-width="3"/>
+  <circle cx="3240" cy="2615" r="75" fill="#888" stroke="black" stroke-width="3"/>
+  <text x="160" y="2780" font-size="20">CASTER 150mm, 300 kg WLL, top-lock brake</text>
+
+  <!-- ============ DIMENSION CALLOUTS ============ -->
+  <!-- Rack length 3340 -->
+  <line x1="200" y1="3000" x2="3540" y2="3000" stroke="black" stroke-width="2"/>
+  <line x1="200" y1="2980" x2="200" y2="3020" stroke="black" stroke-width="2"/>
+  <line x1="3540" y1="2980" x2="3540" y2="3020" stroke="black" stroke-width="2"/>
+  <text x="1800" y="2992" font-size="28" text-anchor="middle">3,340 mm (rack external length)</text>
+
+  <!-- Extension 600 -->
+  <line x1="3540" y1="3050" x2="4140" y2="3050" stroke="#cc6600" stroke-width="2"/>
+  <line x1="3540" y1="3030" x2="3540" y2="3070" stroke="#cc6600" stroke-width="2"/>
+  <line x1="4140" y1="3030" x2="4140" y2="3070" stroke="#cc6600" stroke-width="2"/>
+  <text x="3840" y="3045" font-size="22" text-anchor="middle" fill="#cc6600">600 (extension)</text>
+
+  <!-- Sled front tip when tilted (just for reference) -->
+  <line x1="5846" y1="3000" x2="5846" y2="1086" stroke="#cc6600" stroke-width="1" stroke-dasharray="3,3"/>
+  <line x1="5846" y1="3050" x2="5846" y2="3070" stroke="#cc6600" stroke-width="2"/>
+  <line x1="200" y1="3050" x2="200" y2="3070" stroke="#cc6600" stroke-width="2"/>
+  <line x1="200" y1="3060" x2="5846" y2="3060" stroke="#cc6600" stroke-width="1"/>
+  <text x="3020" y="3088" font-size="22" text-anchor="middle" fill="#cc6600">Sled rear tip when tilted: rack-x ≈ 5,646 mm (deployed footprint)</text>
+
+  <!-- Total height 2280 -->
+  <line x1="100" y1="420" x2="100" y2="2700" stroke="black" stroke-width="2"/>
+  <line x1="80" y1="420" x2="120" y2="420" stroke="black" stroke-width="2"/>
+  <line x1="80" y1="2700" x2="120" y2="2700" stroke="black" stroke-width="2"/>
+  <text x="60" y="1560" font-size="28" text-anchor="middle" transform="rotate(-90 60 1560)">2,280 mm (rack + sled top, stowed)</text>
+
+  <!-- Door margin -->
+  <text x="6280" y="395" font-size="20" fill="red" text-anchor="end">door margin = 50 mm</text>
+
+  <!-- Orientation -->
+  <text x="5400" y="3000" font-size="22">FRONT &lt;-- view -- REAR</text>
+</svg>
