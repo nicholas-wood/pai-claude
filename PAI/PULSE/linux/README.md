@@ -34,6 +34,28 @@ journalctl --user -u pulse.service -n 50
 journalctl --user -u pai-cadence-daily.service -n 50
 ```
 
+## Backup (restic → OneDrive, secondary DR)
+
+Primary DR is `git-autocommit` (both repos → private GitHub). `backup.sh` + `pai-backup.timer`
+add a nightly restic snapshot. One-time interactive setup on the box:
+
+```bash
+sudo apt install -y restic rclone          # if not already
+rclone config                              # add a remote named "onedrive" (OAuth)
+mkdir -p ~/.config/restic
+openssl rand -base64 24 > ~/.config/restic/password && chmod 600 ~/.config/restic/password
+#   ^^ STORE THIS PASSWORD IN YOUR PASSWORD MANAGER — without it the backups are unrecoverable.
+restic -r rclone:onedrive:PAI-Backups/box init
+# install the timer (from ~/.claude/PAI/PULSE):
+chmod +x linux/backup.sh
+cp linux/pai-backup.service linux/pai-backup.timer ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now pai-backup.timer
+systemctl --user start pai-backup.service   # first snapshot now; check ~/.claude/PAI/PULSE/logs/backup.log
+```
+
+Target is OneDrive by default; for an external disk instead, set `RESTIC_REPOSITORY=/mnt/backup/pai`
+in the service (and skip the rclone step). Restore: `restic -r <repo> snapshots` then `restic restore`.
+
 ## Not ported (macOS-only, useless headless)
 
 Voice playback (silenced in `voice.ts` unless `PAI_AUDIO_PLAYER` is set),

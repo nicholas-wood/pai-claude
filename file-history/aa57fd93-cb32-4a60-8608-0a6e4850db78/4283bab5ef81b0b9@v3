@@ -1,0 +1,125 @@
+#!/usr/bin/env bun
+/**
+ * Assistant Module — Pulse DA Subsystem Entry Point
+ *
+ * Soft-fail stub: loaded by pulse.ts when [da] enabled = true.
+ * The actual DA work runs via cron check scripts (heartbeat, tasks, diary, growth).
+ * This module registers a health endpoint and validates the DA identity on startup.
+ *
+ * Status: Phase 1 — check scripts installed, full module (heartbeat loop integration,
+ * HTTP routes, opinion management) is Phase 2.
+ */
+
+import { join } from "path"
+import { existsSync, readFileSync } from "fs"
+
+const HOME = process.env.HOME ?? ""
+const PAI_DIR = join(HOME, ".claude", "PAI")
+const DA_DIR = join(PAI_DIR, "USER", "DA")
+const DA_IDENTITY_FLAT = join(PAI_DIR, "USER", "DA_IDENTITY.md")
+const REGISTRY_PATH = join(DA_DIR, "_registry.yaml")
+
+export interface DAModuleConfig {
+  enabled: boolean
+  primary?: string
+  heartbeat_schedule?: string
+  heartbeat_model?: string
+  heartbeat_cost_ceiling?: number
+  diary_schedule?: string
+  growth_schedule?: string
+}
+
+export interface DAHealthStatus {
+  status: "ok" | "degraded" | "disabled"
+  primary_da: string | null
+  identity_source: "registry" | "flat-file" | "none"
+  tasks_dir_exists: boolean
+  diary_entries_today: number
+}
+
+function detectPrimaryDA(): { name: string | null; source: DAHealthStatus["identity_source"] } {
+  // Prefer registry
+  if (existsSync(REGISTRY_PATH)) {
+    try {
+      const content = readFileSync(REGISTRY_PATH, "utf-8")
+      const match = content.match(/^primary:\s*(\S+)/m)
+      if (match?.[1]) return { name: match[1], source: "registry" }
+    } catch { /* fall through */ }
+  }
+  // Fall back to flat DA_IDENTITY.md — extract name
+  if (existsSync(DA_IDENTITY_FLAT)) {
+    try {
+      const content = readFileSync(DA_IDENTITY_FLAT, "utf-8")
+      const match = content.match(/^\*{0,2}Name:\*{0,2}\s*(.+)/m)
+      if (match?.[1]) return { name: match[1].trim(), source: "flat-file" }
+    } catch { /* fall through */ }
+  }
+  return { name: null, source: "none" }
+}
+
+let _health: DAHealthStatus = {
+  status: "degraded",
+  primary_da: null,
+  identity_source: "none",
+  tasks_dir_exists: false,
+  diary_entries_today: 0,
+}
+
+export async function startDA(config: DAModuleConfig): Promise<void> {
+  const { name, source } = detectPrimaryDA()
+  const tasksDir = join(PAI_DIR, "PULSE", "state", "da")
+
+  _health = {
+    status: name ? "ok" : "degraded",
+    primary_da: name,
+    identity_source: source,
+    tasks_dir_exists: existsSync(tasksDir),
+    diary_entries_today: 0,
+  }
+
+  if (!name) {
+    console.warn(
+      "[Assistant] No DA identity found. Run: bun ~/.claude/PAI/TOOLS/DAInterview.ts"
+    )
+  } else {
+    console.log(`[Assistant] DA module started — primary DA: ${name} (source: ${source})`)
+  }
+}
+
+export function daHealth(): DAHealthStatus {
+  return _health
+}
+
+export function stopDA(): void {
+  console.log("[Assistant] DA module stopped")
+}
+
+// ── Pulse contract ──
+// pulse.ts calls these exact names on the imported module (see pulse.ts:
+// startAssistant @362, assistantHealth @278, handleAssistantRequest @415,
+// stopAssistant @542). They wrap the stub above. enabledJobs is accepted for
+// signature compatibility; the Phase 1 stub does not need it.
+
+export async function startAssistant(
+  config: DAModuleConfig,
+  _enabledJobs?: unknown,
+): Promise<void> {
+  await startDA(config)
+}
+
+export function assistantHealth(): DAHealthStatus {
+  return daHealth()
+}
+
+export function stopAssistant(): void {
+  stopDA()
+}
+
+// Phase 1: no /assistant/* HTTP routes yet. Returning null lets pulse.ts fall
+// through to its other route handlers. Phase 2 implements real routes here.
+export async function handleAssistantRequest(
+  _req: Request,
+  _pathname: string,
+): Promise<Response | null> {
+  return null
+}

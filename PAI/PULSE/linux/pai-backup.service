@@ -1,0 +1,13 @@
+[Unit]
+# Nightly restic snapshot of the PAI host. Secondary DR (git-autocommit is primary).
+Description=PAI host restic backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.claude/PAI/PULSE/linux/backup.sh
+Environment=HOME=%h
+Environment=PATH=%h/.bun/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+StandardOutput=append:%h/.claude/PAI/PULSE/logs/backup.log
+StandardError=append:%h/.claude/PAI/PULSE/logs/backup.log
