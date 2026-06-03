@@ -1,0 +1,15 @@
+systemctl --user daemon-reload && systemctl --user enable --now rclone-onedrive.service
+Created symlink '/home/nicholas-wood/.config/systemd/user/default.target.wants/rclone-onedrive.service' → '/home/nicholas-wood/.config/systemd/user/rclone-onedrive.service'.
+Job for rclone-onedrive.service failed because the control process exited with error code.
+See "systemctl --user status rclone-onedrive.service" and "journalctl --user -xeu rclone-onedrive.service" for details.
+nicholas-wood@nicholas-wood-XPS-13-9360:~$ systemctl --user status rclone-onedrive.service
+● rclone-onedrive.service - rclone mount OneDrive (~/OneDrive)
+     Loaded: loaded (/home/nicholas-wood/.config/systemd/user/rclone-onedrive.service; enabled; preset: enabled)
+     Active: activating (auto-restart) (Result: exit-code) since Wed 2026-06-03 17:00:06 AEST; 1s ago
+ Invocation: 0890ddd66d9845dc8cdfb4d6124aa0a4
+    Process: 339480 ExecStartPre=/bin/mkdir -p /home/nicholas-wood/OneDrive (code=exited, status=0/SUCCESS)
+    Process: 339482 ExecStart=/usr/bin/rclone mount onedrive: /home/nicholas-wood/OneDrive --vfs-cache-mode writes --dir-cache-time 12h --vfs-cache-max-a>
+   Main PID: 339482 (code=exited, status=1/FAILURE)
+   Mem peak: 12.6M
+        CPU: 43ms
+lines 1-9/9 (END)
