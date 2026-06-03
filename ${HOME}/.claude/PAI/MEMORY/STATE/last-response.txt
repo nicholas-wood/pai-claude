@@ -1,0 +1,8 @@
+Yes — clear on both counts:
+
+- **Current session:** `~/.local/bin` is on your PATH at **position 2** (ahead of `/usr/local/bin`).
+- **Persisted:** it's written into `~/.profile` (lines 25-26), with the standard guard that prepends it whenever the dir exists. So new login shells get it automatically.
+
+That means the `claude` keyword will keep resolving to the native install, and you're safe to run the npm uninstall whenever you want — it only removes the shadowed `/usr/local/bin/claude` copy.
+
+One small note: `~/.profile` is read by **login** shells. On most Ubuntu/Debian desktop terminals that's fine (the terminal opens a login shell, or `~/.bashrc` chains to `~/.profile`). If you ever open a terminal and `claude` isn't found, the fix is just `source ~/.profile` or opening a fresh login shell — but given it's already live in this session, you almost certainly won't hit that.

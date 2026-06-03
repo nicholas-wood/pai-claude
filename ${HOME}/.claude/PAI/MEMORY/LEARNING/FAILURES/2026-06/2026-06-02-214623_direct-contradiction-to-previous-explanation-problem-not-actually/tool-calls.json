@@ -1,0 +1,34 @@
+[
+  {
+    "name": "Bash",
+    "input": {
+      "command": "which claude; echo \"---\"; ls -la $(which claude) 2>/dev/null; echo \"---npm prefix---\"; npm config get prefix 2>/dev/null; echo \"---npm global writable?---\"; ls -ld $(npm config get prefix 2>/dev/null)/lib/node_modules 2>/dev/null; echo \"---node/npm versions---\"; node --version 2>/dev/null; npm --version 2>/dev/null",
+      "description": "Inspect claude binary and npm global setup"
+    },
+    "timestamp": "2026-06-03T04:40:06.939Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "claude install 2>&1",
+      "description": "Switch to native installer"
+    },
+    "timestamp": "2026-06-03T04:40:53.229Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo \"=== which claude (PATH winner) ===\"; which claude; echo; echo \"=== all claude on PATH, in order ===\"; which -a claude; echo; echo \"=== ~/.local/bin/claude ===\"; ls -la ~/.local/bin/claude 2>/dev/null; echo; echo \"=== PATH order check: is ~/.local/bin before /usr/local/bin? ===\"; echo \"$PATH\" | tr ':' '\\n' | grep -nE '\\.local/bin|/usr/local/bin'",
+      "description": "Verify which claude binary takes precedence"
+    },
+    "timestamp": "2026-06-03T04:41:23.149Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sudo -n npm uninstall -g @anthropic-ai/claude-code 2>&1 || echo \"__NEEDS_PASSWORD__\"",
+      "description": "Uninstall old npm global claude package"
+    },
+    "timestamp": "2026-06-03T04:42:36.179Z"
+  }
+]
