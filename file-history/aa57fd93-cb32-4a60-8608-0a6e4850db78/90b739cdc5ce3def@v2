@@ -1,0 +1,22 @@
+[Unit]
+# Live OneDrive mount at ~/OneDrive so the box (and agents) can read existing
+# docs and write new ones, syncing to OneDrive. Requires fuse3 + an "onedrive"
+# rclone remote (see linux/README.md → OneDrive). One-time interactive: rclone config.
+Description=rclone mount OneDrive (~/OneDrive)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStartPre=/bin/mkdir -p %h/OneDrive
+ExecStart=/usr/bin/rclone mount onedrive: %h/OneDrive \
+  --vfs-cache-mode writes \
+  --dir-cache-time 12h \
+  --vfs-cache-max-age 24h
+ExecStop=/bin/fusermount -u %h/OneDrive
+Restart=on-failure
+RestartSec=10
+Environment=PATH=/usr/bin:/bin
+
+[Install]
+WantedBy=default.target
