@@ -8,14 +8,14 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h/.claude/PAI/PULSE
+WorkingDirectory=%h/.claude/PAI/Pulse
 ExecStart=__BUN_PATH__ run pulse.ts
 Restart=always
 RestartSec=30
 Environment=HOME=%h
 Environment=PATH=%h/.bun/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
-StandardOutput=append:%h/.claude/PAI/PULSE/logs/pulse-stdout.log
-StandardError=append:%h/.claude/PAI/PULSE/logs/pulse-stderr.log
+StandardOutput=append:%h/.claude/PAI/Pulse/logs/pulse-stdout.log
+StandardError=append:%h/.claude/PAI/Pulse/logs/pulse-stderr.log
 
 [Install]
 WantedBy=default.target
