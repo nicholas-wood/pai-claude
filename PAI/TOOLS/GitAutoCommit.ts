@@ -9,9 +9,9 @@ const HOME = process.env.HOME ?? ""
 // ALLOWLIST: notes/docs/config repos only. NOT code repos, NOT worktrees.
 const REPOS = [
   `${HOME}/Documents/workspace`,        // life-os
-  // `${HOME}/.claude`,                 // enable once it is a git repo on the box
+  `${HOME}/.claude`,                    // pai-claude (host repo)
 ]
-const SECRET = /(^|\/)\.env|\.key$|\.pem$|id_rsa|\.secrets\//
+const SECRET = /(^|\/)\.env|\.key$|\.pem$|\.p12$|id_rsa|\.secrets\/|\.claude\.json|credentials\.json/
 const stamp = new Date().toISOString().slice(0, 16).replace("T", " ")
 const host = (await $`hostname -s`.quiet().text()).trim()
 
