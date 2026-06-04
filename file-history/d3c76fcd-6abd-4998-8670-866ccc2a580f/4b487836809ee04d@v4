@@ -1,0 +1,275 @@
+import ExcelJS from "exceljs";
+
+const OUT = process.env.OUT || "/home/nicholas-wood/Documents/workspace/career/artifacts/Sea_Wolf_Solver.xlsx";
+
+const wb = new ExcelJS.Workbook();
+wb.creator = "Jarvis";
+wb.created = new Date(Date.UTC(2026, 5, 4));
+
+const YELLOW = "FFFFF2CC"; // input cells
+const GREY = "FFF2F2F2"; // result labels
+const HEAD = "FF1F4E78"; // header bar
+
+function fill(cell: ExcelJS.Cell, argb: string) {
+  cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb } };
+}
+function bold(cell: ExcelJS.Cell) {
+  cell.font = { ...(cell.font || {}), bold: true };
+}
+
+function buildSite(ws: ExcelJS.Worksheet, n: number) {
+  ws.columns = [
+    { width: 22 }, { width: 12 }, { width: 14 }, { width: 12 }, { width: 16 }, { width: 16 },
+  ];
+
+  // Title bar
+  ws.mergeCells("A1:F1");
+  const t = ws.getCell("A1");
+  t.value = `SEA WOLF  —  SITE ${n}`;
+  t.font = { bold: true, size: 14, color: { argb: "FFFFFFFF" } };
+  fill(t, HEAD);
+  t.alignment = { vertical: "middle", horizontal: "left" };
+  ws.getRow(1).height = 24;
+
+  // TARGETS
+  bold(ws.getCell("A3"));
+  ws.getCell("A3").value = "TARGETS  (type from the game)";
+  ["A4","B4","C4"].forEach((a,i)=>{ const c=ws.getCell(a); c.value=["Attribute","Min","Max"][i]; bold(c); fill(c,GREY); });
+  const attrs = ["Rigidity","Mobility","Size"];
+  attrs.forEach((name, i) => {
+    const r = 5 + i;
+    ws.getCell(`A${r}`).value = name; bold(ws.getCell(`A${r}`));
+    fill(ws.getCell(`B${r}`), YELLOW);
+    fill(ws.getCell(`C${r}`), YELLOW);
+  });
+  ws.getCell("A9").value = "Desired trait"; bold(ws.getCell("A9")); fill(ws.getCell("B9"), YELLOW);
+  ws.getCell("A10").value = "Undesired trait"; bold(ws.getCell("A10")); fill(ws.getCell("B10"), YELLOW);
+
+  // MICROBES
+  bold(ws.getCell("A12"));
+  ws.getCell("A12").value = "YOUR 3 MICROBES  (type from the game)";
+  const heads = ["Microbe","Rigidity","Mobility","Size","Desired? (Y/N)","Undesired? (Y/N)"];
+  heads.forEach((h,i)=>{ const c=ws.getCell(13,i+1); c.value=h; bold(c); fill(c,GREY); });
+  for (let i = 0; i < 3; i++) {
+    const r = 14 + i;
+    ws.getCell(`A${r}`).value = `m${i+1}`;
+    ["B","C","D","E","F"].forEach((col)=>fill(ws.getCell(`${col}${r}`), YELLOW));
+    // Y/N validation on E and F
+    ["E","F"].forEach((col)=>{
+      ws.getCell(`${col}${r}`).dataValidation = {
+        type: "list", allowBlank: true, formulae: ['"Y,N"'],
+      };
+    });
+  }
+
+  // RESULT
+  bold(ws.getCell("A18"));
+  ws.getCell("A18").value = "RESULT  (auto)";
+  ["A19","B19","C19","D19"].forEach(a=>fill(ws.getCell(a),GREY));
+  const rows: [string,string,string][] = [
+    ["Avg Rigidity", "AVERAGE(B14:B16)", 'IF(AND(B19>=B5,B19<=C5),"MET","MISS")'],
+    ["Avg Mobility", "AVERAGE(C14:C16)", 'IF(AND(B20>=B6,B20<=C6),"MET","MISS")'],
+    ["Avg Size",     "AVERAGE(D14:D16)", 'IF(AND(B21>=B7,B21<=C7),"MET","MISS")'],
+  ];
+  rows.forEach(([label, favg, fflag], i) => {
+    const r = 19 + i;
+    ws.getCell(`A${r}`).value = label; bold(ws.getCell(`A${r}`));
+    ws.getCell(`B${r}`).value = { formula: favg } as any;
+    ws.getCell(`B${r}`).numFmt = "0.00";
+    ws.getCell(`C${r}`).value = "in range?";
+    ws.getCell(`D${r}`).value = { formula: fflag } as any;
+    bold(ws.getCell(`D${r}`));
+  });
+  ws.getCell("A22").value = "Desired present (>=1)"; bold(ws.getCell("A22"));
+  ws.getCell("D22").value = { formula: 'IF(COUNTIF(E14:E16,"Y")>=1,"MET","MISS")' } as any; bold(ws.getCell("D22"));
+  ws.getCell("A23").value = "Undesired absent (0)"; bold(ws.getCell("A23"));
+  ws.getCell("D23").value = { formula: 'IF(COUNTIF(F14:F16,"Y")=0,"MET","MISS")' } as any; bold(ws.getCell("D23"));
+
+  ws.getCell("A25").value = "Unmet conditions"; bold(ws.getCell("A25"));
+  ws.getCell("B25").value = { formula: 'COUNTIF(D19:D23,"MISS")' } as any; bold(ws.getCell("B25"));
+  ws.getCell("A26").value = "Estimated score"; bold(ws.getCell("A26"));
+  ws.getCell("B26").value = { formula: "MAX(0.4,1-0.2*B25)" } as any; bold(ws.getCell("B26"));
+  ws.getCell("B26").numFmt = "0%";
+
+  ws.getCell("A28").value = "Tip: the timer pauses between sites. Do the maths here, not in your head.";
+  ws.getCell("A28").font = { italic: true, color: { argb: "FF808080" } };
+
+  // Colour MET green / MISS red
+  ws.addConditionalFormatting({
+    ref: "D19:D23",
+    rules: [
+      { type: "cellIs", operator: "equal", priority: 1, formulae: ['"MET"'],
+        style: { fill: { type: "pattern", pattern: "solid", bgColor: { argb: "FFC6EFCE" } }, font: { color: { argb: "FF006100" } } } },
+      { type: "cellIs", operator: "equal", priority: 2, formulae: ['"MISS"'],
+        style: { fill: { type: "pattern", pattern: "solid", bgColor: { argb: "FFFFC7CE" } }, font: { color: { argb: "FF9C0006" } } } },
+    ],
+  });
+}
+
+// All 3-combinations of 10 (order ignored): 120 of them
+const COMBOS: [number, number, number][] = [];
+for (let i = 1; i <= 10; i++) for (let j = i + 1; j <= 10; j++) for (let k = j + 1; k <= 10; k++) COMBOS.push([i, j, k]);
+
+function buildAll10(ws: ExcelJS.Worksheet, n: number) {
+  const widths = [8, 16, 12, 12, 34, 12, 14, 10, 8, 10, 12, 4, 6, 10, 40];
+  widths.forEach((w, i) => (ws.getColumn(i + 1).width = w));
+
+  ws.mergeCells("A1:K1");
+  const t = ws.getCell("A1");
+  t.value = `SITE ${n}  —  ALL 10 MICROBES  (auto-scores & ranks every 3-combo)`;
+  t.font = { bold: true, size: 14, color: { argb: "FFFFFFFF" } };
+  fill(t, HEAD);
+  ws.getRow(1).height = 24;
+
+  bold(ws.getCell("A3"));
+  ws.getCell("A3").value = "TARGETS (type from the game)";
+  ["A4", "B4", "C4"].forEach((a, i) => { const c = ws.getCell(a); c.value = ["Attribute", "Min", "Max"][i]; bold(c); fill(c, GREY); });
+  ["Rigidity", "Mobility", "Size"].forEach((name, i) => { const r = 5 + i; ws.getCell(`A${r}`).value = name; bold(ws.getCell(`A${r}`)); fill(ws.getCell(`B${r}`), YELLOW); fill(ws.getCell(`C${r}`), YELLOW); });
+  ws.getCell("A9").value = "Desired trait"; bold(ws.getCell("A9")); fill(ws.getCell("B9"), YELLOW);
+  ws.getCell("A10").value = "Undesired trait"; bold(ws.getCell("A10")); fill(ws.getCell("B10"), YELLOW);
+
+  bold(ws.getCell("A12"));
+  ws.getCell("A12").value = "MICROBES (enter all 10)";
+  ["#", "Microbe", "Rigidity", "Mobility", "Size", "Desired? (Y/N)", "Undesired? (Y/N)"].forEach((h, i) => { const c = ws.getCell(13, i + 1); c.value = h; bold(c); fill(c, GREY); });
+  for (let m = 0; m < 10; m++) {
+    const r = 14 + m;
+    ws.getCell(`A${r}`).value = m + 1; bold(ws.getCell(`A${r}`));
+    ["B", "C", "D", "E", "F", "G"].forEach((col) => fill(ws.getCell(`${col}${r}`), YELLOW));
+    ["F", "G"].forEach((col) => { ws.getCell(`${col}${r}`).dataValidation = { type: "list", allowBlank: true, formulae: ['"Y,N"'] }; });
+  }
+
+  bold(ws.getCell("A25"));
+  ws.getCell("A25").value = "ALL 120 COMBINATIONS";
+  ["Combo#", "i", "j", "k", "Microbes", "Avg Rig", "Avg Mob", "Avg Size", "Pen", "Score", "RankKey"].forEach((h, i) => { const c = ws.getCell(26, i + 1); c.value = h; bold(c); fill(c, GREY); });
+  ["M", "N", "O"].forEach((col, i) => { const c = ws.getCell(`${col}26`); c.value = ["Rank", "Score", "Microbes (best to worst)"][i]; bold(c); fill(c, GREY); });
+
+  const NAMES = "$B$14:$B$23", RIG = "$C$14:$C$23", MOB = "$D$14:$D$23", SIZ = "$E$14:$E$23", DES = "$F$14:$F$23", UND = "$G$14:$G$23";
+  COMBOS.forEach(([i, j, k], ci) => {
+    const r = 27 + ci;
+    ws.getCell(`A${r}`).value = ci + 1;
+    ws.getCell(`B${r}`).value = i; ws.getCell(`C${r}`).value = j; ws.getCell(`D${r}`).value = k;
+    const bi = `B${r}`, cj = `C${r}`, dk = `D${r}`;
+    ws.getCell(`E${r}`).value = { formula: `INDEX(${NAMES},${bi})&" + "&INDEX(${NAMES},${cj})&" + "&INDEX(${NAMES},${dk})` } as any;
+    ws.getCell(`F${r}`).value = { formula: `(INDEX(${RIG},${bi})+INDEX(${RIG},${cj})+INDEX(${RIG},${dk}))/3` } as any; ws.getCell(`F${r}`).numFmt = "0.00";
+    ws.getCell(`G${r}`).value = { formula: `(INDEX(${MOB},${bi})+INDEX(${MOB},${cj})+INDEX(${MOB},${dk}))/3` } as any; ws.getCell(`G${r}`).numFmt = "0.00";
+    ws.getCell(`H${r}`).value = { formula: `(INDEX(${SIZ},${bi})+INDEX(${SIZ},${cj})+INDEX(${SIZ},${dk}))/3` } as any; ws.getCell(`H${r}`).numFmt = "0.00";
+    const rigOut = `IF(OR(F${r}<$B$5,F${r}>$C$5),1,0)`;
+    const mobOut = `IF(OR(G${r}<$B$6,G${r}>$C$6),1,0)`;
+    const sizOut = `IF(OR(H${r}<$B$7,H${r}>$C$7),1,0)`;
+    const desMiss = `IF((IF(INDEX(${DES},${bi})="Y",1,0)+IF(INDEX(${DES},${cj})="Y",1,0)+IF(INDEX(${DES},${dk})="Y",1,0))=0,1,0)`;
+    const undPres = `IF((IF(INDEX(${UND},${bi})="Y",1,0)+IF(INDEX(${UND},${cj})="Y",1,0)+IF(INDEX(${UND},${dk})="Y",1,0))>=1,1,0)`;
+    ws.getCell(`I${r}`).value = { formula: `${rigOut}+${mobOut}+${sizOut}+${desMiss}+${undPres}` } as any;
+    ws.getCell(`J${r}`).value = { formula: `MAX(0,1-0.2*I${r})` } as any; ws.getCell(`J${r}`).numFmt = "0%";
+    ws.getCell(`K${r}`).value = { formula: `J${r}*1000-A${r}` } as any;
+    ws.getCell(`M${r}`).value = ci + 1;
+    ws.getCell(`N${r}`).value = { formula: `INDEX($J$27:$J$146,MATCH(LARGE($K$27:$K$146,M${r}),$K$27:$K$146,0))` } as any; ws.getCell(`N${r}`).numFmt = "0%";
+    ws.getCell(`O${r}`).value = { formula: `INDEX($E$27:$E$146,MATCH(LARGE($K$27:$K$146,M${r}),$K$27:$K$146,0))` } as any;
+  });
+
+  const scale = { type: "colorScale", cfvo: [{ type: "num", value: 0 }, { type: "num", value: 0.5 }, { type: "num", value: 1 }], color: [{ argb: "FFFFC7CE" }, { argb: "FFFFEB9C" }, { argb: "FFC6EFCE" }] };
+  ws.addConditionalFormatting({ ref: "J27:J146", rules: [{ priority: 1, ...scale } as any] });
+  ws.addConditionalFormatting({ ref: "N27:N146", rules: [{ priority: 1, ...scale } as any] });
+
+  ws.views = [{ state: "frozen", ySplit: 26 }];
+}
+
+// Instructions sheet
+const info = wb.addWorksheet("How to use");
+info.columns = [{ width: 100 }];
+const lines = [
+  "SEA WOLF SOLVER  —  McKinsey Solve",
+  "",
+  "What this is: per site you pick 3 microbes. Their AVERAGE attributes must land inside the",
+  "site's Min/Max ranges, at least one microbe must carry the desired trait, and none may carry",
+  "the undesired trait. Each unmet condition costs ~20% (score floors at 40%).",
+  "",
+  "How to use, per site (use the Site 1/2/3 tabs):",
+  "1. Read the site requirements in the game FIRST.",
+  "2. Type the target Min/Max for Rigidity, Mobility, Size into the yellow TARGETS cells.",
+  "3. Type the desired and undesired trait names (just a reminder for you).",
+  "4. As you settle on 3 candidate microbes, type their numbers into the yellow MICROBES table,",
+  "   and Y/N for whether each carries the desired / undesired trait.",
+  "5. Read the RESULT block: green MET = good, red MISS = fix it. Estimated score updates live.",
+  "6. Swap a microbe and watch the flags. Aim for all MET (100%).",
+  "",
+  "Speed tips:",
+  "- Have this open on a second screen and alt-tab to it.",
+  "- Keep full precision; the sheet rounds the display only.",
+  "- Target ~10 min per site. The timer pauses between sites, use the break to reset.",
+  "- If no perfect solution exists, minimise red MISSes (least-bad).",
+];
+lines.forEach((l, i) => {
+  const c = info.getCell(`A${i+1}`);
+  c.value = l;
+  if (i === 0) c.font = { bold: true, size: 14 };
+  if (l.endsWith(":")) c.font = { bold: true };
+});
+
+["Site 1", "Site 2", "Site 3"].forEach((name, i) => buildSite(wb.addWorksheet(name), i + 1));
+
+// Pre-fill Site 1 with a worked example (every condition MET -> 100%)
+const s1 = wb.getWorksheet("Site 1")!;
+s1.getCell("B5").value = 40; s1.getCell("C5").value = 60;   // Rigidity 40-60
+s1.getCell("B6").value = 30; s1.getCell("C6").value = 50;   // Mobility 30-50
+s1.getCell("B7").value = 20; s1.getCell("C7").value = 40;   // Size 20-40
+s1.getCell("B9").value = "Photosynthetic";                  // desired
+s1.getCell("B10").value = "Toxic";                          // undesired
+const ex: [number, number, number, string, string][] = [
+  [50, 40, 30, "Y", "N"],
+  [45, 35, 25, "N", "N"],
+  [55, 45, 35, "N", "N"],
+];
+ex.forEach((row, i) => {
+  const r = 14 + i;
+  s1.getCell(`B${r}`).value = row[0];
+  s1.getCell(`C${r}`).value = row[1];
+  s1.getCell(`D${r}`).value = row[2];
+  s1.getCell(`E${r}`).value = row[3];
+  s1.getCell(`F${r}`).value = row[4];
+});
+s1.getCell("A30").value = "(Worked example: averages are Rigidity 50, Mobility 40, Size 30, all in range; one desired trait present; no undesired. Score 100%. Clear the yellow cells to use for real.)";
+s1.getCell("A30").font = { italic: true, color: { argb: "FF006100" } };
+
+// All-10 ranked sheets, one per site
+["Site 1 all-10", "Site 2 all-10", "Site 3 all-10"].forEach((name, i) => buildAll10(wb.addWorksheet(name), i + 1));
+
+// Worked example on the first all-10 sheet
+const a1 = wb.getWorksheet("Site 1 all-10")!;
+a1.getCell("B5").value = 40; a1.getCell("C5").value = 60;
+a1.getCell("B6").value = 30; a1.getCell("C6").value = 50;
+a1.getCell("B7").value = 20; a1.getCell("C7").value = 40;
+a1.getCell("B9").value = "Photosynthetic"; a1.getCell("B10").value = "Toxic";
+const sample: [string, number, number, number, string, string][] = [
+  ["Alpha", 50, 40, 30, "Y", "N"],
+  ["Bravo", 45, 35, 25, "N", "N"],
+  ["Charlie", 55, 45, 35, "N", "N"],
+  ["Delta", 60, 50, 40, "Y", "N"],
+  ["Echo", 30, 20, 15, "N", "Y"],
+  ["Foxtrot", 48, 38, 28, "N", "N"],
+  ["Golf", 52, 42, 32, "Y", "N"],
+  ["Hotel", 42, 32, 22, "N", "N"],
+  ["India", 58, 48, 38, "N", "N"],
+  ["Juliet", 70, 60, 50, "N", "Y"],
+];
+sample.forEach((row, m) => {
+  const r = 14 + m;
+  a1.getCell(`B${r}`).value = row[0];
+  a1.getCell(`C${r}`).value = row[1];
+  a1.getCell(`D${r}`).value = row[2];
+  a1.getCell(`E${r}`).value = row[3];
+  a1.getCell(`F${r}`).value = row[4];
+  a1.getCell(`G${r}`).value = row[5];
+});
+
+// Append all-10 notes to the How-to sheet
+[
+  "",
+  "ALL-10 RANKED SHEETS (tabs: Site 1/2/3 all-10):",
+  "Type the targets and ALL 10 microbes. The sheet scores every possible 3-combo (120) and the",
+  "Rank / Score / Microbes columns (right side) list them best to worst automatically.",
+  "Scoring: 100%, minus 20% per attribute average out of range, minus 20% if no desired trait,",
+  "minus 20% if any undesired trait. 'Site 1 all-10' has a worked example (best combos = 100%).",
+].forEach((l, idx) => { const c = info.getCell(`A${lines.length + 1 + idx}`); c.value = l; if (l.endsWith(":")) c.font = { bold: true }; });
+
+await wb.xlsx.writeFile(OUT);
+console.log("WROTE " + OUT);

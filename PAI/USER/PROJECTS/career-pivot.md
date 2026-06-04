@@ -51,9 +51,17 @@ As of May 2026:
 
 - BCG TDA (Digital Strategy Consultant, Melbourne): submitted. Referred by Trini Bigalow and Nora Hocke. BCG TDA interview prep underway (kicked off 2026-05-28); talent screen was Friday 2026-05-29, 30 min Zoom.
 - Tranche 1 (7 applications, artefacts in OneDrive `02_Career/Job_Applications/2026/application-artefacts.md`): McKinsey Associate (cold), Publicis Sapient Strategy EOI (Manager), EY-Parthenon Manager Deal Technology, Opus AI Strategy Consultant, Centorrino Senior Strategy Consultant, Google TAM Cloud Consulting, Fabric Group Lead Consultant/Tech Lead - all listed as ready.
-- Tranche 2 (6 applications, artefacts in `application-artefacts-tranche2.md`): Grex Technology Advisory Consultant, Heidi PM Intelligence, Tyro PM Tyro Health, Judo Bank Engineering Lead, EY Manager Digital Implementation EHS, Xero Engineering Manager - all ready.
+- Tranche 2 (6 applications, artefacts in `application-artefacts-tranche2.md`): Grex Technology Advisory Consultant, Heidi PM Intelligence, Tyro PM Tyro Health, Judo Bank Engineering Lead, EY Manager Digital Implementation EHS (rejected 2026-06-04), Xero Engineering Manager - all ready.
 - SWE track: Trideca/Latitude Lead Golang Dev - SWE CV used, salary guidance $180-200k + super permanent; no cover letter artefact (discussed verbally with recruiter).
 - Deprioritised: Xero Engineering Manager (comfort-zone trap), Canva Senior SWE roles, Anduril Manager SWE - pure engineering or engineering-management roles that do not advance the pivot.
+
+## Application Outcomes
+
+> Career ISA (`workspace/career/ISA.md`) is the system of record. First-wave summary below.
+- LIVE: McKinsey (Solve 2026-06-04), BCG TDA (in process), Grex, Heidi.
+- REJECTED: EY-Parthenon Deal Tech (2026-06-03), EY Manager Digital Implementation EHS (2026-06-04), Centorrino, Fabric, Tyro.
+- MISSED/CLOSED: Opus (closed before submit), Judo (missed close).
+- SILENT: Publicis Sapient, Google TAM.
 
 ## Key Outputs / Next Steps
 

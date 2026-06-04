@@ -1,0 +1,123 @@
+# McKinsey Solve Prep Brief — Nick Wood
+
+> Assessment: 3pm, 2026-06-04 (Australia/Melbourne). Prepared 2026-06-03.
+
+## 1. What Solve Actually Is
+
+McKinsey Solve (built by Imbellus, iterated since) is **not a quiz, it is a behavioural simulator**. Every click, scroll, the order you read information, tool usage (calculator, journal), time before committing, whether you revise decisions — all logged. It produces two scores:
+
+- **Product score:** did you get the right answers / best solution (outcome).
+- **Process score:** did you approach it like a consultant (systematic navigation, reading before acting, deliberate revision, tool use)?
+
+**A slightly lower product score from a systematic process can outscore a higher product score from chaotic rushing.** This is not a speed contest. Slow down, show your working through the interface, be deliberate.
+
+**Current format (June 2026):** Most candidates get two games — **Redrock Study (35 min)** and **Sea Wolf (30 min)**, 65 min total. A third module, **Sustainable Future Lab (20 min, situational judgement)**, appears in select regions as an 85-min version. The old **Ecosystem Building** game is fully retired — do not prep for it. Disaster Management and Migration variants also retired. No webcam monitoring. External tools (pen, paper, pre-built spreadsheet) are allowed; external people/AI are not.
+
+## 2. The Games
+
+### 2a. Redrock Study (35 min)
+Data investigation: a researcher studying animal populations on a fictional island. Four sequential phases, no going back:
+1. **Investigation** — ~400-word brief + 2-3 charts/tables. Collect relevant data into a Research Journal. Calculator NOT available yet. Miss a number here and it cascades.
+2. **Analysis** — usually 3 maths questions; calculator appears; answers auto-populate the Journal (chained — wrong early answer corrupts later ones).
+3. **Report** — fill structured report from Analysis answers; select correct chart type per visualisation (~20% of questions); build charts. Cannot revisit phases 1-2.
+4. **Cases** — 6 self-contained maths/data questions, mostly unrelated.
+
+**Maths:** chained percentages (know percentage vs percentage points), weighted averages, growth/compound rates, basic probability. Difficulty is the **chaining**, not the operations. **Do not round intermediate values** — keep full precision in the calculator.
+
+**Chart types (know cold):** bar = compare independent values; line = change over time, many intervals; pie = parts of a whole; stacked area = composition change over time; scatter = relationship between two variables.
+
+**Approach:** read the brief fully before touching the Journal; over-collect data. Write the operation sequence on paper before using the calculator. Use a physical numpad if you have one.
+
+**Time budget:** 35 min / ~14 questions. Aim: Investigation + Analysis 15 min, Report 10, Cases 10.
+
+### 2b. Sea Wolf (30 min)
+Ocean cleanup optimisation. Three contaminated sites. Per site, build a microbe treatment of three microbes whose **averaged** attributes hit target ranges + trait conditions. Five steps per site:
+1. **Characteristic selection** — choose 2 of 7 (Rigidity, Mobility, Size + 4 traits) matching site conditions.
+2. **Microbe categorisation** — sort 10 microbes: this site / future site / reject.
+3. **Microbe screening** — choose 4 from 3-option selections to fill a 10-microbe pool.
+4. **Final selection** — pick best 3. Rule: average of each numerical attribute across the 3 must fall in the site's range, at least one microbe must carry the desired trait, none may carry the undesired trait.
+5. **Confirmation** (sites 1-2 only).
+
+**Scoring:** each unmet condition deducts 20% (range 40-100%). Aim 80%+ average. Some constraint sets have no perfect solution — optimise least-bad.
+
+**The Excel play (build tonight):** Step 4 needs averaging 3 microbes across attributes and checking ranges. Manual = 5+ min/site; spreadsheet = under 2 min. Build:
+- Columns: Microbe, Rigidity, Mobility, Size, Desired trait (Y/N), Undesired trait (Y/N)
+- Three input rows + an AVERAGE formula row
+- Conditional flag: does each average fall in range?
+- Practice fast data entry under time pressure.
+
+**Approach:** read site requirements fully before Step 1. Do the maths on the sheet. ~10 min/site; timer pauses between sites — use the break. Don't let site 1 eat your time.
+
+### 2c. Sustainable Future Lab (20 min — only if 85-min invite)
+Situational judgement, 13 questions, no maths. Q1 drag-and-drop prioritisation; Q2-5 two-option; Q6-9 three-option; Q10-13 four-option. Scenarios compound.
+
+Measures prioritisation, decision-making under uncertainty, trade-offs, stakeholder effectiveness. **It scores consistency of your decision pattern, not individual right/wrong.** Avoid flip-flopping and extreme (hyperaggressive or passive) choices. Sweet spot: hypothesis-driven, act decisively on available info, revise on genuinely new data, include the team.
+
+## 3. Biggest Failure Modes
+1. Rushing Investigation in Redrock (can't go back; miss a data point, lose the Report).
+2. Manual calculation in Sea Wolf Step 4 (build the spreadsheet).
+3. Treating Solve like a speed test (process score rewards systematic behaviour).
+4. Premature rounding (cascades).
+5. Ignoring built-in tools (Journal + calculator are the designated process tools — use them visibly).
+
+## 4. Day-of Checklist
+- Wired internet if possible. Second monitor (Solve primary, spreadsheet secondary). Physical numpad keyboard. Pen + paper. Quiet room, phone away.
+- Spreadsheet open + minimised before start; know the alt-tab shortcut; practise it.
+- Eat a proper lunch. Stop prep by noon — rest the last two hours. Start 10 min early to check connection and close tabs.
+- Read every tutorial screen. Take the inter-site breaks in Sea Wolf (timer stops). Treat each Redrock phase as a clean problem.
+- Mindset: structured quantitative problem-solving — your day job. Systematic beats fast.
+
+## 5. Highest-Value Prep (16 hours to 3pm)
+1. **Build + test the Sea Wolf spreadsheet** (1-1.5 hr tonight) — highest leverage. Practise sub-2-min/site data entry.
+2. **Revise chart types cold** (30 min) — bar/line/pie/stacked-area/scatter decision tree.
+3. **Practise chained percentage calcs** (30 min) — PrepLounge free examples; write the operation sequence before calculating.
+4. **Read one full Redrock walkthrough** (30-45 min) — MConsultingPrep or Road to Offer. Internalise phase structure + Journal/calculator workflow. Don't attempt a full timed mock.
+5. **Tomorrow morning:** re-read Sea Wolf rules (scoring, trait logic, Step 4 constraint), then one dry run of the spreadsheet against a made-up site.
+
+Don't do full practice tests at midnight — sleep matters more than marginal prep.
+
+## 6. Your Engineering Edge (and the traps)
+**Advantages:** systems thinking (Redrock is a data pipeline — you'll see the dependency graph); quantitative comfort; spreadsheet reflex; systematic process (the process score rewards how you already work).
+
+**Watch out for:**
+- Over-optimising the Sea Wolf spreadsheet (no macros/solvers — good enough beats perfect; 10 min/site).
+- Over-thinking Sustainable Future Lab (no objectively correct answer — pick balanced, proactive, hypothesis-driven, move on).
+- Perfectionism in Redrock (can't revisit phases; accept a slightly imperfect Investigation and keep moving).
+- Speed-as-competence (finishing fast because you skimmed is a bad, logged result).
+
+## 7. Situational Judgement Playbook — confirmed from practice run (2026-06-04)
+
+> Source: a full "Wetland Restoration" practice scenario (= the Sustainable Future Lab / situational-judgement module). Patterns below were **confirmed by the test's own feedback screens**, so treat them as the live rubric, not theory.
+
+### The rubric, in the test's own words
+The feedback after a correct answer praised: *"a balanced response... the dataset is considered alongside existing evidence rather than in isolation... avoid giving too much weight to a single unvalidated input... adaptable without overreacting, while maintaining analytical consistency as new information emerges."*
+
+Memorise these four phrases — they ARE the scoring key:
+1. **Consider new inputs alongside existing evidence, not in isolation.**
+2. **Adaptable without overreacting** (update proportionally, not dramatically).
+3. **Maintain analytical consistency** (don't whipsaw direction every time something new lands).
+4. **Don't over-weight a single unvalidated input.**
+
+### Decision lens (apply to every select-one item)
+When two options both look reasonable, pick the one that best matches the four phrases above. The scored-best answer is almost always the **balanced, weigh-everything, proportional-update** option.
+
+### Item-pattern 1 — prioritisation drag-and-drop (Q1)
+Hypothesis-led order wins, given the recurring "limited time" framing:
+1. Develop the initial hypothesis (frames everything, directs scarce time)
+2. Align the team on key assumptions / causal model
+3. Review data — now *targeted* to test the hypothesis (NOT data-first boil-the-ocean)
+4. Stakeholder/external-constraint gathering (a constraint on the *solution*, not an input to the *diagnosis*)
+Trap: putting "review all the data to build a strong factual base" first = boil-the-ocean, penalised under time pressure.
+
+### Item-pattern 2 — new, promising-but-unvalidated data arrives
+**Winning move:** weigh it *alongside all existing evidence*, re-rank the relative importance of all drivers, and **do not change direction prematurely.**
+Two traps that feel right but score lower:
+- **Investigate the new dataset deeply first** → over-focuses effort on the single uncertain input (the exact thing you're told not to over-index on).
+- **Fold it straight into the working hypothesis** (even "with caveats") → gives an unvalidated input direction-altering weight too soon.
+Also wrong: ignore/park it until "rigorously validated" (too dismissive — that's anchoring).
+
+### Calibration note for the real test
+In practice, the elegant "hypothesis-driven, incorporate-it-now" option was a near-miss; the proportionality option ("weigh against existing evidence, reassess all drivers together, don't pivot yet") was correct. **Bias toward proportionality and balance over decisiveness** when both are on offer. Avoid the two extremes every time (hyper-aggressive shift vs passive do-nothing). Pick balanced, proportional, team-inclusive, move on.
+
+---
+*Sources: Road to Offer, MConsultingPrep, PSG Secrets, Prepmatter, CaseBasix (McKinsey Solve / Redrock / Sea Wolf / Sustainable Future Lab guides, 2026); plus a confirmed-feedback practice run, 2026-06-04.*

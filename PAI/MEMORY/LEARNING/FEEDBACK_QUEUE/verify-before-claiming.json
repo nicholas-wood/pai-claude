@@ -1,0 +1,24 @@
+{
+  "slug": "verify-before-claiming",
+  "theme": "Claiming done without verification",
+  "rootCause": "Assistant reports completion without checking the artefact exists or the action landed.",
+  "proposedRuleName": "feedback-verify-before-claiming",
+  "proposedRuleBody": "Assistant reports completion without checking the artefact exists or the action landed.\n\n**Why:** Evidence from 4 signal(s) across 1 session(s) and 3 project(s). Recurring root cause: Claiming done without verification.\n\n**How to apply:** Before using done, complete, handed off, delegated, or landed, verify the artefact exists or the action returned. If you cannot verify, say so explicitly rather than asserting completion.\n\n**Evidence examples:**\n- \"# Implicit Low Rating Captured: 3/10\"\n- \"# Implicit Low Rating Captured: 3/10\"\n- \"FAILURE: command didnt worknothing appearing in phone app\"",
+  "evidenceCount": 4,
+  "sessions": [
+    "aa57fd93-cb32-4a60-8608-0a6e4850db78"
+  ],
+  "projects": [
+    "failure:2026-06-03-165501_LEARNING_sen",
+    "failure:2026-06-03-134039_LEARNING_sen",
+    "unknown"
+  ],
+  "topExamples": [
+    "# Implicit Low Rating Captured: 3/10",
+    "# Implicit Low Rating Captured: 3/10",
+    "FAILURE: command didnt worknothing appearing in phone app"
+  ],
+  "dedupNote": "NEW -- no existing rule covers this theme.",
+  "queuedAt": "2026-06-03T20:30:10.043Z",
+  "status": "pending"
+}
