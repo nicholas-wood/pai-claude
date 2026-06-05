@@ -1,0 +1,61 @@
+---
+brief_id: LIMSOC-BRIEF-LSV-2026-001
+project_ref: "1.1 New Incident Categorisation"
+focus_area: "1. Enhance Our Incident Management"
+season: 2026-27
+status: draft
+owner: Nicholas Wood
+sme_group: Incident Categorisation and Flow
+themes: [Simplification, Cohesion]
+last_updated: 2026-06-05
+---
+
+# Incident Categorisation
+
+> Brief number 001 is assumed for now. Confirm against the Linear brief register before this goes out, as the priorities doc already references later numbers (002 for Secondary Information Forms).
+
+## Problem
+
+The current incident categorisation model uses a category and type structure that has grown to a point where it creates ambiguity rather than clarity. A single incident can reasonably be classified under multiple types. Operators make different choices in the same situation, which degrades data consistency and makes it harder to report on, learn from, or compare incidents. The distinction between what constitutes a type and what is really an attribute of the incident is unclear, leading to types that exist to capture information rather than to classify.
+
+## Proposed change
+
+Replace the current flat category and type model with an inheritance-based approach. A type can be a parent of another type, creating a clear decision tree that guides the operator to a single correct classification.
+
+As part of this, separate what is genuinely an incident type from what is an attribute. Attributes describe characteristics of the incident, for example a SUP was involved or envenomation occurred. Types classify the nature of the incident itself.
+
+The outcome is fewer types overall, a clear path from general to specific, a clear process for how an incident record should evolve, and no scenario where an operator is choosing between two equally valid options.
+
+## Impact
+
+- Consistent classification across operators, shifts, and states
+- Cleaner data for reporting, trend analysis, and benchmarking
+- Faster incident creation, as operators follow a decision tree rather than a long list
+- A foundation for AI-driven features that rely on structured, predictable data
+
+## Themes
+
+Simplification and Cohesion.
+
+## Scope notes
+
+- This brief is project 1.1 specifically. The SME group it sits under (Incident Categorisation and Flow) also touches related projects 1.2 Simplified Incident Creation, 1.3 Secondary Information Forms, and 1.8 Incident Labels. Decide which of those are in scope for this brief versus tracked separately.
+- The incident labels work (1.8) is closely coupled, as moving descriptive metadata into labels is what keeps the type hierarchy clean. Worth deciding upfront whether categorisation and labels are designed together.
+
+## Open design questions
+
+These are the questions the design work and SME input need to answer. See Model Design.md for the working detail.
+
+1. Where exactly is the line between a type and an attribute, and what is the test we apply to decide?
+2. What does the proposed type hierarchy look like, from general to specific?
+3. How does an incident record evolve as more is learned, and what is the process for reclassifying?
+4. How do we migrate the existing flat types to the new model without losing historical comparability?
+5. How does this interact with incident labels (flags, event tags, notable attributes)?
+6. What is the minimum set of types, and how do we resist the pressure to keep adding them?
+
+## Next steps
+
+- Confirm scope against the related Focus Area 1 projects.
+- Stand up the Incident Categorisation and Flow SME group and circulate this brief for input.
+- Work the model design (type hierarchy and attribute set) in Model Design.md.
+- Capture decisions in Decision Log.md as they are made.

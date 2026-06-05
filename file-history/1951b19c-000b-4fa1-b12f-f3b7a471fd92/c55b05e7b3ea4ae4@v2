@@ -1,0 +1,43 @@
+# Incident Categorisation, Model Design
+
+Working document for the categorisation model. This is where the real design happens before anything is written up for distribution.
+
+## Current state
+
+> To capture. The existing flat category and type structure, with examples of where a single incident can be classified more than one way, and examples of types that exist to capture information rather than to classify.
+
+## Type versus attribute
+
+The core distinction. A type classifies the nature of the incident. An attribute describes a characteristic of it.
+
+- **Working test (draft).** If removing the value would change what kind of incident it is, it is a type. If removing it would only remove detail about an otherwise-unchanged incident, it is an attribute.
+- Types (examples to confirm) ...
+- Attributes (examples from the doc) SUP involved, envenomation occurred ...
+
+> To work through. Run the current type list through this test and sort each into type, attribute, or label.
+
+## Proposed type hierarchy
+
+Inheritance-based, parent to child, guiding the operator to a single correct classification.
+
+> To build. A decision tree from general to specific. Capture as an indented outline here first, then render to a diagram once stable.
+
+```
+(placeholder for the hierarchy outline)
+```
+
+## Attribute set
+
+> To build. The set of attributes that describe an incident, and which incident types each attribute is relevant to.
+
+## Incident record evolution
+
+> To define. How a record moves from an initial general classification to a specific one as more is learned, and the rules and any approvals around reclassification.
+
+## Migration mapping
+
+> To build. A mapping from each existing type to its new home (type, attribute, or label), so historical data stays comparable.
+
+## Open questions
+
+> Pull unresolved items up into the brief's Open design questions as they firm up or resolve.
