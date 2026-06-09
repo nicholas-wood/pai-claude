@@ -1,7 +1,7 @@
 # Writing Style — Nick Wood
 
 > Evidence-grounded. Every pattern below is backed by a real quote from his prose.
-> Last updated: 2026-06-02. Source documents listed at the end.
+> Last updated: 2026-06-09 (PM, post Heidi cold-outreach session). Source documents listed at the end.
 
 ---
 
@@ -122,6 +122,64 @@ Within bullet lists, items share a grammatical structure. When one item is genui
 
 > "PA-02 (testing process) excluded — no cost." (Master Plan, end of §4)
 
+### 11. Identity surfaces lead with drive, not credentials
+
+For self-positioning surfaces (LinkedIn headline, bio, short profile copy) Nick writes what drives him, not what he has done. He explicitly rejects achievement-listing in identity copy: no company names, no project names, no title chips. The framing names motivations and the shape of his interest. Hybrid identities use the `×` multiplication operator rather than `+` to signal that the combination is the differentiator, not a sum.
+
+> "Builder × Strategist | Aligning visions, building value, driven by impact | Hard problems, real ownership, AI as multiplier" (LinkedIn headline, June 2026)
+
+Stated preference in his own words:
+
+> "I really want to capture my drive and motivations, my ambitions and my passions rather than listing titles/positions."
+
+Concrete proof is acceptable when honest (e.g. "GenAI delivery at ANZ Plus"); abstract slogan claims are not ("bridge between business and tech", "turning complex problems into scalable solutions" — both rejected as too generic, too consultant-coded).
+
+### 12. Warm ex-colleague register in relational outreach
+
+When reaching out to former colleagues — referral asks, catch-ups, re-connects — the register is warm-but-not-claimed-friendship. The structure is recognisable: brief congratulations on their news, explicit acknowledgement of the time gap, honest one-paragraph update on his own trajectory, the ask woven into prose rather than bulleted, and a no-pressure tail. Australian casual idioms appear naturally ("Been a bit", "down Melb way", "looked really interesting"). Parentheticals carry personal sentiment without disrupting the main message. Question marks soften asks. Exclamation marks signal warmth at the close.
+
+In this register specifically, the punctuation set tightens: **no dashes of any kind (em, en, hyphen) and no colons**. Periods, commas, exclamation marks, question marks, parentheses, apostrophes only.
+
+> "Been a bit since the ANZ Plus days. I finished up at ANZ in April. I've been doing some project and independent work, and also being quite intentional before looking for new roles. I'm looking now though, and the virgin AI role looked really interesting. It fits really well with what I've been doing since with my own work, and where I want to head, building on what we did at ANZ. (Feels like that was so long ago now with how quickly it's all moved!)" (Outreach to ex-colleague at Virgin Australia, June 2026)
+
+> "Would love a referral if you would be open to it?" (Soft ask via question mark, same message)
+
+> "Would be great to catch up if you're in Melb soon or lets do a call!" (Warm close with exclamation, casual idiom)
+
+Stated preference in his own words:
+
+> "There shouldn't be dashes of any type, or colons in the message... a bit more of a relaxed tone."
+
+This register applies to relational/personal messages only. Formal documents, board papers, applications, and operational reports remain governed by the existing patterns and the universal hard rules.
+
+### 13. Functional register for recruiter / TA cold outreach
+
+When the recipient is a recruiter, talent acquisition partner, or hiring manager being approached cold, the register is plainer than any other writing surface Nick uses. Literary moves — metaphors, abstract nouns ("the seam", "the through-line", "the surface"), idiomatic colour ("the CV has the receipts") — read as a candidate trying too hard. The recipient is triaging at speed; literary register signals someone who would rather sound clever than be useful.
+
+The structural pattern that works:
+
+- Plain prose. State what was applied for and when. Acknowledge the direct reach-out without apologising for it.
+- Earn the right to pitch by naming a specific observation about their roles, not yours.
+- Claim the lane confidently with the gap named honestly: `albeit a bit earlier on` or `just earlier on`.
+- A single substantive paragraph in plain language about what's been done across the lane.
+- Triage-friendly close: CV attached, redirect-if-not-you, what's actually wanted next — all in one paragraph.
+
+Evidenced contrast (Thamasi Perera email, Heidi PM Intelligence, June 2026):
+
+Rejected draft:
+> "I'm a senior engineer who has spent most of the last six years working at the seam between engineering, product and strategy. The pattern across that work has been the same: take an ambiguous problem, build something real, ship it, then make the case for what gets built next. The CV gives you the receipts."
+
+Approved replacement:
+> "Over the last six years I've worked across engineering, product and strategy, mostly at the point where AI or new technical capability has to become a product real users can trust."
+
+Stated preference in his own words:
+
+> "CV has the receipts, really don't like that." (Thamasi draft review, 2026-06-09)
+
+> "Trying too hard. Functional emails to recruiters should be plainer than cover letters and exec audiences." (recap acknowledgment, same session)
+
+This register applies to recruiter / TA / hiring manager cold outreach only. Cover letters, exec audiences, board papers, and interview narrative retain literary structure where it earns its keep — §5 (allusion over enumeration) and §11 (drive over credentials) still govern there. Connector cold outreach (a non-recruiter team member who can bridge to a gatekeeper, e.g. via a public post about company growth) sits between this and §12: slightly warmer than gatekeeper cold outreach, slightly more deliberate than relational warm outreach.
+
 ---
 
 ## Anti-patterns (what he never does)
@@ -137,6 +195,10 @@ Within bullet lists, items share a grammatical structure. When one item is genui
 - AI-ism phrases: "it's worth noting", "it's important to note", "let me know if", "happy to help", "to summarise".
 - Self-deprecation about background or experience level.
 - Comparison to other candidates or other organisations.
+- Abstract slogan claims in identity copy ("bridge between business and tech", "thoughtful AI mandate", "turning complex problems into scalable solutions"). The claim must be either concrete proof or genuine identity, never a generic phrase that could belong to anyone.
+- Forced-sounding update intros in relational messages ("Quick update from my side", "I'm thrilled to announce", "I am excited to share"). The opening flows from the prior context; it does not announce itself.
+- Listing companies, project names, or job titles in LinkedIn headlines, bios, or other identity surfaces.
+- Mixing `+` and `×` for hybrid framings. `×` is the convention.
 
 ---
 
@@ -161,3 +223,7 @@ Within bullet lists, items share a grammatical structure. When one item is genui
 Plus the existing rules files:
 - `pai/artifacts/onedrive-PAI/USER/WRITINGSTYLE.md` (4.x rules, carried forward)
 - `.claude/projects/-Users-nicholaswood--claude/memory/feedback-nick-communication-rules.md`
+
+Live conversation evidence (2026-06-09):
+- LinkedIn brand decisions session: headline philosophy (drive over credentials), `×` convention, no-dashes/no-colons rule for relational outreach, warm-ex-colleague register evidenced by message sent to Jaimyn Mayer (Virgin Australia).
+- Heidi PM Intelligence cold-outreach session (2026-06-09 PM): plain register for gatekeeper / TA cold outreach evidenced by Thamasi Perera email and Nell Hardie InMail. Literary metaphors ("the seam", "the through-line", "the surface", "the CV has the receipts") explicitly rejected in functional context. JD-pattern observation hook and `albeit a bit earlier on` honest-gap framing both approved and sent.

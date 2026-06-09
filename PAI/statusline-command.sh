@@ -489,6 +489,20 @@ sep() {
 
 _parallel_tmp="/tmp/pai-parallel-$$"
 mkdir -p "$_parallel_tmp"
+# Guaranteed teardown for the common case (normal exit + SIGTERM/INT/HUP).
+trap 'rm -rf "$_parallel_tmp" 2>/dev/null' EXIT INT TERM HUP
+# Self-healing reap for SIGKILL — Claude Code force-kills slow statuslines,
+# which bypasses the trap and orphans the dir. Each new statusline sweeps
+# dirs whose owning PID is gone. Without this, /tmp accumulated ~182k
+# pai-parallel-* dirs over six days and exhausted the tmpfs inode table.
+for _stale_dir in /tmp/pai-parallel-*; do
+    [ -d "$_stale_dir" ] || continue
+    _stale_pid=${_stale_dir##*-}
+    case "$_stale_pid" in ''|*[!0-9]*) continue ;; esac
+    [ "$_stale_pid" = "$$" ] && continue
+    kill -0 "$_stale_pid" 2>/dev/null || rm -rf "$_stale_dir"
+done
+unset _stale_dir _stale_pid
 NOW_EPOCH=$(date +%s)
 
 # --- PARALLEL BLOCK START ---

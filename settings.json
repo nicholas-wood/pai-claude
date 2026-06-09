@@ -69,7 +69,6 @@
       "Agent(Algorithm)",
       "Agent(pr-review-toolkit:*)",
       "Agent(statusline-setup)",
-      "mcp__*",
       "Write(~/Projects/**)",
       "Edit(~/Projects/**)",
       "MultiEdit(~/Projects/**)",
@@ -359,7 +358,7 @@
     ]
   },
   "worktree": {
-    "sparsePaths": []
+    "bgIsolation": "none"
   },
   "allowedHttpHookUrls": [
     "http://localhost:31337/hooks/*"
@@ -1151,8 +1150,11 @@
     ]
   },
   "awaySummaryEnabled": false,
+  "autoUpdatesChannel": "stable",
   "plansDirectory": "Plans/",
   "skipDangerousModePermissionPrompt": true,
+  "teammateMode": "in-process",
+  "skipAutoPermissionPrompt": true,
   "autoMode": {
     "allow": [
       "Writing and editing files under ~/.claude/ is always safe — this is the user's own AI infrastructure workspace",
@@ -1213,7 +1215,6 @@
   },
   "contextFiles": [],
   "_contextFiles_docs": "v5.0: contextFiles is empty — constitutional rules in PAI/PAI_SYSTEM_PROMPT.md (system prompt), operational procedures + @imported context in CLAUDE.md (native). Dynamic context (relationship, learning, work) injected by LoadContext.hook.ts.",
-  "teammateMode": "in-process",
   "daidentity": {
     "_docs_defaults": "Bootstrap defaults — functional for first boot. Interview overwrites name/fullName/displayName/voiceName with user's chosen DA identity, and voices.*.voiceId with user's ElevenLabs voice pick.",
     "name": "Jarvis",
@@ -1351,7 +1352,7 @@
     "sessions": 0,
     "research": 0,
     "ratings": 0,
-    "updatedAt": "2026-06-04T07:54:06.649Z"
+    "updatedAt": "2026-06-09T02:30:58.692Z"
   },
-  "skipAutoPermissionPrompt": true
+  "skipWorkflowUsageWarning": true
 }

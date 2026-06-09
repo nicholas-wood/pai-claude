@@ -2,7 +2,7 @@
 
 > Distinct from WRITINGSTYLE.md (which describes how Nick writes himself).
 > This file tells the DA how to write in his voice or on his behalf.
-> Last updated: 2026-06-02.
+> Last updated: 2026-06-09 (post Heidi cold-outreach session).
 
 ---
 
@@ -143,6 +143,42 @@ No filler openers. No apology paragraphs. No comparisons to other candidates. Py
 - Each role entry: one framing sentence, then bullet points. Bullets lead with a verb and include a quantified outcome where available.
 - No "responsible for" or "involved in". Every bullet is "did X, which produced Y".
 - Skills section is a flat list of technologies and methods. No self-assessment levels.
+
+### Cold outreach (gatekeeper or connector)
+
+Distinct from relational outreach (warm ex-colleague register, WRITINGSTYLE.md §12) and from gatekeeper-only cold register (WRITINGSTYLE.md §13). Cold outreach to people Nick does not know but who could move his application forward has two flavours; both share the structural spine, the register and ask differ.
+
+**Gatekeeper** — recruiter, TA partner, hiring manager. They are doing their job; they want role + name + angle in five seconds. Register is plain (see WRITINGSTYLE.md §13). Subject line is transactional and scannable: `<Role> application: Nicholas Wood`. Close folds CV attached + redirect-if-not-you + what's wanted next into a single triage-friendly paragraph.
+
+**Connector** — someone on the team who can bridge to a gatekeeper. Often surfaced via a public LinkedIn post about company growth or hiring. Register is slightly warmer than gatekeeper; a post-acknowledgment opener is appropriate. Subject (InMail) is post-anchored, not role-anchored: `Loved your <Company> growth post, keen to connect with the team`. The ask is small — a name or a direction, not a meeting — so the recipient can respond in thirty seconds without commitment: `Long shot, but if you happen to know the hiring manager or the TA partner...`.
+
+**Shared structural pattern (both flavours):**
+
+1. Opener — state role and application date; acknowledge the direct reach-out without apologising for it. Connector variant references their post here.
+2. JD-pattern observation — name something specific noticed reading the company's roles. Earns the right to pitch a lane fit; signals homework; avoids projecting hiring intent on them.
+3. Lane claim with honest gap — `albeit a bit earlier on` (more polished register) or `just earlier on` (more conversational register).
+4. Plain-prose substance paragraph — what Nick has done across the lane, in plain language. No literary metaphors (see WRITINGSTYLE.md §13).
+5. Single ask in a triage-friendly close — gatekeeper gets CV + redirect + next-step; connector gets a small-ask request for a name.
+
+**Reusable phrasing (approved, Heidi PM Intelligence outreach, June 2026):**
+
+JD-pattern hook:
+> "Reading a few of [Company]'s roles, both [role A] and [role B], what stood out is that you're actively after [profile]. That's exactly the lane I'm in, albeit a bit earlier on, and I think my combo of skills and experience would be a strong fit."
+
+Connector close (small ask):
+> "Long shot, but I was wondering if you happen to know the hiring manager or the TA partner you might be able to put me in touch with?"
+
+Gatekeeper close (triage-friendly):
+> "CV attached. If you're not the person owning this role, I'd really appreciate it if you could put me in touch with whoever is. Otherwise, would love to connect to discuss more."
+
+**Constraints (failure modes evidenced June 2026):**
+
+- One emotive intensifier per message, at most. Four `really`s in 200 words is the established failure threshold.
+- Single connect/intro ask. Duplicating the ask across paragraphs reads as needy and cannibalises the structural pivot.
+- No literary metaphors in gatekeeper register (seam, through-line, surface, receipts — all rejected in the Thamasi draft review).
+- No forced clever phrasings (`inside of, not adjacent to` — rejected in the Nell DM review).
+- Subject lines never lead with `Application for...` for connector outreach — too transactional for a non-recruiter. Reserve transactional subjects for gatekeeper emails only.
+- `would be a strong fit` beats `could be a really great fit` — the latter pairs a hedge ("could") with an intensifier ("really great") in a way that reads anxious. The former is honest and confident.
 
 ---
 

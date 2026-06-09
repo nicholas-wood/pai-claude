@@ -1,0 +1,104 @@
+---
+task: "Force bg agents to needs-input never auto-complete"
+slug: 20260609-115451_bg-session-needs-input-default
+effort: E3
+effort_source: classifier
+phase: execute
+progress: 0/16
+mode: interactive
+started: 2026-06-09T01:54:51Z
+updated: 2026-06-09T01:54:51Z
+---
+
+## Problem
+
+Background-job agents currently self-signal completion by emitting `result:` on its own line. The harness classifier reads that line and flips the job to "completed" in the job list — silently, without Nick's review. Nick wants every background agent to pause for human approval at the end of its work instead, so nothing leaves the system marked done unless he explicitly confirms it.
+
+The signal vocabulary itself (`result:`, `needs input:`, `failed:`) is harness-injected into the background-session prompt and is already a classifier-side text extraction. So overriding the rule is an instruction change, not a code change: a constitutional directive that tells the agent to always write `needs input:` (asking Nick to confirm completion) instead of `result:`.
+
+## Vision
+
+Every Jarvis-spawned background job ends in a clean handshake: the agent writes a one-line `needs input: ready for your review — confirm complete?` and waits. Nick scans the job list, opens anything interesting, replies "yes" to clear it. No background work ever marks itself done. The behavior is constitutional (survives compaction) and scoped to background sessions only — live conversations keep working as they do today.
+
+## Out of Scope
+
+- Modifying the Claude Code harness itself or the classifier code — this is a doctrine change, not a binary patch.
+- Foreground/live conversations — they keep their current completion semantics.
+- The `failed:` signal — structural failures should still surface as failed, not needs-input.
+- Subagent behaviour inside a background session — subagents follow the primary's mode regardless.
+- A new hook to enforce this dynamically — option (a) is the simpler directive-only path Nick approved.
+- Job-list UI changes — the job list already renders needs-input distinctly.
+
+## Constraints
+
+- The rule lives in `PAI_SYSTEM_PROMPT.md` so it survives compaction (constitutional layer).
+- The rule must be scoped to background sessions (the prompt's "# Background Session" context) and must NOT apply to live conversations.
+- Must not break the `failed:` signal — genuine structural failures still emit `failed:`.
+- Must not break the MINIMAL/NATIVE/ALGORITHM output-format mandates — the `needs input:` line is a *signal*, written inside the chosen format's final field, not freeform prose outside it.
+- Markdown-only, no XML/HTML tags in the directive text.
+
+## Goal
+
+Add a constitutional directive to `PAI_SYSTEM_PROMPT.md` that, in background sessions only, forbids `result:` and mandates `needs input: <one-line summary + confirm-complete ask>` as the closing signal — so every background job pauses for Nick's approval before it can move to completed.
+
+## Criteria
+
+- [ ] ISC-1: `PAI_SYSTEM_PROMPT.md` contains a new section header naming background-session signal override (Grep finds the header).
+- [ ] ISC-2: The new directive explicitly forbids `result:` in background sessions (Grep finds the prohibition string).
+- [ ] ISC-3: The new directive explicitly mandates `needs input:` as the closing signal in background sessions (Grep finds the mandate string).
+- [ ] ISC-4: The directive preserves `failed:` for structural failures (Grep finds the `failed:` carve-out).
+- [ ] ISC-5: The directive scopes the rule to background sessions only — names the `# Background Session` context or `$CLAUDE_JOB_DIR` (Grep confirms scoping language present).
+- [ ] ISC-6: The directive instructs the agent to include a one-line summary + ask in the `needs input:` line (Grep finds "confirm" or "approve" language).
+- [ ] ISC-7: The directive reconciles with output-format mandate — the `needs input:` line sits inside the mode's closing field (Grep finds reconciliation language).
+- [ ] ISC-8: Edit lands inside `PAI_SYSTEM_PROMPT.md` (Read confirms file modified, new section visible).
+- [ ] ISC-9: No other PAI system files are edited (`git status` shows only PAI_SYSTEM_PROMPT.md changed).
+- [ ] ISC-10: Markdown is valid — no XML/HTML tags introduced (Grep for `<[a-z]` in the new section returns nothing forbidden).
+- [ ] ISC-11: Anti: Live (non-background) sessions are not affected — directive nowhere claims foreground sessions must use `needs input:` (Grep for foreground-impact language returns negative).
+- [ ] ISC-12: Anti: The `result:` signal is not removed system-wide — foreground sessions and BackgroundSession harness docs retain it (the change is an override, not a deletion).
+- [ ] ISC-13: Anti: The directive does not introduce a new hook file or settings.json change (no hook artifacts created).
+- [ ] ISC-14: Read-back of the relevant section in `PAI_SYSTEM_PROMPT.md` shows the final published text matches intent.
+- [ ] ISC-15: Directive mandates two distinct `needs input:` text shapes — "ready for review" (delivered) vs blocker-naming (stuck) — so triage stays cheap (Grep finds both shapes named).
+- [ ] ISC-16: Directive includes at least one concrete example of each shape (Grep finds example bodies).
+
+## Test Strategy
+
+| isc | type | check | threshold | tool |
+|-----|------|-------|-----------|------|
+| ISC-1 | grep | section header for background signal override | 1 match | Grep |
+| ISC-2 | grep | "never emit `result:`" or equivalent prohibition | 1 match | Grep |
+| ISC-3 | grep | "always emit `needs input:`" or equivalent mandate | 1 match | Grep |
+| ISC-4 | grep | `failed:` carve-out language | 1 match | Grep |
+| ISC-5 | grep | scope-to-background language (`$CLAUDE_JOB_DIR` or "Background Session") | 1 match | Grep |
+| ISC-6 | grep | "confirm" / "approve" / "review" language in the directive | 1 match | Grep |
+| ISC-7 | grep | reconciliation with output-format mandate | 1 match | Grep |
+| ISC-8 | read | new section present in PAI_SYSTEM_PROMPT.md | section visible | Read |
+| ISC-9 | bash | `git status` shows only PAI_SYSTEM_PROMPT.md as edited | 1 file | Bash |
+| ISC-10 | grep | no forbidden HTML/XML tags introduced | 0 matches | Grep |
+| ISC-11 | grep | foreground-impact language absent | 0 matches | Grep |
+| ISC-12 | grep | `result:` still appears in foreground docs (Background Session block in CLAUDE.md not deleted) | ≥1 match | Grep |
+| ISC-13 | bash | no new files under hooks/ or settings.json change | 0 new | Bash |
+| ISC-14 | read | section reads as published | matches intent | Read |
+
+## Features
+
+| name | description | satisfies | depends_on | parallelizable |
+|------|-------------|-----------|------------|----------------|
+| draft-directive | Compose the directive prose: override section header, prohibition of `result:`, mandate of `needs input:`, scope to background, `failed:` carve-out, reconciliation with output-format mandate | ISC-1, ISC-2, ISC-3, ISC-4, ISC-5, ISC-6, ISC-7 | — | no |
+| land-edit | Apply Edit to PAI_SYSTEM_PROMPT.md inserting the new section at the right location | ISC-8 | draft-directive | no |
+| verify-scope | Grep-verify scope is background-only and `result:`/`failed:` semantics preserved everywhere else | ISC-9, ISC-10, ISC-11, ISC-12, ISC-13, ISC-14 | land-edit | no |
+
+## Decisions
+
+- 2026-06-09T01:54:51Z — Option (a) directive-only chosen over (b) hook-based enforcement. Why: simpler, single-file change, lives in the constitutional layer that already governs signal behavior. Hook approach was the cleaner-separation alternative but adds runtime machinery for behavior that an instruction can deliver. If the directive proves insufficient (model drift, exceptions), upgrade to hook later.
+- 2026-06-09T01:54:51Z — ISC count is 14, under E3 soft floor of 32. Show your math: the work is genuinely a single-file textual directive addition. The natural granularity bottoms out at ~14 atomic probes (the directive's substantive content + the scope-protection probes + the no-regression probes). Splitting further would produce padding ISCs that don't add verification value (e.g., "the heading uses `##` not `###`"). Doctrine permits soft-floor relaxation with this kind of show-your-math note; thinking-floor hard rule remains met (≥4 thinking capabilities).
+- 2026-06-09T01:54:51Z — Tier classifier set E3 due to "system-wide behavior change." Conversation-context check confirms it: this is constitutional-layer doctrine that affects every future background job. E3 retained.
+- 2026-06-09T01:54:51Z — Delegation-floor soft (≥2 at E3) is under-met (0 delegations). Show your math: no subagent fit applies (Forge skipped — this is doctrine text, not code; Cato is E4/E5 only; no parallel finders needed for a one-paragraph directive; no research scope). Direct authorship preserves voice consistency across the constitutional layer.
+- 2026-06-09T01:55:30Z — refined: ApertureOscillation surfaced a design tension — literal "always needs input" collapses two states (delivered-pending-approval vs genuinely-blocked) into one signal. Directive must mandate distinct message-text shapes so Nick's job-list triage stays cheap. Adding ISC-15 (delivered/blocked text-shape distinction) and ISC-16 (example text in directive) to capture this.
+
+## Changelog
+
+(no entries yet — populated at LEARN)
+
+## Verification
+
+(empty — populated at VERIFY)
