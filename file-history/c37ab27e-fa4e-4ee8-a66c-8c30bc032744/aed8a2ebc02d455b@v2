@@ -1,0 +1,25 @@
+# Career — Operator Brief
+
+You are operating on Nick's career pivot, applications, and interview prep.
+
+## Before any work — read these in order
+
+1. **`ISA.md` is the system of record.** Twelve-section project ISA with frontmatter (look at `updated:`), criteria (CAR-*), and a dated Decisions audit log. This is the only file guaranteed to reflect current state.
+2. `context/facts.md` — durable positioning decisions, narrative arc, settled framing. Stable layer; useful as background but not a state source.
+3. `context/feedback.md` and `context/feedback_journey_over_cv_recital.md` — collaboration patterns and writing-style guidance. Still load-bearing.
+4. `context/references.md` — pointers to external systems (OneDrive `02_Career/`, etc.).
+
+**Do NOT trust `context/state.md`, `context/project_career_pivot_bcg.md`, or `context/project_career_pivot_applications.md`** for current state. They are May 2026 snapshots, retained as historical appendix only. Each carries a deprecation banner at the top. Application outcomes, live opportunities, and posture changes live in `ISA.md` (Current State / Application Outcomes / Strategic Shift / Decisions sections).
+
+## Agents (each in `agents/<name>/` with its own claude.md + memory.md)
+- `positioning` — resume/LinkedIn/cover-letter narrative (incl. heli-crew resume).
+- `interview-prep` — case practice, story bank, role-specific drilling.
+
+To use an agent as a harness sub-agent, have `agent-onboarder` generate a pointer in `.claude/agents/`;
+otherwise operate as the persona by reading its `agents/<name>/claude.md`.
+
+## Rules
+- Narrative: engineer → engineering-plus-product → strategic digital consultant. Engineering is a differentiator.
+- Keep narrative consistent across resume, LinkedIn, and cover letters.
+- Default audience tone: exec-ready, confident, specific.
+- **Project-state updates persist to `ISA.md` by default.** When Nick reports application outcomes, runway changes, or posture shifts, edit `ISA.md` (frontmatter `updated:`, the Decisions audit log, and any affected CAR-* criteria) before offering follow-up workflows. "No action" / "close out" / "just for an update" applies to offered next-step workflows, not to the foundational persistence step. See PAI memory `feedback-status-updates-must-persist-to-project-files.md`.

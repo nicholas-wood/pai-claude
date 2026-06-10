@@ -1,0 +1,386 @@
+/**
+ * /v1/me/limsoc/link endpoint tests.
+ *
+ * Mocks @lifesaveroncall/auth-firebase and @lifesaveroncall/db. The adapter
+ * is swapped via _setAdapterFactoryForTests so we don't have to globally
+ * mock the adapters module (which would leak into other test files).
+ */
+
+import { describe, it, expect, beforeEach, mock } from "bun:test";
+import { Hono } from "hono";
+
+let verifyImpl: (token: string) => Promise<{
+  uid: string;
+  email?: string;
+  email_verified: boolean;
+}> = async () => ({ uid: "uid_alice", email_verified: true });
+
+let linkedByUid: Record<string, unknown> = {};
+let linkedByMember: Record<string, unknown> = {};
+let memberById: Record<string, unknown> = {};
+let memberByExt: Record<string, unknown> = {};
+const insertCalls: Array<Record<string, unknown>> = [];
+const updateCalls: Array<Record<string, unknown>> = [];
+const idempotencyHits: Record<string, { status: number; body: unknown }> = {};
+let consumedJtis = new Set<string>();
+const recordConsumedCalls: Array<{ jti: string; member_id: string }> = [];
+const auditCalls: Array<Record<string, unknown>> = [];
+
+mock.module("@lifesaveroncall/auth-firebase", () => ({
+  verifyIdToken: (token: string) => verifyImpl(token),
+  FirebaseAuthError: class FirebaseAuthError extends Error {
+    code: string;
+    constructor(code: string, message?: string) {
+      super(message ?? code);
+      this.code = code;
+    }
+  },
+}));
+
+mock.module("@lifesaveroncall/db", () => ({
+  withTenantContextAsync: async <T>(_ctx: unknown, fn: () => Promise<T>): Promise<T> => fn(),
+  currentTenantId: () => "tnt_test",
+  linkedCredentials: {
+    findByFirebaseUid: async (uid: string) => linkedByUid[uid] ?? null,
+    findByMemberId: async (mid: string) => linkedByMember[mid] ?? null,
+    insertLinkedCredential: async (input: Record<string, unknown>) => {
+      insertCalls.push(input);
+      const row = { ...input, id: "lcr_new" };
+      linkedByUid[input["firebase_uid"] as string] = row;
+      linkedByMember[input["member_id"] as string] = row;
+      return row;
+    },
+    updateTokens: async (input: Record<string, unknown>) => {
+      updateCalls.push(input);
+      const existing = linkedByUid[input["firebase_uid"] as string] as Record<string, unknown>;
+      return { ...existing, ...input };
+    },
+  },
+  members: {
+    getMemberById: async (id: string) => memberById[id] ?? null,
+    findMemberByExternalId: async (_src: string, ext: string) => memberByExt[ext] ?? null,
+    createMember: async (input: Record<string, unknown>) => {
+      const row = { ...input, id: "mem_new", tenant_id: "tnt_test" };
+      memberById["mem_new"] = row;
+      memberByExt[input["external_id"] as string] = row;
+      return row;
+    },
+  },
+  orgs: {
+    listOrgsByType: async () => [{ id: "org_lsv", state_code: "VIC", org_type: "state" }],
+  },
+  idempotency: {
+    findIdempotencyHit: async (key: string) => idempotencyHits[key] ?? null,
+    recordIdempotency: async (
+      key: string,
+      _method: string,
+      _path: string,
+      _bodyHash: string,
+      status: number,
+      body: unknown,
+    ) => {
+      idempotencyHits[key] = { status, body };
+    },
+    hashBody: (s: string) => s,
+    IdempotencyKeyMismatchError: class IdempotencyKeyMismatchError extends Error {},
+  },
+  consumedLinkJti: {
+    isJtiConsumed: async (jti: string) => consumedJtis.has(jti),
+    recordConsumedJti: async (input: { jti: string; member_id: string }) => {
+      recordConsumedCalls.push(input);
+      consumedJtis.add(input.jti);
+    },
+    purgeConsumedJtiOlderThan: async () => 0,
+  },
+  auditLog: {
+    recordAudit: async (input: Record<string, unknown>) => {
+      auditCalls.push(input);
+    },
+  },
+  memberCapabilities: {
+    upsertMemberCapability: async () => {},
+  },
+  db: () => {
+    // Return a fake tagged-template fn that yields an empty array — matches
+    // the dev-trust capability-discovery query which is not exercised here.
+    const fn = async () => [] as unknown[];
+    return fn as unknown as never;
+  },
+}));
+
+mock.module("@lifesaveroncall/observability", () => ({
+  logger: {
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+    child: () => ({ info: () => {}, warn: () => {}, error: () => {} }),
+  },
+}));
+
+// Import AFTER mocks are registered.
+const { meLimsocRoutes, _setAdapterFactoryForTests } = await import("./me-limsoc.ts");
+const { AuthError } = await import("@lifesaveroncall/adapters");
+
+let decodeImpl: (token: string) => Promise<unknown>;
+let resolveImpl: (sub: string, token: string) => Promise<unknown>;
+
+function buildApp() {
+  return new Hono().route("/", meLimsocRoutes);
+}
+
+beforeEach(() => {
+  verifyImpl = async () => ({ uid: "uid_alice", email_verified: true });
+  linkedByUid = {};
+  linkedByMember = {};
+  memberById = {};
+  memberByExt = { "3352207": { id: "mem_existing", external_id: "3352207", full_name: "Nick" } };
+  memberById["mem_existing"] = memberByExt["3352207"];
+  insertCalls.length = 0;
+  updateCalls.length = 0;
+  consumedJtis = new Set<string>();
+  recordConsumedCalls.length = 0;
+  auditCalls.length = 0;
+  delete process.env["NODE_ENV"];
+  delete process.env["LIMSOC_DEV_TRUST_TOKEN"];
+  for (const k of Object.keys(idempotencyHits)) delete idempotencyHits[k];
+  // Use a unique jti per test by default; individual tests override decodeImpl
+  // to simulate a re-used jti.
+  decodeImpl = async () => ({
+    external_provider: "limsoc",
+    external_subject: "3352207",
+    member_id_external: "3352207",
+    display_name: "Nicholas Wood",
+    email: "nick@example.com",
+    expires_at: new Date(Date.now() + 15 * 60_000),
+    raw_claims: { jti: `jti-${Math.random().toString(36).slice(2)}` },
+  });
+  resolveImpl = async (sub) => ({
+    external_id: sub,
+    full_name: "Nicholas Wood",
+    email: "nick@example.com",
+    mobile: null,
+    state_code: "VIC",
+    active: true,
+    raw: {},
+  });
+  _setAdapterFactoryForTests(
+    () =>
+      ({
+        decodeForLinking: (t: string) => decodeImpl(t),
+        resolveMember: (sub: string, t: string) => resolveImpl(sub, t),
+        refreshTokens: async () => {
+          throw new Error("not used in link tests");
+        },
+      }) as never,
+  );
+});
+
+function authedPost(path: string, body: unknown, key = "ik-1") {
+  return new Request(`http://test${path}`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer good",
+      "content-type": "application/json",
+      "idempotency-key": key,
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+describe("POST /v1/me/limsoc/link", () => {
+  it("happy path: links and returns the member id", async () => {
+    const res = await buildApp().request(
+      authedPost("/v1/me/limsoc/link", {
+        access_token: "fake-token",
+        refresh_token: "fake-refresh",
+      }),
+    );
+    expect(res.status).toBe(200);
+    const j = (await res.json()) as { linked: boolean; member_id: string };
+    expect(j.linked).toBe(true);
+    expect(j.member_id).toBe("mem_existing");
+    expect(insertCalls.length).toBe(1);
+    expect(insertCalls[0]).toMatchObject({
+      firebase_uid: "uid_alice",
+      member_id: "mem_existing",
+      external_subject: "3352207",
+    });
+  });
+
+  it("rejects 409 MEMBER_ALREADY_LINKED when another firebase_uid owns the same member", async () => {
+    linkedByMember["3352207"] = {
+      firebase_uid: "uid_someone_else",
+      member_id: "mem_existing",
+    };
+    const res = await buildApp().request(
+      authedPost("/v1/me/limsoc/link", { access_token: "fake-token" }),
+    );
+    expect(res.status).toBe(409);
+    const j = (await res.json()) as { code: string };
+    expect(j.code).toBe("MEMBER_ALREADY_LINKED");
+    expect(insertCalls.length).toBe(0);
+  });
+
+  it("rejects 409 IDENTITY_LOCKED when this firebase_uid is already bound to a different member", async () => {
+    memberById["mem_someone_else"] = {
+      id: "mem_someone_else",
+      external_id: "9999999",
+      full_name: "Someone Else",
+    };
+    linkedByUid["uid_alice"] = {
+      firebase_uid: "uid_alice",
+      member_id: "mem_someone_else",
+      external_subject: "9999999",
+      external_provider: "limsoc",
+      access_token_expires_at: new Date(),
+      refresh_token_expires_at: null,
+      last_refreshed_at: new Date(),
+    };
+    const res = await buildApp().request(
+      authedPost("/v1/me/limsoc/link", { access_token: "fake-token" }),
+    );
+    expect(res.status).toBe(409);
+    const j = (await res.json()) as { code: string };
+    expect(j.code).toBe("IDENTITY_LOCKED");
+    expect(insertCalls.length).toBe(0);
+  });
+
+  it("idempotency replay returns the same response without re-running insert", async () => {
+    const app = buildApp();
+    const r1 = await app.request(
+      authedPost("/v1/me/limsoc/link", { access_token: "fake-token" }, "same-key"),
+    );
+    expect(r1.status).toBe(200);
+    const r2 = await app.request(
+      authedPost("/v1/me/limsoc/link", { access_token: "fake-token" }, "same-key"),
+    );
+    expect(r2.status).toBe(200);
+    expect(insertCalls.length).toBe(1);
+  });
+
+  it("returns 401 when upstream rejects the token", async () => {
+    resolveImpl = async () => {
+      throw new AuthError("UPSTREAM_REJECTED_TOKEN", "401 from upstream");
+    };
+    const res = await buildApp().request(
+      authedPost("/v1/me/limsoc/link", { access_token: "stale-token" }),
+    );
+    expect(res.status).toBe(401);
+    const j = (await res.json()) as { code: string };
+    expect(j.code).toBe("UPSTREAM_REJECTED_TOKEN");
+    expect(insertCalls.length).toBe(0);
+  });
+
+  // F1.2 — JTI consumed-store replay protection.
+  it("returns 401 JTI_REUSED on second link with the same jti", async () => {
+    decodeImpl = async () => ({
+      external_provider: "limsoc",
+      external_subject: "3352207",
+      member_id_external: "3352207",
+      display_name: "Nicholas Wood",
+      email: "nick@example.com",
+      expires_at: new Date(Date.now() + 15 * 60_000),
+      raw_claims: { jti: "fixed-jti-for-replay-test" },
+    });
+    const app = buildApp();
+    // First link succeeds and consumes the jti.
+    const r1 = await app.request(
+      authedPost("/v1/me/limsoc/link", { access_token: "fake-token" }, "ik-first"),
+    );
+    expect(r1.status).toBe(200);
+    expect(recordConsumedCalls.length).toBe(1);
+    expect(recordConsumedCalls[0]?.jti).toBe("fixed-jti-for-replay-test");
+
+    // Reset linked state to simulate an attacker linking with the same token
+    // (different idempotency key bypasses the byte-replay short-circuit).
+    linkedByUid = {};
+    linkedByMember = {};
+    const r2 = await app.request(
+      authedPost("/v1/me/limsoc/link", { access_token: "fake-token" }, "ik-replay"),
+    );
+    expect(r2.status).toBe(401);
+    const j = (await r2.json()) as { code: string };
+    expect(j.code).toBe("JTI_REUSED");
+    // The replay must NOT cause a second insert.
+    expect(insertCalls.length).toBe(1);
+  });
+
+  it("returns 401 INVALID_LIMSOC_TOKEN when jti claim is missing (F1.2)", async () => {
+    decodeImpl = async () => ({
+      external_provider: "limsoc",
+      external_subject: "3352207",
+      member_id_external: "3352207",
+      display_name: "Nicholas Wood",
+      email: "nick@example.com",
+      expires_at: new Date(Date.now() + 15 * 60_000),
+      raw_claims: {}, // no jti
+    });
+    const res = await buildApp().request(
+      authedPost("/v1/me/limsoc/link", { access_token: "fake-token" }),
+    );
+    expect(res.status).toBe(401);
+    const j = (await res.json()) as { code: string };
+    expect(j.code).toBe("INVALID_LIMSOC_TOKEN");
+    expect(insertCalls.length).toBe(0);
+  });
+
+  // F3.1 — audit_log entry on identity-binding link.
+  it("writes an audit_log entry on a successful link (F3.1)", async () => {
+    const res = await buildApp().request(
+      new Request("http://test/v1/me/limsoc/link", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer good",
+          "content-type": "application/json",
+          "idempotency-key": "ik-audit",
+          "x-forwarded-for": "203.0.113.42, 10.0.0.1",
+          "user-agent": "lifesaveroncall-test/1.0",
+        },
+        body: JSON.stringify({ access_token: "fake-token" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(auditCalls.length).toBe(1);
+    const entry = auditCalls[0]!;
+    expect(entry["actor_user_id"]).toBe("uid_alice");
+    expect(entry["action"]).toBe("limsoc_credential_linked");
+    expect(entry["target_type"]).toBe("member");
+    expect(entry["target_id"]).toBe("mem_existing");
+    expect(entry["ip_address"]).toBe("203.0.113.42");
+    expect(entry["user_agent"]).toBe("lifesaveroncall-test/1.0");
+    const payload = entry["payload"] as Record<string, unknown>;
+    expect(payload["external_subject"]).toBe("3352207");
+    expect(payload["relink"]).toBe(false);
+    expect(payload["dev_trust"]).toBe(false);
+  });
+
+  // F1.1 — devTrustEnabled() refuses outright when NODE_ENV=production, so
+  // the dev-trust capability-grant + skip-upstream-resolve branch must NOT
+  // fire even with the env var set.
+  it("ignores LIMSOC_DEV_TRUST_TOKEN when NODE_ENV=production (F1.1)", async () => {
+    process.env["NODE_ENV"] = "production";
+    process.env["LIMSOC_DEV_TRUST_TOKEN"] = "true";
+    let resolveCalled = false;
+    resolveImpl = async (sub) => {
+      resolveCalled = true;
+      return {
+        external_id: sub,
+        full_name: "Nicholas Wood",
+        email: "nick@example.com",
+        mobile: null,
+        state_code: "VIC",
+        active: true,
+        raw: {},
+      };
+    };
+    const res = await buildApp().request(
+      authedPost("/v1/me/limsoc/link", { access_token: "fake-token" }),
+    );
+    expect(res.status).toBe(200);
+    expect(resolveCalled).toBe(true); // upstream resolve was NOT bypassed
+    // Audit entry must record dev_trust=false even though the env var is set.
+    expect(auditCalls.length).toBe(1);
+    const payload = auditCalls[0]!["payload"] as Record<string, unknown>;
+    expect(payload["dev_trust"]).toBe(false);
+  });
+});

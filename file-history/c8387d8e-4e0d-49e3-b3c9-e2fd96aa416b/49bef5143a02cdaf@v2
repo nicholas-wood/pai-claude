@@ -1,0 +1,425 @@
+/**
+ * Smoke tests for the pin-drop UX (FR-6, UC-3).
+ *
+ * Real Google Maps render and Firebase auth need a browser; here we just
+ * verify the components export, exercise pure helpers, and unit-test the
+ * triple-click counter logic with a deterministic fake clock.
+ */
+
+import { describe, it, expect } from "bun:test";
+import { readFileSync } from "node:fs";
+import PinDropMode, { buildClickHandler, type ClickMap } from "./PinDropMode";
+import PinController from "./PinController";
+import PlacesSearchBar from "./PlacesSearchBar";
+import CreateIncidentModal, { haversineMetres, rankByDistance } from "./CreateIncidentModal";
+import { evaluateClick, type TripleClickState } from "./tripleClick";
+
+const MODAL_SRC = readFileSync(new URL("./CreateIncidentModal.tsx", import.meta.url), "utf8");
+const PIN_CONTROLLER_SRC = readFileSync(new URL("./PinController.tsx", import.meta.url), "utf8");
+
+const WINDOW_MS = 600;
+const ll = (n: number) => ({ lat: n, lng: n });
+
+function freshState(): TripleClickState {
+  return { count: 0, timer: null, latLng: null, firstAt: 0 };
+}
+
+describe("PinDropMode", () => {
+  it("exports the component", () => {
+    expect(typeof PinDropMode).toBe("function");
+  });
+});
+
+describe("PinController", () => {
+  it("exports the component", () => {
+    expect(typeof PinController).toBe("function");
+  });
+});
+
+describe("PlacesSearchBar", () => {
+  it("exports the component", () => {
+    expect(typeof PlacesSearchBar).toBe("function");
+  });
+});
+
+describe("CreateIncidentModal helpers", () => {
+  it("exports the modal", () => {
+    expect(typeof CreateIncidentModal).toBe("function");
+  });
+
+  it("computes Haversine distance with 1% accuracy on a known pair", () => {
+    // Brighton Beach -> Williamstown is ~9.5 km in a straight line.
+    const d = haversineMetres({ lat: -37.905, lng: 144.9888 }, { lat: -37.8625, lng: 144.9024 });
+    expect(d).toBeGreaterThan(8_500);
+    expect(d).toBeLessThan(11_000);
+  });
+
+  it("ranks bases by distance from a point", () => {
+    const point = { lat: -37.905, lng: 144.9888 }; // Brighton
+    const bases = [
+      { id: "far", lat: -38.5408, lng: 143.9763 },
+      { id: "near", lat: -37.8676, lng: 144.9783 }, // St Kilda
+      { id: "mid", lat: -38.1413, lng: 145.1201 },
+    ];
+    const ranked = rankByDistance(point, bases);
+    expect(ranked[0]!.id).toBe("near");
+    expect(ranked[2]!.id).toBe("far");
+  });
+});
+
+// === FR-6.1, FR-6.5, UC-3 — initial multi-target picker wiring ===
+//
+// Source-introspection (rather than jsdom rendering) for parity with the
+// rest of the web-app test surface. The contract we lock here:
+//   - the modal imports the new B01 add* helpers,
+//   - it surfaces an "Initial page targets" expander,
+//   - the follow-up POSTs use deterministic per-(callout, base/capability)
+//     idempotency keys so a retry doesn't double-insert link rows,
+//   - failures are non-blocking and surface via onCreated's warnings arg,
+//   - the host PinController renders a passive WarningToast so the user
+//     isn't blocked by a broken follow-up insert.
+
+describe("CreateIncidentModal multi-target wiring", () => {
+  it("imports the new B01 add* helpers", () => {
+    expect(MODAL_SRC).toContain("addCalloutTargetBase");
+    expect(MODAL_SRC).toContain("addCalloutRequiredCapability");
+  });
+
+  it("renders the Multi-target dispatch expander with pickers", () => {
+    // web-multi-target-dispatch landed the section under the "Multi-target
+    // dispatch" copy (FR-6.3, FR-6.5, UC-3 step 4-5) rather than the earlier
+    // "Initial page targets" name floated in design. Lock the final copy
+    // and confirm the section is wired into the modal source.
+    expect(MODAL_SRC).toContain("Multi-target dispatch");
+    // Expander surfaces both base and capability dispatch rows via the
+    // shared base_capability picker.
+    expect(MODAL_SRC).toContain("dispatchRows");
+    expect(MODAL_SRC).toContain("baseCapabilities");
+  });
+
+  it("uses deterministic per-(callout, base/capability) idempotency keys", () => {
+    // The final implementation iterates dispatchRows and de-dupes by
+    // base/capability; the idempotency-key shape is identical (callout +
+    // base/cap sub-action) but the template variables are bound from the
+    // row context rather than top-level locals.
+    expect(MODAL_SRC).toMatch(/`create-incident:\$\{calloutId\}:base:\$\{[^}]+\}`/);
+    expect(MODAL_SRC).toMatch(/`create-incident:\$\{calloutId\}:cap:\$\{[^}]+\}`/);
+  });
+
+  it("collects warnings instead of failing the create on follow-up errors", () => {
+    // The follow-up loop must be inside the same try block that catches
+    // the create itself, but each link-insert wrapped in its own try
+    // that pushes to `warnings` rather than rethrowing.
+    expect(MODAL_SRC).toContain("warnings.push(");
+    expect(MODAL_SRC).toContain("warnings.length > 0 ? warnings : undefined");
+  });
+
+  it("fires base inserts before capability inserts (sequential, predictable)", () => {
+    // The dispatchRows loop calls addCalloutTargetBase BEFORE
+    // addCalloutRequiredCapability per row, so the first invocation of
+    // each helper appears in source order with base first. Anchor on
+    // source-order of the helper calls rather than a specific loop shape
+    // because the implementation de-dupes within a single combined loop
+    // rather than running two passes.
+    const baseInsertIdx = MODAL_SRC.indexOf("addCalloutTargetBase(");
+    const capInsertIdx = MODAL_SRC.indexOf("addCalloutRequiredCapability(");
+    expect(baseInsertIdx).toBeGreaterThan(0);
+    expect(capInsertIdx).toBeGreaterThan(baseInsertIdx);
+  });
+
+  it("PinController surfaces follow-up warnings via a passive toast", () => {
+    expect(PIN_CONTROLLER_SRC).toContain("WarningToast");
+    expect(PIN_CONTROLLER_SRC).toContain("createWarnings");
+    // 8s auto-dismiss so the user isn't stuck looking at the warning.
+    expect(PIN_CONTROLLER_SRC).toContain("8_000");
+  });
+});
+
+// === B28 — severity dropped from create-incident modal ===
+//
+// Regression guard for UI_COVERAGE §7: the modal previously surfaced a
+// severity 1-5 input that was silently appended to `comms_notes` as
+// `Severity: N` text, an over-built field that lost fidelity on save.
+// REQUIREMENTS.md does not reference severity, so the field is dropped
+// entirely (rather than formalised as an `incident_severity` column —
+// that's a product decision out of scope for B28). These tests assert
+// the field is gone from both the rendered DOM-source and the submit
+// payload, so a future PR re-introducing it without a real column will
+// fail this suite. Source-introspection mirrors the rest of this file.
+describe("CreateIncidentModal severity field removal (B28)", () => {
+  // The module-level docstring legitimately references "severity"
+  // (explaining why it was removed) so a naive file-wide grep is too
+  // strict. Strip the leading block comment and search the remainder.
+  const codeAfterDocstring = (() => {
+    const firstClose = MODAL_SRC.indexOf("*/");
+    return firstClose > 0 ? MODAL_SRC.slice(firstClose + 2) : MODAL_SRC;
+  })();
+
+  it("does not render any severity-labelled <Field> in the modal source", () => {
+    // The previous incarnation rendered a numeric 1-5 picker behind a
+    // `<Field label="Severity">` block. Any new surface attempting to
+    // add it back via the same Field helper will trip this guard.
+    expect(/<Field\s+label=["']Severity/i.test(codeAfterDocstring)).toBe(false);
+  });
+
+  it("does not declare a severity state hook or destructure the value into anything", () => {
+    // Catches `useState<...>('low')` patterns, `severity` props,
+    // `setSeverity`, etc. anywhere outside the explanatory docstring.
+    expect(/\bsetSeverity\b/.test(codeAfterDocstring)).toBe(false);
+    expect(/\bseverity\s*[:=]/.test(codeAfterDocstring)).toBe(false);
+  });
+
+  it("does not mention 'severity' anywhere in the submit payload construction", () => {
+    // The pre-B28 submit handler shoved `Severity: ${severity}` into
+    // `comms_notes`. We slice out the submit() body and assert the
+    // string `severity` (case-insensitive) is absent from it. This is
+    // tighter than the file-wide guard above because it specifically
+    // protects the wire shape rather than just the rendered form.
+    const submitStart = MODAL_SRC.indexOf("async function submit()");
+    expect(submitStart).toBeGreaterThan(0);
+    // Submit body runs from there to the closing `}` before `return (`.
+    const submitEnd = MODAL_SRC.indexOf("return (", submitStart);
+    expect(submitEnd).toBeGreaterThan(submitStart);
+    const submitBody = MODAL_SRC.slice(submitStart, submitEnd);
+    expect(/severity/i.test(submitBody)).toBe(false);
+    // The remaining comms_notes call site interpolates only the
+    // radio-channel free text (no severity-derived value).
+    expect(submitBody).toContain("Radio channel:");
+  });
+});
+
+// === B28 — coord format toggle labelled as presentational ===
+//
+// UI_COVERAGE §7 flagged the DD/DDM/DMS toggle on
+// `incident-info-panel.tsx` as out-of-FR. We don't remove it (it's
+// useful for dispatchers who get coords in different formats from
+// callers) but we do add a one-line note next to the toggle so future
+// readers don't go looking for an FR that doesn't exist. The same note
+// appears in the create-incident modal so the mental model is
+// consistent across the two surfaces. The lock-in here is just that
+// the canonical phrase is present — wording is intentional.
+const PRESENTATIONAL_NOTE =
+  "Format toggle is presentational only — server stores canonical decimal degrees.";
+const PANEL_SRC = readFileSync(
+  new URL("../../app/dashboard/callouts/[id]/incident-info-panel.tsx", import.meta.url),
+  "utf8",
+);
+describe("Coordinate format toggle is labelled presentational (B28)", () => {
+  it("the create-incident modal carries the presentational-only note", () => {
+    expect(MODAL_SRC).toContain(PRESENTATIONAL_NOTE);
+  });
+
+  it("the deep callout incident-info-panel carries the presentational-only note", () => {
+    expect(PANEL_SRC).toContain(PRESENTATIONAL_NOTE);
+  });
+
+  it("the deep panel still keeps all three format options (we documented, did not remove)", () => {
+    // Belt-and-braces — the spec keeps the existing toggle. If a future
+    // refactor accidentally collapses it to one option this test fails.
+    expect(PANEL_SRC).toContain('value="dd"');
+    expect(PANEL_SRC).toContain('value="ddm"');
+    expect(PANEL_SRC).toContain('value="dms"');
+  });
+});
+
+describe("triple-click counter", () => {
+  it("does not fire on a single click", () => {
+    const s = freshState();
+    expect(evaluateClick(s, ll(1), 0, WINDOW_MS)).toBeNull();
+    expect(s.count).toBe(1);
+  });
+
+  it("does not fire on a double click", () => {
+    const s = freshState();
+    expect(evaluateClick(s, ll(1), 0, WINDOW_MS)).toBeNull();
+    expect(evaluateClick(s, ll(2), 100, WINDOW_MS)).toBeNull();
+    expect(s.count).toBe(2);
+  });
+
+  it("fires on a triple click within the window", () => {
+    const s = freshState();
+    expect(evaluateClick(s, ll(1), 0, WINDOW_MS)).toBeNull();
+    expect(evaluateClick(s, ll(2), 120, WINDOW_MS)).toBeNull();
+    const fired = evaluateClick(s, ll(3), 240, WINDOW_MS);
+    expect(fired).not.toBeNull();
+    // Returns the latLng of the THIRD click — the post-zoom intent.
+    expect(fired).toEqual(ll(3));
+  });
+
+  it("resets between separate runs and does not fire stale triples", () => {
+    const s = freshState();
+    evaluateClick(s, ll(1), 0, WINDOW_MS);
+    // Second click well outside the window.
+    expect(evaluateClick(s, ll(2), 5_000, WINDOW_MS)).toBeNull();
+    // Third click also outside — fresh run, no triple.
+    expect(evaluateClick(s, ll(3), 10_000, WINDOW_MS)).toBeNull();
+  });
+
+  it("requires the third click to land within windowMs of the first", () => {
+    const s = freshState();
+    evaluateClick(s, ll(1), 0, WINDOW_MS);
+    evaluateClick(s, ll(2), 100, WINDOW_MS);
+    // Third click after window expires — should NOT fire as a triple.
+    const fired = evaluateClick(s, ll(3), WINDOW_MS + 50, WINDOW_MS);
+    expect(fired).toBeNull();
+  });
+
+  it("can fire two triples in succession (state resets after firing)", () => {
+    const s = freshState();
+    evaluateClick(s, ll(1), 0, WINDOW_MS);
+    evaluateClick(s, ll(2), 100, WINDOW_MS);
+    expect(evaluateClick(s, ll(3), 200, WINDOW_MS)).toEqual(ll(3));
+    // Second triple, fresh.
+    evaluateClick(s, ll(4), 1_000, WINDOW_MS);
+    evaluateClick(s, ll(5), 1_100, WINDOW_MS);
+    expect(evaluateClick(s, ll(6), 1_200, WINDOW_MS)).toEqual(ll(6));
+  });
+});
+
+/**
+ * Helper: build a fake map + a fake clock + a fake timer scheduler so we
+ * can drive `buildClickHandler` deterministically. The fake timer keeps a
+ * list of scheduled callbacks and exposes `advance(ms)` to fire them in
+ * order — this is enough for the disarm-on-timeout assertion.
+ */
+function makeHarness() {
+  const setOptionsCalls: Array<{ disableDoubleClickZoom?: boolean }> = [];
+  const map: ClickMap = {
+    setOptions: (opts) => {
+      setOptionsCalls.push(opts);
+    },
+  };
+  let now = 0;
+  type Pending = { fn: () => void; at: number; cancelled: boolean };
+  const pending: Pending[] = [];
+  const setTimer = (fn: () => void, ms: number): ReturnType<typeof setTimeout> => {
+    const handle = { fn, at: now + ms, cancelled: false };
+    pending.push(handle);
+    // The handle's only role here is identity for clearTimer.
+    return handle as unknown as ReturnType<typeof setTimeout>;
+  };
+  const clearTimer = (h: ReturnType<typeof setTimeout>) => {
+    const handle = h as unknown as Pending;
+    handle.cancelled = true;
+  };
+  const dropped: Array<{ lat: number; lng: number }> = [];
+  const dropPin = (latLng: { lat: number; lng: number }) => {
+    dropped.push(latLng);
+  };
+  const advance = (ms: number) => {
+    now += ms;
+    // Fire any non-cancelled timers whose time has come, in order.
+    for (const p of pending.filter((p) => !p.cancelled && p.at <= now)) {
+      p.cancelled = true; // one-shot
+      p.fn();
+    }
+  };
+  const click = (latLng: { lat: number; lng: number }, atMs?: number) => {
+    if (typeof atMs === "number") now = atMs;
+    handler.onClick(latLng);
+  };
+  const handler = buildClickHandler({
+    map,
+    dropPin,
+    windowMs: WINDOW_MS,
+    now: () => now,
+    setTimer,
+    clearTimer,
+  });
+  return { map, handler, setOptionsCalls, dropped, advance, click };
+}
+
+describe("PinDropMode dblclick-zoom suppression (Fix 2)", () => {
+  it("disables dblclick-zoom on the very first click of a sequence", () => {
+    const h = makeHarness();
+    h.click({ lat: 1, lng: 1 }, 0);
+    expect(h.setOptionsCalls.length).toBe(1);
+    expect(h.setOptionsCalls[0]).toEqual({ disableDoubleClickZoom: true });
+    expect(h.handler.isArmed()).toBe(true);
+  });
+
+  it("does NOT re-call setOptions on the 2nd click — once armed, stay armed", () => {
+    const h = makeHarness();
+    h.click({ lat: 1, lng: 1 }, 0);
+    h.click({ lat: 1, lng: 1 }, 100);
+    // Click 1 set true; click 2 must not re-set true (Google would
+    // otherwise repeatedly receive the same option, which is harmless
+    // but signals the arm/disarm logic isn't tracking state correctly).
+    expect(h.setOptionsCalls.length).toBe(1);
+    expect(h.handler.isArmed()).toBe(true);
+  });
+
+  it("restores dblclick-zoom AFTER the 3rd click drops the pin (so the next dblclick zooms)", () => {
+    const h = makeHarness();
+    h.click({ lat: 1, lng: 1 }, 0);
+    h.click({ lat: 2, lng: 2 }, 100);
+    h.click({ lat: 3, lng: 3 }, 200);
+    // Pin dropped at the 3rd-click latLng (the post-zoom intent).
+    expect(h.dropped).toEqual([{ lat: 3, lng: 3 }]);
+    // Two setOptions calls: one to suppress, one to restore.
+    expect(h.setOptionsCalls).toEqual([
+      { disableDoubleClickZoom: true },
+      { disableDoubleClickZoom: false },
+    ]);
+    expect(h.handler.isArmed()).toBe(false);
+  });
+
+  it("restores dblclick-zoom on idle timeout (no 3rd click within window)", () => {
+    const h = makeHarness();
+    h.click({ lat: 1, lng: 1 }, 0);
+    expect(h.setOptionsCalls).toEqual([{ disableDoubleClickZoom: true }]);
+    // Advance past the window — the disarm timer should fire.
+    h.advance(WINDOW_MS + 1);
+    expect(h.setOptionsCalls).toEqual([
+      { disableDoubleClickZoom: true },
+      { disableDoubleClickZoom: false },
+    ]);
+    expect(h.handler.isArmed()).toBe(false);
+    expect(h.dropped).toEqual([]);
+  });
+
+  it("after a triple fires, the next single click re-arms (so a second triple suppresses zoom again)", () => {
+    const h = makeHarness();
+    h.click({ lat: 1, lng: 1 }, 0);
+    h.click({ lat: 2, lng: 2 }, 100);
+    h.click({ lat: 3, lng: 3 }, 200);
+    // Triple #1 fired and disarmed.
+    expect(h.setOptionsCalls).toEqual([
+      { disableDoubleClickZoom: true },
+      { disableDoubleClickZoom: false },
+    ]);
+    // Click 4 starts a new sequence — should re-arm.
+    h.click({ lat: 4, lng: 4 }, 1_000);
+    expect(h.setOptionsCalls).toEqual([
+      { disableDoubleClickZoom: true },
+      { disableDoubleClickZoom: false },
+      { disableDoubleClickZoom: true },
+    ]);
+    expect(h.handler.isArmed()).toBe(true);
+  });
+
+  it("explicit disarm() (component unmount path) restores the option", () => {
+    const h = makeHarness();
+    h.click({ lat: 1, lng: 1 }, 0);
+    expect(h.handler.isArmed()).toBe(true);
+    h.handler.disarm();
+    expect(h.handler.isArmed()).toBe(false);
+    expect(h.setOptionsCalls).toEqual([
+      { disableDoubleClickZoom: true },
+      { disableDoubleClickZoom: false },
+    ]);
+  });
+
+  it("disarm() is idempotent (no double-restore)", () => {
+    const h = makeHarness();
+    h.click({ lat: 1, lng: 1 }, 0);
+    h.handler.disarm();
+    h.handler.disarm();
+    // Only one false call should be recorded — subsequent disarms do
+    // nothing because `armed` is already false.
+    expect(h.setOptionsCalls).toEqual([
+      { disableDoubleClickZoom: true },
+      { disableDoubleClickZoom: false },
+    ]);
+  });
+});

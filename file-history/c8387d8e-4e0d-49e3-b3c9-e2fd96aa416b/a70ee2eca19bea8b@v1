@@ -1,0 +1,45 @@
+# State (current working state)
+
+What is in progress, the backlog, next-session intent, and active blockers.
+This is the volatile layer. Agents read this to know where things stand right now.
+
+## Current status (as of 2026-05-12)
+- Phase 1 P0 + Phase 2 P1 + Phase 3 P2/P3 of `docs/COVERAGE_TO_100.md` are complete.
+- `dev` tip is `693cfc7`. 15 branches merged into `dev` closing every branch in COVERAGE_TO_100:
+  B13, B18b, B21, B22, B23, B24, B25, B25b, B25c, B26, B27, B28, B29-pre, B29, B30, B31.
+- Local containers were rebuilt + restarted on the new images at the end of the session, so the
+  `dev` code is what's running locally now.
+- DB at migration 0029; migrations 0001–0029 all applied to `loc-postgres`. No pending migrations.
+
+## What's shipped
+- Dispatch, incident UI/log, map + clustering, leader/admin UI, and mobile responder flows across
+  the COVERAGE_TO_100 branch set.
+- B25c server side: `setCalloutCommander` endpoint + typed client helper landed (UI deferred —
+  see backlog).
+
+## Backlog (top of next-session list)
+1. **Incident form** — user reported it "looks the same as before" mid-session (containers were
+   stale, since rebuilt). Confirm on a fresh refresh which specific change they expected.
+   CreateIncidentModal currently has 4 fields (Location, Incident Type, Brief, Radio Channel);
+   severity was removed pre-B28. If they meant a different form (e.g. `incident-info-panel.tsx` on
+   the deep page), capture and act.
+2. **B25c commander picker UI** — deferred. Web picker on `incident-info-panel.tsx` needs a
+   member-search component first (none exists on web yet; `MemberPicker` returned no hits). Small
+   follow-up branch.
+3. **B22 cross-org excluded count** — currently a heuristic. `/v1/dispatch-candidates` doesn't expose
+   `home_state_code` or `excluded_count`; the branch counts candidates whose `home_organisation_id`
+   differs from the modal value. Clean fix = a server-side `excluded_count` field per FR-6.17.
+4. **External actions (COVERAGE_TO_100 §6)** — still outside the code envelope: Apple Critical Alerts
+   entitlement, Firebase Storage bucket, SLSA OIDC client (FR-1.1), Places billing review, branch
+   protection on main/dev (needs GitHub Pro), restricted-radio-channels production seed.
+
+## Blockers
+- **Logo regeneration blocked.** Three concept directions briefed (Radar Beacon / Radar Scope /
+  Tube-as-Dial) from `~/Downloads/Rescue_Tube_*.avif`. All three image APIs failed:
+  Replicate `google/nano-banana` HTTP 402 (no payment method); Gemini `gemini-2.5-flash-image`
+  `API_KEY_INVALID`; OpenAI `gpt-image-1` no key set. Ready-to-run script:
+  `~/.claude/skills/Media/Art/Tools/lifesaveroncall-radar-trio.ts` → outputs to `brand/logos/`.
+  Unblock by adding Replicate payment, refreshing the Gemini key, or generating manually in the
+  AI Studio web UI using the script's prompts.
+
+<!-- Raw migrated source: project_lifesaveroncall_next_session.md, project_lifesaveroncall.md -->

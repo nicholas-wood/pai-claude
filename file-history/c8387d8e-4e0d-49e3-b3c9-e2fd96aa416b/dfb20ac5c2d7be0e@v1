@@ -1,0 +1,131 @@
+"use client";
+
+/**
+ * Collapsible left drawer for the dispatch map.
+ *
+ * Holds the legacy dashboard cards in a narrower column. Drawer state is
+ * mirrored to the `?drawer=open|closed` URL search param so SSR + reload
+ * preserve the user's choice.
+ *
+ * FR-5.7 / FR-5.8: the drawer optionally renders a `children` slot at
+ * the top — used to surface the filter-aware counts strip
+ * (`MapCountsPanel`) above the dispatch nav. The slot is `null` when no
+ * children are passed so the legacy single-column layout still works.
+ */
+
+import type { ReactNode } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import Link from "next/link";
+
+const DRAWER_WIDTH = 320;
+
+export type SideDrawerProps = {
+  /** Optional content rendered above the dispatch nav cards. */
+  children?: ReactNode;
+};
+
+export default function SideDrawer({ children }: SideDrawerProps = {}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const open = (params.get("drawer") ?? "open") !== "closed";
+
+  function toggle() {
+    const next = new URLSearchParams(params.toString());
+    next.set("drawer", open ? "closed" : "open");
+    router.replace(`${pathname}?${next.toString()}`);
+  }
+
+  return (
+    <aside
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        bottom: 0,
+        width: open ? DRAWER_WIDTH : 36,
+        background: "rgba(20, 20, 20, 0.92)",
+        color: "#fff",
+        zIndex: 10,
+        transition: "width 180ms ease",
+        boxShadow: "2px 0 8px rgba(0,0,0,0.25)",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <button
+        type="button"
+        onClick={toggle}
+        aria-label={open ? "Collapse drawer" : "Expand drawer"}
+        style={{
+          alignSelf: "flex-end",
+          background: "transparent",
+          color: "#fff",
+          border: "none",
+          padding: "8px 10px",
+          cursor: "pointer",
+          fontSize: 18,
+        }}
+      >
+        {open ? "‹" : "›"}
+      </button>
+
+      {open && (
+        <div style={{ padding: 16, overflowY: "auto" }}>
+          {children ? <div style={{ marginBottom: 16 }}>{children}</div> : null}
+          <h3 style={{ marginTop: 0 }}>Dispatch</h3>
+          <nav style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <Link
+              href="/dashboard/callouts/new"
+              style={{
+                display: "block",
+                background: "#1f1f1f",
+                padding: 12,
+                borderRadius: 6,
+                color: "#fff",
+                textDecoration: "none",
+              }}
+            >
+              <strong>Create callout</strong>
+              <div className="muted" style={{ fontSize: 12 }}>
+                Drop a pin, pick capabilities + base, dispatch responders.
+              </div>
+            </Link>
+            <Link
+              href="/dashboard/callouts"
+              style={{
+                display: "block",
+                background: "#1f1f1f",
+                padding: 12,
+                borderRadius: 6,
+                color: "#fff",
+                textDecoration: "none",
+              }}
+            >
+              <strong>Active callouts</strong>
+              <div className="muted" style={{ fontSize: 12 }}>
+                Live status board for callouts in progress.
+              </div>
+            </Link>
+            <Link
+              href="/dashboard/onboard"
+              style={{
+                display: "block",
+                background: "#1f1f1f",
+                padding: 12,
+                borderRadius: 6,
+                color: "#fff",
+                textDecoration: "none",
+              }}
+            >
+              <strong>Onboarding</strong>
+              <div className="muted" style={{ fontSize: 12 }}>
+                Sync your awards from LIMSOC and create your member record.
+              </div>
+            </Link>
+          </nav>
+        </div>
+      )}
+    </aside>
+  );
+}

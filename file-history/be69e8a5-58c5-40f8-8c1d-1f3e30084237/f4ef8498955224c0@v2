@@ -1,0 +1,23 @@
+on run
+	set theSubject to "SME reps for the LIMSOC 2026-27 priorities"
+
+	set theBody to "<p>Hey team,</p>" & ¬
+		"<p>Hope you're all keeping well. I've chatted to each of you about this separately, looking to pull it together now and get the SME reps sorted by early next week.</p>" & ¬
+		"<p>The four groups and the reps we'd like on each:</p>" & ¬
+		"<ul>" & ¬
+		"<li>Incident Categorisation and Flow: LSV Comms, SDO, SAC, Reporting</li>" & ¬
+		"<li>Call Out Systems and Capabilities: LSV Comms, SDO, Ops Officer</li>" & ¬
+		"<li>Rostering within LIMSOC: Club captain reps (a couple, mix of remote/metro, large/small), Ops Officer</li>" & ¬
+		"<li>AI within our Incident Management Practice: LSV Comms, SDO, SAC, ARO</li>" & ¬
+		"</ul>" & ¬
+		"<p>What do you think? Would like to have these in place by next week if we can. Open to suggestions on the best next steps from here.</p>" & ¬
+		"<p>Let me know.</p>" & ¬
+		"<p>Cheers,<br>Nick</p>"
+
+	tell application id "com.microsoft.Outlook"
+		set theMessage to make new outgoing message with properties {subject:theSubject, content:theBody}
+		open theMessage
+	end tell
+
+	return "draft created (HTML body): " & theSubject
+end run

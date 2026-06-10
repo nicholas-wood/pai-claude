@@ -1,0 +1,151 @@
+---
+project: lifesaveroncall
+effort: E3
+phase: active
+progress: phase-3-complete-plus-12-pr-landing
+mode: build
+started: 2026-06-02
+updated: 2026-06-10
+---
+
+# LifesaverOnCall — Project ISA
+
+> Project ISA (system of record). Lives in the repo per PAI doctrine. Supersedes the `context/{facts,state,references,feedback}.md` foundation pattern: those files fold into the sections below and are retained as detailed appendices until fully absorbed. The `USER/PROJECTS/lifesaveroncall.md` entry in PAI is the lightweight index that points here.
+
+## Problem
+
+Manual paging and roster phone trees are slow and error-prone for SLSA volunteer lifesaver dispatch in emergency situations. Life Saving Victoria (LSV) operates without a map-first dispatch interface, proper de-identification, or real-time responder availability tracking. When a rescue is called, dispatchers must manually contact candidates rather than the system surfacing the closest available, award-current responders automatically.
+
+## Vision
+
+A GoodSAM-style emergency dispatch platform for SLSA volunteers: map-first dispatch that pages the closest available, award-eligible responders automatically; incident lifecycle management from callout creation through stand-down; and a mobile responder app for on-the-go accept/reject/navigation. Stage 1 targets LSV (Victoria) via LIMSOC credential integration; pluggable adapters are architected for other states later. Euphoric surprise: a dispatcher who previously relied on a phone tree finds the right responders paged and accepted within seconds, with a full audit trail and no PII leaked to the wrong people.
+
+## Out of Scope
+
+- National rollout beyond LSV in Stage 1 (pluggable adapter architectured, not built).
+- SLSA OIDC client provisioning (FR-1.1 -- still pending external action from LSV).
+- Apple Critical Alerts entitlement (deferred until product is proven and LSV affiliation letter obtained).
+- Firebase Storage bucket (not yet provisioned).
+- Cross-org dispatch beyond three-way consent model (already architected).
+- Writeback to LIMSOC unit status in Stage 1.
+- Direct Surfguard adapter for non-LIMSOC orgs (Stage 2+).
+- SaaS pricing model and multi-tenant commercial go-to-market (future stage).
+- Branch protection on main/dev (requires GitHub Pro).
+
+## Principles
+
+- Safety is first: dispatch is life-critical. Never dispatch a member with an expired award or pending/suspended/not-approved capability status.
+- User journey before code: write the 3-5 step responder/dispatcher journey and confirm before writing a line.
+- Location is consent: location data is only collected and shared when a member is `available` or accepted on a callout.
+- Identity reveal follows a six-rule precedence (KICKOFF.md §6): `unavailable` members are never visible, even with `view_member_pii`.
+- Append-only incident log: log entries are never mutated; corrections are additional entries. Incomplete logs make debriefs and disputes unanswerable.
+- Never treat Pub/Sub publish as delivery: subscribers must ack; DLQ with alerting is required.
+- Critical alerts are reserved exclusively for the initial request-for-assistance push to candidate responders -- not stand-downs, status updates, or approvals.
+- Fail closed on tenancy: every read query filters by tenant scope. Cross-org dispatch allowed only via explicit consent matrix.
+
+## Constraints
+
+- **Stack is settled:** Bun runtime; Hono API; Next.js 15 + React 19 (web); Expo + React Native + EAS (mobile); Postgres 16 + PostGIS via Cloud SQL; GCP Pub/Sub (emulator locally, real in prod); Redis cache; Docker Compose for local; Firebase Auth (email/password); Google Maps Platform (two-key pattern).
+- **Production topology:** three Cloud Run services (`api`, `push-worker`, `sweeper`); GCP Cloud SQL HA Standard tier; Memorystore Redis Basic; Global External ALB + Cloud Armor; all in `australia-southeast1`.
+- **Pub/Sub topics:** `member-status`, `member-location`, `callout-events` (each with DLQ).
+- **Auth:** LIMSOC JWT (HS256) for VIC year 1; SLSA Members Area adapter for national next.
+- **Tenant isolation:** AsyncLocalStorage + `withTenantContextAsync` + static analyser. Default DENY on `state_cross_org_configs` when config row is missing.
+- **LIMSOC credential shape:** `linked_credentials` table binds Firebase UID to SLSA `member_id`. Token stored AES-256-GCM (`CREDENTIAL_ENCRYPTION_KEY`). Awards adapter must treat a 404 as an empty list before throwing `UpstreamError`.
+- **Reliability targets:** Year 1 ~3.5-nines, architected for 4-nines. P95 push < 5s, P99 < 10s. P95 API write < 200ms, P99 < 500ms.
+- **DB migrations:** 0001-0029 applied to `loc-postgres`; `dev` tip `bc2a0a7` (was `693cfc7` pre-2026-06-10 landing). No pending migrations locally; no new migrations introduced by the 12-PR landing.
+- **Never** use `--set-env-vars` on Cloud Run; always `--update-env-vars`.
+- **`NEXT_PUBLIC_*`** are Docker build args baked at build time; pass as ARG+ENV in Dockerfile and `args` in compose `build:` block.
+- **Docker Compose:** always `docker compose --env-file .env.local`; never `.env.local` auto-read by compose.
+- **Worktree pattern:** one worktree per branch under `lifesaveroncall-wt/<branch-name>/`; commit local fixes before firing any agent.
+- **Idempotency keys** on every state-changing API call.
+- Australian English throughout; all data resident in `australia-southeast1`.
+
+## Goal
+
+LifesaverOnCall reaches production with at least one LSV pilot tenant: LIMSOC credential integration verified end-to-end, dispatch and incident lifecycle complete, mobile responder app functional, GCP infrastructure provisioned via Terraform, and the hard Phase 4 blockers cleared. Done is measured by: at least one real responder paged and accepted via the app in a controlled pilot environment, with a complete audit trail, no PII leakage, and no expired-award dispatch.
+
+## Criteria
+
+- [ ] ISC-1: Domain `lifesaveroncall.com.au` registered and trademark-clear [gap: not confirmed]
+- [ ] ISC-2: Three GCP projects provisioned (`-dev`, `-staging`, `-prod`) with billing attached [gap: not confirmed]
+- [ ] ISC-3: Apple Developer enrolment confirmed ($149 AUD/yr, required for Expo iOS + TestFlight) [gap: not confirmed]
+- [ ] ISC-4: Legal entity decision made (sole trader vs Pty Ltd vs LSV-internal) [gap: not confirmed]
+- [ ] ISC-5: LSV org mapping received (entity_type values, parent links, sample `/api/organisations/` rows) [gap: not confirmed]
+- [ ] ISC-6: LIMSOC test account in staging with at least one current award [gap: not confirmed]
+- [ ] ISC-7: LIMSOC JWT auth adapter verified end-to-end against real token shape
+- [ ] ISC-8: Member availability state machine implemented (`available`/`unavailable`, auto-return, location suppression)
+- [x] ISC-9: Capability approval workflow implemented (pending/approved/suspended/not_approved, escalation) -- approvals queue + filters + suspend/lift/extend UI landed in `feat/web-leader-ui` (2026-06-10, `35395d1`); sweeper org-tree escalation landed in `feat/backend-sweepers` (`5535b7b`). Integration verification against a real Postgres pending.
+- [ ] ISC-10: Dispatch path implemented: map-first, closest-available, award-current, page composition serialised server-side
+- [ ] ISC-11: Callout lifecycle implemented (`draft → requesting → partially_filled → filled → in_progress → closing → stood_down/closed`)
+- [ ] ISC-12: Responder lifecycle implemented (`requested → accepted/rejected/expired/cancelled` then `enroute → at_base → on_scene → stood_down/dropped`)
+- [ ] ISC-13: Incident log implemented: append-only, hash-chained, Postgres trigger blocks mutation
+- [ ] ISC-14: Mobile responder app (Expo + RN): accept/reject push, navigation to base, status updates
+- [ ] ISC-15: GCP production infra provisioned via Terraform (all 13 components per PHASE_4_PREREQS.md)
+- [ ] ISC-16: Push notifications wired: Expo Notifications to FCM + APNs (critical alerts deferred)
+- [x] ISC-17: De-identification enforced server-side only (`apps/api/src/features/dispatch/identity.ts`); client never receives PII for non-eligible users -- F2.1 paged-responders gate confirmed pre-patched on `dev`; F2.2 SSE per-listener redactor + access control landed in `feat/sec-pii-sse` (2026-06-10, `7cf8126`). Per-listener redaction test in `apps/api/src/sse/redactor.test.ts`.
+- [ ] ISC-18: LIMSOC awards sync: daily + expiry-window re-syncs (14d/7d/1d), alert on consecutive failure
+- [ ] ISC-19: Phase 4 pilot: at least one real responder paged and accepted in a controlled LSV pilot
+- [ ] ISC-20: Anti: no member location collected or shared when member is `unavailable` (server-side rejection verified)
+- [ ] ISC-21: Anti: no expired-award or pending/suspended capability member dispatched (hard validation in dispatch path, not just UI)
+- [ ] ISC-22: Anti: no cross-tenant data leakage (every read query filtered by tenant scope, DENY by default on `state_cross_org_configs`)
+- [ ] ISC-23: Anti: no Incident Log entry mutated (storage-level trigger verified)
+- [ ] ISC-24: B25c commander picker UI (web `incident-info-panel.tsx`) -- server endpoint landed; blocked on `MemberPicker` component
+- [ ] ISC-25: B22 cross-org excluded count replaced with server-side `excluded_count` field per FR-6.17 (currently a heuristic)
+- [x] ISC-26: COVERAGE_TO_100 Phase 1-3 complete (dispatch, incident UI/log, map + clustering, leader/admin UI, mobile responder) -- 15 branches merged into `dev`
+
+## Test Strategy
+
+| isc | type | check | threshold | tool |
+|-----|------|-------|-----------|------|
+| ISC-7 | integration | LIMSOC JWT decoded + member linked in test env | member record created, capability matched | curl + DB read |
+| ISC-10 | functional | Page composition serialised: two concurrent dispatchers clicking "page closest 5" produce no duplicate pages | zero duplicate page events | staged concurrent test |
+| ISC-13 | schema | Postgres trigger blocks UPDATE/DELETE on `incident_log` | trigger fires, mutation rejected | direct SQL attempt |
+| ISC-17 | security | `/v1/dispatch-candidates` response for non-dispatch-access user contains no name/contact/member_id | zero PII fields in response | request as non-dispatcher role |
+| ISC-20 | security | Location ping from `unavailable` member rejected by server | 4xx response, no record written | request + DB read |
+| ISC-21 | functional | Dispatch path with expired-award member returns error, not a page | error returned before page issued | staged award expiry test |
+| ISC-22 | security | Query as tenant A cannot read tenant B rows | zero cross-tenant rows | SELECT with tenant A context |
+| ISC-23 | security | Direct SQL UPDATE on `incident_log` rejected by trigger | trigger fires | psql direct attempt |
+| ISC-26 | live | `dev` tip `693cfc7` running in local containers, all 15 COVERAGE_TO_100 branches merged | containers healthy, UI renders | Docker Compose + browser |
+
+## Features
+
+| name | satisfies | depends_on | parallelisable |
+|------|-----------|------------|----------------|
+| Phase 4 hard blockers cleared | ISC-1 to ISC-6 | external (Nick + LSV) | no (gates Phase 4) |
+| GCP production infra (Terraform) | ISC-15 | ISC-2, ISC-6 | yes (draft while waiting on GCP project) |
+| LIMSOC auth + awards sync | ISC-7, ISC-18 | ISC-5, ISC-6 | no |
+| Member availability + location | ISC-8, ISC-20 | ISC-7 | yes |
+| Capability approval workflow | ISC-9, ISC-21 | ISC-7 | yes |
+| Dispatch path (serialised, award-gated) | ISC-10, ISC-17, ISC-21 | ISC-8, ISC-9 | no (core path) |
+| Callout + responder lifecycle | ISC-11, ISC-12 | ISC-10 | no |
+| Incident log (append-only, hash-chained) | ISC-13, ISC-23 | ISC-11 | yes |
+| Mobile responder app | ISC-14 | ISC-3, ISC-12, ISC-16 | yes (after lifecycle) |
+| Push notifications (FCM + APNs) | ISC-16 | ISC-14 | yes |
+| Tenancy + cross-org guard | ISC-22 | ISC-5 | yes |
+| B25c commander picker UI | ISC-24 | MemberPicker component | no |
+| B22 excluded count server-side | ISC-25 | - | yes |
+| LSV pilot | ISC-19 | ISC-7 to ISC-18 | no (gate to launch) |
+
+## Decisions
+
+- 2026-05-03: Initial extract from AccessBuddy Phase 0 fill. Stack settled (KICKOFF.md §7 locked decisions): Bun, Hono, Next.js 15, Expo + RN, Postgres 16 + PostGIS, GCP Pub/Sub, Redis, Docker Compose, Firebase Auth, Google Maps Platform.
+- 2026-05-03: Reliability targets set: Year 1 3.5-nines architected for 4-nines. P95 push < 5s, P99 < 10s. P95 API write < 200ms, P99 < 500ms.
+- 2026-05-03: Three-way cross-org consent model (responder + home-state outbound + dispatching-state inbound) confirmed. Pair-asymmetric. Default DENY.
+- 2026-05-03: `main` = production; `dev` = working. Worktree-per-branch pattern.
+- 2026-05-12: COVERAGE_TO_100 Phase 3 complete. 15 branches (B13-B31) merged into `dev`. DB at migration 0029. Local containers rebuilt on `693cfc7`.
+- 2026-06-02: Project converted to PAI project-ISA model. `context/` foundation folds into this file; retained as appendix until fully absorbed. Four specialist agents rebuilt as PAI-registered subagents (architect, feature-dev, infra-ops, security-redteam) with distinct voices.
+- 2026-06-10: 12-PR landing via review→fix→merge workflow. `dev` advanced from `693cfc7` to `bc2a0a7` (+64 commits / +12 merge commits). Security (F2.2), backend reliability (DLQ alerting + transaction-boundary tests), backend sweeper escalation (FR-3.7/4.5), mobile safety (push priority routing, availability wiring, location gate, 30s countdown), mobile completion (broadcasts inbox + ack, stand-down ack), web base-manager, web admin (cross-org, radio channels, capabilities, reliability), web leader (members + approvals), multi-target dispatch composer, incident-log debrief affordances, dispatch-map filters/counts/active-dispatchers, coverage cleanup. Followed by `0e5b987` (typecheck fixes) and `bc2a0a7` (test-suite fixes). Typecheck clean vs baseline; `bun test --isolate` → 1213 pass / 6 skip / 0 fail / 2832 expect() calls.
+
+## Changelog
+
+- conjectured: flat `context/{facts,state,references,feedback}.md` is sufficient project memory. refuted_by: PAI's twelve-section ISA carries the same content plus testable Criteria, Test Strategy, and a verification trail the flat files lacked. learned: the ISA is a superset. criterion_now: project record is the ISA; `context/` is appendix-only.
+- 2026-06-10 / conjectured: "100% UI" from a single multi-agent build pass would land cleanly straight onto `dev`. refuted_by: 5 source-introspection tests and 4 type errors needed post-merge fix-up (test-vs-source drift on `PinDropMode.test.tsx`, `base-manage.test.ts`, `broadcasts.test.ts`; `exactOptionalPropertyTypes` widening, React 19 ReactNode unification, `TaskManager.defineTask` generic shape). learned: introspection tests written from a design plan rather than the final implementation drift hardest; run typecheck and test suite before declaring a multi-PR landing done. criterion_now: a multi-PR sweep is "complete" only after `bun --filter '*' typecheck` matches the baseline error shape and `bun test --isolate` returns zero new failures.
+
+## Verification
+
+- ISC-26: live-probe 2026-05-12 -- 15 COVERAGE_TO_100 branches (B13-B31) confirmed merged into `dev`; local containers rebuilt and restarted on tip `693cfc7`; DB at migration 0029 (0001-0029 applied, none pending). Phase 3 complete per session record.
+- ISC-9: source + test verification 2026-06-10 -- approvals queue at `apps/web/app/dashboard/leader/approvals/` (filter controls + Approve/Reject/Suspend), members listing at `apps/web/app/dashboard/leader/members/`, sweeper escalators at `apps/sweeper/src/{suspension,outage}-escalation.ts` (org-tree walker, leader push fan-out via `apps/push-worker/src/member-status-handler.ts`). Unit tests pass; integration (live Postgres) pending.
+- ISC-13: incident log hash-chain and Postgres trigger confirmed in data model (KICKOFF.md §2 + facts.md). Direct DB verification pending next deep session.
+- ISC-17: source + test verification 2026-06-10 -- SSE redactor at `apps/api/src/sse/redactor.ts` (167 LOC, 279-line test). F2.2 access-control gate in `apps/api/src/routes/sse.ts`. F2.1 paged-responders gate confirmed pre-patched on `dev` baseline by backend-reviewer + sec-pii-sse builder cross-check.
+- ISC-7: LIMSOC identity adapter verified end-to-end against real token shape (facts.md). LIMSOC test account in staging not yet obtained -- cannot fully re-verify.
+- Workflow output: 12 origin `feat/*` branches still present at 2026-06-10 for diff inspection; safe to delete after local smoke-test pass on the merged `dev` (resume backlog item #1 in `context/state.md`).

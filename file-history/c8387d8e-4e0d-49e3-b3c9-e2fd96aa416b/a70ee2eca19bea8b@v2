@@ -1,0 +1,115 @@
+# State (current working state)
+
+What is in progress, the backlog, next-session intent, and active blockers.
+This is the volatile layer. Agents read this to know where things stand right now.
+
+## Current status (as of 2026-06-10)
+- `dev` tip is `bc2a0a7`. +64 commits / +12 merge commits since `693cfc7`.
+- 12 feature branches landed via a review→fix→merge workflow in a single sweep, followed by
+  a typecheck-cleanup commit (`0e5b987`) and a test-suite cleanup commit (`bc2a0a7`).
+- DB still at migration 0029; migrations 0001–0029 applied to `loc-postgres`; no new
+  migrations in this round. No pending migrations.
+- Typecheck clean vs the `693cfc7` baseline (5 genuine new errors introduced by the merges
+  were all fixed in `0e5b987`; remaining errors are all in the pre-existing
+  TS6310 + bun-types + bun:test family already documented as known-ignorable).
+- Test suite: `bun test --isolate` → **1213 pass / 6 skip / 0 fail / 2832 expect()
+  calls** across 98 files. Six skips are environment-conditional integration tests
+  that need `DATABASE_URL` + a live Postgres (the suite skips them when the env
+  var isn't set and prints a one-liner telling the runner how to enable).
+
+## 12-PR landing (2026-06-09 → 2026-06-10)
+
+Order of merge into `dev`:
+
+1. `feat/sec-pii-sse` → `7cf8126` — F2.2 SSE per-listener PII redaction +
+   access control (FR-N-5.1, FR-5.5a). F2.1 paged-responders gate confirmed
+   pre-patched on dev before this branch landed.
+2. `feat/backend-reliability` → `c9011e7` — Terraform `observability.tf` (DLQ
+   depth alerts + Pub/Sub health dashboard); F5.1 callout-create/standdown
+   transaction-boundary integration test.
+3. `feat/backend-sweepers` → `5535b7b` — FR-4.5 suspension-escalation and
+   FR-3.7 outage-escalation walking the org tree, with capability-leader push
+   fan-out via push-worker.
+4. `feat/mobile-safety` → `de5ba4d` — push event_type routing (Critical
+   Alerts safe-by-default), availability-toggle wiring + return-date picker,
+   defence-in-depth client-side location gate, 30s accept countdown.
+5. `feat/mobile-completion` → `bc172e7` — per-callout broadcasts inbox +
+   ack, stand-down ack banner.
+6. `feat/web-base-manager` → `687b0d6` — `/dashboard/bases/[id]` unified
+   config page + `/v1/bases/:id/manage` API + `assertBaseManagerOrStateAdmin`
+   gate (UC-5, FR-3.4/3.4a/3.9).
+7. `feat/web-admin-ui` → `6deb218` — cross-org consent matrix admin,
+   radio-channels catalogue admin, capabilities admin, member-reliability tab
+   (FR-3.1/3.2, FR-6.16, FR-4a, FR-6d).
+8. `feat/web-leader-ui` → `35395d1` — `/dashboard/leader/members` listing +
+   approvals queue filter controls + leader landing tile (UC-2, FR-3.5, FR-4.3).
+9. `feat/web-multi-target-dispatch` → `b0835d5` — multi-capability/multi-base
+   composer in CreateIncidentModal + mid-flight Increase-target affordance
+   (FR-6.3/6.5/6.10).
+10. `feat/web-incident-log` → `fa38433` — load-full-log + time-range filter +
+    JSON export + dispatcher force-clear on stale stand-down (FR-6b.6/6b.7/6b.8,
+    UC-9).
+11. `feat/web-map-improvements` → `4aa4f98` — `MapFiltersPanel` +
+    `MapCountsPanel` + active-dispatchers Join/Leave strip (FR-5.7/5.8,
+    FR-6a.1/2/5). One additive conflict resolved in
+    `incident-page-client.tsx` (keep HEAD's HeaderForceClearButton + branch's
+    ActiveDispatchersStrip side-by-side).
+12. `feat/web-coverage-cleanup` → `494a7bf` — shared cluster-hover
+    InfoWindow helper, pseudonymous-ID pin captions, per-recipient
+    broadcast-ack tracker, `docs/UI_COVERAGE.md` status delta. Five additive
+    conflicts resolved. The reviewer caught + restored SSE redactor and
+    sweeper-escalation work the cleanup branch's older base would have
+    overwritten — 5 `fix(...): restore ...` commits land between
+    `4aa4f98` and `494a7bf`.
+
+Followed by `0e5b987` (4 type-error fixes from the post-merge typecheck:
+`exactOptionalPropertyTypes` widening on `CapabilityCounts`, React 19 ReactNode
+unification in `SideDrawer`, `TaskManager.defineTask` generic shape in mobile
+location) and `bc2a0a7` (5 test-vs-source drift fixes in
+`PinDropMode.test.tsx` + `base-manage.test.ts` + `broadcasts.test.ts`, plus 1
+pre-existing `me-limsoc.test.ts` mock gap — the `roles` re-export from
+packages/db exposed it).
+
+## Backlog (top of next-session list)
+1. **Local smoke test of the 12-PR landing.** `bun run compose:up` then walk
+   the new surfaces end-to-end: dispatcher cockpit (map filters + counts +
+   active dispatchers, multi-target composer, incident-log full-load +
+   filters + JSON export + force-clear, leader approvals queue, base-manager
+   unified config page, admin cross-org matrix + radio channels + capabilities
+   + reliability tab), responder mobile (availability toggle + expected return,
+   accept-30s countdown, broadcasts inbox + ack, stand-down ack banner).
+2. **Run the 6 env-conditional integration tests.** `DATABASE_URL=postgres://...
+   bun test --isolate` exercises sweeper escalators, F5.1 transaction
+   boundaries, base + callout-target repos, dev-location heartbeat, outage
+   auto-clear against a real Postgres.
+3. **Delete the 12 origin `feat/*` branches** once smoke-test is clean.
+4. **Sequence the Apple Critical Alerts entitlement application** behind the
+   LSV affiliation letter. The push priority routing now safely defaults
+   non-page events to non-critical regardless of entitlement state, but the
+   entitlement is still the prerequisite for the initial `page.sent` to use
+   critical alerts in production.
+5. **B25c commander picker UI** — deferred. Web picker on
+   `incident-info-panel.tsx` needs a member-search component first (none
+   exists on web yet; `MemberPicker` returned no hits). Small follow-up branch.
+6. **B22 cross-org excluded count** — currently a heuristic.
+   `/v1/dispatch-candidates` doesn't expose `home_state_code` or
+   `excluded_count`; the branch counts candidates whose `home_organisation_id`
+   differs from the modal value. Clean fix = a server-side `excluded_count`
+   field per FR-6.17.
+7. **External actions (COVERAGE_TO_100 §6)** — still outside the code envelope:
+   Apple Critical Alerts entitlement, Firebase Storage bucket, SLSA OIDC
+   client (FR-1.1), Places billing review, branch protection on main/dev
+   (needs GitHub Pro), restricted-radio-channels production seed.
+
+## Blockers
+- **Logo regeneration blocked.** Three concept directions briefed (Radar Beacon
+  / Radar Scope / Tube-as-Dial) from `~/Downloads/Rescue_Tube_*.avif`. All
+  three image APIs failed: Replicate `google/nano-banana` HTTP 402 (no payment
+  method); Gemini `gemini-2.5-flash-image` `API_KEY_INVALID`; OpenAI
+  `gpt-image-1` no key set. Ready-to-run script:
+  `~/.claude/skills/Media/Art/Tools/lifesaveroncall-radar-trio.ts` → outputs
+  to `brand/logos/`. Unblock by adding Replicate payment, refreshing the
+  Gemini key, or generating manually in the AI Studio web UI using the
+  script's prompts.
+
+<!-- Raw migrated source: project_lifesaveroncall_next_session.md, project_lifesaveroncall.md -->

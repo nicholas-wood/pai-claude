@@ -2,8 +2,8 @@
 task: Nick Giblin re-engagement + SME EOI convergence emails
 slug: lsv-slco-nick-giblin-and-sme-progression-emails
 effort: E3
-phase: execute
-progress: 0
+phase: complete
+progress: 100
 mode: algorithm
 started: 2026-06-09T13:00:00+10:00
 updated: 2026-06-09T13:00:00+10:00
@@ -131,6 +131,8 @@ Ship two drafted emails ready for Nick Wood to review and send: (1) a single re-
 
 - 2026-06-09T13:00 — Conjecture: a single re-engagement email to Nick G that covers all three substantive items + the timing pressure will land better than three separate emails or a string of further phone attempts. Refuted-by: TBD (Nick's read of the draft). Learned: TBD.
 - 2026-06-09T13:35 — Conjecture: writing first, anti-string-checking second is the correct order even with a hard "no em dash" rule. Refuted-by: the verify pass found 2 em dashes in Email 1 and 4 in Email 2 despite explicit preflight load of WRITINGSTYLE.md. Learned: the model's habitual em dash usage survives prompt-level rules; for voice-sensitive drafts, add a pre-write anti-string self-check (or a Bash grep gate in EXECUTE) rather than relying on the VERIFY pass to catch it. Cost this turn was small (4 Edit calls); cost compounds if a draft ships before VERIFY runs.
+- 2026-06-10 — Conjecture: my v5 of Email 1 was the right voice. Refuted-by: Nick's final rewrite turned headed prose into numbered chat-list, stripped strategic-logic and per-recipient role spell-outs, folded timing into the ask, reordered SME ahead of Patrol Map. Learned: voice-match is necessary but not sufficient; the *form* for a known-recipient multi-topic email is numbered list + connector phrases + strip-when-they-know + folded timing. Captured as durable feedback memory `feedback-nick-stakeholder-email-style.md`; boundary noted against convergence emails to multiple stakeholders, which keep the per-person ask structure.
+- 2026-06-10 — Conjecture: Outlook AppleScript `content:` property + plain-text newlines would render as paragraphs. Refuted-by: rendered as one blob (HTML parser ate the newlines). Learned: for Outlook on Mac, set `content:` to HTML markup (`<p>`, `<ul><li>`) rather than plain text. Pipeline now proven: write `.applescript` locally, SSH `osascript -` < file, returns `draft created: <subject>` on success. TCC permission prompt blocks first SSH-driven control attempt until user clicks once; thereafter SSH-driven Outlook drafting is one command.
 
 ## Verification
 

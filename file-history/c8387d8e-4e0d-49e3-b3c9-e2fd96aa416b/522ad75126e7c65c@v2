@@ -1,0 +1,553 @@
+export const meta = {
+  name: 'loc-build-to-100',
+  description: '12-stream parallel build of LifesaverOnCall: safety fixes + 100% UI coverage. Each stream runs build → review → fix (up to 2 iterations) → final review → push. One feature branch per stream, ready for PR.',
+  phases: [
+    { title: 'Build' },
+    { title: 'Review' },
+    { title: 'Fix' },
+    { title: 'Final Review' },
+    { title: 'Push & Summary' },
+  ],
+}
+
+const REPO = '/home/nicholas-wood/.claude/jobs/c8387d8e/loc-repo'
+const WT = '/home/nicholas-wood/.claude/jobs/c8387d8e/wt'
+
+const STREAMS = [
+  {
+    id: 'sec-pii-sse',
+    branch: 'feat/sec-pii-sse',
+    title: 'Security: F2.1 paged-responders PII gate + F2.2 SSE per-callout access control',
+    spec: `
+VERIFY FIRST. Two reviewers disagreed about whether these are already patched. Read the current state of the files before changing anything.
+
+Target files:
+- apps/api/src/routes/callouts.ts around lines 773-879 (paged-responders endpoint)
+- apps/api/src/routes/sse.ts around lines 33-93 (event stream)
+
+F2.1 — paged-responders PII gate (FR-N-5.1, KICKOFF.md §6):
+If full_name is returned unconditionally for paged members, gate it. Use a server-side canSeeIdentity(viewer, paged_member, callout) predicate evaluated per-row. Return pseudonymous_id by default; full_name only when the caller is on the accepted-responder list, is an active dispatcher, has view_member_pii AND the member is available, OR the member is on the same callout and has accepted. Six-rule precedence in KICKOFF.md §6 binds. \`unavailable\` members NEVER reveal identity even with view_member_pii.
+
+F2.2 — SSE per-callout access control (FR-N-6a.1, FR-5.5a):
+Gate /v1/callouts/:id/events:stream subscribers to one of (a) active dispatcher on this callout, (b) accepted responder on this callout, (c) caller with view_member_pii within tenant scope. Reject others with 403 before opening the stream. Redact events per-listener (a responder shouldn't see other responders' raw location_ping if F2.x rules disallow).
+
+Add focused regression tests if a test pattern exists in adjacent files.
+Touch only apps/api/src/routes/callouts.ts, apps/api/src/routes/sse.ts, any narrow helper they require, and matching test files.
+`,
+  },
+  {
+    id: 'mobile-safety',
+    branch: 'feat/mobile-safety',
+    title: 'Mobile safety: push event_type routing + availability wiring + location gate + 30s countdown',
+    spec: `
+Four safety fixes in apps/mobile.
+
+1. Push event_type routing (apps/mobile/lib/push.ts ~lines 24-32, setNotificationHandler):
+Refactor setNotificationHandler so that when the Critical Alerts entitlement lands later, only the initial \`page.sent\` event uses critical/maximum interruption; all other event types (stand-down, status-change, broadcast, approval, etc.) route to time-sensitive/high. Read notification.request.content.data.event_type and switch. Document the contract in a top-of-file comment matching FR-N-6.2 and KICKOFF.md §6.
+
+2. Availability toggle wiring (apps/mobile/app/(tabs)/index.tsx ~lines 28-53):
+Toggle is currently UI-only. Wire it to PATCH /v1/me/availability with optional expected_return_at when transitioning to unavailable. Add a date-picker modal on transition to unavailable. References FR-2.1, FR-2.4, UC-7.
+
+3. Location stop on unavailable (apps/mobile/lib/location.ts ~lines 32-91):
+Ensure stopBackgroundLocation() is called on transition to unavailable. Add a defensive client-side gate in sendPing that reads persisted availability state (SecureStore or equivalent) and no-ops if unavailable, so a racing task can't leak pings. Server already rejects, this is defence-in-depth + battery + UX. References FR-2.3, FR-N-2.1.
+
+4. 30-second countdown on accept screen (apps/mobile/app/callout/[id].tsx):
+Pass response_window_expires_at from incidents.tsx into the callout screen, render a live countdown above Accept/Reject. Turns amber at 10s, red at 5s. UX only. References FR-6.5a, UC-4 step 2.
+
+Scope: apps/mobile only. Do not modify server endpoints.
+`,
+  },
+  {
+    id: 'mobile-completion',
+    branch: 'feat/mobile-completion',
+    title: 'Mobile completion: broadcasts inbox + ack, stand-down ack banner, cross-org consent toggle',
+    spec: `
+Three responder-app features.
+
+1. Broadcasts inbox + ack (FR-6e.5, UC-10 step 4):
+Add a Broadcasts section to apps/mobile/app/callout/[id].tsx, above status controls. Fetch GET /v1/callouts/:id/broadcasts (create endpoint in apps/api/src/routes/callouts.ts if missing — should already exist for the dispatcher composer). Show priority badge, message, sender, ack-required flag, ack-state. POST ack via existing or new endpoint. Show ack status per-recipient where applicable.
+
+2. Stand-down ack banner (FR-6.12):
+When myStatus === 'stood_down' on apps/mobile/app/callout/[id].tsx, replace the "you are not currently a responder" message with an acknowledgement banner: "This callout is standing down. Please acknowledge to clear it from your view." Tap → POST /v1/callouts/:id/standdown/ack. Until acked, callout stays in the responder's active list. UC-6.12 is explicit.
+
+3. Cross-org consent toggle (FR-6.15/6.16, profile screen):
+Add a "Accept cross-organisation dispatch" toggle on apps/mobile/app/(tabs)/profile.tsx around lines 77-153. PATCH /v1/me/preferences with accept_cross_org_dispatch boolean (create field if absent in API + migration; coordinate with backend-reliability stream if you need a migration — otherwise add a new migration here).
+
+Scope: apps/mobile + small targeted additions in apps/api/src/routes/callouts.ts or /me.ts to expose what mobile needs.
+`,
+  },
+  {
+    id: 'web-leader-ui',
+    branch: 'feat/web-leader-ui',
+    title: 'Web leader UI: approval queue, suspend/lift/extend, outage management, base outage badges',
+    spec: `
+Capability-leader surfaces (UC-2, UC-6, FR-4, FR-3.5-3.7). None exist today per docs/ADMIN_UI_TODO.md.
+
+1. /dashboard/leader/approvals page (consumes GET /v1/approvals — endpoint exists):
+List pending member-capability approval requests. For each row: member name, capability, evidence, currency, Approve / Reject / Suspend buttons. Approve hits POST /v1/approvals/:id/approve etc. (verify endpoint names in apps/api/src/routes/leaders.ts). Filter by capability, by region, by status.
+
+2. Suspend / lift / extend UI:
+Same page or a sibling /dashboard/leader/members route. List members with a capability, show status (approved/pending/suspended/not_approved). Actions: Suspend (with reason + duration), Lift suspension, Extend (push expiry forward). Use endpoints in apps/api/src/routes/leaders.ts.
+
+3. Outage management:
+Either inside the new leader route or in apps/web/components/map/BaseDetailPanel.tsx (gated by role). Declare outage (POST /v1/bases/:id/capabilities/:id/outage), clear outage (POST /v1/outages/:id/clear). Show active outages list with declared-by, declared-at, reason, expected-resolution.
+
+4. Outage badges on base map markers (FR-5.3):
+apps/web/components/map/BasesLayer.tsx — when a base has an active capability outage, overlay a red badge or change the marker style. Tooltip lists outaged capabilities.
+
+Role gating: routes guarded by hasRole('capability_leader') or equivalent. If the role check pattern doesn't exist yet, scaffold a minimal one inline and note in knownLimitations for follow-up.
+
+Scope: apps/web only, except for any small API additions strictly required.
+`,
+  },
+  {
+    id: 'web-admin-ui',
+    branch: 'feat/web-admin-ui',
+    title: 'Web admin UI: cross-org consent matrix, radio channel catalogue, capabilities admin, member reliability stats display',
+    spec: `
+State-admin and tenant-admin surfaces (FR-3.1/3.2, FR-6.16, FR-4a, FR-6d).
+
+1. /dashboard/admin/cross-org page — state cross-org consent matrix:
+Editor for state_cross_org_configs (consumes admin.ts:55-77 endpoints). Grid of home-state × dispatching-state with outbound and inbound toggles. Pair-asymmetric per state. Default DENY. Audit log shown below.
+
+2. /dashboard/admin/radio-channels page:
+CRUD for radio_channels catalogue. Name, frequency designator, scope (org / region / area), active/inactive. Used by composer (web-multi-target-dispatch stream may consume this).
+
+3. /dashboard/admin/capabilities page:
+List defined capability types per tenant (IRB, RWC, SSV, 4WD, ARO, RPAS, aerial, support + extensions). Show counts of approved/suspended/pending members per capability. Edit org-defined extensions.
+
+4. Member reliability stats display (FR-4a.1/2/4):
+Add a /dashboard/members/[id]/reliability tab or panel. Consume the already-existing endpoint (B26 shipped this server-side per state.md). Show acceptance rate, mean time to accept, completion rate, last 30 days vs lifetime.
+
+Role gating: state_admin or tenant_admin role. Scaffold a minimal role check if missing.
+
+Scope: apps/web. Where endpoints don't exist, document in knownLimitations rather than implementing API surface here.
+`,
+  },
+  {
+    id: 'web-base-manager',
+    branch: 'feat/web-base-manager',
+    title: 'Web base manager: edit base operational notes, photos, access details, service_name; promote capability config',
+    spec: `
+Base manager surfaces (UC-5, FR-3.4, FR-3.9).
+
+apps/web/components/map/BaseDetailPanel.tsx today shows operational notes read-only. Build an editor:
+
+1. Operational notes editor — rich text or markdown. POST/PUT to a base endpoint (verify name in apps/api/src/routes/bases.ts; if absent, add minimal endpoint).
+2. Access details editor — entry codes, gate info, parking notes. Visible only when caller is an accepted responder on a callout (server enforces; client renders when present).
+3. service_name editor per capability — text field on each BaseCapability.
+4. Photo upload — defer if Firebase Storage bucket isn't provisioned (PHASE_4_PREREQS.md notes this is missing). If deferred, scaffold the UI behind a feature flag and document in knownLimitations.
+
+5. Promote ConfigureCapabilitiesModal (apps/web/components/map/ConfigureCapabilitiesModal.tsx) out from behind NEXT_PUBLIC_ALLOW_BASE_CAPABILITY_EDIT dev flag. Add the service_name + ops-notes editors into the modal or alongside it as a unified base-config page at /dashboard/bases/[id].
+
+Role gating: base_manager or tenant_admin.
+
+Scope: apps/web primarily. Narrow API additions allowed where strictly necessary.
+`,
+  },
+  {
+    id: 'web-multi-target-dispatch',
+    branch: 'feat/web-multi-target-dispatch',
+    title: 'Web multi-target dispatch composer + mid-flight target adjustment',
+    spec: `
+Two related gaps in the dispatcher cockpit.
+
+1. Multi-capability / multi-base composer (FR-6.3, UC-3 step 4):
+apps/web/components/map/CreateIncidentModal.tsx (~lines 182-186) is commented as "multi-target schema is unmerged". Rebuild the UI to allow chip multi-select of capabilities, per-capability target_count, and per-capability base picker. On submit, POST /v1/callouts (callout shell) then N POSTs to /v1/callouts/:id/pages — one page per (capability, base, target_count) combo. Read FR-6.3 and the responder-lifecycle spec to confirm shape.
+
+If the server-side multi-target endpoint isn't present, build the client to issue N composes against the existing /v1/callouts/:id/pages endpoint sequentially. Note any required server work in knownLimitations.
+
+2. Mid-flight target adjustment (FR-6.5):
+On the running incident view (apps/web/app/dashboard/callouts/[id]/compose-pages-panel.tsx), add an "Increase target" control on each page tile that POSTs a new page with delta target_count to the same (capability, base) combo. Currently no control to bump target after initial send.
+
+Scope: apps/web with minimal API coordination.
+`,
+  },
+  {
+    id: 'web-incident-log',
+    branch: 'feat/web-incident-log',
+    title: 'Web incident log debrief: full log fetch, time-range filter, JSON export, dispatcher force-clear',
+    spec: `
+Make the incident log usable for post-incident debrief (FR-6b.7, FR-6b.8, UC-9).
+
+apps/web/app/dashboard/callouts/[id]/paged-and-log-panel.tsx currently retains the last 200 SSE events in memory only. Add:
+
+1. "Load full log" button → fetch GET /v1/callouts/:id/log (endpoint exists at callouts.ts:1274). Replace SSE buffer with full server response. Re-attach SSE for live tail.
+2. Time-range filter — date pickers from/to. Filter rendered entries.
+3. Entry-type filter — checkboxes for dispatch / responder / broadcast / status / system.
+4. Export — JSON download (POST to existing log-export endpoint or client-side serialise). PDF deferred unless a render lib is already in package.json.
+5. "Add note" button → POST /v1/callouts/:id/notes (verify endpoint).
+
+Separately:
+6. Dispatcher force-clear button (FR-6.12 dispatcher side):
+On the incident header, when isStanddownStale(callout) returns true (no responder ack for N minutes after stand-down), show a "Force clear" button. POST /v1/callouts/:id/force-clear (verify endpoint name) which acks-on-behalf and closes the callout. Hash-chain entry appended showing force-clear by dispatcher.
+
+Scope: apps/web mainly, with confirmations of endpoint names in apps/api/src/routes/callouts.ts.
+`,
+  },
+  {
+    id: 'web-map-improvements',
+    branch: 'feat/web-map-improvements',
+    title: 'Web map improvements: filter controls, counts panel, active dispatchers list, multi-dispatcher Join/Leave',
+    spec: `
+Three map/dispatcher-cockpit improvements (FR-5.7, FR-5.8, FR-6a).
+
+1. Filter controls panel:
+Collapsible panel on the dispatch map. Filters: capability (multi-select), availability (available/unavailable/all), proximity radius (slider km), exclude-outaged-bases (toggle). Applies to all map layers. Pin to a corner; preserves state across navigation via localStorage.
+
+2. Counts panel (FR-5.7/5.8):
+Strip in apps/web/components/SideDrawer.tsx or above it. Shows: "N IRB-qualified within 10km", "M RWC available within 5km", etc., updating as filters change. The canonical FR-5.8 phrasing is "8 IRB-qualified responders within 10km".
+
+3. Active dispatchers list + Join/Leave (FR-6a, multi-dispatcher coordination):
+On the running-incident header, replace the static origin-org chip with a live list of currently-dispatching users (heartbeat already 20s per incident-page-client.tsx:32). Add Join (post heartbeat) and Leave (stop heartbeat) buttons. New dispatcher appears within one heartbeat cycle.
+
+Scope: apps/web. Read existing heartbeat plumbing to wire Join/Leave.
+`,
+  },
+  {
+    id: 'web-coverage-cleanup',
+    branch: 'feat/web-coverage-cleanup',
+    title: 'Web coverage cleanup: remaining UI_COVERAGE.md gaps not covered by other streams',
+    spec: `
+Read /home/nicholas-wood/.claude/jobs/c8387d8e/wt/web-coverage-cleanup/docs/UI_COVERAGE.md end-to-end. The other streams cover: leader UI, admin UI, base manager, multi-target dispatch, incident log debrief, map improvements, mobile completion. List every FR row in UI_COVERAGE.md still marked PARTIAL or MISSING after those streams ship, and implement them.
+
+Likely catch-up items (verify against the doc):
+- responding_services_summary CSV chip picker → migrate web to first-class /v1/callouts/{id}/services rows (FR-6c.2) — mobile already reads the proper endpoint
+- radio_channel_id picker pulling from the catalogue built by web-admin-ui
+- de-identified responder pins on map: render pseudonymous IDs as pin labels not just hover (FR-5.4a)
+- broadcast composer recipient scopes: by-capability, by-service_name, named individuals (FR-6e.1/2)
+- per-recipient ack-status view on dispatcher side (FR-6e.5)
+- any orphaned routes (e.g. apps/web/app/dashboard/callouts/new/callout-composer.tsx) — link or remove
+- shared InfoWindow hover helper (de-dup across BasesLayer / RespondersLayer / CalloutsLayer)
+
+This stream's success is measured by reducing docs/UI_COVERAGE.md's MISSING column to as close to zero as possible. Update UI_COVERAGE.md status markers to reflect what you've shipped.
+
+Scope: apps/web. Anything that needs server work, note in knownLimitations rather than implementing.
+`,
+  },
+  {
+    id: 'backend-sweepers',
+    branch: 'feat/backend-sweepers',
+    title: 'Backend sweepers: suspension escalation (FR-4.5) + outage escalation (FR-3.7)',
+    spec: `
+Two sweeper-task gaps identified by backend review.
+
+1. Suspension escalation (FR-4.5):
+apps/sweeper/src/suspension-escalation.ts today only increments escalation_level. Implement the actual escalation:
+- On 3-day cadence, find suspensions with escalation_level < max
+- Identify the capability leader for the member's primary org-node
+- Publish member.suspension_escalated event with leader_user_id payload
+- Increment escalation_level
+- After max level (e.g. 3), escalate to next level in org hierarchy (area → region → state)
+- Update consumer in apps/push-worker/src/handler.ts to translate event into a leader push notification (route as non-critical per FR-N-6.2)
+
+2. Outage escalation (FR-3.7):
+apps/sweeper/src/outage-escalation.ts — same pattern for capability outages. Surface to base manager first, then escalate up the org tree if unresolved.
+
+Add tests in adjacent test files.
+
+Scope: apps/sweeper + apps/push-worker + packages/events (event type additions) + packages/db (any new migration for escalation_level history). Touch packages/domain only for the org-tree traversal helper if it doesn't exist.
+`,
+  },
+  {
+    id: 'backend-reliability',
+    branch: 'feat/backend-reliability',
+    title: 'Backend reliability: DLQ alerting (Terraform) + transaction boundaries on callout create/standdown',
+    spec: `
+Two reliability gaps.
+
+1. DLQ alerting in Terraform:
+Add google_monitoring_alert_policy resources to terraform/ (probably terraform/main.tf or a new terraform/observability.tf). One alert per DLQ topic (member-status-dlq, member-location-dlq, callout-events-dlq). Condition: subscription/num_undelivered_messages > 0 for 5 minutes. Notification channel: a google_monitoring_notification_channel placeholder (email or PagerDuty — pick email + a TODO note since Nick hasn't picked a paging vendor). Documents ARCHITECTURE.md §9 + EVENTS.md §6 stated posture.
+
+Also add google_monitoring_dashboard JSON for at-a-glance Pub/Sub health (publish rate, ack latency, DLQ depth per topic).
+
+2. Transaction boundaries on callout create + standdown (F5.1 redteam finding):
+apps/api/src/features/callouts/create-callout.ts (~line 40): wrap createCallout + incidentLog.appendEntries + (defer publishEvent until after commit) in db().begin(tx => ...). Pass tx into appendEntries.
+apps/api/src/features/callouts/standdown.ts (~line 41): same pattern — UPDATE loop + log append must be atomic; Pub/Sub publish only after commit.
+
+Closes FR-N-6b.2 contract. Add a focused integration test that simulates a DB error mid-flow and asserts no orphaned rows.
+
+Scope: terraform/ + apps/api/src/features/callouts + tests.
+`,
+  },
+]
+
+const BUILD_SCHEMA = {
+  type: 'object',
+  required: ['branch', 'worktreePath', 'commitCount', 'summary', 'commitMessage'],
+  properties: {
+    branch: { type: 'string' },
+    worktreePath: { type: 'string' },
+    commitCount: { type: 'number' },
+    summary: { type: 'string', description: 'One-paragraph summary of what shipped' },
+    commitMessage: { type: 'string', description: 'The HEAD commit message' },
+    filesTouched: { type: 'array', items: { type: 'string' } },
+    knownLimitations: { type: 'array', items: { type: 'string' } },
+  },
+  additionalProperties: false,
+}
+
+const REVIEW_SCHEMA = {
+  type: 'object',
+  required: ['verdict', 'blockingIssues', 'nonBlockingNotes'],
+  properties: {
+    verdict: { type: 'string', enum: ['PASS', 'NEEDS_FIX'] },
+    blockingIssues: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['description', 'fileLine', 'suggestedFix'],
+        properties: {
+          description: { type: 'string' },
+          fileLine: { type: 'string' },
+          suggestedFix: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
+    },
+    nonBlockingNotes: { type: 'array', items: { type: 'string' } },
+  },
+  additionalProperties: false,
+}
+
+const FINAL_SCHEMA = {
+  type: 'object',
+  required: ['verdict', 'prTitle', 'prDescription'],
+  properties: {
+    verdict: { type: 'string', enum: ['APPROVE', 'APPROVE_WITH_NOTES', 'REJECT'] },
+    prTitle: { type: 'string' },
+    prDescription: { type: 'string', description: 'Markdown PR body: what, why, files, FR references, test notes, known limitations.' },
+    notes: { type: 'array', items: { type: 'string' } },
+  },
+  additionalProperties: false,
+}
+
+const PUSH_SCHEMA = {
+  type: 'object',
+  required: ['branch', 'pushed', 'message'],
+  properties: {
+    branch: { type: 'string' },
+    pushed: { type: 'boolean' },
+    message: { type: 'string' },
+    prCreateUrl: { type: 'string' },
+  },
+  additionalProperties: false,
+}
+
+function buildPrompt(s) {
+  return `You are the BUILDER for stream "${s.id}" of a coordinated 12-stream parallel build of LifesaverOnCall.
+
+WORKTREE (you own this; commit here, do not leave it):
+  ${WT}/${s.id}
+BRANCH (already created and checked out):
+  ${s.branch}
+BASE: forked from \`dev\` at tip 693cfc7.
+
+STREAM TITLE: ${s.title}
+
+WORK SPEC:
+${s.spec}
+
+REPO CONVENTIONS (binding):
+- Bun runtime, TypeScript strict, no emojis, Australian English.
+- Multi-tenant: AsyncLocalStorage + withTenantContextAsync. Every DB read filters by tenant. See packages/db/src/tenant-context.ts.
+- Idempotency-Key header on every state-changing API write. Helper exists; reuse it.
+- Hash-chained append-only incident log. Mutations blocked by Postgres trigger. Never modify, only append.
+- KICKOFF.md §6 don't-do list is binding (PII, capability outages, location-while-unavailable, critical alerts).
+- Server-side de-identification only; the client must never enforce the gate alone.
+- No em dashes in user-facing copy.
+- Match surrounding code style. Read 2-3 similar files before writing.
+
+PROCESS:
+1. cd into the worktree.
+2. \`git status\` to confirm clean state on the branch.
+3. Read the relevant spec docs (docs/REQUIREMENTS.md, docs/USE_CASES.md, docs/UI_COVERAGE.md, KICKOFF.md, EVENTS.md, SECURITY.md as needed for your stream).
+4. Read the relevant source files in apps/ and packages/ to understand surrounding code.
+5. Implement the work. Prefer small, focused commits over one mega-commit (e.g. one per FR or sub-feature).
+6. Each commit: \`git add -A && git commit -m "<message>"\`. Commit messages: imperative mood, FR reference where applicable, one line subject + blank + body if needed.
+7. Do NOT install dependencies. Do NOT run typecheck / lint / tests / docker / servers. The reviewer will catch what you can't compile-check.
+8. If you discover the work is bigger than one pass can deliver well: ship a partial but coherent implementation with TODO comments at the genuine cut line, and describe the remaining work crisply in \`knownLimitations\`.
+9. Stay inside your stream's scope. If you touch a file outside scope, that's a blocking issue at review.
+
+Return BUILD_SCHEMA describing what you shipped.`
+}
+
+function reviewPrompt(s, built) {
+  return `You are the REVIEWER for stream "${s.id}". An independent builder just shipped on branch ${built.branch}.
+
+WORKTREE: ${built.worktreePath}
+BUILDER'S SUMMARY: ${built.summary}
+BUILDER'S KNOWN LIMITATIONS: ${(built.knownLimitations || []).join('; ') || 'none stated'}
+
+PROCESS:
+1. cd ${built.worktreePath}
+2. \`git log --oneline dev..HEAD\` — see the commits.
+3. \`git diff --stat dev..HEAD\` — see the file footprint.
+4. \`git diff dev..HEAD\` — read the full diff. Focus on changed files in context.
+5. Read the original spec for this stream:
+${s.spec}
+6. Cross-check against repo conventions (multi-tenant, idempotency, hash-chained log, KICKOFF §6, server-side de-id, no em dashes).
+
+WHAT IS BLOCKING:
+- Safety/correctness bugs (PII leaks, broken state machines, race conditions, security holes, location-while-unavailable, expired-award dispatch, critical-alert misuse).
+- Missed FRs the spec required (cite FR-X).
+- Code that obviously won't compile (TypeScript errors, missing imports, wrong types).
+- Drift from KICKOFF.md don't-do list.
+- Tenant-context not propagated on a new query.
+- Mutation of incident_log_entries (must be append-only).
+- Files modified outside the stream's scope without justification.
+- Em dashes in user-facing copy.
+
+WHAT IS NON-BLOCKING (note only):
+- Style preferences, naming nits.
+- Missing tests if the stream's spec didn't mandate them.
+- Polish that would be nice but doesn't ship-block.
+- Builder's own stated knownLimitations that match the spec's defer guidance.
+
+Return PASS only when there are zero blocking issues. NEEDS_FIX with a precise blockingIssues list otherwise. Be specific: file:line, what's wrong, what to do.`
+}
+
+function fixPrompt(s, built, review, iter) {
+  return `You are the FIXER for stream "${s.id}", iteration ${iter}. The reviewer flagged ${review.blockingIssues.length} blocking issue(s) on branch ${built.branch}.
+
+WORKTREE: ${built.worktreePath}
+
+BLOCKING ISSUES TO RESOLVE:
+${review.blockingIssues.map((i, n) => `${n + 1}. ${i.description}\n   File/Line: ${i.fileLine}\n   Suggested fix: ${i.suggestedFix}`).join('\n\n')}
+
+NON-BLOCKING NOTES (optional, address if quick):
+${(review.nonBlockingNotes || []).map((n, i) => `${i + 1}. ${n}`).join('\n') || 'none'}
+
+PROCESS:
+1. cd ${built.worktreePath}
+2. Address each blocking issue. Add NEW commits — do not amend or rebase the existing history.
+3. Stay in scope. Same conventions as build (bun/TS strict, multi-tenant, idempotency, no em dashes).
+4. Return updated BUILD_SCHEMA reflecting current state.`
+}
+
+function finalPrompt(s, built) {
+  return `You are the FINAL REVIEWER for stream "${s.id}". The fix loop has completed; perform a lightweight final pass and write the PR description.
+
+WORKTREE: ${built.worktreePath}
+BRANCH: ${built.branch}
+
+PROCESS:
+1. cd ${built.worktreePath}
+2. \`git log --oneline dev..HEAD\` and \`git diff --stat dev..HEAD\`.
+3. Skim the diff one more time. Look for: obvious last-mile issues, missing imports, unused vars, anything that would embarrass on PR review.
+4. Decide: APPROVE / APPROVE_WITH_NOTES / REJECT.
+5. Write a PR description (Markdown) suitable for posting on GitHub:
+   - **Title** (under 80 chars).
+   - **What this changes** — bullets.
+   - **Why** — link back to FR / UC / KICKOFF / redteam-finding references.
+   - **Files touched** — list.
+   - **Testing notes** — what to manually verify locally.
+   - **Known limitations / follow-ups** — if any.
+   - **Reviewer notes** — anything Nick should look at first.
+
+Return FINAL_SCHEMA.`
+}
+
+function pushPrompt(s, built, final) {
+  return `Push branch ${built.branch} from worktree ${built.worktreePath} to origin so Nick can open a PR.
+
+PROCESS:
+1. cd ${built.worktreePath}
+2. \`git push -u origin ${built.branch}\` — capture full output.
+3. If push succeeds, construct the PR-create URL: https://github.com/nicholas-wood/lifesaveroncall/compare/dev...${built.branch}?expand=1 — return as prCreateUrl.
+4. If push fails for any reason, return pushed:false and the exact error in message.
+
+Do NOT attempt to install gh or use the GitHub API.`
+}
+
+// === Run ===
+
+phase('Build')
+
+const results = await pipeline(
+  STREAMS,
+  // Stage 1: BUILD
+  (s) =>
+    agent(buildPrompt(s), {
+      phase: 'Build',
+      schema: BUILD_SCHEMA,
+      label: `build:${s.id}`,
+    }),
+  // Stage 2: REVIEW + up to 2 FIX iterations
+  async (built, stream) => {
+    if (!built) return { stream, status: 'BUILD_FAILED' }
+    let current = built
+    let lastReview = null
+    for (let i = 0; i < 3; i++) {
+      const review = await agent(reviewPrompt(stream, current), {
+        phase: 'Review',
+        schema: REVIEW_SCHEMA,
+        label: `review:${stream.id}:r${i}`,
+      })
+      lastReview = review
+      if (!review) return { stream, built: current, status: 'REVIEW_NULL' }
+      if (review.verdict === 'PASS' || review.blockingIssues.length === 0) {
+        return { stream, built: current, review, status: 'PASS' }
+      }
+      if (i === 2) {
+        return { stream, built: current, review, status: 'CAP_HIT' }
+      }
+      const fixed = await agent(fixPrompt(stream, current, review, i + 1), {
+        phase: 'Fix',
+        schema: BUILD_SCHEMA,
+        label: `fix:${stream.id}:r${i + 1}`,
+      })
+      if (!fixed) return { stream, built: current, review, status: 'FIX_NULL' }
+      current = fixed
+    }
+    return { stream, built: current, review: lastReview, status: 'CAP_HIT' }
+  },
+  // Stage 3: FINAL REVIEW (PR description)
+  async (prev, stream) => {
+    if (!prev || !prev.built) return prev
+    const final = await agent(finalPrompt(stream, prev.built), {
+      phase: 'Final Review',
+      schema: FINAL_SCHEMA,
+      label: `final:${stream.id}`,
+    })
+    return { ...prev, final }
+  },
+)
+
+// === Push ===
+
+phase('Push & Summary')
+
+const pushed = []
+for (const r of results.filter(Boolean)) {
+  if (!r || !r.built) {
+    pushed.push({ stream: r?.stream, status: r?.status || 'UNKNOWN' })
+    continue
+  }
+  const pushResult = await agent(pushPrompt(r.stream, r.built, r.final), {
+    phase: 'Push & Summary',
+    schema: PUSH_SCHEMA,
+    label: `push:${r.stream.id}`,
+  })
+  pushed.push({
+    streamId: r.stream.id,
+    title: r.stream.title,
+    branch: r.built.branch,
+    status: r.status,
+    push: pushResult,
+    final: r.final,
+    build: { commitCount: r.built.commitCount, summary: r.built.summary, knownLimitations: r.built.knownLimitations || [] },
+    reviewVerdict: r.review?.verdict || 'NONE',
+  })
+}
+
+log(`Workflow complete. ${pushed.filter((p) => p.push?.pushed).length}/${STREAMS.length} branches pushed.`)
+
+return {
+  summary: {
+    streamsAttempted: STREAMS.length,
+    streamsCompleted: pushed.filter((p) => p.push?.pushed).length,
+    streamsFailed: pushed.filter((p) => !p.push?.pushed).length,
+  },
+  streams: pushed,
+}

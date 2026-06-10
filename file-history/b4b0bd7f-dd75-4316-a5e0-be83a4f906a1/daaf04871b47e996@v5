@@ -1,0 +1,306 @@
+#!/usr/bin/env python3
+"""Build SOP 1.4.1 Patrolling Areas .docx using SOP 5.11 as style template."""
+from docx import Document
+from docx.shared import Cm, Pt
+from docx.oxml.ns import qn
+
+BODY_FONT = "Arial"
+BODY_SIZE = Pt(10)
+BODY_SPACE_AFTER = Pt(6)
+
+def _style_run(run):
+    run.font.name = BODY_FONT
+    run.font.size = BODY_SIZE
+    # Set east-asia and cs fonts to Arial via rFonts to override docDefault Times New Roman
+    rPr = run._element.get_or_add_rPr()
+    rFonts = rPr.find(qn('w:rFonts'))
+    if rFonts is None:
+        from docx.oxml import OxmlElement
+        rFonts = OxmlElement('w:rFonts')
+        rPr.insert(0, rFonts)
+    rFonts.set(qn('w:ascii'), BODY_FONT)
+    rFonts.set(qn('w:hAnsi'), BODY_FONT)
+    rFonts.set(qn('w:cs'), BODY_FONT)
+    rFonts.set(qn('w:eastAsia'), BODY_FONT)
+    return run
+
+def _style_body_para(p):
+    p.paragraph_format.space_after = BODY_SPACE_AFTER
+    return p
+
+TEMPLATE = "/Users/nicholaswood/Library/CloudStorage/OneDrive-Personal/00_Inbox/SOP 5.11 - PRE Activation V1 (1).docx"
+OUTPUT = "/Users/nicholaswood/Library/CloudStorage/OneDrive-Personal/06_Lifesaving/LSV/2026/LIMSOC/Patrol Map/SOP 1.4.1 - Patrolling Areas V0.1.docx"
+
+doc = Document(TEMPLATE)
+style_map = {s.name: s.name for s in doc.styles}
+
+def pick(*names):
+    for n in names:
+        if n in style_map:
+            return n
+    return None
+
+H1 = pick("heading 1", "Heading 1")
+H2 = pick("heading 2", "Heading 2")
+H3 = pick("heading 3", "Heading 3")
+TITLE = pick("Title")
+LIST_PARA = pick("List Paragraph", "ListParagraph")
+TABLE_STYLE = pick("Table Grid", "Light Grid Accent 1", "Grid Table 1 Light", "TableGrid")
+
+body = doc.element.body
+sectPr = body.find(qn('w:sectPr'))
+for child in list(body):
+    if child is sectPr:
+        continue
+    body.remove(child)
+
+# Update footer per-run, preserving original run/paragraph structure
+# Original footer1.xml runs (paragraph 0): "SOP", " ", "5", ".", "11", " – ", "Public Rescue Equipment", " Activation", "Page", " ", "1", "of", " ", "4"
+# Original footer1.xml runs (paragraph 1): "Section ", "5", " – ", "Emergency", " Operations", "Effe", ...
+RUN_REPLACEMENTS = {
+    "5": "1",                                  # SOP version major AND Section number both go 5 -> 1
+    "11": "4.1",                               # SOP version minor (5.11 -> 1.4.1)
+    "Public Rescue Equipment": "Patrolling Areas",
+    " Activation": "",                         # subsumed by "Patrolling Areas"
+    "Emergency": "Patrol",
+}
+def replace_footer_text(footer_part):
+    for para in footer_part.paragraphs:
+        for run in para.runs:
+            if run.text in RUN_REPLACEMENTS:
+                run.text = RUN_REPLACEMENTS[run.text]
+
+for section in doc.sections:
+    for footer in [section.footer, section.first_page_footer, section.even_page_footer]:
+        try:
+            replace_footer_text(footer)
+        except Exception:
+            pass
+
+def heading(text, style):
+    p = doc.add_paragraph()
+    if style:
+        p.style = style
+    _style_run(p.add_run(text))
+    return p
+
+def para(text=""):
+    p = doc.add_paragraph()
+    _style_body_para(p)
+    if text:
+        _style_run(p.add_run(text))
+    return p
+
+def rich(segments):
+    p = doc.add_paragraph()
+    _style_body_para(p)
+    for text, fmt in segments:
+        run = p.add_run(text)
+        run.bold = fmt.get("bold", False)
+        run.italic = fmt.get("italic", False)
+        _style_run(run)
+    return p
+
+def bullet(text, level=0):
+    p = doc.add_paragraph()
+    if LIST_PARA:
+        p.style = LIST_PARA
+    p.paragraph_format.left_indent = Cm(0.6 + 0.6 * level)
+    p.paragraph_format.space_after = BODY_SPACE_AFTER
+    prefix = ["• ", "○ ", "▪ "][min(level, 2)]
+    _style_run(p.add_run(prefix + text))
+    return p
+
+def bullet_rich(segments, level=0):
+    p = doc.add_paragraph()
+    if LIST_PARA:
+        p.style = LIST_PARA
+    p.paragraph_format.left_indent = Cm(0.6 + 0.6 * level)
+    p.paragraph_format.space_after = BODY_SPACE_AFTER
+    prefix = ["• ", "○ ", "▪ "][min(level, 2)]
+    _style_run(p.add_run(prefix))
+    for text, fmt in segments:
+        run = p.add_run(text)
+        run.bold = fmt.get("bold", False)
+        run.italic = fmt.get("italic", False)
+        _style_run(run)
+    return p
+
+def _style_cell(cell):
+    """Apply Arial to every run in every paragraph of a table cell."""
+    for p in cell.paragraphs:
+        for run in p.runs:
+            _style_run(run)
+
+def make_table(headers, rows):
+    tbl = doc.add_table(rows=1 + len(rows), cols=len(headers))
+    if TABLE_STYLE:
+        try:
+            tbl.style = TABLE_STYLE
+        except Exception:
+            pass
+    hdr = tbl.rows[0].cells
+    for i, label in enumerate(headers):
+        hdr[i].text = ""
+        run = hdr[i].paragraphs[0].add_run(label)
+        run.bold = True
+        _style_run(run)
+    for r, row_data in enumerate(rows, start=1):
+        cells = tbl.rows[r].cells
+        for c, val in enumerate(row_data):
+            cells[c].text = val
+            _style_cell(cells[c])
+    return tbl
+
+# === Build document ===
+
+heading("SOP 1.4.1 – Patrolling Areas", TITLE)
+rich([("Section 1 – Patrol Operations", {"bold": True})])
+
+heading("Scope", H1)
+para("To describe how patrolling areas are defined and operated across Life Saving Victoria services, including the relationships between active patrol coverage, response capability, neighbouring service awareness, and priority service delivery zones. These definitions underpin the operational use of the patrol mapping framework in LIMSOC.")
+para("This SOP defines the zones only. Operations within and outside these zones, safety obligations, and the application of these zones in LIMSOC are addressed in separate SOPs.")
+
+heading("Audience", H1)
+# Template format: roles as columns, knowledge levels as rows
+audience_roles = ["Patrol Captain", "Patrol Member", "State Duty Officer", "Area Lifesaving Ops Officer (LOO)", "RWC Operator", "EMCaR Staff", "LSV Member"]
+audience_levels = [
+    ("Basic Awareness",     ["",  "R", "",  "",  "",  "",  "R"]),
+    ("Working Knowledge",   ["R", "",  "",  "",  "R", "",  ""]),
+    ("Expert Knowledge",    ["",  "",  "R", "R", "",  "R", ""]),
+]
+aud_tbl = doc.add_table(rows=1 + len(audience_levels), cols=1 + len(audience_roles))
+if TABLE_STYLE:
+    try:
+        aud_tbl.style = TABLE_STYLE
+    except Exception:
+        pass
+# Header row: empty first cell, then role names (bold)
+hdr_cells = aud_tbl.rows[0].cells
+hdr_cells[0].text = ""
+for i, role in enumerate(audience_roles, start=1):
+    hdr_cells[i].text = ""
+    run = hdr_cells[i].paragraphs[0].add_run(role)
+    run.bold = True
+    _style_run(run)
+# Data rows: level label (bold) + R markers
+for r, (level, marks) in enumerate(audience_levels, start=1):
+    cells = aud_tbl.rows[r].cells
+    cells[0].text = ""
+    run = cells[0].paragraphs[0].add_run(level)
+    run.bold = True
+    _style_run(run)
+    for c, mark in enumerate(marks, start=1):
+        cells[c].text = mark
+        _style_cell(cells[c])
+
+heading("Policy", H1)
+para("LSV requires all patrolling members and operational personnel to adhere to the established policies, procedures and guidelines to ensure safe and effective practices relating to patrol coverage, response, and inter-service coordination.")
+
+heading("Procedure", H1)
+
+heading("Aim", H2)
+para('To establish a consistent operational definition of the areas in which lifesaving services patrol, respond, and share situational information. The intent is for LIMSOC to capture what services do operationally, not to introduce new operational concepts. Clear definitions of these areas resolve historical confusion around the meaning of "Primary" and "Secondary" zones, ensure relevant information reaches the front line, and provide the foundation for a state view that reflects each service\'s actual coverage and capability, and our agency capability and coverage for any given location.')
+
+heading("Zone Types", H2)
+para("This procedure outlines a number of zones which have separate operational relevance. These are:")
+bullet("Capability Zones: Define capability", 0)
+bullet("Active Patrol", 1)
+bullet("Emergency Response", 1)
+bullet("Service Delivery Zones: Define priority", 0)
+bullet("Primary Patrol", 1)
+bullet("Secondary Patrol", 1)
+bullet("Supplementary Zones: Information sharing", 0)
+bullet("Information Sharing", 1)
+para("Not all services will have all zones defined. The Service Delivery Zones are currently applied to RWC services and may be applied to other services where operational priority needs to be defined.")
+rich([
+    ("Note on standard operating conditions. ", {"bold": True}),
+    ("Several zone definitions refer to standard operating conditions. For the purpose of this SOP, standard operating conditions means what would usually be expected when operating at that location, and excludes extreme weather and other adverse operating conditions.", {}),
+])
+
+heading("Capability Zones", H2)
+para("Capability Zones describe the area in which a service can operate, both under active supervision and on response.")
+
+heading("Active Patrol Zone", H3)
+rich([("The area actively supervised by a patrol while on duty.", {"bold": True})])
+para("As a general guide, this is the area within line of sight of the patrol towers under standard operating conditions. If a service is signed on, this area should have coverage to be checked immediately if assistance was required.")
+para("Each service should define its Active Patrol Zone in line with its own patrol set-up and operating conditions.")
+para("Some services will not have an Active Patrol Zone. For example, RWC services are always moving and do not maintain a fixed area of active supervision.")
+
+heading("Emergency Response Zone", H3)
+rich([("The area that can be effectively responded to with the capabilities available at that service, assuming assets are launched from the base location under standard operating conditions, and excluding 4WD transport.", {"bold": True})])
+para("The Emergency Response Zone is a function of the service's capability. A Lifeguard site with no power craft will have a much smaller Emergency Response Zone than an RWC site. Each service should define its Emergency Response Zone against its actual operating assets and base location.")
+para("For services operating Primary and Secondary Zones, the Emergency Response Zone covers the full extent of the Primary and Secondary Zones combined.")
+
+heading("Service Delivery Zones", H2)
+para("Service Delivery Zones define the order in which a service's area is covered when operational priority needs to be set. They are currently applied to RWC services and may be applied to other services where appropriate.")
+
+heading("Primary Zone", H3)
+para("The area in which the service's response activity is prioritised first under standard operating conditions.")
+
+heading("Secondary Zone", H3)
+para("The area in which the service's response activity is prioritised second, after the Primary Zone.")
+
+heading("Movement and Approvals", H3)
+bullet_rich([("Primary Zone: ", {"bold": True}), ("First area to be patrolled. This area should be covered completely for all patrols with desirable weather conditions.", {})])
+bullet_rich([("Secondary Zone: ", {"bold": True}), ("This area should be patrolled at the discretion of the team leader, or at the request of the Area Response Officer or State Duty Officer. This area should only be patrolled once there has been sufficient patrol coverage of the Primary Zone, with a SMEAC and dynamic risk assessment completed prior to expanding patrol operations into the Secondary Zone.", {})])
+bullet_rich([("Beyond the Primary and Secondary Zone: ", {"bold": True}), ("Services may only proceed outside their Primary and Secondary Zones where the following apply:", {})])
+bullet("The operators are comfortable proceeding, AND", 1)
+bullet("EITHER:", 1)
+bullet("They are responding to a confirmed request for assistance where there is an imminent danger to human life, OR", 2)
+bullet("Approval or tasking has been given by the State Duty Officer.", 2)
+
+heading("Supplementary Zones", H2)
+para("Supplementary Zones support inter-service awareness and information sharing across the area of operation.")
+
+heading("Information Sharing Zone", H3)
+rich([("The area outside the Active Patrol Zone and Emergency Response Zone for which the service should have operational visibility, because activity within that area could reasonably affect the service's delivery.", {"bold": True})])
+para("As a general guide, an Information Sharing Zone should give the service enough visibility that any lifesaving activity within the area could reasonably influence the service's operational decisions. For example, Port Melbourne should know if South Melbourne does not have an operational IRB, whereas Brighton does not need that information.")
+
+heading("Related Information", H1)
+para("The following references were used in the development of this SOP:")
+bullet("SOP 1.4 – Patrols (parent SOP)")
+bullet("SOP 5.8 – Low Light and Night Operations")
+bullet("SOP 5.11 – Public Rescue Equipment Activation")
+
+heading("Definitions / Abbreviations", H1)
+make_table(
+    ["Term", "Definition"],
+    [
+        ("Active Patrol Zone", "The area actively supervised by a patrol while on duty, as a general guide within line of sight of the patrol towers under standard operating conditions."),
+        ("ARO", "Area Response Officer"),
+        ("Emergency Response Zone", "The area that can be effectively responded to with the capabilities available at the service from the base location under standard operating conditions, excluding 4WD transport."),
+        ("EMCaR", "Emergency Management Capability and Response"),
+        ("Information Sharing Zone", "The area outside the Active Patrol Zone and Emergency Response Zone for which the service should have operational visibility because activity within it could reasonably affect the service's delivery."),
+        ("IRB", "Inflatable Rescue Boat"),
+        ("LG", "Lifeguard"),
+        ("LIMSOC", "Lifesaving Incident Management System and Operations Console"),
+        ("LOO", "Area Lifesaving Operations Officer"),
+        ("LSV", "Life Saving Victoria"),
+        ("LSV Comms", "Life Saving Victoria Communications"),
+        ("LSV Member", "Any financial volunteer of an affiliated lifesaving club, any staff member employed by LSV."),
+        ("Primary Zone", "The area in which a service's response activity is prioritised first under standard operating conditions."),
+        ("RWC", "Rescue Water Craft"),
+        ("SAC", "State Area Coordinator"),
+        ("Secondary Zone", "The area in which a service's response activity is prioritised second, after the Primary Zone."),
+        ("SDO", "State Duty Officer"),
+        ("SMEAC", "Situation, Mission, Execution, Administration, Communications (mission briefing format)"),
+        ("Standard Operating Conditions", "What would usually be expected when operating at that location. Excludes extreme weather and other adverse operating conditions."),
+    ],
+)
+
+heading("Revision Version Control", H1)
+make_table(
+    ["Version", "Date", "Author", "Details"],
+    [("0.1", "10 June 2026", "Nicholas Wood", "Initial draft")],
+)
+
+heading("Endorsement", H1)
+make_table(
+    ["Effective Date", "Endorsed By"],
+    [("TBC", "Kirsty Robertson – Chief Operations Officer")],
+)
+
+doc.save(OUTPUT)
+print(f"Saved: {OUTPUT}")
+print(f"Styles used: H1={H1!r} H2={H2!r} H3={H3!r} Title={TITLE!r} List={LIST_PARA!r} Table={TABLE_STYLE!r}")

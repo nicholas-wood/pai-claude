@@ -1,0 +1,273 @@
+/**
+ * base-manage — source-introspection tests for the base-manager surface
+ * (UC-5, FR-3.4 / FR-3.4a / FR-3.9). Same style as
+ * `admin-base-ops-notes.test.ts` and `base-capability-service-name.test.ts`.
+ *
+ * We don't stand up the DB; we pin the wiring invariants that the
+ * /dashboard/bases/[id] editor depends on (correct role gate, idempotency
+ * middleware, length caps, undefined-vs-null semantics, audit shape).
+ */
+
+import { describe, it, expect } from "bun:test";
+import { baseManageRoutes } from "./base-manage.ts";
+import { readFileSync } from "node:fs";
+
+const SRC = readFileSync(new URL("./base-manage.ts", import.meta.url), "utf8");
+
+/**
+ * Find the slice of source that contains a single handler. We anchor on
+ * `baseManageRoutes.<verb>(` plus the literal path string and walk forward
+ * to the next `baseManageRoutes.` registration.
+ */
+function getSlice(): string {
+  const reg = /baseManageRoutes\.get\(\s*\n?\s*"\/v1\/bases\/:id\/manage"\s*,/m;
+  const m = reg.exec(SRC);
+  if (!m) return "";
+  const idx = m.index;
+  const next = SRC.indexOf("baseManageRoutes.", idx + (m[0]?.length ?? 0));
+  return SRC.slice(idx, next > 0 ? next : undefined);
+}
+
+function patchBaseSlice(): string {
+  // PATCH base is anchored on the path string followed by a comma (not a
+  // slash) so we don't accidentally match the longer
+  // /v1/bases/:id/manage/capabilities/:capability_id path.
+  const reg = /baseManageRoutes\.patch\(\s*\n?\s*"\/v1\/bases\/:id\/manage"\s*,/m;
+  const m = reg.exec(SRC);
+  if (!m) return "";
+  const idx = m.index;
+  const next = SRC.indexOf("baseManageRoutes.", idx + (m[0]?.length ?? 0));
+  return SRC.slice(idx, next > 0 ? next : undefined);
+}
+
+function patchCapSlice(): string {
+  const reg = /baseManageRoutes\.patch\(\s*\n?\s*"\/v1\/bases\/:id\/manage\/capabilities\/:capability_id"/m;
+  const m = reg.exec(SRC);
+  if (!m) return "";
+  const idx = m.index;
+  const next = SRC.indexOf("baseManageRoutes.", idx + (m[0]?.length ?? 0));
+  return SRC.slice(idx, next > 0 ? next : undefined);
+}
+
+describe("base-manage — GET /v1/bases/:id/manage (UC-5)", () => {
+  it("registers a GET handler at the expected path", () => {
+    expect(SRC).toMatch(/baseManageRoutes\.get\(\s*"\/v1\/bases\/:id\/manage"/);
+  });
+
+  it("runs under authMiddleware (no idempotency on GET)", () => {
+    const slice = getSlice();
+    expect(slice).toContain("authMiddleware");
+  });
+
+  it("gates on assertBaseManagerOrStateAdmin", () => {
+    const slice = getSlice();
+    expect(slice).toContain("assertBaseManagerOrStateAdmin");
+    expect(slice).toMatch(
+      /return c\.json\(\s*\{\s*code:\s*"INSUFFICIENT_ROLE"\s*\}\s*,\s*403\s*\)/,
+    );
+  });
+
+  it("returns 401 without bearer", async () => {
+    const req = new Request("http://localhost/v1/bases/base_1/manage", {
+      method: "GET",
+    });
+    const res = await baseManageRoutes.fetch(req);
+    expect(res.status).toBe(401);
+  });
+
+  it("selects operational_notes + organisation/state metadata", () => {
+    const slice = getSlice();
+    expect(slice).toMatch(/SELECT[\s\S]*operational_notes[\s\S]*FROM operational_bases/);
+    expect(slice).toContain("o.state_code");
+  });
+
+  it("emits attached capabilities with service_name", () => {
+    const slice = getSlice();
+    expect(slice).toMatch(/FROM base_capabilities/);
+    expect(slice).toContain("bc.service_name");
+    expect(slice).toContain("c.active = true");
+  });
+});
+
+describe("base-manage — PATCH /v1/bases/:id/manage (FR-3.4, B12-equivalent)", () => {
+  it("registers a PATCH handler at the expected path", () => {
+    expect(SRC).toMatch(/baseManageRoutes\.patch\(\s*\n?\s*"\/v1\/bases\/:id\/manage"/);
+  });
+
+  it("is wrapped in authMiddleware + idempotencyMiddleware", () => {
+    expect(SRC).toMatch(
+      /"\/v1\/bases\/:id\/manage"\s*,\s*authMiddleware\s*,\s*idempotencyMiddleware/,
+    );
+  });
+
+  it("gates on assertBaseManagerOrStateAdmin", () => {
+    const slice = patchBaseSlice();
+    expect(slice).toContain("assertBaseManagerOrStateAdmin");
+  });
+
+  it("returns NO_FIELDS when operational_notes is undefined", () => {
+    const slice = patchBaseSlice();
+    expect(slice).toContain("body.operational_notes === undefined");
+    expect(slice).toContain('"NO_FIELDS"');
+  });
+
+  it("rejects non-string non-null operational_notes with INVALID_OPERATIONAL_NOTES", () => {
+    const slice = patchBaseSlice();
+    expect(slice).toContain("INVALID_OPERATIONAL_NOTES");
+  });
+
+  it("caps length at 8000 chars with OPERATIONAL_NOTES_TOO_LONG", () => {
+    const slice = patchBaseSlice();
+    expect(slice).toContain("OPERATIONAL_NOTES_TOO_LONG");
+    // The cap constant is declared at module scope (out of the route
+    // handler slice), so match against the full source.
+    expect(SRC).toMatch(/OPS_NOTES_MAX\s*=\s*8000/);
+  });
+
+  it("coerces whitespace-only string to null (clear semantics)", () => {
+    const slice = patchBaseSlice();
+    expect(slice).toMatch(/body\.operational_notes\.trim\(\)\.length\s*===\s*0/);
+    expect(slice).toMatch(/body\.operational_notes\s*=\s*null/);
+  });
+
+  it("writes operational_notes in the UPDATE statement", () => {
+    const slice = patchBaseSlice();
+    expect(slice).toMatch(/UPDATE operational_bases[\s\S]*operational_notes\s*=/);
+  });
+
+  it("emits the same base_admin_updated audit action as admin-ui surface", () => {
+    const slice = patchBaseSlice();
+    expect(slice).toContain('"base_admin_updated"');
+    expect(slice).toContain('diff: {');
+    expect(slice).toContain('operational_notes:');
+  });
+
+  it("skips the audit row when the value is unchanged (no-op autosave)", () => {
+    const slice = patchBaseSlice();
+    expect(slice).toMatch(
+      /\(\s*before\.operational_notes\s*\?\?\s*null\s*\)\s*!==\s*\(\s*nextOpsNotes\s*\?\?\s*null\s*\)/,
+    );
+  });
+
+  it("tags the audit payload with surface: base_manage", () => {
+    const slice = patchBaseSlice();
+    expect(slice).toContain('surface: "base_manage"');
+  });
+
+  it("returns 401 without bearer", async () => {
+    const req = new Request("http://localhost/v1/bases/base_1/manage", {
+      method: "PATCH",
+      headers: { "content-type": "application/json", "idempotency-key": "k1" },
+      body: JSON.stringify({ operational_notes: "Launch on incoming tide only." }),
+    });
+    const res = await baseManageRoutes.fetch(req);
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("base-manage — PATCH /v1/bases/:id/manage/capabilities/:capability_id (FR-3.4a / FR-3.3a)", () => {
+  it("registers a PATCH handler at the expected path", () => {
+    expect(SRC).toMatch(
+      /baseManageRoutes\.patch\(\s*\n?\s*"\/v1\/bases\/:id\/manage\/capabilities\/:capability_id"/,
+    );
+  });
+
+  it("is wrapped in authMiddleware + idempotencyMiddleware", () => {
+    expect(SRC).toMatch(
+      /"\/v1\/bases\/:id\/manage\/capabilities\/:capability_id"\s*,\s*authMiddleware\s*,\s*idempotencyMiddleware/,
+    );
+  });
+
+  it("gates on assertBaseManagerOrStateAdmin", () => {
+    const slice = patchCapSlice();
+    expect(slice).toContain("assertBaseManagerOrStateAdmin");
+  });
+
+  it("returns NO_FIELDS when service_name is undefined", () => {
+    const slice = patchCapSlice();
+    expect(slice).toContain("body.service_name === undefined");
+    expect(slice).toContain('"NO_FIELDS"');
+  });
+
+  it("rejects non-string non-null service_name", () => {
+    const slice = patchCapSlice();
+    expect(slice).toContain("INVALID_SERVICE_NAME");
+  });
+
+  it("enforces ≤200 char length cap with SERVICE_NAME_TOO_LONG", () => {
+    const slice = patchCapSlice();
+    expect(slice).toContain("SERVICE_NAME_TOO_LONG");
+    expect(slice).toMatch(/trimmed\.length\s*>\s*SERVICE_NAME_MAX/);
+    // Constant declared at module scope (out of the route handler slice).
+    expect(SRC).toMatch(/SERVICE_NAME_MAX\s*=\s*200/);
+  });
+
+  it("coerces empty / whitespace-only string to null (clear semantics)", () => {
+    const slice = patchCapSlice();
+    expect(slice).toMatch(/trimmed\.length\s*===\s*0/);
+    expect(slice).toMatch(/body\.service_name\s*=\s*null/);
+  });
+
+  it("trims surrounding whitespace before save", () => {
+    const slice = patchCapSlice();
+    expect(slice).toContain("body.service_name.trim()");
+  });
+
+  it("404s when no base_capabilities row exists", () => {
+    const slice = patchCapSlice();
+    expect(slice).toContain("BASE_CAPABILITY_NOT_FOUND");
+  });
+
+  it("rejects per-state duplicate service_name with 409 SERVICE_NAME_DUPLICATE", () => {
+    const slice = patchCapSlice();
+    expect(slice).toContain("SERVICE_NAME_DUPLICATE");
+    expect(slice).toMatch(/o1\.state_code\s*=\s*o2\.state_code/);
+    expect(slice).toMatch(/409/);
+  });
+
+  it("emits the same audit action as admin-ui surface for converging diffs", () => {
+    const slice = patchCapSlice();
+    expect(slice).toContain('"base_capability_service_name_updated"');
+    expect(slice).toMatch(/target_type:\s*"base_capability"/);
+    expect(slice).toMatch(/target_id:\s*before\.id/);
+  });
+
+  it("captures before + after service_name in the audit payload", () => {
+    const slice = patchCapSlice();
+    expect(slice).toMatch(/before:\s*\{\s*service_name:\s*before\.service_name\s*\}/);
+    expect(slice).toMatch(/after:\s*\{\s*service_name:\s*body\.service_name\s*\}/);
+  });
+
+  it("skips the audit row when the value is unchanged (no-op save)", () => {
+    const slice = patchCapSlice();
+    expect(slice).toMatch(
+      /\(\s*before\.service_name\s*\?\?\s*null\s*\)\s*!==\s*\(\s*body\.service_name\s*\?\?\s*null\s*\)/,
+    );
+  });
+
+  it("tags the audit payload with surface: base_manage", () => {
+    const slice = patchCapSlice();
+    expect(slice).toContain('surface: "base_manage"');
+  });
+
+  it("returns 401 without bearer", async () => {
+    const req = new Request(
+      "http://localhost/v1/bases/base_1/manage/capabilities/cap_1",
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json", "idempotency-key": "k1" },
+        body: JSON.stringify({ service_name: "Brighton SLSC IRB Crew" }),
+      },
+    );
+    const res = await baseManageRoutes.fetch(req);
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("base-manage — surface tagging in audit_log", () => {
+  it("tags both PATCH endpoints with surface: 'base_manage' so reviewers can distinguish manager vs admin writes", () => {
+    // Count occurrences — should be 2 (both PATCH endpoints).
+    const matches = SRC.match(/surface:\s*"base_manage"/g);
+    expect(matches?.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+});

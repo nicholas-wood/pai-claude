@@ -1,0 +1,213 @@
+/**
+ * FR-6e / UC-10 step 4 / KICKOFF §6 — pure-helper tests for the broadcast
+ * inbox row formatters, plus source-introspection assertions that the
+ * screens never auto-ack (KICKOFF §6 line 132).
+ *
+ * The RN renderer is not exercised here — bun's CommonJS handling can't
+ * import expo-router. We test the pure helpers directly and grep the screen
+ * source for the never-auto-ack invariants. Same pattern as
+ * standdowns.test.ts.
+ *
+ * Refs: REQUIREMENTS.md FR-6e, USE_CASES.md UC-10 step 4, KICKOFF §6.
+ */
+
+import { describe, it, expect } from "bun:test";
+import { readFileSync } from "node:fs";
+import {
+  formatSentAt,
+  previewMessage,
+  priorityColour,
+  priorityLabel,
+  sortInbox,
+  type BroadcastRow,
+} from "./broadcasts";
+
+const BROADCASTS_SCREEN_SRC = readFileSync(
+  new URL("../app/(tabs)/broadcasts.tsx", import.meta.url),
+  "utf8",
+);
+const CALLOUT_SCREEN_SRC = readFileSync(
+  new URL("../app/callout/[id].tsx", import.meta.url),
+  "utf8",
+);
+const STATUS_SCREEN_SRC = readFileSync(new URL("../app/(tabs)/index.tsx", import.meta.url), "utf8");
+
+function row(over: Partial<BroadcastRow> = {}): BroadcastRow {
+  return {
+    broadcast_id: "bcst_x",
+    callout_id: "clt_x",
+    callout_name: "Test callout",
+    message: "Hello",
+    priority: "normal",
+    ack_required: false,
+    sent_at: "2026-05-05T14:00:00.000Z",
+    sent_by_display: "Dispatcher A",
+    acknowledged_at: null,
+    ...over,
+  };
+}
+
+describe("priorityLabel", () => {
+  it("renders HIGH for high", () => {
+    expect(priorityLabel("high")).toBe("HIGH");
+  });
+  it("renders NORMAL for normal", () => {
+    expect(priorityLabel("normal")).toBe("NORMAL");
+  });
+  it("falls back to NORMAL for an unknown value", () => {
+    expect(priorityLabel("critical")).toBe("NORMAL");
+  });
+});
+
+describe("priorityColour", () => {
+  it("returns a red palette for high", () => {
+    expect(priorityColour("high").border).toBe("#ef4444");
+  });
+  it("returns a blue palette for normal", () => {
+    expect(priorityColour("normal").border).toBe("#4ea1ff");
+  });
+});
+
+describe("formatSentAt", () => {
+  it("returns em-dash for an invalid timestamp", () => {
+    expect(formatSentAt("not-a-date")).toBe("—");
+  });
+
+  it("returns 'just now' for sub-minute deltas", () => {
+    const now = new Date("2026-05-05T14:00:30.000Z");
+    expect(formatSentAt("2026-05-05T14:00:00.000Z", now)).toBe("just now");
+  });
+
+  it("returns minutes for sub-hour deltas", () => {
+    const now = new Date("2026-05-05T14:30:00.000Z");
+    expect(formatSentAt("2026-05-05T14:00:00.000Z", now)).toBe("30 min ago");
+  });
+
+  it("returns hours for sub-day deltas", () => {
+    const now = new Date("2026-05-05T18:00:00.000Z");
+    expect(formatSentAt("2026-05-05T14:00:00.000Z", now)).toBe("4 hr ago");
+  });
+
+  it("returns 'yesterday' for 1-day deltas", () => {
+    const now = new Date("2026-05-06T14:00:00.000Z");
+    expect(formatSentAt("2026-05-05T14:00:00.000Z", now)).toBe("yesterday");
+  });
+
+  it("falls back to a non-empty AU-locale string for older timestamps", () => {
+    const now = new Date("2026-05-20T14:00:00.000Z");
+    const out = formatSentAt("2026-05-05T14:00:00.000Z", now);
+    expect(typeof out).toBe("string");
+    expect(out.length).toBeGreaterThan(0);
+    expect(out).not.toBe("—");
+  });
+});
+
+describe("previewMessage", () => {
+  it("returns the message verbatim when within bounds", () => {
+    expect(previewMessage("short", 80)).toBe("short");
+  });
+  it("truncates with an ellipsis past the bound", () => {
+    const out = previewMessage("a".repeat(100), 10);
+    expect(out.length).toBeLessThanOrEqual(10);
+    expect(out.endsWith("…")).toBe(true);
+  });
+});
+
+describe("sortInbox", () => {
+  it("puts unack-required-and-unacked first", () => {
+    const out = sortInbox([
+      row({ broadcast_id: "a", ack_required: false, acknowledged_at: null }),
+      row({ broadcast_id: "b", ack_required: true, acknowledged_at: null }),
+      row({
+        broadcast_id: "c",
+        ack_required: true,
+        acknowledged_at: "2026-05-05T15:00:00.000Z",
+      }),
+    ]);
+    expect(out.map((r) => r.broadcast_id)).toEqual(["b", "a", "c"]);
+  });
+
+  it("sorts by sent_at desc within a bucket", () => {
+    const out = sortInbox([
+      row({ broadcast_id: "old", sent_at: "2026-05-05T10:00:00.000Z" }),
+      row({ broadcast_id: "new", sent_at: "2026-05-05T15:00:00.000Z" }),
+    ]);
+    expect(out.map((r) => r.broadcast_id)).toEqual(["new", "old"]);
+  });
+});
+
+describe("KICKOFF §6 — broadcast inbox NEVER auto-acks", () => {
+  it("the inbox screen acknowledge() function is gated by Alert.alert", () => {
+    const ackIdx = BROADCASTS_SCREEN_SRC.indexOf("async function acknowledge(row");
+    expect(ackIdx).toBeGreaterThan(0);
+    const ackBody = BROADCASTS_SCREEN_SRC.slice(ackIdx, ackIdx + 1500);
+    expect(ackBody).toContain("Alert.alert");
+    expect(ackBody).toContain('"Acknowledge broadcast?"');
+    // POST is inside the onPress callback of the "Acknowledge" alert button.
+    expect(ackBody).toContain('text: "Acknowledge"');
+    expect(ackBody).toContain("/v1/me/broadcasts/${row.broadcast_id}/ack`");
+  });
+
+  it("the inbox load() function only GETs from /v1/me/broadcasts (read-only)", () => {
+    const loadIdx = BROADCASTS_SCREEN_SRC.indexOf("const load = useCallback");
+    expect(loadIdx).toBeGreaterThan(0);
+    const loadEnd = BROADCASTS_SCREEN_SRC.indexOf("}, []);", loadIdx);
+    const loadBody = BROADCASTS_SCREEN_SRC.slice(loadIdx, loadEnd);
+    expect(loadBody).toContain("/v1/me/broadcasts?status=unread");
+    expect(loadBody).not.toContain('method: "POST"');
+    expect(loadBody).not.toContain("/ack`");
+  });
+
+  it("the inbox useEffect on mount never POSTs an ack", () => {
+    const useIdx = BROADCASTS_SCREEN_SRC.indexOf("useEffect(() => {");
+    expect(useIdx).toBeGreaterThan(0);
+    const closeIdx = BROADCASTS_SCREEN_SRC.indexOf("}, [load]);", useIdx);
+    expect(closeIdx).toBeGreaterThan(useIdx);
+    const hookBlock = BROADCASTS_SCREEN_SRC.slice(useIdx, closeIdx + "}, [load]);".length);
+    expect(hookBlock).toContain("void load()");
+    expect(hookBlock).not.toContain("/ack`");
+    expect(hookBlock).not.toContain('method: "POST"');
+  });
+
+  it("row tap navigates to /callout/:id and does NOT POST", () => {
+    // The pressable around the title block routes via expo-router's push;
+    // there is no ack POST attached.
+    expect(BROADCASTS_SCREEN_SRC).toContain("router.push(`/callout/${row.callout_id}`)");
+  });
+
+  it("Acknowledge button only renders when ack_required && !acknowledged_at", () => {
+    expect(BROADCASTS_SCREEN_SRC).toContain("row.ack_required && !row.acknowledged_at");
+  });
+
+  it("the in-callout inline ack ALSO requires Alert.alert confirmation", () => {
+    const fnIdx = CALLOUT_SCREEN_SRC.indexOf("async function acknowledgeBroadcast(row");
+    expect(fnIdx).toBeGreaterThan(0);
+    const slice = CALLOUT_SCREEN_SRC.slice(fnIdx, fnIdx + 1500);
+    expect(slice).toContain("Alert.alert");
+    expect(slice).toContain('"Acknowledge broadcast?"');
+    expect(slice).toContain("/v1/me/broadcasts/${row.broadcast_id}/ack`");
+  });
+
+  it("loading the in-callout view does NOT fire an ack POST", () => {
+    const loadIdx = CALLOUT_SCREEN_SRC.indexOf("const load = useCallback");
+    const useIdx = CALLOUT_SCREEN_SRC.indexOf("useEffect(", loadIdx);
+    const loadBody = CALLOUT_SCREEN_SRC.slice(loadIdx, useIdx);
+    expect(loadBody).not.toContain("/v1/me/broadcasts/${");
+    expect(loadBody).toContain("/v1/me/broadcasts?status=unread");
+  });
+
+  it("the Status screen banner is informational only — no broadcast ack POST on render", () => {
+    const idx = STATUS_SCREEN_SRC.indexOf("unreadBroadcastCount");
+    expect(idx).toBeGreaterThan(0);
+    expect(STATUS_SCREEN_SRC).toContain("/v1/me/broadcasts?status=unread");
+    // No broadcast ack URL anywhere on the status screen.
+    expect(STATUS_SCREEN_SRC).not.toContain("/v1/me/broadcasts/");
+  });
+
+  it("each ack POST passes through the api helper (idempotency-key auto-attached)", () => {
+    expect(BROADCASTS_SCREEN_SRC).not.toMatch(/\bfetch\(/);
+    // CALLOUT_SCREEN_SRC also asserts no raw fetch in standdowns.test.ts;
+    // re-asserting here keeps the broadcast ack honest if anyone refactors.
+    expect(CALLOUT_SCREEN_SRC).not.toMatch(/\bfetch\(/);
+  });
+});

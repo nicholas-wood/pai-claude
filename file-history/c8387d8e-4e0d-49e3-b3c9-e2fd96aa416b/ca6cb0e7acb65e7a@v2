@@ -1,0 +1,429 @@
+"use client";
+
+/**
+ * Inline-edit row for a capability. Saves on blur (text fields) and on
+ * change (checkbox / colour picker) via PATCH /v1/admin/capabilities/:id
+ * with any of:
+ *   { display_label, display_description, ring_colour, show_ring,
+ *     approval_required }.
+ *
+ * The `code` field is read-only — the API rejects any body that includes
+ * it (CAPABILITY_CODE_IMMUTABLE, 400). We never send it.
+ *
+ * Fix 1 of dispatch-ux-batch added ring_colour + show_ring so the dispatch
+ * map ring config is editable from this surface — no code change needed
+ * to add or recolour a ring.
+ *
+ * admin-extensions adds `approval_required` (FR-3.2). When false, member
+ * onboarding auto-approves the capability instead of routing to a leader
+ * approval queue (see apps/api/src/features/onboarding/onboard-member.ts).
+ */
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+
+/**
+ * Per-capability member counts surfaced beside the catalogue row. Sourced
+ * from `/v1/approvals?status=` in the server component and aggregated
+ * in-page (no new server route was added). The truncation flags reflect the
+ * 100-row cap on that endpoint — see capabilities/page.tsx.
+ */
+export type CapabilityCounts = {
+  approved: number | null;
+  approved_truncated: boolean;
+  suspended: number | null;
+  suspended_truncated: boolean;
+  pending: number | null;
+  pending_truncated: boolean;
+};
+
+export function CapEditRow({
+  id,
+  code,
+  label,
+  description,
+  approvalRequired,
+  ringColour,
+  showRing,
+  isCanonical,
+  deletedAt,
+  counts,
+}: {
+  id: string;
+  code: string;
+  label: string;
+  description: string | null;
+  approvalRequired: boolean;
+  ringColour: string | null;
+  showRing: boolean;
+  isCanonical: boolean;
+  deletedAt: string | null;
+  counts?: CapabilityCounts | undefined;
+}) {
+  const router = useRouter();
+  const [labelDraft, setLabelDraft] = useState(label);
+  const [descDraft, setDescDraft] = useState(description ?? "");
+  // Colour picker always needs a value (the HTML colour-input spec
+  // requires #rrggbb); a NULL DB value renders as charcoal in the
+  // picker but is preserved as null in the saved body when the hex
+  // string is empty / matches the default sentinel.
+  const [colourDraft, setColourDraft] = useState(ringColour ?? "");
+  const [showRingDraft, setShowRingDraft] = useState(showRing);
+  const [approvalRequiredDraft, setApprovalRequiredDraft] = useState(approvalRequired);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  // admin-extensions Fix 3: separate state for the delete / restore actions
+  // so they don't overwrite the inline-edit save indicator.
+  const [actionPending, setActionPending] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  async function doDelete() {
+    if (isCanonical) return;
+    if (typeof window !== "undefined") {
+      const ok = window.confirm(
+        `Delete capability "${code}"?\n\nThis is a soft-delete — the capability will be hidden from operational lists but its history is preserved. You can restore it later.`,
+      );
+      if (!ok) return;
+    }
+    setActionError(null);
+    setActionPending(true);
+    try {
+      const res = await fetch(`/api/proxy/v1/admin/capabilities/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: { "idempotency-key": crypto.randomUUID() },
+      });
+      if (!res.ok) {
+        // Surface the body so 409 CAPABILITY_IN_USE counts reach the admin.
+        const text = await res.text();
+        setActionError(text);
+        return;
+      }
+      startTransition(() => router.refresh());
+    } catch (err) {
+      setActionError((err as Error).message);
+    } finally {
+      setActionPending(false);
+    }
+  }
+
+  async function doRestore() {
+    setActionError(null);
+    setActionPending(true);
+    try {
+      const res = await fetch(
+        `/api/proxy/v1/admin/capabilities/${encodeURIComponent(id)}/restore`,
+        {
+          method: "POST",
+          headers: { "idempotency-key": crypto.randomUUID() },
+        },
+      );
+      if (!res.ok) {
+        setActionError(await res.text());
+        return;
+      }
+      startTransition(() => router.refresh());
+    } catch (err) {
+      setActionError((err as Error).message);
+    } finally {
+      setActionPending(false);
+    }
+  }
+
+  function dirty(): boolean {
+    return (
+      labelDraft !== label ||
+      descDraft !== (description ?? "") ||
+      colourDraft !== (ringColour ?? "") ||
+      showRingDraft !== showRing ||
+      approvalRequiredDraft !== approvalRequired
+    );
+  }
+
+  async function save() {
+    if (!dirty()) return;
+    setError(null);
+    const body: Record<string, string | boolean | null> = {};
+    if (labelDraft !== label) body["display_label"] = labelDraft;
+    if (descDraft !== (description ?? "")) body["display_description"] = descDraft || null;
+    if (colourDraft !== (ringColour ?? "")) {
+      // Empty string clears the colour back to NULL.
+      body["ring_colour"] = colourDraft.trim() === "" ? null : colourDraft.trim();
+    }
+    if (showRingDraft !== showRing) body["show_ring"] = showRingDraft;
+    if (approvalRequiredDraft !== approvalRequired) {
+      body["approval_required"] = approvalRequiredDraft;
+    }
+    try {
+      const res = await fetch(`/api/proxy/v1/admin/capabilities/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": crypto.randomUUID(),
+        },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        setError(await res.text());
+        return;
+      }
+      setSavedAt(Date.now());
+      startTransition(() => router.refresh());
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  return (
+    <tr>
+      <td style={tdStyle}>
+        <code>{code}</code>
+      </td>
+      <td style={tdStyle}>
+        <input
+          type="text"
+          value={labelDraft}
+          onChange={(e) => setLabelDraft(e.target.value)}
+          onBlur={save}
+          style={inputStyle}
+        />
+      </td>
+      <td style={tdStyle}>
+        <input
+          type="text"
+          value={descDraft}
+          onChange={(e) => setDescDraft(e.target.value)}
+          onBlur={save}
+          style={{ ...inputStyle, width: "100%" }}
+        />
+      </td>
+      <td style={tdStyle}>
+        <input
+          type="checkbox"
+          checked={approvalRequiredDraft}
+          onChange={(e) => {
+            setApprovalRequiredDraft(e.target.checked);
+            // Toggle saves immediately like show-ring; no typing to lose
+            // and the side-effect (auto-grant onboarding) is significant
+            // enough to surface a save indicator promptly.
+            window.setTimeout(save, 0);
+          }}
+          aria-label="Requires approval"
+        />
+      </td>
+      <td style={tdStyle}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <input
+            type="color"
+            // The colour-input spec requires a #rrggbb value; empty
+            // strings are coerced to #000000. We display charcoal as
+            // the visual sentinel for "unset" but keep the underlying
+            // draft as the empty string so save() saves null.
+            value={colourDraft || "#1f1f1f"}
+            onChange={(e) => setColourDraft(e.target.value)}
+            onBlur={save}
+            aria-label="Ring colour picker"
+            style={{
+              width: 28,
+              height: 24,
+              padding: 0,
+              border: "1px solid var(--border)",
+              borderRadius: 4,
+              background: "transparent",
+              cursor: "pointer",
+            }}
+          />
+          <input
+            type="text"
+            value={colourDraft}
+            onChange={(e) => setColourDraft(e.target.value)}
+            onBlur={save}
+            aria-label="Ring colour hex"
+            placeholder="#rrggbb or empty"
+            style={{ ...inputStyle, width: 100, fontSize: 13 }}
+          />
+        </div>
+      </td>
+      <td style={tdStyle}>
+        <input
+          type="checkbox"
+          checked={showRingDraft}
+          onChange={(e) => {
+            setShowRingDraft(e.target.checked);
+            // Checkbox toggles save immediately rather than waiting for
+            // blur — there's no continuation of typing to lose.
+            window.setTimeout(save, 0);
+          }}
+          aria-label="Show ring"
+        />
+      </td>
+      <td style={{ ...tdStyle, fontSize: 12 }}>
+        <CountsCell counts={counts} />
+      </td>
+      <td style={{ ...tdStyle, fontSize: 12 }}>
+        {deletedAt ? (
+          <span
+            className="tag"
+            style={{
+              background: "rgba(239,68,68,0.18)",
+              color: "#fca5a5",
+              padding: "2px 6px",
+              borderRadius: 4,
+            }}
+          >
+            Deleted
+          </span>
+        ) : isCanonical ? (
+          <span
+            className="tag"
+            style={{
+              background: "rgba(78,161,255,0.18)",
+              color: "#9cc4ff",
+              padding: "2px 6px",
+              borderRadius: 4,
+            }}
+            title="Canonical capability — backs the onboarding award→capability mapping. Cannot be deleted."
+          >
+            Canonical
+          </span>
+        ) : (
+          <span className="muted">Custom</span>
+        )}
+      </td>
+      <td style={{ ...tdStyle, fontSize: 11 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {error || actionError ? (
+            <span style={{ color: "#fca5a5" }}>{actionError ?? error}</span>
+          ) : pending || actionPending ? (
+            <span className="muted">saving…</span>
+          ) : savedAt ? (
+            <span className="muted">saved</span>
+          ) : null}
+          {deletedAt ? (
+            <button
+              type="button"
+              onClick={() => void doRestore()}
+              disabled={actionPending}
+              style={restoreButtonStyle}
+            >
+              Restore
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void doDelete()}
+              disabled={isCanonical || actionPending}
+              title={isCanonical ? "Canonical capability — cannot be deleted" : "Soft-delete"}
+              style={isCanonical ? disabledDeleteButtonStyle : deleteButtonStyle}
+            >
+              Delete
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function CountsCell({ counts }: { counts?: CapabilityCounts | undefined }) {
+  if (!counts) return <span className="muted">&mdash;</span>;
+  return (
+    <div style={{ display: "inline-flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+      <CountBadge
+        label="approved"
+        n={counts.approved}
+        truncated={counts.approved_truncated}
+        tone="success"
+        title="Members with status=approved for this capability"
+      />
+      <CountBadge
+        label="suspended"
+        n={counts.suspended}
+        truncated={counts.suspended_truncated}
+        tone="warn"
+        title="Members with status=suspended for this capability"
+      />
+      <CountBadge
+        label="pending"
+        n={counts.pending}
+        truncated={counts.pending_truncated}
+        tone="info"
+        title="Members with status=pending for this capability"
+      />
+    </div>
+  );
+}
+
+function CountBadge({
+  label,
+  n,
+  truncated,
+  tone,
+  title,
+}: {
+  label: string;
+  n: number | null;
+  truncated: boolean;
+  tone: "success" | "warn" | "info";
+  title: string;
+}) {
+  const palette =
+    tone === "success"
+      ? { bg: "rgba(34,197,94,0.18)", fg: "#86efac" }
+      : tone === "warn"
+        ? { bg: "rgba(234,179,8,0.18)", fg: "#fde047" }
+        : { bg: "rgba(59,130,246,0.18)", fg: "#93c5fd" };
+  return (
+    <span
+      title={truncated ? `${title} — capped at 100; actual figure may be higher` : title}
+      style={{
+        padding: "2px 6px",
+        borderRadius: 4,
+        background: palette.bg,
+        color: palette.fg,
+        fontSize: 11,
+        fontFamily: "ui-monospace, monospace",
+      }}
+    >
+      {n === null ? "?" : truncated ? `${n}+` : `${n}`} {label}
+    </span>
+  );
+}
+
+const tdStyle: React.CSSProperties = {
+  padding: "10px 12px",
+  borderBottom: "1px solid var(--border)",
+  fontSize: 14,
+};
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  background: "transparent",
+  color: "inherit",
+  border: "1px solid var(--border)",
+  borderRadius: 4,
+  padding: "4px 8px",
+  fontSize: 14,
+};
+const deleteButtonStyle: React.CSSProperties = {
+  padding: "3px 8px",
+  borderRadius: 4,
+  background: "rgba(239,68,68,0.18)",
+  color: "#fca5a5",
+  border: "1px solid rgba(239,68,68,0.35)",
+  cursor: "pointer",
+  fontSize: 12,
+};
+const disabledDeleteButtonStyle: React.CSSProperties = {
+  ...deleteButtonStyle,
+  opacity: 0.4,
+  cursor: "not-allowed",
+};
+const restoreButtonStyle: React.CSSProperties = {
+  padding: "3px 8px",
+  borderRadius: 4,
+  background: "rgba(34,197,94,0.18)",
+  color: "#86efac",
+  border: "1px solid rgba(34,197,94,0.35)",
+  cursor: "pointer",
+  fontSize: 12,
+};

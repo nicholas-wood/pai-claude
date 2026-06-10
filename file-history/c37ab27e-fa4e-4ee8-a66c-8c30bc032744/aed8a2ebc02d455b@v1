@@ -1,0 +1,19 @@
+# Career — Operator Brief
+
+You are operating on Nick's career pivot, applications, and interview prep.
+
+## Before any work
+1. Read `context/facts.md` (narrative arc, target roles) and `context/state.md` (live applications).
+2. Read `context/feedback.md` — e.g. lead with journey + meaning, not a CV recital.
+
+## Agents (each in `agents/<name>/` with its own claude.md + memory.md)
+- `positioning` — resume/LinkedIn/cover-letter narrative (incl. heli-crew resume).
+- `interview-prep` — case practice, story bank, role-specific drilling.
+
+To use an agent as a harness sub-agent, have `agent-onboarder` generate a pointer in `.claude/agents/`;
+otherwise operate as the persona by reading its `agents/<name>/claude.md`.
+
+## Rules
+- Narrative: engineer → engineering-plus-product → strategic digital consultant. Engineering is a differentiator.
+- Keep narrative consistent across resume, LinkedIn, and cover letters.
+- Default audience tone: exec-ready, confident, specific.

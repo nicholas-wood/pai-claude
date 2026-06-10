@@ -1,0 +1,264 @@
+export const meta = {
+  name: 'loc-review-merge-all',
+  description: 'Iterative review → fix → merge of all 12 LifesaverOnCall feature PRs into dev. Each PR runs up to 3 review/fix cycles; passing PRs merged with --no-ff and pushed sequentially in dependency order.',
+  phases: [
+    { title: 'Review & Merge' },
+    { title: 'Summary' },
+  ],
+}
+
+const REPO = '/home/nicholas-wood/.claude/jobs/c8387d8e/loc-repo'
+const WT_BASE = '/home/nicholas-wood/.claude/jobs/c8387d8e/wt'
+
+// Order matters — earlier merges may resolve later conflicts.
+// Sequence rationale: security first (small, isolated), then backend infra (no UI overlap),
+// then mobile (no web overlap), then web in admin → leader → dispatcher-cockpit → cleanup order.
+const PRS = [
+  { id: 'sec-pii-sse', branch: 'feat/sec-pii-sse' },
+  { id: 'backend-reliability', branch: 'feat/backend-reliability' },
+  { id: 'backend-sweepers', branch: 'feat/backend-sweepers' },
+  { id: 'mobile-safety', branch: 'feat/mobile-safety' },
+  { id: 'mobile-completion', branch: 'feat/mobile-completion' },
+  { id: 'web-base-manager', branch: 'feat/web-base-manager' },
+  { id: 'web-admin-ui', branch: 'feat/web-admin-ui' },
+  { id: 'web-leader-ui', branch: 'feat/web-leader-ui' },
+  { id: 'web-multi-target-dispatch', branch: 'feat/web-multi-target-dispatch' },
+  { id: 'web-incident-log', branch: 'feat/web-incident-log' },
+  { id: 'web-map-improvements', branch: 'feat/web-map-improvements' },
+  { id: 'web-coverage-cleanup', branch: 'feat/web-coverage-cleanup' },
+]
+
+// Intentionally tiny schemas — the previous workflow failed when builder agents finished
+// long work then forgot to call StructuredOutput. Smaller surface, fewer required fields,
+// explicit ending instruction in every prompt.
+
+const REVIEW_SCHEMA = {
+  type: 'object',
+  required: ['verdict'],
+  properties: {
+    verdict: { type: 'string', enum: ['PASS', 'NEEDS_FIX'] },
+    issues: {
+      type: 'string',
+      description: 'Numbered list of blocking issues with file:line precision. Empty string if PASS.',
+    },
+  },
+  additionalProperties: false,
+}
+
+const FIX_SCHEMA = {
+  type: 'object',
+  required: ['commitsAdded'],
+  properties: {
+    commitsAdded: { type: 'number' },
+    summary: { type: 'string' },
+  },
+  additionalProperties: false,
+}
+
+const MERGE_SCHEMA = {
+  type: 'object',
+  required: ['merged'],
+  properties: {
+    merged: { type: 'boolean' },
+    hadConflicts: { type: 'boolean' },
+    message: { type: 'string' },
+    mergeCommit: { type: 'string' },
+  },
+  additionalProperties: false,
+}
+
+function reviewPrompt(pr, iter, priorIssues) {
+  const priorBlock = iter === 0
+    ? ''
+    : `\n\nPRIOR REVIEW FLAGGED:\n${priorIssues}\nA fix attempt has been made. Verify whether those specific issues are now resolved; do NOT find new issues unless they are also genuinely blocking.`
+  return `You are an INDEPENDENT REVIEWER for PR "${pr.id}" (review pass ${iter + 1} of up to 3 before this branch is either merged or flagged stuck).
+
+WORKTREE: ${WT_BASE}/${pr.id}
+BRANCH: ${pr.branch}
+TARGET: dev (this branch will be merged into dev if you return PASS)
+
+PROCESS:
+1. cd ${WT_BASE}/${pr.id}
+2. \`git fetch origin --quiet\` to refresh refs.
+3. \`git log --oneline origin/dev..HEAD\` to see commits in scope.
+4. \`git diff --stat origin/dev..HEAD\` for the file footprint.
+5. \`git diff origin/dev..HEAD\` to read the full diff. Where helpful, open the changed files to see surrounding code.
+
+REPO CONVENTIONS (binding):
+- Bun runtime, TypeScript strict, no emojis, Australian English, no em dashes in user-facing copy.
+- Multi-tenant: every DB query must go through tenant-context helpers (AsyncLocalStorage + withTenantContextAsync). See packages/db/src/tenant-context.ts.
+- Idempotency-Key on every state-changing API write.
+- Server-side de-identification only; the client never enforces it alone.
+- Hash-chained incident log is append-only. Never UPDATE/DELETE incident_log_entries.
+- KICKOFF.md §6 don't-do list is binding (PII rules, capability outages auto-clear forbidden, location-while-unavailable forbidden, critical alerts reserved for initial page only).
+- LIMSOC awards-adapter 404 = empty list, not throw.
+
+BLOCKING (return NEEDS_FIX):
+- Safety/correctness bug (PII leak, state machine break, race, security hole, expired-award dispatch path opening up).
+- TypeScript that obviously won't compile (missing imports, wrong types, broken signature).
+- Tenant context not propagated on a new query.
+- Direct mutation of incident_log_entries.
+- Em dash in user-facing copy.
+- Files modified outside the announced scope of this branch with no clear reason.
+- Genuinely missing functionality the branch's spec required.
+
+NOT BLOCKING (note in issues if you want, but do not gate on):
+- Style preferences, naming nits.
+- Missing tests (unless the spec explicitly required tests).
+- Polish / nice-to-haves.
+- Documentation tidiness.
+- Builder-stated knownLimitations that are coherent deferrals.
+
+Be FAIR. If the PR ships its spec and the code is correct, return PASS. The purpose is the gate before merging into dev — not a perfection bar.${priorBlock}
+
+CRITICAL ENDING INSTRUCTION:
+Your FINAL action in this conversation MUST be a call to the StructuredOutput tool with the schema. Do NOT write a long prose summary. Do NOT explain your reasoning at length in text. After you have read what you need, immediately call StructuredOutput with verdict and (if NEEDS_FIX) a numbered issues string with file:line precision. One call. That is the deliverable.`
+}
+
+function fixPrompt(pr, issues, iter) {
+  return `You are the FIXER for PR "${pr.id}" (fix pass ${iter + 1}). The reviewer flagged the issues below. Address them, commit, push.
+
+WORKTREE: ${WT_BASE}/${pr.id}
+BRANCH: ${pr.branch}
+
+ISSUES TO RESOLVE:
+${issues}
+
+PROCESS:
+1. cd ${WT_BASE}/${pr.id}
+2. \`git status\` to confirm clean state on ${pr.branch}.
+3. For each issue: read the cited file, make the fix, stage with \`git add -A\`, commit with \`git commit -m "fix: <one-line>"\`. Use multiple commits when the fixes are logically distinct.
+4. After ALL fixes are committed: \`git push origin ${pr.branch}\`.
+
+REPO CONVENTIONS:
+- bun + TS strict, no emojis, AU English, no em dashes.
+- Match surrounding code style.
+- Do NOT introduce new dependencies unless absolutely required.
+- Do NOT broaden the scope of this PR. Stay inside the announced spec.
+- Do NOT amend or rebase — add new commits.
+
+CRITICAL ENDING INSTRUCTION:
+Your FINAL action MUST be a call to the StructuredOutput tool. Just commitsAdded (number) and a one-line summary string. Do NOT narrate after the push. Call StructuredOutput once and stop.`
+}
+
+function mergePrompt(pr) {
+  return `You are the MERGE OPERATOR for PR "${pr.id}". The reviewer has APPROVED. Merge ${pr.branch} into dev and push.
+
+PROCESS:
+1. cd ${REPO}
+2. \`git fetch origin --quiet\` to refresh.
+3. \`git checkout dev\` and \`git pull --ff-only origin dev\` to ensure dev is current.
+4. \`git merge --no-ff origin/${pr.branch} -m "Merge ${pr.branch} into dev"\` — preserves PR boundary as a merge commit.
+5. If conflicts arise:
+   - \`git status\` to list conflicted files.
+   - Read each conflicted file. Resolve in favour of keeping both sides where the changes are additive (e.g. both branches add different routes to the same layout — keep both). For true logical conflicts, prefer the version that better matches the announced spec of the LATER-arriving branch (the one being merged).
+   - After resolving each file: \`git add <file>\`, then once all are done \`git commit --no-edit\`.
+   - If the conflict is fundamentally semantic and resolution would require human judgement (e.g. two branches both rewrote the same state machine in incompatible ways), abort with \`git merge --abort\` and return merged:false, hadConflicts:true, with a clear one-paragraph explanation in message.
+6. \`git push origin dev\` to publish.
+7. Capture the merge commit SHA with \`git rev-parse --short HEAD\`.
+
+CONSTRAINTS:
+- NEVER force-push.
+- NEVER rewrite history.
+- NEVER push if dev was not actually advanced (no-op merge → still ok, just report mergeCommit).
+- If the merge produces a clean fast-forward despite --no-ff (rare on this repo), that's still fine — report merged:true.
+
+CRITICAL ENDING INSTRUCTION:
+Your FINAL action MUST be a call to StructuredOutput. Fields: merged (bool), hadConflicts (bool, true if conflicts encountered even if resolved), message (one paragraph if anything notable, otherwise short), mergeCommit (short SHA if merged). Do NOT add narrative after.`
+}
+
+phase('Review & Merge')
+
+const results = []
+
+for (const pr of PRS) {
+  log(`>>> ${pr.id}`)
+
+  let verdict = 'NEEDS_FIX'
+  let lastIssues = ''
+  let iterations = 0
+  let reviewFailed = false
+  let fixFailed = false
+
+  for (let i = 0; i < 3; i++) {
+    iterations = i + 1
+    const review = await agent(reviewPrompt(pr, i, lastIssues), {
+      phase: 'Review & Merge',
+      schema: REVIEW_SCHEMA,
+      label: `review:${pr.id}:r${i + 1}`,
+    })
+    if (!review) {
+      reviewFailed = true
+      break
+    }
+    if (review.verdict === 'PASS') {
+      verdict = 'PASS'
+      break
+    }
+    lastIssues = review.issues || ''
+    if (i === 2) {
+      verdict = 'STUCK'
+      break
+    }
+    const fix = await agent(fixPrompt(pr, lastIssues, i), {
+      phase: 'Review & Merge',
+      schema: FIX_SCHEMA,
+      label: `fix:${pr.id}:r${i + 1}`,
+    })
+    if (!fix) {
+      fixFailed = true
+      break
+    }
+  }
+
+  if (reviewFailed) {
+    results.push({ id: pr.id, branch: pr.branch, status: 'REVIEW_AGENT_FAILED', merged: false, iterations })
+    continue
+  }
+  if (fixFailed) {
+    results.push({ id: pr.id, branch: pr.branch, status: 'FIX_AGENT_FAILED', merged: false, iterations, lastIssues })
+    continue
+  }
+  if (verdict === 'STUCK') {
+    results.push({ id: pr.id, branch: pr.branch, status: 'REVIEW_STUCK_AT_CAP', merged: false, iterations, lastIssues })
+    continue
+  }
+
+  const merge = await agent(mergePrompt(pr), {
+    phase: 'Review & Merge',
+    schema: MERGE_SCHEMA,
+    label: `merge:${pr.id}`,
+  })
+  if (!merge) {
+    results.push({ id: pr.id, branch: pr.branch, status: 'MERGE_AGENT_FAILED', merged: false, iterations })
+    continue
+  }
+  results.push({
+    id: pr.id,
+    branch: pr.branch,
+    status: merge.merged ? 'MERGED' : 'MERGE_BLOCKED',
+    merged: !!merge.merged,
+    hadConflicts: !!merge.hadConflicts,
+    mergeCommit: merge.mergeCommit || null,
+    message: merge.message || '',
+    iterations,
+  })
+}
+
+phase('Summary')
+
+const merged = results.filter((r) => r.merged).length
+const stuck = results.filter((r) => r.status === 'REVIEW_STUCK_AT_CAP').length
+const mergeBlocked = results.filter((r) => r.status === 'MERGE_BLOCKED').length
+const agentFailures = results.filter((r) => r.status.endsWith('_AGENT_FAILED')).length
+
+log(`Workflow complete. Merged: ${merged}/${PRS.length}. Stuck: ${stuck}. Merge blocked: ${mergeBlocked}. Agent failures: ${agentFailures}.`)
+
+return {
+  totalAttempted: PRS.length,
+  merged,
+  stuck,
+  mergeBlocked,
+  agentFailures,
+  perPr: results,
+}
