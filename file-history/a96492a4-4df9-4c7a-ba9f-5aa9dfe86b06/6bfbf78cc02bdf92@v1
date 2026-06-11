@@ -20,22 +20,6 @@ import { join } from 'path';
 
 const TELOS_DIR = join(process.env.HOME || '', '.claude/PAI/USER/TELOS');
 const OUTPUT_PATH = join(TELOS_DIR, 'PRINCIPAL_TELOS.md');
-const IDENTITY_PATH = join(process.env.HOME || '', '.claude/PAI/USER/PRINCIPAL_IDENTITY.md');
-
-/**
- * Resolve the principal's display name from PRINCIPAL_IDENTITY.md.
- * Falls back to the literal placeholder if the file can't be read or doesn't
- * contain a recognisable "**Name:**" line.
- */
-function resolvePrincipalName(): string {
-  if (!existsSync(IDENTITY_PATH)) return '{{PRINCIPAL_FULL_NAME}}';
-  const content = readFileSync(IDENTITY_PATH, 'utf-8');
-  const m = content.match(/^-\s*\*\*Name:\*\*\s*(.+?)\s*$/m);
-  if (m) return m[1].trim();
-  const h1 = content.match(/^#\s+.*?-\s*(.+?)\s*$/m);
-  if (h1) return h1[1].trim();
-  return '{{PRINCIPAL_FULL_NAME}}';
-}
 
 interface ParsedItem {
   id: string;
@@ -65,13 +49,10 @@ function parseItems(content: string): ParsedItem[] {
   const lines = content.split('\n');
 
   for (const line of lines) {
-    // Match "- **M0**: text", "- **M0:** text", "- M0: text" patterns.
-    // Capture the body and strip a stray closing "**" left over when the source
-    // wraps the whole "ID:" inside bold ("- **M0:** body").
-    const match = line.match(/^-\s+\*?\*?(\w+)\*?\*?:\s*\*?\*?\s*(.+)/);
+    // Match "- **M0**: text" or "- M0: text" or "- **G0**: text" patterns
+    const match = line.match(/^-\s+\*?\*?(\w+)\*?\*?:\s*(.+)/);
     if (match) {
-      const body = match[2].replace(/\*\*$/, '').trim();
-      items.push({ id: match[1], text: body });
+      items.push({ id: match[1], text: match[2].trim() });
     }
   }
   return items;
@@ -140,28 +121,17 @@ function parseProblems(): string[] {
 }
 
 /**
- * Parse strategies from STRATEGIES.md.
- * Accepts both header form ("## S0: text") and list-item form
- * ("- **S0: Lead with leverage.** rest...").
+ * Parse strategies from STRATEGIES.md
  */
 function parseStrategies(): string[] {
   const content = readTelosFile('STRATEGIES.md');
   const lines: string[] = [];
 
-  // Header form: ## S0: name
+  // Extract strategy headers: ## S0: name or ### S1: name
   const headers = [...content.matchAll(/^#{2,3}\s+(S\d+):\s*(.+?)(?:\s*\(.*\))?\s*$/gm)];
   for (const match of headers) {
     const short = match[2].length > 60 ? match[2].substring(0, 57) + '...' : match[2];
     lines.push(`- **${match[1]}**: ${short}`);
-  }
-
-  // List-item form: - **S0: Title.** body
-  if (lines.length === 0) {
-    const items = [...content.matchAll(/^-\s+\*\*(S\d+):\s*(.+?)\*\*/gm)];
-    for (const match of items) {
-      const title = match[2].trim().replace(/\.$/, '');
-      lines.push(`- **${match[1]}**: ${truncate(title, 70)}`);
-    }
   }
 
   return lines;
@@ -191,34 +161,12 @@ function parseNarratives(): { primary: string[]; secondary: string[] } {
 }
 
 /**
- * Parse challenges from CHALLENGES.md.
- * The file uses a numbered list under "## Active" — entries look like
- * "1. **Title** - body text". Synthesise C0/C1/... ids from the numbering.
+ * Parse challenges from CHALLENGES.md (all items — truncation was hiding real scope)
  */
 function parseChallenges(): string[] {
   const content = readTelosFile('CHALLENGES.md');
-  const lines: string[] = [];
-
-  // Restrict to the "## Active" section so "Resolved / Managed" doesn't leak in
-  const activeMatch = content.match(/##\s+Active\s*\n([\s\S]*?)(?:\n##\s|\Z)/);
-  const scope = activeMatch ? activeMatch[1] : content;
-
-  const numbered = [...scope.matchAll(/^\s*(\d+)\.\s+\*\*(.+?)\*\*\s*[-—]\s*(.+?)\s*$/gm)];
-  for (let i = 0; i < numbered.length; i++) {
-    const match = numbered[i];
-    const id = `C${match[1]}`;
-    const title = match[2].trim();
-    const body = match[3].trim();
-    lines.push(`- **${id}**: ${truncate(`${title} — ${body}`, 110)}`);
-  }
-
-  // Fallback to legacy bullet form
-  if (lines.length === 0) {
-    const items = parseItems(content);
-    return items.map(i => `- **${i.id}**: ${truncate(i.text, 90)}`);
-  }
-
-  return lines;
+  const items = parseItems(content);
+  return items.map(i => `- **${i.id}**: ${truncate(i.text, 90)}`);
 }
 
 /**
@@ -245,40 +193,15 @@ function parseTraumas(): string[] {
 }
 
 /**
- * Parse models from MODELS.md. The file groups named models under category H2s
- * with bullets like "- **Jevons paradox** - efficiency gains increase ...".
- * Surface one model per category, first sentence only.
+ * Parse models from MODELS.md (first sentence only)
  */
 function parseModels(): string[] {
   const content = readTelosFile('MODELS.md');
-  const lines: string[] = [];
-  const seen = new Set<string>();
-
-  // Walk sections so we can pick one representative per H2 category
-  const sectionRegex = /^##\s+(.+?)\s*\n([\s\S]*?)(?=^##\s|\Z)/gm;
-  for (const section of content.matchAll(sectionRegex)) {
-    const body = section[2];
-    const firstBullet = body.match(/^-\s+\*\*(.+?)\*\*\s*[-—]\s*(.+?)\s*$/m);
-    if (firstBullet) {
-      const name = firstBullet[1].trim();
-      const desc = firstBullet[2].split(/\.\s/)[0].trim();
-      if (!seen.has(name)) {
-        lines.push(`- **${name}**: ${truncate(desc, 70)}`);
-        seen.add(name);
-      }
-    }
-  }
-
-  // Fallback: legacy "- **ID**: text" parse
-  if (lines.length === 0) {
-    const items = parseItems(content);
-    return items.slice(0, 3).map(i => {
-      const first = i.text.split(/\.\s/)[0].trim();
-      return `- ${truncate(first, 65)}`;
-    });
-  }
-
-  return lines.slice(0, 6);
+  const items = parseItems(content);
+  return items.slice(0, 3).map(i => {
+    const first = i.text.split(/\.\s/)[0].trim();
+    return `- ${truncate(first, 65)}`;
+  });
 }
 
 function generate(): string {
@@ -293,10 +216,8 @@ function generate(): string {
   const traumas = parseTraumas();
   const models = parseModels();
 
-  const principalName = resolvePrincipalName();
-
   const lines: string[] = [
-    `# Principal TELOS — ${principalName}`,
+    '# Principal TELOS — {{PRINCIPAL_FULL_NAME}}',
     '',
     '> Auto-generated from TELOS source files. Do not edit manually.',
     `> Generated: ${now} | Sources: MISSION, GOALS, PROBLEMS, STRATEGIES, NARRATIVES, CHALLENGES, WRONG, TRAUMAS, MODELS`,

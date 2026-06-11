@@ -1,0 +1,341 @@
+# EnvelopeOS — Requirements Clarification
+
+> Pre-build clarification doc. Staff-solutions-architect lens. No code yet. Goal: surface every meaningful design decision before the ISA is written.
+
+## 1. Summary of understanding
+
+Nick wants a zero-based envelope budgeting layer on top of his existing PocketSmith setup, because Dave Ramsey's apps do not connect to Australian banks and PocketSmith's envelope handling is weak. PocketSmith stays as the bank-feed and categorisation layer (ANZ primary account, NAB credit card, Macquarie account); a new app owns the envelope semantics (allocation, cash basis, monthly and annualised budgets prorated to month, time-travel views of envelope balances at any past date). UI must work on web and mobile. Sync from PocketSmith is undecided between API, periodic CSV export/import, and PAI Interceptor scraping. The envelope state should feed the PAI Pulse dashboard. This is personal financial data, so security is a first-class constraint.
+
+The trick of this project is that "zero-based envelope budgeting" is a specific methodology with specific edge cases (credit card spend, refunds, transfers between envelopes, mid-month income, annualised budgets, rollovers) and the build will live or die on whether the model matches Nick's mental model exactly. Most of the questions in section 6 exist to nail that down.
+
+## 2. Working name
+
+| Name | Pitch | Cost |
+|------|-------|------|
+| **EnvelopeOS** | Names the metaphor; "OS" signals it's part of the PAI surface. | Slightly heavy. |
+| **Envelopes** | Single noun. Sits next to Pulse, Tasks. | Generic. |
+| **Allocate** | Names the dominant verb — every dollar gets allocated in zero-based. | Less evocative; loses the cash-envelope image. |
+| **Penny** | Compact, friendly, AU-acceptable; nod to Dave Ramsey's "every dollar has a name." | Could read as childish. |
+
+**Recommendation:** "Envelopes" for the codebase, "EnvelopeOS" as the long form when needed. Decide later. Penny is a tempting brand for a UI surface.
+
+## 3. Key assumptions
+
+1. **Single-user.** Nick's finances only. No joint surface in v1.
+2. **AUD only.** No multi-currency in v1.
+3. **PocketSmith is the bank-feed layer for the foreseeable future.** No direct bank integrations.
+4. **Cash basis means: an envelope balance changes when the transaction date hits the ledger, not when the credit card statement clears.** Verify in question section.
+5. **The envelope is the user-facing primitive.** PocketSmith categories are inputs; envelopes are how Nick thinks and decides.
+6. **PocketSmith categories are stable enough to map.** If Nick reorganises categories monthly, the mapping layer becomes a real burden.
+7. **Local-first canonical store.** Personal finance does not leave Nick's machine without a deliberate choice. Hosted SaaS is not on the table.
+8. **Stack defaults.** bun + TypeScript, Postgres (this one genuinely warrants relational), Hono API, Next.js + shadcn/ui, PWA for mobile.
+9. **Pulse widget is read-only.** Pulse surfaces "where am I against budget?" — it does not allocate or move money.
+10. **Refresh cadence is daily.** Hourly sync from PocketSmith is overkill for the use case; daily is enough and simpler.
+11. **Transactions imported are immutable.** Edits stay in Envelopes' overlay (e.g. envelope override) rather than mutating the source.
+
+## 4. Mental model of envelope budgeting (state this back so any mismatch surfaces now)
+
+**Zero-based budgeting means: every dollar of expected income for the period is allocated to a named envelope before the period begins; the sum of envelope allocations equals income; "unallocated" is itself an envelope that must be explicitly drained to zero.**
+
+**Envelope budgeting means: spending is tracked against the envelope, not against the account. An envelope is the budget — the bank account just holds the money on its behalf.**
+
+### Combined for Nick's case
+
+1. At the start of each month (or "budget period"), Nick decides where every expected dollar goes. Sum(envelope_allocations_this_period) = expected_income_this_period.
+2. Envelopes have a starting balance for the period (rollover from prior period + allocation - any pre-period commitments).
+3. Each transaction in PocketSmith carries a category. The category maps to one envelope. Hierarchy collapses: subcategories may have the same parent envelope; parent and child can also feed the same envelope.
+4. Spend on a category decrements the envelope. Income to a category may either increase income-available-to-allocate (typical) or directly increase an envelope (rare — refund of a previous spend).
+5. An envelope can be:
+   - **Monthly target:** $X per month, resets each period.
+   - **Annual target:** $Y per year, displayed pro rata against month (= Y/12) and against year-to-date (= Y * (months_elapsed/12)).
+6. Rollover policy: each envelope has a rule. Options include: **roll positive, zero negative** (forgive overspend at period end), **roll all** (carry overspend as debt to next period), **drain to zero** (use it or lose it, e.g. monthly entertainment), **annual-only-resets-Jan** (most annual envelopes).
+7. Time-travel: pick any past date `T`; show envelope balances as they were at end-of-day `T`. This requires storing every state change as an event, or storing daily snapshots, or computing on demand from the event log.
+
+### Credit card edge case (NAB) — the load-bearing question
+
+Three coherent ways to treat credit-card spend:
+
+| Model | When does the envelope decrement? | Where does the cash live? |
+|-------|-----------------------------------|---------------------------|
+| **A. Spend-date model** | When the card is swiped (transaction date). | A "Credit Card Holding" envelope accrues; when the card statement is paid, holding clears. |
+| **B. Statement-date model** | When the statement closes. | Cash is in a normal envelope until statement close. |
+| **C. Payment-date model** | When the card is paid. | Cash is in a normal envelope until payment hits. |
+
+Dave Ramsey purists use A. YNAB uses a variant of A. PocketSmith defaults to closer to spend-date. **Recommendation: model A — spend-date with a Credit Card Holding envelope.** Question 6.2 confirms with Nick.
+
+### Annualised envelope reconciliation
+
+If the car-registration envelope has a $900/year target, monthly display is $75. Year-to-date by end of June: $450 should have been accumulated. If Nick only allocated $50/month so far, he is $150 behind year-to-date. UI must show both **month progress** and **year progress** clearly, with a "true-up" suggestion when reality drifts.
+
+## 5. Preliminary architecture sketch
+
+### 5.1 Components
+
+```
++-----------------+    +------------------+   +-----------------+
+|  PocketSmith    |--->|  Sync Worker     |-->|  Postgres       |
+|  (bank feeds)   |    |  (bun cron)      |   |  (ledger,       |
++-----------------+    +------------------+   |   envelopes,    |
+                                              |   snapshots)    |
+                                              +---------+-------+
+                                                        |
+                                                        v
+                                              +------------------+
+                                              |  Hono API        |
+                                              +---------+--------+
+                                                        |
+                                  +---------------------+----------+
+                                  v                                v
+                          +---------------+              +----------------+
+                          |  Next.js web  |              |  PWA / mobile  |
+                          +---------------+              +----------------+
+                                  |                                |
+                                  +---------------+----------------+
+                                                  v
+                                            +-----------+
+                                            |  Pulse    |
+                                            |  widget   |
+                                            +-----------+
+```
+
+### 5.2 Data model (first cut)
+
+```
+Transaction
+  id              text (PocketSmith id)
+  date            date
+  amount          decimal (signed; positive = inflow, negative = outflow)
+  account_id      text (PocketSmith account)
+  category_id     text (PocketSmith category at time of import)
+  envelope_id     ulid (resolved through mapping table at time of import)
+  payee           text
+  note            text
+  is_transfer     bool
+  imported_at     timestamp
+  raw_json        jsonb (PocketSmith payload, for diffs)
+
+Category
+  id              text (PocketSmith id)
+  name            text
+  parent_id       text (nullable)
+
+CategoryMapping
+  category_id     text
+  envelope_id     ulid
+  effective_from  date
+  effective_to    date (nullable)
+
+Envelope
+  id              ulid
+  name            text
+  group           text (Bills, Lifestyle, Savings, Annual, Sinking, etc.)
+  rollover_rule   enum (roll_positive_zero_negative, roll_all, drain_to_zero, annual_reset_jan)
+  target_type     enum (monthly, annual, sinking, no_target)
+  target_amount   decimal
+  active_from     date
+  archived_at     date (nullable)
+  display_order   int
+
+Allocation
+  envelope_id     ulid
+  period_start    date
+  period_end      date
+  amount          decimal
+  source          enum (manual, recurring_rule, agent_proposed)
+  created_at      timestamp
+
+Snapshot
+  date            date
+  envelope_id     ulid
+  balance         decimal
+  computed_at     timestamp
+```
+
+### 5.3 Time-travel implementation
+
+Three credible patterns:
+
+| Pattern | Detail | Pros | Cons |
+|---------|--------|------|------|
+| **Event-sourced ledger** | Every allocation and transaction is an event; balance at T = fold of events ≤ T. | Lossless, audit-friendly, supports "what if I had remapped X 6 months ago?". | Implementation complexity higher; queries need careful indexing. |
+| **Daily snapshots** | One row per envelope per day with end-of-day balance. | Trivial queries. | 10 envelopes x 365 days = 3,650 rows/year — fine. Recompute on backfill is heavy. |
+| **SQL with effective dates on every entity** | Each row carries effective_from/to. Balance computed at query time. | No background snapshot job. | Query complexity creeps; mapping changes get knotty. |
+
+**Recommendation: Event-sourced ledger + materialised daily snapshots.** The events table is the truth; the snapshots table is a cache rebuilt from the events. Time-travel queries hit snapshots; what-if queries replay events.
+
+### 5.4 PocketSmith integration — three paths
+
+Investigated against PocketSmith's documented developer surface.
+
+| Path | What it is | Reliability | Effort | Risks |
+|------|------------|-------------|--------|-------|
+| **A. PocketSmith Developer API** | OAuth + REST. Endpoints for transactions, categories, accounts. Rate-limited. Requires an active PocketSmith account on a paid plan that allows API access (Foundation plan and up). | High — official, documented. | Low to medium — known surface, well-shaped. | Quota and plan tier; depends on PocketSmith keeping API stable. |
+| **B. CSV export/import** | Periodic manual export from PocketSmith UI, ingested into Envelopes. | Medium — depends on Nick remembering to export. | Lowest dev effort; highest user effort. | Stale data; copy-paste friction; reconciliation pain. |
+| **C. Interceptor-driven scrape** | PAI Interceptor drives logged-in PocketSmith session, scrapes transactions list. | Medium — UI changes break it. | High dev effort and ongoing maintenance. | Could violate ToS; fragile; rate-limit risk. |
+
+**Recommendation: A as primary, B as manual fallback for backfill or recovery. Drop C entirely.** The PocketSmith API is the right interface and using Interceptor for what's already an API endpoint is the wrong tool. Nick should verify his PocketSmith plan tier includes API access. If it doesn't, the upgrade cost is likely less than the engineering cost of B or C.
+
+### 5.5 Security model
+
+- **Local-only by default.** API binds to localhost or Tailscale.
+- **Postgres on the laptop.** No hosted DB. Daily encrypted backup to OneDrive (rclone with crypt remote, since the regular OneDrive cache has the 12h staleness issue your existing memory flags).
+- **PocketSmith credentials in PAI secrets store.** Never in env files, never in git.
+- **No cloud-side AI inference on transactions** unless Nick deliberately opts in per query.
+- **Mobile access via Tailscale**, not public internet.
+
+### 5.6 Pulse widget
+
+Read-only tile showing: total income allocated this month, % allocated vs expected, top 3 envelopes by overspend, "you have $X unallocated" alert if income is in but allocation hasn't happened. Click-through opens the web app.
+
+## 6. Critical clarifying questions, grouped and prioritised
+
+### 6.1 Envelope semantics (highest priority — the model lives or dies here)
+
+1. **Confirm "every dollar allocated"** is a hard rule, not aspirational. Should the UI block save when income > sum(allocations)?
+2. **Period boundary.** Monthly aligned to calendar month, to a pay cycle, or to something else?
+3. **Initial allocation per month — manual every month, or carry forward last month's allocation as default?**
+4. **Allocation pools.** Is there one income pool that gets allocated, or do allocations come directly from specific accounts?
+
+### 6.2 Credit-card treatment (the single most important question)
+
+5. **Which model — A (spend-date), B (statement-date), C (payment-date)?** *Recommendation: A.*
+6. **Should the Credit Card Holding envelope be visible to Nick, or hidden plumbing?**
+7. **What if Nick puts a purchase on NAB but funds were going to come from a different envelope conceptually — manual override per transaction, or a rule by category?**
+8. **Card payment transactions from ANZ to NAB — automatically treated as transfers and excluded from envelope decrement, or visible?**
+
+### 6.3 Rollover rules
+
+9. **Default rollover rule?** Roll positive, zero negative is most popular; want this as default with per-envelope overrides?
+10. **Negative envelope handling.** If an envelope ends the month at -$50, does the next month's allocation auto-cover it (true-up), or is the negative carried as visible debt?
+11. **Annual envelope reset.** Always Jan 1, financial-year Jul 1 (AU), or per-envelope choice?
+
+### 6.4 Annual / sinking funds
+
+12. **Sinking-fund envelopes.** A category like "Holiday 2027" might have a target ($5,000 by Dec 2026) rather than monthly or annual. Need a sinking-fund target type?
+13. **Display.** Show monthly proration with year-to-date, or just "track against absolute target"?
+14. **What if Nick under-allocates an annual envelope for 4 months and wants to "catch up"?** Auto-suggest the catch-up amount?
+
+### 6.5 Category-to-envelope mapping
+
+15. **Mapping cardinality.** Many categories to one envelope is required. Do you also need one category split across multiple envelopes (e.g. "Groceries 80% Groceries envelope, 20% Household envelope")?
+16. **Hierarchy.** If a parent category maps to envelope X and a child category maps to envelope Y, which wins for a transaction tagged with the child?
+17. **Unmapped category handling.** Land in "Inbox" envelope until mapped, or block import?
+18. **Mapping audit.** When PocketSmith renames or merges categories, what does Envelopes do?
+
+### 6.6 Transactions
+
+19. **Transaction edits in PocketSmith after import.** Re-sync wins, or local edit wins?
+20. **Splits.** Some transactions need to split across two envelopes ($100 receipt = $60 groceries + $40 household). PocketSmith supports splits — do you mirror them, or split locally only?
+21. **Transfers between Nick's own accounts.** Should they show in the ledger at all, or be filtered out entirely?
+22. **Pending vs posted.** PocketSmith distinguishes pending and posted transactions. Show pending in envelope balances, or only posted?
+
+### 6.7 Time-travel
+
+23. **Granularity.** Day-level enough, or do you ever want intraday?
+24. **What can you do at the past date — just view, or also "fix history" (e.g. remap a transaction that was wrongly categorised 4 months ago)?**
+25. **If you change a category mapping today, does it apply retroactively or only forward?** Recommendation: choose at the mapping change time.
+
+### 6.8 PocketSmith sync
+
+26. **Confirm PocketSmith plan tier has API access** (Foundation plan or above).
+27. **Sync cadence.** Daily at a fixed time (e.g. 06:00), every 6 hours, on demand, or hybrid?
+28. **Backfill window.** How far back should the initial sync pull? 2 years? Since-account-creation?
+29. **Failure mode.** If sync fails for 2 days, alert via Pulse / Telegram?
+
+### 6.9 UI / UX
+
+30. **Primary surface — envelope grid (Dave Ramsey style) or list (YNAB style)?**
+31. **Allocation ritual.** Beginning-of-month wizard, or "allocate as income arrives"?
+32. **Bulk allocation shortcuts.** "Apply last month again with one click"?
+33. **Spend entry on mobile** — read-only mobile, or quick-add purchases when offline (and reconcile later when PocketSmith catches up)?
+34. **Notification on overspend** — push, Pulse, email? Threshold?
+35. **Dashboard "you have $X to allocate" prominence.**
+
+### 6.10 Pulse integration
+
+36. **Widget content priorities.** Pick the 3 most useful tiles. Candidates: today's unallocated dollars, top 3 envelopes by overspend, days into period, total spend vs total budget, sinking-fund progress.
+37. **Refresh cadence on Pulse.** Pulled on dashboard load, or pushed?
+
+### 6.11 Security and storage
+
+38. **Postgres locally, or DuckDB / SQLite for simpler ops?** Postgres warranted by time-travel queries.
+39. **Backups.** rclone crypt to OneDrive, or somewhere else?
+40. **Mobile access path.** Tailscale-only, or public with auth?
+41. **Threat model.** Worst-case: laptop stolen. What protects the data? Full-disk encryption + Postgres password is probably enough — confirm.
+
+### 6.12 Reporting
+
+42. **Monthly close report.** Auto-generated end-of-period summary, or on-demand only?
+43. **Spend-by-payee, spend-by-envelope drill-down** — v1 or v2?
+44. **Export to CSV / PDF** for tax purposes?
+
+### 6.13 Multi-currency / joint finances (forward-look)
+
+45. **AUD-only confirmed for v1?**
+46. **Joint-finance surface ever needed?** If yes, model it now even if hidden.
+
+### 6.14 Data lifecycle
+
+47. **Retention.** Keep all transaction history indefinitely, or auto-archive past 7 years?
+48. **Deletion.** Can a transaction be deleted from Envelopes? (Recommendation: no — only marked excluded.)
+
+### 6.15 Auth
+
+49. **Single-user auth model.** PIN + Tailscale device trust, full password, or PAI session?
+50. **Session timeout?**
+
+## 7. Open trade-offs needing Nick's call
+
+| Decision | Option A | Option B | Cost of getting it wrong |
+|----------|----------|----------|--------------------------|
+| **Credit card model** | Spend-date + holding envelope | Payment-date | A: matches Dave Ramsey, harder to explain at first. B: simpler, breaks "every dollar allocated" between spend and payment. |
+| **Sync source** | PocketSmith API | CSV import | A: ongoing dependency on a third-party API and plan tier. B: monthly friction tax forever. |
+| **Time-travel** | Event-sourced + snapshots | SQL effective-dating | A: more code, more durable. B: simpler now, harder later. |
+| **Period boundary** | Calendar month | Pay cycle | A: ubiquitous, simple. B: aligns with cashflow reality but unusual. |
+| **Mobile capability** | Read-only mobile | Quick-add on mobile | A: simpler. B: more useful when spending in the wild. |
+| **Storage** | Postgres local | SQLite local | A: time-travel queries cleaner. B: zero-ops. |
+
+## 8. Suggested MVP scope
+
+**Goal: replace Nick's current PocketSmith-plus-mental-model setup with a real envelope view, within 3 to 4 weekends.**
+
+In:
+- PocketSmith API sync (transactions + categories + accounts), daily cron
+- Postgres ledger + event log + daily snapshots
+- Envelope CRUD + category-to-envelope mapping (many to one)
+- Credit card holding envelope (model A)
+- Monthly allocation UI ("apply last month + adjust")
+- Web dashboard: envelope grid + per-envelope detail with month progress
+- Annual envelope proration display
+- Time-travel "as of date" view (read-only)
+- Pulse widget: unallocated dollars + top 3 overspend envelopes
+- Tailscale-only mobile access
+
+Out of MVP:
+- Splits across multiple envelopes
+- Sinking-fund target type (treat as annual for MVP, add proper type in v1.0)
+- Quick-add purchase from mobile
+- Auto-allocation rules / agent proposals
+- Bulk transaction editing
+- Export to PDF / CSV
+- What-if queries against the event log
+- Reporting suite beyond monthly close
+
+Cut line: **if API sync doesn't work end-to-end with real data within weekend 1, kill the API path and switch to CSV import for MVP.**
+
+## 9. Risks
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| PocketSmith API plan-tier surprise | Medium | Slip | Confirm plan now; budget for upgrade or fallback. |
+| Category restructure in PocketSmith breaks mappings | Medium | Data quality | Effective-dated mappings + alert on unmapped category. |
+| Credit-card model mismatch with Nick's mental model | Medium | Constant re-explanation | Settle in section 6.2 before code. |
+| Time-travel correctness bug under category remap | Medium | Trust collapse | Replay tests; explicit "retroactive remap" toggle. |
+| Sensitive data accidentally synced to cloud | Low | Privacy breach | Local-only by default; crypt remote for backups. |
+| Bank feed lag at month boundary | High | Apparent overspend | Pending-transaction toggle in UI; reconcile button. |
+| PocketSmith ToS / pricing change | Low to medium | Architectural lock-in | Keep transaction model bank-agnostic; PocketSmith is a source, not the contract. |
+| Pulse widget over-promises ("you're $X under") then a late transaction blows it | Medium | Confidence dip | Show "as of" timestamp prominently. |
+
+## 10. Recommended next step
+
+Nick answers the highest-priority questions in section 6 (specifically 1, 2, 5, 6, 9, 11, 15, 19, 26, 30, 31, 36, 40). With those answers locked, an architect agent writes the ISA against `~/.claude/PAI/DOCUMENTATION/IsaFormat.md`, and a feature-dev agent ships the API sync + Postgres ledger + envelope grid within weekend 1. Allocation UI and Pulse widget follow in weekend 2.

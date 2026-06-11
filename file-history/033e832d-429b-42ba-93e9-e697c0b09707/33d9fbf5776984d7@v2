@@ -1,0 +1,102 @@
+#!/usr/bin/env bun
+// Transform an authoritative resume .md into "template-shaped" markdown that
+// pandoc + the Eng.docx reference-doc will render to match Nick's template.
+//
+// Transforms:
+//  1. Drop the H1 (name) and contact line — these belong in the docx page header,
+//     not the body.
+//  2. Drop "## Profile" label — promote the profile paragraph itself to an H2.
+//  3. Wrap recognised section headers in {.underline} so the underline character
+//     style is applied.
+//  4. Inside the Key Skills section, bulletise each "**Label:** content" row and
+//     wrap in italic-with-bold-label pattern: "- ***Label**: content*".
+//  5. Demote company H3 headings (### Company) to bold paragraphs (**Company**).
+//
+// Usage: bun ResumeToTemplate.ts <input.md> <output.md>
+
+import { readFileSync, writeFileSync } from "fs";
+
+const SECTION_HEADERS = new Set([
+  "Key Skills",
+  "Experience",
+  "Independent Engagements",
+  "Selected Engagements",
+  "Engineering Background",
+  "Leadership",
+  "Strategy, Governance & Leadership",
+  "Education",
+  "Certifications",
+]);
+
+const [, , inputPath, outputPath] = process.argv;
+if (!inputPath || !outputPath) {
+  console.error("Usage: bun ResumeToTemplate.ts <input.md> <output.md>");
+  process.exit(1);
+}
+
+const lines = readFileSync(inputPath, "utf8").split("\n");
+const out: string[] = [];
+let i = 0;
+
+// 1. Skip leading H1 + contact line + their trailing blanks.
+while (i < lines.length && lines[i].trim() === "") i++;
+if (i < lines.length && lines[i].startsWith("# ")) {
+  i++;
+  while (i < lines.length && lines[i].trim() === "") i++;
+  if (i < lines.length && !lines[i].startsWith("#")) i++;
+  while (i < lines.length && lines[i].trim() === "") i++;
+}
+
+// 2. Drop "## Profile", promote following paragraph to H2.
+if (i < lines.length && lines[i].trim() === "## Profile") {
+  i++;
+  while (i < lines.length && lines[i].trim() === "") i++;
+  const profileLines: string[] = [];
+  while (i < lines.length && lines[i].trim() !== "") {
+    profileLines.push(lines[i].trim());
+    i++;
+  }
+  if (profileLines.length > 0) {
+    out.push("## " + profileLines.join(" "));
+    out.push("");
+  }
+}
+
+let currentSection = "";
+
+for (; i < lines.length; i++) {
+  const line = lines[i];
+
+  // 3. Section header underline.
+  if (line.startsWith("## ")) {
+    const header = line.slice(3).trim();
+    currentSection = header;
+    if (SECTION_HEADERS.has(header)) {
+      out.push(`## [${header}]{.underline}`);
+      continue;
+    }
+    out.push(line);
+    continue;
+  }
+
+  // 5. Company H3 → bold paragraph.
+  if (line.startsWith("### ")) {
+    const company = line.slice(4).trim();
+    out.push(`**${company}**`);
+    continue;
+  }
+
+  // 4. Key Skills lines: bulletise + italic-bold-label.
+  if (currentSection === "Key Skills") {
+    const skillMatch = line.match(/^\*\*([^:*]+):\*\*\s*(.+)$/);
+    if (skillMatch) {
+      out.push(`- ***${skillMatch[1]}**: ${skillMatch[2]}*`);
+      continue;
+    }
+  }
+
+  out.push(line);
+}
+
+writeFileSync(outputPath, out.join("\n"));
+console.log(`Wrote ${outputPath}`);

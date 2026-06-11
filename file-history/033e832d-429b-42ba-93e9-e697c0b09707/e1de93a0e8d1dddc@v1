@@ -57,7 +57,6 @@ FOR: Multi-step, complex, or difficult work. Troubleshooting, debugging, buildin
 - Build over ask for reversible actions. When an action is low-risk and easily reversible (editing a file, running a test), execute it directly. Reserve AskUserQuestion for irreversible or high-impact decisions. Momentum matters.
 - Reproduce before fixing. Reported UI bug = open the page with **Interceptor skill** FIRST. Console errors and network 404s before code analysis. Never theorize from code when you can just look.
 - Interceptor for ALL web verification. Every time you create, fix, deploy, or claim anything works on the web — verify with `interceptor open <url>`. NEVER use agent-browser for verification. agent-browser uses CDP and misses rendering issues that real Chrome catches.
-- OneDrive holds exports only. Markdown source lives in the workspace (`~/Documents/workspace/`). OneDrive directories (`02_Career/Job_Applications/`, `CV_and_Resume/Historical_CVs/`, and all siblings) hold `.docx`, `.pdf`, or other exported artefact formats only. Never put `.md` into OneDrive. Render the `.docx` programmatically via python-docx (installed on both Linux and Mac) and write it straight to the OneDrive destination. Manual export is not an acceptable workflow step; if python-docx fails, fix the toolchain or escalate the failure, never hand the export back to Nick as a manual task.
 
 ### Operational Notes
 - Context reduction: PreToolUse hook rewrites Bash through RTK for 60-90% token reduction. Use `rtk gain` to check savings.

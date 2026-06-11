@@ -1,0 +1,48 @@
+# Resume System
+
+Authoritative source-of-truth markdown for Nick's three resume variants. Established 2026-06-11.
+
+## Files
+
+- `resume-swe.md` - engineering-focused variant
+- `resume-hybrid.md` - engineering plus strategy variant
+- `resume-consulting.md` - strategy and advisory variant
+
+## Source templates
+
+The latest dated `.docx` files in `~/OneDrive/02_Career/CV_and_Resume/Historical_CVs/` are the canonical styling and structure templates for each variant. Do not edit those `.docx` files directly. They are historical baselines.
+
+Current template baselines (as at 2026-06-11):
+
+| Variant | Template `.docx` |
+|---|---|
+| SWE | `Resumè- Nick Wood 2026-04-22 - Eng.docx` |
+| Hybrid | `Resumè- Nick Wood 2026-05-14 - Hybrid.docx` |
+| Consulting | `Resumè- Nick Wood 2026-04-22 - Consulting.docx` |
+
+## Workflow
+
+1. Edit the `.md` files here. They are the single editable source of truth.
+2. When ready to submit an application, export the relevant `.md` to a new dated `.docx` saved into `~/OneDrive/02_Career/CV_and_Resume/Historical_CVs/`, following the existing naming convention: `Resumè- Nick Wood YYYY-MM-DD - [Eng|Hybrid|Consulting].docx`.
+3. The newly-dated file becomes the new template baseline for future exports.
+
+## Conventions
+
+- Australian English throughout (organisation, recognised, optimise).
+- No em dashes. No semicolons. Hyphens, commas, colons, and separate sentences instead.
+- Verb framing per the style guide: Architected, Defined, Established, Drove, Owned, Led, Delivered. Avoid "responsible for" and "involved in".
+- Categorised Key Skills (Languages / Cloud & Infra / Data / AI / Architecture / Practices) for SWE. Strategy & Delivery / Technical / Practices for Hybrid and Consulting.
+- Bullets lead with an action verb and where possible state the outcome.
+- Profile paragraph leads with differentiator, then proof, then ambition.
+- See `~/.claude/PAI/USER/WRITINGSTYLE.md` for the full style guide.
+
+## Tailoring for a specific application
+
+When tailoring for a specific role:
+
+1. Copy the relevant base `.md` to a working file (e.g. `resume-swe-virgin.md`) in this folder.
+2. Apply role-specific tweaks (profile reframe, skills emphasis, bullet reorder).
+3. Export the tailored file to a dated `.docx` in `Historical_CVs/`.
+4. Decide whether tweaks should fold back into the base. Discard the working file if not.
+
+Do not edit the base `.md` files for one-off application tailoring. Only fold changes back when they improve the resume for future use too.

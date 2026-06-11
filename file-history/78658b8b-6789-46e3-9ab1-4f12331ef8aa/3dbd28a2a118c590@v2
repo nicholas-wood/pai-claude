@@ -1,0 +1,274 @@
+# PAI Task System — Requirements Clarification
+
+> Pre-build clarification doc. Staff-solutions-architect lens. No code yet. Goal: surface every meaningful design decision before the ISA is written.
+
+## 1. Summary of understanding
+
+Nick wants a personal task system built on top of PAI that replaces his paper notebook for everything the notebook can't do well (search, cross-project context, agent review, mobile capture, persistence across days), while preserving the things the notebook does best (zero-friction capture, spatial scan, fast reordering, satisfying "done" gesture). It needs: lightweight capture, allocation to project/life-area, prioritisation, a today-view that slots items into time blocks (e.g. A/B/C 09:00 to 11:00; D/E/F 13:00 to 15:00), a backlog, per-item notes, and a "personal assistant" agent that periodically reviews the list with him (is this done? still relevant? what changed?) and surfaces gaps and forgotten items. He flagged a possible GitHub-backed implementation as worth considering. The system is for Nick alone, multi-front (career pivot, two SaaS products, two volunteer leadership roles, personal admin), and needs a great UI on both web and mobile.
+
+## 2. Working name
+
+Sticking with "PAI Task System" loses the chance to give the thing a personality. Three candidates:
+
+| Name | Pitch | Cost |
+|------|-------|------|
+| **Tasks** | Honest, terse, no ego. Sits next to Pulse, Telos in the PAI lexicon. | Generic; SEO-poor inside the PAI codebase if you ever google for it. |
+| **Inkwell** | Pays direct tribute to the notebook it is replacing. Carries the metaphor through the UI (pages, ink, margin notes). | Twee risk if not held tightly. |
+| **Daily** | Names the dominant verb: pull from the pool, decide on today. | Underplays the backlog, agent-review, and cross-project work. |
+
+**Recommendation:** ship as `Tasks` internally and brand the UI as "Inkwell" if you want the notebook callback. Decide later.
+
+## 3. Key assumptions
+
+1. **Single-user.** No shared lists, no delegation to a partner or assistant other than the agent. If joint-finance-style sharing comes later, it is v2+.
+2. **Local-first.** Source of truth lives on Nick's machine (file-backed markdown or local Postgres), not in a cloud SaaS. The mobile surface syncs to local-first.
+3. **Tasks are not calendar events.** A scheduled block on a today-view is not the same object as a Google Calendar event. We may sync but the task ledger is canonical.
+4. **The agent is a real participant.** Not a UI nicety. It writes to the ledger, asks questions through Pulse or Telegram or a chat surface, and Nick answers in natural language.
+5. **PAI is the OS.** Auth, secrets, voice, and notifications go through the PAI stack (Pulse 31337, ElevenLabs voice, Telegram, iMessage). No new auth system.
+6. **Stack defaults.** bun + TypeScript, Postgres if relational store is used, Hono for any API, Next.js + shadcn/ui for the UI, PWA for mobile. No Python.
+7. **Project/area taxonomy is finite and known.** Career, AccessBuddy, LIMSOC, LifesaverOnCall, LSV Comms, SMLSC, Personal, PAI Tooling, Life OS Console. Reuse the PROJECTS.md registry rather than reinvent.
+8. **"Time block" granularity is hours, not minutes.** Nick's scheduling examples (9 to 11, 1 to 3) imply human-sized blocks, not pomodoro precision. If wrong, ledger granularity changes.
+9. **No team review surface.** No PR, no stakeholder dashboard. The agent is the only reviewer.
+10. **Capture must work when offline and when the laptop is closed.** Mobile and CLI capture both must work without the web app being open.
+
+If any of these is wrong, flag it and the architecture pivots.
+
+## 4. Mental model & metaphor
+
+Three credible metaphors:
+
+| Metaphor | Strengths | Weaknesses for Nick |
+|----------|-----------|---------------------|
+| **Ticketing system** (Linear, GitHub Issues, Jira) | Project allocation, prioritisation, comments, status lifecycle, agent automation all native. | Heavy ceremony per item; capture friction higher than a notebook line. Today-scheduling is awkward. |
+| **Outliner + day plan** (Things 3, OmniFocus, Logseq) | Capture is fast; today-view first-class; project sidebar is natural. | Cross-project review and agent integration weaker; backlog hygiene drifts. |
+| **Notebook + day page** (Roam-style, daily notes) | Closest to the paper notebook. Spatial. Forgiving. | Structured queries (priority, area, "what is overdue") get harder. Agent needs structure to act on. |
+
+**Recommendation: Outliner + day plan with ticket-style metadata behind the scenes.** Capture is a single line, dropped onto a daily inbox or quick-add. The item gets project/area/priority/notes lazily, either by the user or the agent. The today-view is its own surface with time blocks. The backlog is just "everything not on a today-view yet." This beats the notebook on search, agent review, and cross-project visibility while keeping capture latency under a second.
+
+The notebook constraint is the constant against which every UI decision gets measured. If a screen requires more than one tap or keystroke to capture a thought, it loses against the notebook and Nick will quietly go back to paper.
+
+## 5. Preliminary architecture sketch
+
+### 5.1 Storage options
+
+| Option | Description | Pros | Cons |
+|--------|-------------|------|------|
+| **A. File-backed markdown** in `~/.claude/PAI/MEMORY/TASKS/` | One markdown file per task or per day, frontmatter for structured fields. | Native to PAI memory pattern. Survives any tool failure. Hand-editable. Git-friendly. | Queries (top priority items across projects) require an index. Mobile editing is harder. |
+| **B. Local Postgres** | Tasks table, relations to projects/areas. | Fast queries, clean joins, transactional. | Yet another service to run. Backups become Nick's problem. Less hand-editable. |
+| **C. GitHub Issues + Projects** | One repo per area; GitHub Projects v2 board for the today-view. | Free hosting, mobile app exists, agent can post comments, audit log free. | Capture latency is higher (GitHub network roundtrip). Notebook-replacement test fails. Sensitive data leaves the laptop. Rate limits on the agent. |
+| **D. Hybrid: file-backed markdown + SQLite read-model** | Markdown is canonical; SQLite is rebuilt on change. | Best of both — durable, queryable, agent-friendly. | One more moving piece. |
+
+**Recommendation: D (markdown canonical + SQLite read-model).** SQLite over Postgres because this is single-user and we want it dead simple. GitHub is out for capture-latency and privacy reasons but could be a mirror for mobile review.
+
+### 5.2 Data model (first cut)
+
+```
+Task
+  id              ulid
+  title           text (one-liner, the notebook line)
+  body            text (markdown notes, optional)
+  project         enum from PROJECTS registry (nullable; "inbox" if unassigned)
+  area            enum (Career, Health, Money, Relationships, Creative, Civic, Tooling) (optional)
+  status          enum (inbox, backlog, today, doing, done, dropped, snoozed)
+  priority        enum (P0 must-do-today, P1 important, P2 normal, P3 someday)
+  created_at      timestamp
+  updated_at      timestamp
+  due             date (optional)
+  estimate_min    int (optional)
+  energy          enum (deep, shallow, errand) (optional)
+  blocks          [task_id]
+  blocked_by      [task_id]
+
+DayPlan
+  date            date
+  blocks          [TimeBlock]
+
+TimeBlock
+  start           time
+  end             time
+  task_ids        [task_id]
+  label           text (optional, e.g. "deep work — LIMSOC")
+
+AgentTouch
+  task_id         task_id
+  timestamp       timestamp
+  question        text
+  response        text
+  outcome         enum (still_relevant, dropped, edited, rescheduled, completed)
+```
+
+Status lifecycle: `inbox → backlog → today → doing → done`, with branches to `dropped` and `snoozed` at any point.
+
+### 5.3 Surfaces
+
+| Surface | Purpose | Priority |
+|---------|---------|----------|
+| **CLI quick-add** (`tasks add "..."`) | Sub-second capture from terminal. | P0 |
+| **Web app** (Next.js, localhost or LAN) | Primary review and scheduling UI. | P0 |
+| **Mobile PWA** | Capture and review from phone. iOS install via add-to-home. | P0 |
+| **Pulse widget** | "What's on today?" tile on the Life Dashboard. | P1 |
+| **Telegram/iMessage bot** | Capture from anywhere by message; agent check-ins arrive here. | P1 |
+| **Voice capture** | "Jarvis, add: …" via ElevenLabs flow. | P2 |
+| **Daily markdown export** | One file per day in OneDrive, for the notebook-replacement feel. | P2 |
+
+### 5.4 Agent integration
+
+A scheduled PAI agent (e.g. `task-orchestrator`) runs at chosen cadences:
+
+- **Morning** (08:00): proposes a today-view from priority + estimate + calendar gaps.
+- **Midday** (13:00): "What got done from the morning block? Anything blocked?"
+- **Evening** (18:00): closes the day, moves unfinished work to tomorrow's inbox or backlog.
+- **Weekly** (Sunday): backlog hygiene — flags stale items, items with no project, items repeated across days.
+- **Ad hoc**: gap-spotting against PROJECTS.md and CHALLENGES.md — "you said you would draft the SMLSC paper this week, no task captured."
+
+The agent never silently mutates. Every proposed edit goes through Pulse or Telegram as a one-tap accept/reject.
+
+### 5.5 GitHub-backed alternative — should we?
+
+Considered seriously. Verdict: **no for the primary store**, **yes as a one-way mirror** if Nick wants a mobile review surface for free. Reasons:
+
+- Capture latency on GitHub Issues is 300 to 1500ms — worse than paper, worse than a local CLI. The notebook test fails immediately.
+- Sensitive content (e.g. career-pivot notes, LIMSOC SME details) should not leave the laptop without a deliberate choice.
+- GitHub Projects v2 is excellent for engineering teams but heavy for a single user juggling 9 fronts.
+- Agent automation against GitHub burns API quota and adds latency where local is free.
+
+If Nick wants the GitHub mobile app for review, mirror selected projects out, do not push capture in.
+
+## 6. Critical clarifying questions, grouped and prioritised
+
+### 6.1 Capture UX (the most load-bearing decisions)
+
+1. **Primary capture surface in the moment of "I just thought of a thing"?**  Options: (a) CLI from any terminal tab, (b) Telegram message to Jarvis, (c) iMessage to Jarvis, (d) PWA "+" button, (e) all of the above with one canonical sync. *Recommendation: all of the above. Confirm.*
+2. **Sub-second target for capture: real or aspirational?** If Nick wants sub-second, the laptop must already be unlocked and the terminal already open. Are we OK with "30 seconds when phone is in pocket" as the realistic target?
+3. **One field on capture, or three?** "Title only and figure the rest out later" vs "title + project + priority required up front." The notebook is one field. *Recommendation: title only, defer everything else.*
+4. **Voice capture in v1, or v2?** Voice is the only sub-second mobile capture. Worth building first?
+5. **Should the agent auto-classify** project and area from the title text? It can guess; Nick approves with one tap.
+
+### 6.2 Today-view and scheduling
+
+6. **Are time blocks a planning artefact or a tracking artefact?** Planning = "I intend to do A/B/C from 9 to 11." Tracking = "I did A/B/C from 9 to 11." Different data model implications.
+7. **Do blocks need to align with the calendar?** Should the today-view read Google Calendar to know when meetings are, and slot blocks into the gaps?
+8. **Default block length?** 90 min, 120 min, or "no default — Nick draws them"?
+9. **What happens to a task that wasn't finished in its block?** Auto-roll to next block, auto-roll to tomorrow, or ask?
+10. **Today-view persists how?** As an immutable "this is what I planned" snapshot, or always the live state?
+
+### 6.3 Project and area model
+
+11. **Use existing PROJECTS.md registry** as the source of truth for the project list, or maintain a separate list inside Tasks?  *Recommendation: read from PROJECTS.md, add an internal "inbox" and "personal" if missing.*
+12. **Is "area" needed in addition to "project"?** Areas (Career, Health, Money, Relationships, Creative, Civic) come from Telos and IDEAL_STATE. Projects are concrete. Both, or just projects?
+13. **Multiple projects per task?** Yes/no.
+14. **Tags in addition to project/area?** Free tags risk taxonomy drift but help search.
+
+### 6.4 Priority model
+
+15. **Priority levels: P0/P1/P2/P3, or just "today vs not today"?** The latter is closer to the notebook. The former gives the agent something to sort by.
+16. **Auto-decay priority** if a task has been P1 for 14 days and never done? Forces a real decision.
+
+### 6.5 Agent behaviour (this is the differentiator from any off-the-shelf tool)
+
+17. **Check-in cadence and surface?** Morning/midday/evening as proposed, or different? On which surface — Pulse widget, Telegram message, iMessage, or all?
+18. **Can the agent close tasks unilaterally?** Or must Nick confirm every state change?
+19. **Gap-spotting scope.** Should the agent read CHALLENGES.md, GOALS.md, project ISAs, and recent commit history to spot uncaptured work? *Recommendation: yes, weekly.*
+20. **Agent "voice" — Jarvis, or a dedicated task-agent with a distinct personality?**
+21. **Bothered threshold.** How often is "too often"? Hard cap of N pings/day, or learn from Nick's response rate?
+22. **What does the agent do with a task that has been in backlog for 30+ days untouched?** Auto-drop with notice, ask, or leave alone?
+
+### 6.6 Sync and offline
+
+23. **Source of truth lives where?** Local laptop (canonical) + mobile is read-mostly with offline capture queue, or both equal and conflict-resolve on sync?
+24. **Sync mechanism.** Tailscale + REST endpoint, iCloud Drive file sync, Git auto-commit, or a hosted endpoint (Cloudflare Worker + Tunnel)?  *Recommendation: Tailscale + local API + offline queue on mobile.*
+25. **Conflict resolution rules** when mobile and desktop both edited the same task offline.
+
+### 6.7 Storage and persistence
+
+26. **Markdown canonical + SQLite read-model** vs Postgres-only. Earlier recommendation: markdown canonical. Confirm.
+27. **One file per task** or **one file per day**?
+28. **Where on disk?** `~/.claude/PAI/MEMORY/TASKS/` vs `~/OneDrive/...`. OneDrive gives free cross-device backup but the Linux rclone 12h cache (per your existing memory note) becomes a sync hazard.
+29. **Backups.** Nightly snapshot to where?
+
+### 6.8 Mobile
+
+30. **PWA install path acceptable** (add to home screen on iOS Safari), or native iOS shell required for capture to be fast enough?
+31. **Mobile push notifications** for agent check-ins — via Telegram (free) or APNs (build cost)?
+
+### 6.9 Pulse integration
+
+32. **What lives on Pulse?** A "today" widget (top 3 items, current block), a "captured this week" counter, an "agent has questions" tile? Pick the 2 most useful.
+
+### 6.10 Reporting and review
+
+33. **Weekly review surface.** Does Nick want a "what got done, what slid" view on Sunday? Generated by agent and posted where?
+34. **Telos linkage.** Should tasks roll up to GOALS.md so progress is visible? If yes, manual tag or agent-inferred?
+
+### 6.11 Integration with existing PAI artefacts
+
+35. **Should completed tasks become LEARNING.md / KNOWLEDGE.md entries** when significant? Or are tasks ephemeral and Telos owns the long memory?
+36. **CHALLENGES.md and PROBLEMS.md feed.** Should "P0: solve X" turn into auto-generated breakdown tasks the agent proposes?
+
+### 6.12 Auth and security
+
+37. **Anyone other than Nick ever opens this UI?** If no, no auth on localhost. If maybe-mobile-on-LAN, need a minimal auth (PAI cred or magic-link).
+38. **Sensitivity of content.** Are career-pivot notes, financial tasks, or LSV comms tasks in scope? If yes, no cloud SaaS for storage.
+
+### 6.13 Capture hygiene
+
+39. **Item lifespan.** Default snooze, default drop after N days unreviewed?
+40. **Recurring tasks.** Daily/weekly/monthly recurrences in v1, or v2?
+
+### 6.14 Calendar integration
+
+41. **Google Calendar read?** To know meeting gaps.
+42. **Google Calendar write?** Push the day's blocks back as events.
+
+## 7. Open trade-offs needing Nick's call
+
+| Decision | Option A | Option B | Cost of getting it wrong |
+|----------|----------|----------|--------------------------|
+| **Canonical store** | Markdown files | Local Postgres | A: harder structured queries. B: harder hand-edit and harder PAI memory consistency. |
+| **Mobile** | PWA-only | Native shell | A: capture latency on iOS slightly worse. B: build cost ~5x, App Store friction. |
+| **Agent autonomy** | Propose-and-confirm | Auto-close on signals | A: more pings. B: trust collapses if the agent gets one closure wrong. |
+| **Calendar coupling** | Tasks own time blocks; calendar is read-only context | Time blocks are written to calendar | A: calendar stays uncluttered. B: phone calendar alerts fire for your own plan. |
+| **Today-view immutability** | Snapshot at 09:00 | Live-mutating | A: post-hoc review honest. B: today reflects reality. |
+| **GitHub mirror** | None | One-way mirror of selected projects | A: zero mobile review surface for free. B: extra moving piece. |
+
+## 8. Suggested MVP scope
+
+**Goal: beat the notebook on capture latency + cross-day persistence + agent review, within 2 to 3 weekends of build.**
+
+In:
+- CLI quick-add (`tasks add "..."`) writing markdown to `~/.claude/PAI/MEMORY/TASKS/`
+- SQLite read-model built on file change
+- Web app (Next.js + shadcn/ui) with three views: Inbox, Today, Backlog
+- Drag-drop between Inbox/Backlog/Today (or keyboard shortcuts)
+- Per-item notes (markdown body)
+- Project allocation from a fixed list (read from PROJECTS.md)
+- Priority field (P0/P1/P2/P3)
+- A daily agent check-in via Telegram at 17:00 — "what got done; what rolls"
+
+Out (v1.0 or later):
+- Mobile PWA
+- Time-block scheduling on today-view (manual list in MVP, blocks in v1.0)
+- Voice capture
+- Calendar read
+- Auto-classification by agent
+- Pulse widget
+- Recurring tasks
+- Telos rollup
+
+Explicit cut line: **if it doesn't beat the notebook in 3 weeks, kill the project and keep the notebook.**
+
+## 9. Risks
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| Capture latency loses against the notebook | High | Project dies | CLI quick-add ships first, measured against stopwatch. |
+| Agent becomes noisy and gets muted | Medium | Differentiator dies | Hard cap on pings, response-rate adaptive cadence, one-touch "shut up today". |
+| Backlog grows to 500+ items | High over 6 months | Tool feels heavy | Aggressive default-drop after 60 days, weekly hygiene by agent. |
+| Mobile capture never gets built and Nick goes back to notebook for "on the go" thoughts | Medium | Hybrid system, neither wins | PWA in v1.0, voice in v1.1. |
+| Markdown + SQLite drift | Low | Data integrity | Markdown is canonical; SQLite always rebuildable from files. |
+| Sensitive content accidentally synced to GitHub mirror | Low | Privacy | Allowlist for mirrored projects, never an opt-out. |
+| Project bikeshed: 3 weeks of taxonomy debates, no usable tool | Medium | Time sink | MVP cut line is brutal. |
+
+## 10. Recommended next step
+
+Nick answers the highest-priority questions in section 6 (specifically 1, 3, 6, 11, 15, 17, 18, 23, 26, 30, 37). With those answers locked, an architect agent writes the ISA against `~/.claude/PAI/DOCUMENTATION/IsaFormat.md`, and a feature-dev agent ships the CLI + markdown store + Telegram check-in within one weekend. Web UI follows in week 2.
