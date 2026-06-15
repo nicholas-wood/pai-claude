@@ -1,0 +1,427 @@
+import {
+  Client,
+  GatewayIntentBits,
+  Partials,
+  Events,
+  ChannelType,
+  ButtonBuilder,
+  ActionRowBuilder,
+  ButtonStyle,
+  SlashCommandBuilder,
+  MessageFlags,
+} from "discord.js";
+import type { CategoryChannel, Interaction } from "discord.js";
+import {
+  getRoster,
+  findAgent,
+  findAgentByName,
+  buildSystemPrompt,
+  type Agent,
+} from "./roster";
+import { askAgent, buildTranscript } from "./inference";
+import { DEFAULT_LEVEL } from "./config";
+import { trunc } from "./util";
+import { runAgentTask, type TaskEvent } from "./executor";
+import { makeCanUseTool, type Approver } from "./approval";
+import {
+  createTask,
+  appendEvent,
+  setStatus,
+  finishTask,
+  failTask,
+  listRecent,
+} from "./tasks";
+import {
+  isAutopilot,
+  isAlwaysAllowed,
+  isDangerous,
+  toggleAutopilot,
+  alwaysAllow,
+} from "./autopilot";
+import { tokenForAgent, hasToken } from "./discordTokens";
+import { getSession, setSession, dmKey, channelKey } from "./sessions";
+import { MEMORY_TOOL_NAME } from "./memoryTool";
+
+const GUILD_ID = process.env.DISCORD_GUILD_ID ?? "";
+const DISCORD_MAX = 1900; // stay under Discord's 2000-char message limit
+
+// One Discord application (bot) per agent: each agent posts under its own native
+// identity in DMs *and* its channel — no webhooks. Shared fleet state below.
+const bots = new Map<string, AgentBot>();
+const pendingApprovals = new Map<
+  string,
+  { resolve: (ok: boolean) => void; tool: string; agentId: string }
+>();
+const pendingQuestions = new Map<string, (answer: string) => void>(); // conversationId -> resolver
+let taskSeq = 0;
+
+/** Minimal "can post here" view of a channel — sidesteps discord.js channel-union friction. */
+type Sendable = { send: (options: any) => Promise<any> };
+function asSendable(ch: unknown): Sendable | null {
+  return ch && typeof (ch as any).send === "function" ? (ch as Sendable) : null;
+}
+
+function slug(s: string): string {
+  return (
+    s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 90) || "x"
+  );
+}
+
+function chunkText(s: string, n: number): string[] {
+  if (!s) return ["(empty)"];
+  const out: string[] = [];
+  for (let i = 0; i < s.length; i += n) out.push(s.slice(i, i + n));
+  return out;
+}
+
+const STATUS_EMOJI: Record<string, string> = {
+  running: "🟡",
+  "awaiting-approval": "⏸️",
+  done: "✅",
+  error: "❌",
+};
+
+function approvalRow(id: string): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(`approve:${id}`).setLabel("Approve").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`always:${id}`).setLabel("Always (this tool)").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`deny:${id}`).setLabel("Deny").setStyle(ButtonStyle.Danger)
+  );
+}
+
+/** A single agent's Discord bot: its own client, its own channel, its own identity. */
+class AgentBot {
+  readonly agent: Agent;
+  readonly client: Client;
+  channelId = "";
+
+  constructor(agent: Agent) {
+    this.agent = agent;
+    this.client = new Client({
+      intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.DirectMessages,
+      ],
+      partials: [Partials.Channel], // required to receive DMs
+    });
+    this.wire();
+  }
+
+  private wire(): void {
+    this.client.once(Events.ClientReady, async (c) => {
+      try {
+        await this.ensureOwnChannel();
+        await this.registerCommands();
+        console.log(
+          `⚡️ ${this.agent.title} online as ${c.user.tag}` +
+            (this.channelId ? ` (channel ${this.channelId})` : " (DM only)")
+        );
+      } catch (e: any) {
+        console.error(`[${this.agent.id}] startup error:`, e?.message ?? e);
+      }
+    });
+    this.client.on(Events.MessageCreate, (msg) => {
+      this.onMessage(msg).catch((e) => console.error(`[${this.agent.id}] message error:`, e));
+    });
+    this.client.on(Events.InteractionCreate, (i) => {
+      this.onInteraction(i).catch((e) => console.error(`[${this.agent.id}] interaction error:`, e));
+    });
+  }
+
+  /** Find-or-create this agent's category (project) + channel. Best-effort. */
+  private async ensureOwnChannel(): Promise<void> {
+    if (!GUILD_ID) return;
+    const guild = await this.client.guilds.fetch(GUILD_ID).catch(() => null);
+    if (!guild) return;
+    const existing = await guild.channels.fetch();
+    const catName = slug(this.agent.project);
+    let category =
+      (existing.find(
+        (c) => c?.type === ChannelType.GuildCategory && c.name === catName
+      ) as CategoryChannel | undefined) ?? undefined;
+    if (!category) {
+      category = (await guild.channels
+        .create({ name: catName, type: ChannelType.GuildCategory })
+        .catch(() => undefined)) as CategoryChannel | undefined;
+    }
+    const chName = slug(this.agent.name);
+    let channel: any = existing.find(
+      (c) =>
+        c?.type === ChannelType.GuildText &&
+        c.name === chName &&
+        c.parentId === (category?.id ?? null)
+    );
+    if (!channel) {
+      channel = await guild.channels
+        .create({
+          name: chName,
+          type: ChannelType.GuildText,
+          parent: category?.id,
+          topic: `${this.agent.title} — DM me or post here to run me.`,
+        })
+        .catch(() => null);
+    }
+    if (channel) this.channelId = channel.id;
+  }
+
+  /** Per-application slash commands (each bot owns its own set). */
+  private async registerCommands(): Promise<void> {
+    if (!GUILD_ID) return;
+    const guild = await this.client.guilds.fetch(GUILD_ID).catch(() => null);
+    if (!guild) return;
+    await guild.commands
+      .set([
+        new SlashCommandBuilder()
+          .setName("ask")
+          .setDescription("Quick answer from me (no tools)")
+          .addStringOption((o) => o.setName("question").setDescription("Your question").setRequired(true))
+          .toJSON(),
+        new SlashCommandBuilder()
+          .setName("autopilot")
+          .setDescription("Toggle my autonomous mode (still confirms destructive actions)")
+          .toJSON(),
+        new SlashCommandBuilder().setName("tasks").setDescription("Recent tasks").toJSON(),
+      ])
+      .catch(() => {});
+  }
+
+  /** A message in my DM or my channel = run me as a task (or answer a pending question). */
+  private async onMessage(msg: any): Promise<void> {
+    if (msg.author?.bot) return;
+    const isDM = msg.channel?.type === ChannelType.DM;
+    const isMine = Boolean(this.channelId) && msg.channelId === this.channelId;
+    if (!isDM && !isMine) return; // each bot only acts on its own surfaces
+    const text: string = (msg.content ?? "").trim();
+    if (!text) return;
+
+    const convoId: string = msg.channelId;
+    // A pending ask_user question takes the next reply instead of starting a task.
+    const pendingQ = pendingQuestions.get(convoId);
+    if (pendingQ) {
+      pendingQuestions.delete(convoId);
+      pendingQ(text);
+      return;
+    }
+
+    const sendable = asSendable(msg.channel);
+    if (!sendable) return;
+    const sessionKey = isDM
+      ? dmKey(this.agent.id, msg.author.id)
+      : channelKey(this.agent.id, convoId);
+    await this.runTask(sendable, text, sessionKey, convoId);
+  }
+
+  /** Run this agent as a task in `sendable`, resuming `sessionKey` so the thread remembers. */
+  async runTask(
+    sendable: Sendable,
+    prompt: string,
+    sessionKey: string,
+    convoId: string,
+    canDelegate = true
+  ): Promise<string> {
+    const agent = this.agent;
+    const taskId = `task_${Date.now()}_${taskSeq++}`;
+    createTask({ id: taskId, agentId: agent.id, agentTitle: agent.title, user: "discord", prompt });
+
+    const activity = await sendable
+      .send({ content: `🟡 **${agent.title}** is working…` })
+      .catch(() => null);
+    const lines: string[] = [];
+    let lastEdit = 0;
+
+    const render = async (done: boolean, force = false): Promise<void> => {
+      if (!activity) return;
+      const now = Date.now();
+      if (!force && !done && now - lastEdit < 1500) return; // throttle edits
+      lastEdit = now;
+      const head = done ? `✅ **${agent.title}** — done` : `🟡 **${agent.title}** is working…`;
+      await activity
+        .edit({ content: trunc(`${head}\n${lines.join("\n") || "_starting…_"}`, DISCORD_MAX) })
+        .catch(() => {});
+    };
+
+    const onEvent = async (e: TaskEvent): Promise<void> => {
+      if (e.kind === "tool") {
+        lines.push(`${e.delegated ? "↳ " : "🔧 "}${e.summary}`);
+        appendEvent(taskId, "tool", e.summary);
+        await render(false);
+      } else if (e.kind === "text") {
+        appendEvent(taskId, "text", e.text);
+      } else if (e.kind === "result") {
+        appendEvent(taskId, "result", `${e.turns} turns · $${e.costUsd.toFixed(4)}`);
+      } else if (e.kind === "error") {
+        lines.push(`⚠️ ${e.message}`);
+        appendEvent(taskId, "error", e.message);
+        await render(false, true);
+      }
+    };
+
+    const approver: Approver = async (req) => {
+      // Memory writes are always reviewed, even under autopilot — they change the agent's definition.
+      const alwaysConfirm = req.tool === MEMORY_TOOL_NAME;
+      if (
+        !alwaysConfirm &&
+        (isAutopilot(agent.id) || isAlwaysAllowed(agent.id, req.tool)) &&
+        !isDangerous(req.tool, req.summary)
+      ) {
+        lines.push(`✅ auto-approved ${req.tool}`);
+        appendEvent(taskId, "tool", `auto-approved ${req.tool}`);
+        await render(false);
+        return true;
+      }
+      return new Promise<boolean>((resolve) => {
+        setStatus(taskId, "awaiting-approval");
+        sendable
+          .send({
+            content: `⏸️ **${agent.title}** wants to run **${req.tool}**\n\`${trunc(req.summary, 300)}\``,
+            components: [approvalRow(req.id)],
+          })
+          .then(() => {
+            pendingApprovals.set(req.id, { resolve, tool: req.tool, agentId: agent.id });
+          })
+          .catch(() => resolve(false));
+      }).then((ok) => {
+        setStatus(taskId, "running");
+        return ok;
+      });
+    };
+
+    // ISC-9: the agent can pause and ask Nick a free-form question; the next reply answers it.
+    const onAskUser = async (question: string): Promise<string> => {
+      await sendable
+        .send({ content: `❓ **${agent.title}** asks:\n${trunc(question, DISCORD_MAX - 40)}` })
+        .catch(() => {});
+      return new Promise<string>((resolve) => {
+        pendingQuestions.set(convoId, resolve);
+      });
+    };
+
+    // Orchestrators delegate: the target agent runs in ITS OWN channel, as its own bot.
+    const onDelegate =
+      agent.isOrchestrator && canDelegate
+        ? async (agentKey: string, task: string): Promise<string> => {
+            const target = findAgent(agentKey) ?? findAgentByName(agentKey);
+            if (!target) return `No agent matching "${agentKey}".`;
+            const tbot = bots.get(target.id);
+            if (!tbot) return `${target.title} has no bot configured (no Discord token).`;
+            return tbot.runInOwnChannel(`[Delegated by ${agent.title}]\n${task}`);
+          }
+        : undefined;
+
+    try {
+      const { result, costUsd, sessionId } = await runAgentTask({
+        agent,
+        prompt,
+        onEvent,
+        canUseTool: makeCanUseTool(approver),
+        onDelegate,
+        onAskUser,
+        resume: getSession(sessionKey),
+      });
+      setSession(sessionKey, sessionId); // ISC-7: remember the session for next time
+      finishTask(taskId, result, costUsd);
+      await render(true, true);
+      for (const part of chunkText(result || "(no result)", DISCORD_MAX)) {
+        await sendable.send({ content: part }).catch(() => {});
+      }
+      return result || "";
+    } catch (e: any) {
+      failTask(taskId, e?.message ?? String(e));
+      await sendable.send({ content: `❌ Task failed: ${e?.message ?? String(e)}` }).catch(() => {});
+      return `Task failed: ${e?.message ?? String(e)}`;
+    }
+  }
+
+  /** Run a (delegated) task in this agent's own channel. */
+  async runInOwnChannel(prompt: string): Promise<string> {
+    if (!this.channelId) return `${this.agent.title} has no channel yet.`;
+    const ch = await this.client.channels.fetch(this.channelId).catch(() => null);
+    const sendable = asSendable(ch);
+    if (!sendable) return `${this.agent.title}'s channel is unreachable.`;
+    return this.runTask(
+      sendable,
+      prompt,
+      channelKey(this.agent.id, this.channelId),
+      this.channelId,
+      false
+    );
+  }
+
+  private async onInteraction(interaction: Interaction): Promise<void> {
+    if (interaction.isButton()) {
+      const [action, id] = interaction.customId.split(":");
+      const pending = pendingApprovals.get(id);
+      if (!pending) {
+        await interaction.deferUpdate().catch(() => {});
+        return;
+      }
+      pendingApprovals.delete(id);
+      if (action === "always") alwaysAllow(pending.agentId, pending.tool);
+      pending.resolve(action !== "deny");
+      const label =
+        action === "deny"
+          ? "🚫 Denied"
+          : action === "always"
+            ? `✅ Approved — won't ask again for ${pending.tool}`
+            : "✅ Approved";
+      // This bot authored the message, so a direct interaction.update() works (no webhook hack).
+      await interaction.update({ content: label, components: [] }).catch(() => {});
+      return;
+    }
+    if (!interaction.isChatInputCommand()) return;
+    const agent = this.agent;
+
+    if (interaction.commandName === "ask") {
+      const q = interaction.options.getString("question", true);
+      await interaction.deferReply();
+      const reply = await askAgent(buildSystemPrompt(agent), buildTranscript([], q), DEFAULT_LEVEL).catch(
+        (e: any) => `⚠️ ${e?.message ?? String(e)}`
+      );
+      await interaction.editReply(trunc(reply || "(no response)", DISCORD_MAX));
+    } else if (interaction.commandName === "autopilot") {
+      const on = toggleAutopilot(agent.id);
+      await interaction.reply({
+        content: on
+          ? `🛫 Autopilot **ON** for **${agent.title}** — I act without asking, except destructive/outbound actions (and memory writes), which still confirm.`
+          : `🛑 Autopilot **OFF** for **${agent.title}** — I ask before each gated action.`,
+        flags: MessageFlags.Ephemeral,
+      });
+    } else if (interaction.commandName === "tasks") {
+      const recent = listRecent(10);
+      const body = recent.length
+        ? recent
+            .map((t) => `${STATUS_EMOJI[t.status] ?? "•"} ${t.agentTitle} — ${t.status}: ${trunc(t.prompt, 60)}`)
+            .join("\n")
+        : "_No tasks yet._";
+      await interaction.reply({ content: trunc(body, DISCORD_MAX), flags: MessageFlags.Ephemeral });
+    }
+  }
+
+  async login(): Promise<void> {
+    await this.client.login(tokenForAgent(this.agent.id));
+  }
+}
+
+/** Start one Discord bot per agent that has a token configured. Returns the count started. */
+export function startDiscordFleet(): number {
+  const agents = getRoster()
+    .flatMap((p) => p.agents)
+    .filter((a) => hasToken(a.id));
+  if (!agents.length) {
+    console.error(
+      "No agent has a Discord token configured.\n" +
+        "Set DISCORD_TOKEN_<AGENT_ID> env vars, or populate code/.data/discord-tokens.json " +
+        "({ \"project/agent\": \"token\" }). See README — Discord setup."
+    );
+    return 0;
+  }
+  for (const agent of agents) {
+    const bot = new AgentBot(agent);
+    bots.set(agent.id, bot);
+    bot.login().catch((e) => console.error(`[${agent.id}] login failed:`, e?.message ?? e));
+  }
+  console.log(`Starting LifeOS Discord fleet — ${agents.length} agent bot(s) logging in…`);
+  return agents.length;
+}

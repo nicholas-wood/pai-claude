@@ -1,0 +1,20 @@
+import os from "node:os";
+import path from "node:path";
+
+export type InferenceLevel = "fast" | "standard" | "smart";
+
+/** Root of the workspace whose agents we surface. */
+export const WORKSPACE_ROOT =
+  process.env.WORKSPACE_ROOT ?? path.join(os.homedir(), "Documents", "workspace");
+
+/** The PAI inference tool — our Claude brain (uses the CLI subscription, no API key). */
+export const INFERENCE_TOOL =
+  process.env.INFERENCE_TOOL ??
+  path.join(os.homedir(), ".claude", "PAI", "TOOLS", "Inference.ts");
+
+/** Inference level for chat replies. */
+export const DEFAULT_LEVEL: InferenceLevel =
+  (process.env.DEFAULT_LEVEL as InferenceLevel) ?? "smart";
+
+/** The Chief of Staff's task register, rendered by /status. */
+export const COS_REGISTER_PATH = path.join(WORKSPACE_ROOT, "life", "context", "state.md");

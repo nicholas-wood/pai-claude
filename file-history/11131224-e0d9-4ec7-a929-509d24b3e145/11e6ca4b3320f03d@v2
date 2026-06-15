@@ -1,0 +1,35 @@
+import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
+import fs from "node:fs";
+import path from "node:path";
+
+// ISC-8: gated memory growth. Every agent gets an `update_memory` tool that
+// appends a durable note to its own memory.md. The tool is deliberately NOT in
+// `allowedTools`, so `canUseTool` fires for it and Nick approves each write —
+// the agent's definition is owned and grown by PAI, but only with sign-off.
+
+export const MEMORY_TOOL_NAME = "mcp__memory__update_memory";
+
+export function memoryServer(agentDir: string) {
+  return createSdkMcpServer({
+    name: "memory",
+    version: "1.0.0",
+    tools: [
+      tool(
+        "update_memory",
+        "Append a durable note to your own memory.md so you remember it in future sessions. " +
+          "Requires Nick's approval. Use for facts, preferences, and decisions worth keeping.",
+        { note: z.string().describe("The note to remember (one or two sentences)") },
+        async (args) => {
+          const note = args.note.trim();
+          const file = path.join(agentDir, "memory.md");
+          const stamp = new Date().toISOString().slice(0, 10);
+          fs.appendFileSync(file, `\n- (${stamp}) ${note}\n`);
+          return {
+            content: [{ type: "text" as const, text: `Saved to memory.md: ${note}` }],
+          };
+        }
+      ),
+    ],
+  });
+}

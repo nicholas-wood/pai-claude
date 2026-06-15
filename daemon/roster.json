@@ -1,35 +1,33 @@
 {
   "proto": 1,
   "supervisorPid": 4023950,
-  "updatedAt": 1781337649737,
+  "updatedAt": 1781529532768,
   "workers": {
-    "cc752d27": {
-      "pid": 58065,
-      "procStart": "77002114",
-      "sessionId": "cc752d27-af3f-4332-a65e-1799677f325f",
-      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/cc752d27.sock",
-      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/1b575646.pty.sock",
-      "cliVersion": "2.1.153",
-      "startedAt": 1781140715550,
+    "b9d40840": {
+      "pid": 4160406,
+      "procStart": "115481493",
+      "sessionId": "b9d40840-fee0-4ef2-ae28-3a4e22532cab",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/b9d40840.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/ed6acb92.pty.sock",
+      "cliVersion": "2.1.177",
+      "startedAt": 1781525902346,
       "attempt": 1,
       "cwd": "/home/nicholas-wood",
       "dispatch": {
         "proto": 1,
-        "short": "cc752d27",
-        "nonce": "11eba036",
-        "sessionId": "cc752d27-af3f-4332-a65e-1799677f325f",
-        "createdAt": 1781140715545,
+        "short": "b9d40840",
+        "nonce": "3c7e8439",
+        "sessionId": "b9d40840-fee0-4ef2-ae28-3a4e22532cab",
+        "createdAt": 1781525902335,
         "source": "fleet",
         "cwd": "/home/nicholas-wood",
         "launch": {
-          "mode": "prompt",
-          "args": [
-            "--session-id",
-            "cc752d27-af3f-4332-a65e-1799677f325f",
+          "mode": "resume",
+          "sessionId": "b9d40840-fee0-4ef2-ae28-3a4e22532cab",
+          "fork": false,
+          "flagArgs": [
             "--agent",
-            "claude",
-            "--",
-            "Stream 3 — PM roles Melbourne (2 to apply)\n\n  You are picking up Stream 3 of Nick's career-pivot push from a prior thread that has been closed. Self-contained context follows.\n\n  ORIGINAL ASK (Nick's words):\n  \"Apply for two product manager roles in Melbourne. Preference roles that are looking for someone with a software engineering background, ideally a smaller company that would value that cross skill set.\"\n\n  WHAT THE PRIOR AGENT PRODUCED:\n  Honest finding: Melbourne PM market is thin for this filter. Only 2 strong fits surfaced — agent did not pad.\n\n  Pick #1: FrankieOne — Senior PM, KYC (Melbourne, hybrid, ~A$155-181K est). 9/10 fit.\n  - JD explicitly names \"engineering background or strong technical depth\" as desirable, spec-driven dev workflow, Claude Code use.\n  - ~90-person Airtree Series A. KYC/AML/fraud orchestration API.\n  - URL: https://careers.frankieone.com/jobs/7470683-senior-product-manager-kyc\n  - CAVEAT: aggregators show 27 May deadline but role still live on FrankieOne careers + LinkedIn — apply today and email hiring team direct.\n  - Cover letter draft: leans on AccessBuddy end-to-end + ANZ/Macquarie compliance-grade work + SLSA C-suite consulting engagement.\n\n  Pick #2: Heidi Health — PM, Intelligence (Syd or Melb, hybrid 3 days). 8/10 fit.\n  - Wants LLM concept fluency, builder-PM not process-PM. Clinical data → AI-native insight surfaces.\n  - $100M raised, Melbourne-founded, equity-backed.\n  - URL: https://jobs.ashbyhq.com/heidihealth.com.au/50d0963c-c178-42c6-b28a-815cf2e3f1ef\n  - STRATEGIC: Nick has existing warm contacts from prior Heidi Tranche 2 outreach (Mo Ismail, Thamasi Perera, Nell Hardie). Warm path > cold portal.\n  - Cover letter draft: frames LSV operational comms platform as the same shape as Heidi Intelligence (raw operational data → decision-changing surfaces). Honest about clinical-domain newness.\n\n  Rejected/closed (do not revisit): Octopus Deploy PM, Heidi PM Models, Heidi PM Apps, RecordPoint (wrong domain), Lorikeet (no PM open), Relevance AI (no PM live), HUG (opaque shell).\n\n  NICK'S ANSWERS TO OPEN QUESTIONS:\n  - FrankieOne: submit-and-email-direct, or any FrankieOne contacts to route through first? ___\n  - Heidi: warm path via Mo/Thamasi/Nell before cold portal — yes? ___\n  - Comp floor (both silent on salary): ___\n  - Heidi Melb vs Syd office split — verified Melbourne availability? ___\n\n  WHAT TO DELIVER:\n  1. Finalised FrankieOne cover letter + 4 CV emphasis bullets.\n  2. Finalised Heidi cover letter + 4 CV emphasis bullets.\n  3. If Nick chose Heidi warm path: draft the brief warm note to Mo/Thamasi/Nell.\n  4. If FrankieOne contact named: tailor the direct-email opener.\n\n  CONTEXT FILES TO READ:\n  - /home/nicholas-wood/.claude/PAI/USER/RESUME.md\n  - /home/nicholas-wood/.claude/PAI/USER/PRINCIPAL_IDENTITY.md\n  - /home/nicholas-wood/Documents/workspace/career/ISA.md (for Heidi Tranche 2 contact details)\n\n  CONSTRAINTS:\n  - Australian English, no em dashes, executive-ready tone.\n  - Drafts only — no submissions.\n  - Don't invent achievements. Reword existing ones.\n  - Return under 1000 words."
+            "claude"
           ]
         },
         "env": {},
@@ -40,66 +38,10 @@
         ],
         "agent": "claude",
         "seed": {
-          "intent": "Stream 3 — PM roles Melbourne (2 to apply)\n\n  You are picking up Stream 3 of Nick's career-pivot push from a prior thread that has been closed. Self-contained context follows.\n\n  ORIGINAL ASK (Nick's words):\n  \"Apply for two product manager roles in Melbourne. Preference roles that are looking for someone with a software engineering background, ideally a smaller company that would value that cross skill set.\"\n\n  WHAT THE PRIOR AGENT PRODUCED:\n  Honest finding: Melbourne PM market is thin for this filter. Only 2 strong fits surfaced — agent did not pad.\n\n  Pick #1: FrankieOne — Senior PM, KYC (Melbourne, hybrid, ~A$155-181K est). 9/10 fit.\n  - JD explicitly names \"engineering background or strong technical depth\" as desirable, spec-driven dev workflow, Claude Code use.\n  - ~90-person Airtree Series A. KYC/AML/fraud orchestration API.\n  - URL: https://careers.frankieone.com/jobs/7470683-senior-product-manager-kyc\n  - CAVEAT: aggregators show 27 May deadline but role still live on FrankieOne careers + LinkedIn — apply today and email hiring team direct.\n  - Cover letter draft: leans on AccessBuddy end-to-end + ANZ/Macquarie compliance-grade work + SLSA C-suite consulting engagement.\n\n  Pick #2: Heidi Health — PM, Intelligence (Syd or Melb, hybrid 3 days). 8/10 fit.\n  - Wants LLM concept fluency, builder-PM not process-PM. Clinical data → AI-native insight surfaces.\n  - $100M raised, Melbourne-founded, equity-backed.\n  - URL: https://jobs.ashbyhq.com/heidihealth.com.au/50d0963c-c178-42c6-b28a-815cf2e3f1ef\n  - STRATEGIC: Nick has existing warm contacts from prior Heidi Tranche 2 outreach (Mo Ismail, Thamasi Perera, Nell Hardie). Warm path > cold portal.\n  - Cover letter draft: frames LSV operational comms platform as the same shape as Heidi Intelligence (raw operational data → decision-changing surfaces). Honest about clinical-domain newness.\n\n  Rejected/closed (do not revisit): Octopus Deploy PM, Heidi PM Models, Heidi PM Apps, RecordPoint (wrong domain), Lorikeet (no PM open), Relevance AI (no PM live), HUG (opaque shell).\n\n  NICK'S ANSWERS TO OPEN QUESTIONS:\n  - FrankieOne: submit-and-email-direct, or any FrankieOne contacts to route through first? ___\n  - Heidi: warm path via Mo/Thamasi/Nell before cold portal — yes? ___\n  - Comp floor (both silent on salary): ___\n  - Heidi Melb vs Syd office split — verified Melbourne availability? ___\n\n  WHAT TO DELIVER:\n  1. Finalised FrankieOne cover letter + 4 CV emphasis bullets.\n  2. Finalised Heidi cover letter + 4 CV emphasis bullets.\n  3. If Nick chose Heidi warm path: draft the brief warm note to Mo/Thamasi/Nell.\n  4. If FrankieOne contact named: tailor the direct-email opener.\n\n  CONTEXT FILES TO READ:\n  - /home/nicholas-wood/.claude/PAI/USER/RESUME.md\n  - /home/nicholas-wood/.claude/PAI/USER/PRINCIPAL_IDENTITY.md\n  - /home/nicholas-wood/Documents/workspace/career/ISA.md (for Heidi Tranche 2 contact details)\n\n  CONSTRAINTS:\n  - Australian English, no em dashes, executive-ready tone.\n  - Drafts only — no submissions.\n  - Don't invent achievements. Reword existing ones.\n  - Return under 1000 words."
-        },
-        "cols": 240,
-        "rows": 77
-      },
-      "decModes": [
-        1000,
-        1002,
-        1003,
-        1006,
-        2004,
-        1004,
-        2031
-      ],
-      "rvAuth": "3efef809954201df239bdb32ea58d8e8",
-      "ptyAuth": "99d37ff44f490894b17d7e39ca11f2fb"
-    },
-    "dca7298d": {
-      "pid": 3629644,
-      "procStart": "96142746",
-      "sessionId": "dca7298d-6ad4-422b-9359-e9db07b125df",
-      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/dca7298d.sock",
-      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/c2faa7d3.pty.sock",
-      "cliVersion": "2.1.175",
-      "startedAt": 1781332061401,
-      "attempt": 1,
-      "cwd": "/home/nicholas-wood",
-      "dispatch": {
-        "proto": 1,
-        "short": "dca7298d",
-        "nonce": "446542d1",
-        "sessionId": "dca7298d-6ad4-422b-9359-e9db07b125df",
-        "createdAt": 1781332061398,
-        "source": "fleet",
-        "cwd": "/home/nicholas-wood",
-        "launch": {
-          "mode": "resume",
-          "sessionId": "dca7298d-6ad4-422b-9359-e9db07b125df",
-          "fork": false,
-          "flagArgs": [
-            "--agent",
-            "claude",
-            "--model",
-            "claude-fable-5[1m]"
-          ]
-        },
-        "env": {},
-        "isolation": "none",
-        "respawnFlags": [
-          "--agent",
-          "claude",
-          "--model",
-          "claude-fable-5[1m]"
-        ],
-        "agent": "claude",
-        "seed": {
           "intent": ""
         },
-        "cols": 191,
-        "rows": 49
+        "cols": 206,
+        "rows": 78
       },
       "decModes": [
         1000,
@@ -110,8 +52,8 @@
         1004,
         2031
       ],
-      "rvAuth": "3b72e642936fdb5287d1c1299020cbd4",
-      "ptyAuth": "798b5d0be2cd4d3d3f2f19734cc71833"
+      "rvAuth": "749accff124c77181b9246f0c043dbd6",
+      "ptyAuth": "e6496de5d139a3f4ebbcdd3789cd7aeb"
     }
   }
 }

@@ -1,0 +1,46 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { loadJson, saveJson } from "./util";
+
+// ISC-7: persistent memory across messages. Each conversation surface (a DM with
+// an agent, or the agent's own channel/thread) maps to a Claude Agent SDK
+// session id. Resuming that session id replays the full prior conversation, so a
+// thread is no longer one-off — it remembers.
+
+const SESSIONS_FILE = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  ".data",
+  "sessions.json"
+);
+
+interface SessionRec {
+  sessionId: string;
+  updatedAt: number;
+}
+
+type SessionStore = Record<string, SessionRec>;
+
+const store: SessionStore = loadJson<SessionStore>(SESSIONS_FILE, {});
+
+/** Conversation key for a DM with an agent — one resumable thread per (agent, user). */
+export function dmKey(agentId: string, userId: string): string {
+  return `dm:${agentId}:${userId}`;
+}
+
+/** Conversation key for an agent's channel (or a thread within it). */
+export function channelKey(agentId: string, channelId: string, threadId?: string): string {
+  return threadId
+    ? `ch:${agentId}:${channelId}:${threadId}`
+    : `ch:${agentId}:${channelId}`;
+}
+
+export function getSession(key: string): string | undefined {
+  return store[key]?.sessionId;
+}
+
+export function setSession(key: string, sessionId: string): void {
+  if (!sessionId) return;
+  store[key] = { sessionId, updatedAt: Date.now() };
+  saveJson(SESSIONS_FILE, store);
+}

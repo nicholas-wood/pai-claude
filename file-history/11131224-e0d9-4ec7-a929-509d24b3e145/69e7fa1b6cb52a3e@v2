@@ -1,0 +1,22 @@
+# === Discord (default frontend) — one bot per agent ===
+# All agent bots share one guild (server):
+DISCORD_GUILD_ID=your-server-id
+
+# Each agent needs its own Discord application + bot token (that's what gives it a
+# native name/avatar in DMs and its channel). Provide a token per agent EITHER as
+# an env var named DISCORD_TOKEN_<AGENT_ID> (id uppercased, non-alphanumerics -> _),
+# OR in code/.data/discord-tokens.json as { "project/agent": "token" }.
+# The onboarding script writes the json file. Examples:
+# DISCORD_TOKEN_LIFE_OS_CONSOLE_ENGINEER=your-bot-token
+# DISCORD_TOKEN_ACCESSBUDDY_FEATURE_DEV=your-bot-token
+
+# === Slack (legacy frontend, only for `bun run start:slack`) ===
+SLACK_BOT_TOKEN=xoxb-your-bot-token
+SLACK_APP_TOKEN=xapp-your-app-level-token
+
+# Optional overrides (defaults shown)
+# WORKSPACE_ROOT=~/Documents/workspace        # resolved from your home dir by default
+# INFERENCE_TOOL=~/.claude/PAI/TOOLS/Inference.ts
+# DEFAULT_LEVEL=smart   # fast | standard | smart
+# AGENT_MODEL=          # e.g. haiku for cheaper task runs
+# MAX_TURNS=24

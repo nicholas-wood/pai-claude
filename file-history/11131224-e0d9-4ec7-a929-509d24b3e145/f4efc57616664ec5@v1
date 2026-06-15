@@ -1,0 +1,24 @@
+{
+  "name": "life-os-console",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local agent console: chat with and run your workspace agents from Discord (or Slack).",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "start:slack": "tsx src/slackIndex.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.159",
+    "@slack/bolt": "^4.2.0",
+    "discord.js": "^14.26.4",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

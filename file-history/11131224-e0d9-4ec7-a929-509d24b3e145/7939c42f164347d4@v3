@@ -1,0 +1,117 @@
+---
+project: life-os-console
+effort: E3
+phase: active
+progress: paused-phase-3a
+mode: build
+started: 2026-06-02
+updated: 2026-06-02
+---
+
+# LifeOS Console — Project ISA
+
+> Project ISA (system of record). Lives in the project directory per PAI doctrine. Supersedes the `context/{facts,state,references,feedback}.md` foundation pattern: those files fold into the sections below and are retained as detailed appendices until fully absorbed.
+
+## Problem
+
+Nick's workspace holds a growing set of represented agents (one per project, stored in `~/Documents/workspace/<project>/agents/<name>/`). There is no unified interface for interacting with them: to work with an agent you open Claude Code in its project directory, switch context, and manually load its files. There is also no visibility into what agents are doing, what tasks are running, or which agent to reach for a given question. The cost is context-switching friction and no operational overview across projects.
+
+## Vision
+
+A local cockpit that surfaces Nick's represented agents as a roster inside a chat interface (Discord default, Slack legacy), lets him chat with any of them, runs agents via the Claude Agent SDK so they can execute real tools and tasks, and shows a live operational picture -- approval gates, task instances, delegation chains, and agent status. The agent is not a separate AI; it is a thin shell over the on-disk agent files (each agent's `claude.md` / `memory.md` / `context/`) and the PAI inference pipeline. Euphoric surprise: Nick opens Discord and his entire agent roster is there, each agent replying under its own name and avatar, running real tasks with appropriate gates.
+
+## Out of Scope
+
+- Remote execution or cloud hosting (local-only; Socket Mode / Discord gateway; no public URLs).
+- Importing `@anthropic-ai/sdk` directly (all AI calls route through the PAI inference tool or the Claude Agent SDK).
+- A separate agent store or database (the workspace agent directories are the data model).
+- Native mobile app or web portal (Discord / Slack are the frontends).
+- Membership or access-control integration with external club/org systems.
+- Shared PAI infrastructure changes -- this project only modifies files under `~/Documents/workspace/life-os-console/`.
+
+## Principles
+
+- Data model is the workspace: agent directories on disk, not a database, are the source of truth.
+- Thin shell over real infrastructure: the cockpit orchestrates; it does not duplicate AI capability.
+- Local-first: no credentials leave the laptop; no public URLs; prototype stays prototype until a deliberate decision to productionise.
+- Gate before acting: destructive or outbound actions (rm -rf, git push, sudo, outbound POST, npm publish) always require explicit approval regardless of autopilot mode.
+- Verify, do not assert: typecheck passes and a smoke test runs before any claim of "done".
+- Keep it honest: the console is chat over personas, not autonomous AGI. Do not overclaim.
+
+## Constraints
+
+- **Stack is settled:** TypeScript ESM; `@slack/bolt` (Socket Mode, legacy) + `discord.js` (default); Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`); PAI `Inference.ts` for quick `/ask` path; `tsx` to run; `tsc` for typecheck; `dotenv` for config. Minimal dependencies.
+- **Module boundaries are fixed:** `config`, `roster`, `inference`, `executor`, `approval`, `agentConfig`, `delegation`, `delegateTool`, `tasks`, `autopilot`, `util` (platform-agnostic engine); `discordApp.ts` (default frontend); `app.ts` / `slackIndex.ts` (Slack legacy).
+- **`code/` is its own git repo** (gitignored from the parent workspace project). Commit code changes there; commit project meta/docs to the parent.
+- **Discord webhook constraint:** per-agent identity (name + avatar) only works on guild channels via webhooks, not DMs. True DM-as-contact would require one bot per agent.
+- **Approval gate is non-negotiable:** delegated agents run with full capability gated by their own channel's approval/autopilot state.
+- **Tokens are sensitive:** `DISCORD_BOT_TOKEN` and `DISCORD_GUILD_ID` (and legacy Slack tokens) must not be committed or shared; treat any token pasted into chat as exposed and rotate it.
+- Australian English, no em dashes, in all output.
+
+## Goal
+
+LifeOS Console reaches Phase 3 completion: persistent memory (per-channel SDK session resume and gated `memory.md` updates) and free-form `ask_user` capability (agent posts a question to the channel and resolves on the next reply), built on the verified Phase 1-3a foundation. The project is left either completed or in a documented paused state that any engineer can cold-start from `HANDOFF.md`.
+
+## Criteria
+
+- [x] ISC-1: Roster scan reads workspace agent directories and returns all represented agents.
+- [x] ISC-2: `/ask` quick-path routes a message to any named agent and returns a reply via PAI `Inference.ts`.
+- [x] ISC-3: Phase 2 -- Agent SDK execution with tool runs, activity streaming, and approval gates on write/run/delegate actions. Verified on subscription.
+- [x] ISC-4: Discord frontend live -- category per project, channel per agent, each agent replies under its own name and avatar via per-channel webhooks. Live-connected to "NW Life OS" server.
+- [x] ISC-5: `/autopilot` per channel with "Always (this tool)" button; destructive/outbound actions still confirm regardless.
+- [x] ISC-6: Phase 3a channel-aware delegation -- CoS delegates via `delegate` MCP tool; target agent runs in its own channel as its own task and reports back. Verified headless.
+- [ ] ISC-7: Persistent memory -- per-channel SDK session resume (`resume`/`continue` + stored `session_id`) so a thread remembers prior messages across tasks.
+- [ ] ISC-8: Gated `memory.md` updates -- agent can propose and apply updates to its own `memory.md` behind an approval gate.
+- [ ] ISC-9: `ask_user` MCP tool -- agent posts a question to its channel and blocks until the next reply resolves it (mirror `pendingApprovals` pattern in `discordApp.ts`).
+- [ ] ISC-10: qa-verify signs off on Phase 3 with PASS/FAIL evidence per criterion (typecheck + smoke test + live Discord check).
+- [ ] ISC-11: Anti: no `@anthropic-ai/sdk` imported directly anywhere in `code/src/` (all AI calls through `Inference.ts` or Agent SDK).
+- [ ] ISC-12: Anti: no committed secrets (`DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID`, Slack tokens) in `code/` or project root.
+- [ ] ISC-13: Tokens rotated/revoked if still in a compromised state from prior paste-into-chat incident (flagged in `HANDOFF.md`).
+
+## Test Strategy
+
+| isc | type | check | threshold | tool |
+|-----|------|-------|-----------|------|
+| ISC-1 | unit | roster scan returns >= 1 agent from workspace dirs | >= 1 agent object with `id`, `name`, `claude.md` path | `tsx` smoke test |
+| ISC-2 | functional | `/ask` round-trip returns a non-empty reply | non-empty string, exit 0 | `tsx` smoke test |
+| ISC-3 | functional | Agent SDK task with a safe tool runs and completes | tool call logged, result returned | headless task run |
+| ISC-4 | live | Discord bot connects, channel messages show agent name + avatar | visual confirm in "NW Life OS" | live Discord check |
+| ISC-5 | functional | destructive command in autopilot-on channel triggers approve/deny | approve/deny button appears | live Discord or headless |
+| ISC-6 | functional | CoS `delegate` routes task to target agent channel | task appears in target channel | headless `delegate-smoke.ts` |
+| ISC-11 | static | no direct `@anthropic-ai/sdk` import in `code/src/` | zero matches | `grep -r` |
+| ISC-12 | static | no token values committed to git | zero `.env` committed | `git ls-files` |
+| ISC-13 | process | tokens rotated per `HANDOFF.md` warning | confirmed by Nick | manual |
+
+## Features
+
+| name | satisfies | depends_on | parallelisable |
+|------|-----------|------------|----------------|
+| Per-channel SDK session resume | ISC-7 | ISC-3 | no (gates persistent memory) |
+| Gated memory.md updates | ISC-8 | ISC-7 | no |
+| ask_user MCP tool | ISC-9 | ISC-3 | yes (independent of memory) |
+| qa-verify Phase 3 sign-off | ISC-10 | ISC-7, ISC-8, ISC-9 | no |
+| Token rotation | ISC-13 | - | yes (do first) |
+
+## Decisions
+
+- 2026-06-01: TypeScript ESM chosen; deps kept minimal (`@slack/bolt` + `dotenv`); `tsx` to run.
+- 2026-06-01: Discord made the default frontend (category-per-project + channel-per-agent, per-agent webhook identity). Slack demoted to legacy path.
+- 2026-06-01: Per-agent identity hardened (CoS decision, Option A) -- all channel messages post as the agent via webhook; button clicks on webhook messages use `deferUpdate()` then edit out-of-band.
+- 2026-06-02: Project paused -- Nick is trying a different approach. Repo left in clean, committed, typechecking state. Full cold-start guide in `HANDOFF.md`.
+- 2026-06-02: Project converted to PAI project-ISA model. `context/` folds into this file; retained as appendix. Agents rebuilt as PAI-registered subagents with distinct voices.
+- 2026-06-15: BLOCKER on build resume — the `code/` implementation repo is **absent on the Linux box**. It was its own git repo, gitignored from parent `life-os.git`, so the Mac→Linux workspace migration did not bring it across; no separate remote for it is recorded anywhere (refs, HANDOFF, memory all assume local presence). `find` for `*.ts` / `package.json` / `discordApp.ts` across the box returns nothing. Engine + Discord frontend cannot be refactored here until the code is restored. Approved scope (one-app-per-agent refactor + ISC-7/8/9) is paused pending code recovery from the Mac or its remote. Build NOT started.
+- 2026-06-15: RESOLVED — code recovered from Mac via SSH (`mac` host). The `code/` repo had no git remote, so it was rsync'd across (source only, node_modules excluded): 17 src modules + git history (8 commits, Phase 1→3a) + `.env`/manifests/`.data`. Baseline re-established on Linux: `bun install` (187 pkgs, migrated package-lock→bun.lock) and `tsc --noEmit` both pass. Fixed one migration bug — `config.ts` referenced `PAI/Tools/Inference.ts` (worked on case-insensitive macOS; Linux dir is `PAI/TOOLS/`); corrected + committed (7f9b3c3). Engine now live on this box. NEXT: one-app-per-agent refactor (ISC-7/8/9) — gated on Nick provisioning per-agent Discord apps/tokens (portal-only) and rotating the exposed `.env` tokens (ISC-13). Note: `config.ts` COS_REGISTER_PATH still points at retired `life/` project — stale, breaks `/status`, not yet fixed.
+
+## Changelog
+
+- conjectured: Slack is the right chat frontend for an agent cockpit. refuted_by: Discord's guild/category/channel model maps more naturally to project-per-category, agent-per-channel; webhook identity gives each agent its own name and avatar without hacks. learned: Discord first for cockpit UI; Slack remains available as legacy.
+- conjectured: flat `context/{facts,state,references,feedback}.md` is sufficient project memory. refuted_by: PAI's twelve-section ISA carries the same content plus testable Criteria, Test Strategy, and a verification trail the flat files lacked. learned: ISA is a superset; `context/` becomes appendix-only.
+- confirmed: per-agent identity on Discord requires webhooks (one per channel); DM-based identity is not achievable without one bot per agent. constraint locked.
+
+## Verification
+
+- ISC-1..ISC-6: verified by engineer agent (tsc exit 0; roster scan = 18 agents / 8 projects; fuzzy `/agent chief` resolves; headless `delegate-smoke.ts` passed; Discord live-connected to "NW Life OS"). Re-confirm via live probe on resume.
+- ISC-11: [gap: grep not yet run post-Phase-3a; assumed compliant from engineer memory notes but not independently verified].
+- ISC-12: [gap: git ls-files check not run during ISA authoring; HANDOFF.md warns tokens may be exposed -- treat as unverified].
+- ISC-7..ISC-10: open -- not yet built.
+- ISC-13: open -- HANDOFF.md warns tokens were pasted into chat; rotation not confirmed.
