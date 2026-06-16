@@ -1,0 +1,133 @@
+// Onboard a represented agent as its own Discord bot.
+//
+// Discord has no API to create applications, so step 1 is manual (once per agent):
+//   Developer Portal -> New Application -> Bot -> Reset Token -> copy it.
+// This script automates the rest: validate the token, store it, scaffold the
+// agent on disk if needed, and print the invite URL.
+//
+// Single agent:
+//   bun run scripts/onboard-agent.ts --agent <project/name> --token <bot-token>
+//        [--create] [--orchestrator] [--title "Display Name"] [--persona "one-line persona"]
+//
+// Batch (validate + print invites for every token already in .data/discord-tokens.json):
+//   bun run scripts/onboard-agent.ts --all
+//
+// The token may also be supplied via the ONBOARD_TOKEN env var instead of --token.
+
+import "dotenv/config";
+import fs from "node:fs";
+import path from "node:path";
+import { WORKSPACE_ROOT } from "../src/config";
+import { setToken, tokenForAgent, tokenEnvVar, allConfiguredAgentIds } from "../src/discordTokens";
+
+function arg(name: string): string | undefined {
+  const i = process.argv.indexOf(`--${name}`);
+  return i !== -1 && i + 1 < process.argv.length ? process.argv[i + 1] : undefined;
+}
+function flag(name: string): boolean {
+  return process.argv.includes(`--${name}`);
+}
+function die(msg: string): never {
+  console.error(`✗ ${msg}`);
+  process.exit(1);
+}
+
+// Bot permissions the fleet needs: View Channels, Send Messages, Manage Channels,
+// Read Message History, Embed Links. (No Manage Webhooks — the webhook era is over.)
+const PERMISSIONS =
+  (1 << 10) | (1 << 11) | (1 << 4) | (1 << 16) | (1 << 14); // = 85008
+
+function inviteUrl(appId: string): string {
+  return (
+    `https://discord.com/oauth2/authorize?client_id=${appId}` +
+    `&permissions=${PERMISSIONS}&scope=bot+applications.commands`
+  );
+}
+
+/** Validate a token against Discord's REST API; returns the bot identity. */
+async function validate(token: string): Promise<{ id: string; username: string }> {
+  const res = await fetch("https://discord.com/api/v10/users/@me", {
+    headers: { Authorization: `Bot ${token}` },
+  }).catch((e) => die(`could not reach Discord: ${e?.message ?? e}`));
+  if (!res.ok) die(`token rejected by Discord (HTTP ${res.status}). Re-copy it from the portal.`);
+  return (await res.json()) as { id: string; username: string };
+}
+
+/** Mark an agent as the orchestrator (Nick's DA) by ensuring `orchestrator: true` in its claude.md. */
+function markOrchestrator(claudePath: string): void {
+  const body = fs.readFileSync(claudePath, "utf8");
+  if (/^\s*orchestrator:\s*true\s*$/im.test(body)) return;
+  fs.writeFileSync(claudePath, `orchestrator: true\n${body}`);
+}
+
+/** Onboard a single agent: scaffold if needed, validate token, store it, print the invite. */
+async function onboardOne(agentId: string, token: string): Promise<void> {
+  const [project, name] = agentId.split("/");
+  const agentDir = path.join(WORKSPACE_ROOT, project, "agents", name);
+  const claudePath = path.join(agentDir, "claude.md");
+
+  if (!fs.existsSync(claudePath)) {
+    if (!flag("create")) die(`agent not found at ${claudePath}. Pass --create to scaffold a new one.`);
+    const title = arg("title") ?? name;
+    const persona = arg("persona") ?? `${title} — a represented agent in the ${project} project.`;
+    fs.mkdirSync(agentDir, { recursive: true });
+    fs.writeFileSync(
+      claudePath,
+      `${flag("orchestrator") ? "orchestrator: true\n\n" : ""}# ${title}\n\n## Persona\n${persona}\n\n## Notes\n(Define this agent's role, scope, and voice here.)\n`
+    );
+    if (!fs.existsSync(path.join(agentDir, "memory.md"))) {
+      fs.writeFileSync(path.join(agentDir, "memory.md"), `# ${title} — memory\n`);
+    }
+    console.log(`✓ scaffolded agent at ${agentDir}`);
+  } else if (flag("orchestrator")) {
+    markOrchestrator(claudePath);
+    console.log(`✓ marked ${agentId} as orchestrator`);
+  }
+
+  const me = await validate(token);
+  console.log(`✓ token valid — bot "${me.username}" (application id ${me.id})`);
+  setToken(agentId, token);
+  console.log(`✓ token stored for "${agentId}" (env override: ${tokenEnvVar(agentId)})`);
+  console.log(`  invite: ${inviteUrl(me.id)}`);
+}
+
+async function main(): Promise<void> {
+  // Batch mode: validate + print invites for every token already stored.
+  if (flag("all")) {
+    const ids = allConfiguredAgentIds();
+    if (!ids.length) die("no tokens in .data/discord-tokens.json yet. Onboard agents singly first, or fill that file.");
+    console.log(`Onboarding ${ids.length} agent(s) from the token file:\n`);
+    for (const id of ids) {
+      const token = tokenForAgent(id);
+      if (!token) {
+        console.error(`✗ ${id}: no token resolved — skipping`);
+        continue;
+      }
+      const me = await validate(token);
+      console.log(`✓ ${id} → "${me.username}"\n  invite: ${inviteUrl(me.id)}\n`);
+    }
+    console.log("Click each invite URL, enable MESSAGE CONTENT INTENT per app, then: bun start");
+    return;
+  }
+
+  const agentId = arg("agent");
+  if (!agentId || !/^[a-z0-9._-]+\/[a-z0-9._-]+$/i.test(agentId)) {
+    die('pass --agent <project/name> (e.g. --agent accessbuddy/feature-dev), or --all for batch mode');
+  }
+  const token = (arg("token") ?? process.env.ONBOARD_TOKEN ?? "").trim();
+  if (!token) {
+    die(
+      "no token. Create the app in the Discord Developer Portal (New Application -> Bot ->\n" +
+        "  Reset Token), then pass it via --token <bot-token> or ONBOARD_TOKEN=..."
+    );
+  }
+
+  await onboardOne(agentId, token);
+
+  console.log("\nNext steps:");
+  console.log("  1. Open the invite URL above and add the bot to your server.");
+  console.log("  2. Portal: Bot -> Privileged Gateway Intents -> enable MESSAGE CONTENT INTENT -> Save.");
+  console.log("  3. Start the fleet:  bun start");
+}
+
+main().catch((e) => die(e?.message ?? String(e)));

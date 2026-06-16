@@ -1,0 +1,100 @@
+// Onboard a represented agent as its own Discord bot.
+//
+// Discord has no API to create applications, so step 1 is manual (once per agent):
+//   Developer Portal -> New Application -> Bot -> Reset Token -> copy it.
+// This script automates the rest: validate the token, store it, scaffold the
+// agent on disk if needed, and print the invite URL.
+//
+//   bun run scripts/onboard-agent.ts --agent <project/name> --token <bot-token>
+//        [--create] [--title "Display Name"] [--persona "one-line persona"]
+//
+// The token may also be supplied via the ONBOARD_TOKEN env var instead of --token.
+
+import "dotenv/config";
+import fs from "node:fs";
+import path from "node:path";
+import { WORKSPACE_ROOT } from "../src/config";
+import { setToken, tokenEnvVar } from "../src/discordTokens";
+
+function arg(name: string): string | undefined {
+  const i = process.argv.indexOf(`--${name}`);
+  return i !== -1 && i + 1 < process.argv.length ? process.argv[i + 1] : undefined;
+}
+function flag(name: string): boolean {
+  return process.argv.includes(`--${name}`);
+}
+function die(msg: string): never {
+  console.error(`✗ ${msg}`);
+  process.exit(1);
+}
+
+// Bot permissions the fleet needs: View Channels, Send Messages, Manage Channels,
+// Read Message History, Embed Links. (No Manage Webhooks — the webhook era is over.)
+const PERMISSIONS =
+  (1 << 10) | (1 << 11) | (1 << 4) | (1 << 16) | (1 << 14); // = 85008
+
+async function main(): Promise<void> {
+  const agentId = arg("agent");
+  if (!agentId || !/^[a-z0-9._-]+\/[a-z0-9._-]+$/i.test(agentId)) {
+    die('pass --agent <project/name>, e.g. --agent accessbuddy/feature-dev');
+  }
+  const token = (arg("token") ?? process.env.ONBOARD_TOKEN ?? "").trim();
+  if (!token) {
+    die(
+      "no token. Create the app in the Discord Developer Portal (New Application -> Bot ->\n" +
+        "  Reset Token), then pass it via --token <bot-token> or ONBOARD_TOKEN=..."
+    );
+  }
+
+  const [project, name] = agentId.split("/");
+  const agentDir = path.join(WORKSPACE_ROOT, project, "agents", name);
+  const claudePath = path.join(agentDir, "claude.md");
+
+  // 1) Ensure the represented agent exists on disk (scaffold if --create).
+  if (!fs.existsSync(claudePath)) {
+    if (!flag("create")) {
+      die(`agent not found at ${claudePath}. Pass --create to scaffold a new one.`);
+    }
+    const title = arg("title") ?? name;
+    const persona = arg("persona") ?? `${title} — a represented agent in the ${project} project.`;
+    fs.mkdirSync(agentDir, { recursive: true });
+    fs.writeFileSync(
+      claudePath,
+      `# ${title}\n\n## Persona\n${persona}\n\n## Notes\n(Define this agent's role, scope, and voice here.)\n`
+    );
+    if (!fs.existsSync(path.join(agentDir, "memory.md"))) {
+      fs.writeFileSync(path.join(agentDir, "memory.md"), `# ${title} — memory\n`);
+    }
+    console.log(`✓ scaffolded agent at ${agentDir}`);
+  }
+
+  // 2) Validate the token via the REST API (no gateway / intents needed for this).
+  const res = await fetch("https://discord.com/api/v10/users/@me", {
+    headers: { Authorization: `Bot ${token}` },
+  }).catch((e) => die(`could not reach Discord: ${e?.message ?? e}`));
+  if (!res.ok) {
+    die(`token rejected by Discord (HTTP ${res.status}). Re-copy it from the portal.`);
+  }
+  const me = (await res.json()) as { id: string; username: string };
+  console.log(`✓ token valid — bot "${me.username}" (application id ${me.id})`);
+
+  // 3) Store the token for the fleet.
+  setToken(agentId, token);
+  console.log(`✓ token stored in code/.data/discord-tokens.json for "${agentId}"`);
+  console.log(`  (env override available as ${tokenEnvVar(agentId)})`);
+
+  // 4) Invite URL — the bot must be authorized into your guild (browser click).
+  const invite =
+    `https://discord.com/oauth2/authorize?client_id=${me.id}` +
+    `&permissions=${PERMISSIONS}&scope=bot+applications.commands`;
+
+  console.log("\nNext steps:");
+  console.log(`  1. Open this URL and add the bot to your server:\n     ${invite}`);
+  console.log(
+    "  2. In the portal: Bot -> Privileged Gateway Intents -> enable MESSAGE CONTENT INTENT -> Save."
+  );
+  console.log("  3. Start the fleet:  bun start");
+  console.log(`\n"${me.username}" will appear as its own contact — DM it, or use its channel.`);
+}
+
+main().catch((e) => die(e?.message ?? String(e)));

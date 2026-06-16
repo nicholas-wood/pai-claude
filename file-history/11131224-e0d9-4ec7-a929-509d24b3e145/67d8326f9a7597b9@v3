@@ -1,0 +1,51 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { loadJson, saveJson } from "./util";
+
+// One Discord application (bot) per agent is what gives each agent its own
+// native identity in DMs *and* channels (webhooks only work in guild channels).
+// A token is resolved per agent id, from an env override first, then a json file
+// that the onboarding script writes to.
+
+const TOKENS_FILE = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  ".data",
+  "discord-tokens.json"
+);
+
+type TokenMap = Record<string, string>; // agentId -> bot token
+
+const fileTokens: TokenMap = loadJson<TokenMap>(TOKENS_FILE, {});
+
+/**
+ * Env var that overrides the token file for an agent, e.g.
+ * `accessbuddy/feature-dev` -> `DISCORD_TOKEN_ACCESSBUDDY_FEATURE_DEV`.
+ */
+export function tokenEnvVar(agentId: string): string {
+  const suffix = agentId
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return `DISCORD_TOKEN_${suffix}`;
+}
+
+/** Resolve an agent's Discord bot token: env override first, then the token file. */
+export function tokenForAgent(agentId: string): string | undefined {
+  const env = process.env[tokenEnvVar(agentId)];
+  if (env && env.trim()) return env.trim();
+  const fromFile = fileTokens[agentId];
+  return fromFile && fromFile.trim() ? fromFile.trim() : undefined;
+}
+
+export function hasToken(agentId: string): boolean {
+  return Boolean(tokenForAgent(agentId));
+}
+
+/** Persist an agent's bot token to the token file (used by the onboarding script). */
+export function setToken(agentId: string, token: string): void {
+  const current = loadJson<TokenMap>(TOKENS_FILE, {});
+  current[agentId] = token.trim();
+  saveJson(TOKENS_FILE, current);
+  fileTokens[agentId] = token.trim(); // keep the in-memory view fresh
+}

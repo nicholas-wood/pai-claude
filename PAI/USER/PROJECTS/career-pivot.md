@@ -27,12 +27,17 @@ Nick's engineering background is a differentiator, not a liability. Never frame 
 ### Settled positioning decisions
 - No photo on any resume.
 - No "non-traditional background" framing.
-- AccessBuddy: "live with real users" (not "commercial" or "paying").
-- LIMSOC: national scaling strategy, not a national product.
+- AccessBuddy: **supplementary only (refined 2026-06-16).** Treat as a personal/hobby SaaS build. Never headline it or lead with it. At most a brief supplementary clause. For engineering roles it may appear as a brief personal engineering example (solo full-stack build), never a primary proof point or a "commercial"/"paying" product. This supersedes the earlier co-headline "live with real users" framing.
+- LIMSOC: national scaling strategy, not a national product. Framing that lands well (2026-06-16): an independent consulting piece that had to take **seven** different federation stakeholders and pull their needs into one product operating model and roadmap they could all move behind.
+- SLSA federation = **seven jurisdictions, not eight.** Use seven wherever the number appears.
+- Deputy Chair of Surf Life Saving Australia = usable multi-stakeholder and governance proof. He brought those same seven jurisdictions together on national policy. Strong for "most senior person in the room aligning competing interests".
+- Agile stance (use wherever agile comes up): believes in agile as a delivery approach, but the key is keeping it flexible to the specific company rather than applying it by the book, something he has now seen and applied across multiple environments. Not an agile zealot, not anti-agile.
+- For leadership/hybrid roles, map the technical-credibility requirement to the **engineering career** (ANZ generative AI, Macquarie real-time platform architecture), not product-side proof.
 - Water safety policy: board-endorsed, national standard, adopted externally.
 - GPA (~70 WAM UniMelb): do not volunteer.
 - Certifications kept in resume (Nick's choice).
 - Cover-letter structure: "what sets me apart -> how I built it -> why this role." No filler openers, no domain-apology paragraphs, no comparisons to other candidates.
+- Banned phrasing (2026-06-16): never use the "you are describing the work I already do" construction or its cousins ("this is the work I have been doing", "is exactly the work I have been doing", "is the work I have done for years", "the role you describe is what I already do"). Nick dislikes it. It reads presumptuous and cliched. State the capability directly instead (e.g. "I have run the roadmap and every delivery function", "I have spent years between business priorities and technical execution").
 
 ### Key contacts
 - Trini Bigalow - BCG Principal (generalist management consultant, sister's friend), referrer; "there is no traditional consulting background."
@@ -58,11 +63,12 @@ As of 2026-06-10:
 
 ## Application Outcomes
 
-> Career ISA (`workspace/career/ISA.md`) is the system of record. Summary below as of 2026-06-15.
-- LIVE: **Virgin Australia Senior Engineer, AI** (submitted 2026-06-12; referred by Jaimyn Mayer, ex-ANZ colleague now at Virgin; Brisbane/Sydney role, Nick open to Brisbane relocation; SWE CV + thesis-led cover letter), **Wesfarmers Senior AI Solutions Engineer** (submitted 2026-06-15), **Jora/SEEK Senior SWE AI and Platform Capability** (submitted 2026-06-15, internal referral via Jay ex-ANZ Plus), **Tennis Australia Associate Digital Product Owner Participation** (submitted 2026-06-15, Hybrid CV + JD-tailored PM cover letter), **Prezzee Product Manager Melbourne** (submitted 2026-06-15, Hybrid CV + JD-tailored PM cover letter). **The Onset Product Manager SaaS Platform** test-the-water email sent to Jacquie Nolan (recruiter) 2026-06-15 ahead of any portal submission, awaiting reply.
+> Career ISA (`workspace/career/ISA.md`) is the system of record. Summary below as of 2026-06-16.
+- LIVE: **Virgin Australia Senior Engineer, AI** (submitted 2026-06-12; referred by Jaimyn Mayer, ex-ANZ colleague now at Virgin; Brisbane/Sydney role, Nick open to Brisbane relocation; SWE CV + thesis-led cover letter), **Wesfarmers Senior AI Solutions Engineer** (submitted 2026-06-15), **Jora/SEEK Senior SWE AI and Platform Capability** (submitted 2026-06-15, internal referral via Jay ex-ANZ Plus), **Tennis Australia Associate Digital Product Owner Participation** (submitted 2026-06-15, Hybrid CV + JD-tailored PM cover letter), **Prezzee Product Manager Melbourne** (submitted 2026-06-15, Hybrid CV + JD-tailored PM cover letter), **SprintSuite Product and Delivery Lead** (submitted 2026-06-16, Hybrid CV, Seek 92654742), **Profusion PAC Lead Engineer Golang** (submitted 2026-06-16, SWE CV, Seek 92304732; reverses its earlier 2026-06-11 drop), **Encompass Engineering Manager (vintrace)** (applied 2026-06-16, Hybrid CV, Seek 92350273; applied despite the EM people-management gap). **The Onset Product Manager SaaS Platform** test-the-water email sent to Jacquie Nolan (recruiter) 2026-06-15 ahead of any portal submission, awaiting reply.
 - REJECTED: BCG TDA (early June 2026, post-TA-chat), EY-Parthenon Deal Tech (2026-06-03), EY Manager Digital Implementation EHS (2026-06-04), Canva, Centorrino, Fabric, Tyro.
 - COLD / SILENT (sent, no response): McKinsey (Solve sent 2026-06-04, low likelihood of proceeding), Grex, Heidi, Publicis Sapient, Google TAM, Xero Engineering Manager.
 - MISSED / CLOSED: Opus (closed before submit), Judo (missed close).
+- PARKED (2026-06-16 Seek batch, worked up but not submitted): Easygo Senior SWE Full-Stack (TS/Svelte stack mismatch + iGaming domain), Contour Senior PM (first-PM tenure screen, no full JD captured), TOM Technical PM (Sydney + 27d stale), DXC Technical Product Owner (5yr experience + design-leaning). Still active/ready from that batch: Kongo AI-Native Integration Engineer, UpperGround Tech Lead. Full per-role artefacts in `workspace/career/artifacts/applications/2026/2026-06-16/`.
 
 ## Strategic Shift (2026-06-10)
 

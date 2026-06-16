@@ -1,0 +1,162 @@
+import fs from "node:fs";
+import path from "node:path";
+import { WORKSPACE_ROOT } from "./config";
+import { trunc } from "./util";
+
+export interface Agent {
+  id: string; // `${project}/${name}`
+  project: string;
+  name: string;
+  dir: string; // absolute path to the agent directory
+  title: string; // from `# Title` in claude.md
+  persona: string; // first persona line
+  isOrchestrator: boolean; // manager/delegator role — gets the Agent tool + delegation subagents
+  avatarUrl: string; // from `avatar:` frontmatter (http(s) only), else a deterministic identicon
+}
+
+export interface Project {
+  name: string;
+  agents: Agent[];
+}
+
+/** Read a file, returning `fallback` if it can't be read. */
+export function readFileSafe(p: string, fallback = ""): string {
+  try {
+    return fs.readFileSync(p, "utf8");
+  } catch {
+    return fallback;
+  }
+}
+
+/** List directory or file names under `p` (empty array if `p` is unreadable). */
+function listNames(p: string, kind: "dir" | "file"): string[] {
+  try {
+    return fs
+      .readdirSync(p, { withFileTypes: true })
+      .filter((d) => (kind === "dir" ? d.isDirectory() : d.isFile()))
+      .map((d) => d.name);
+  } catch {
+    return [];
+  }
+}
+
+function parseTitle(claudeMd: string, fallback: string): string {
+  const m = claudeMd.match(/^#\s+(.+)$/m);
+  return m ? m[1].trim() : fallback;
+}
+
+function parsePersona(claudeMd: string): string {
+  const m = claudeMd.match(/##\s+Persona\s*\n+([^\n]+(?:\n[^\n#]+)?)/i);
+  if (m) return m[1].replace(/\s+/g, " ").trim();
+  const firstProse = claudeMd
+    .split("\n")
+    .find((l) => l.trim() && !l.startsWith("#"));
+  return firstProse?.trim() ?? "";
+}
+
+function parseOrchestrator(claudeMd: string, agentName: string): boolean {
+  // `orchestrator: true` frontmatter marks the delegator (Nick's DA, Jarvis).
+  // Falls back to the legacy chief-of-staff name for back-compat.
+  const m = claudeMd.match(/^\s*orchestrator:\s*(true|false)\s*$/im);
+  if (m) return m[1].toLowerCase() === "true";
+  return agentName === "chief-of-staff";
+}
+
+function parseAvatar(claudeMd: string, id: string): string {
+  // Optional `avatar: <url>` line near the top of claude.md (http(s) only — a
+  // local path can't be fetched by Discord's webhook avatarURL).
+  const m = claudeMd.match(/^\s*avatar:\s*(\S+)\s*$/im);
+  if (m && /^https?:\/\//i.test(m[1])) return m[1];
+  // Deterministic, no-dependency default: identicon seeded by the agent id.
+  return `https://api.dicebear.com/9.x/identicon/png?seed=${encodeURIComponent(id)}`;
+}
+
+/** Scan the workspace for projects that contain represented agents (uncached). */
+export function scanWorkspace(): Project[] {
+  const projects: Project[] = [];
+  for (const projName of listNames(WORKSPACE_ROOT, "dir")) {
+    const agentsDir = path.join(WORKSPACE_ROOT, projName, "agents");
+    if (!fs.existsSync(agentsDir)) continue;
+    const agents: Agent[] = [];
+    for (const agentName of listNames(agentsDir, "dir")) {
+      const dir = path.join(agentsDir, agentName);
+      const claudePath = path.join(dir, "claude.md");
+      if (!fs.existsSync(claudePath)) continue;
+      const claudeMd = readFileSafe(claudePath);
+      agents.push({
+        id: `${projName}/${agentName}`,
+        project: projName,
+        name: agentName,
+        dir,
+        title: parseTitle(claudeMd, agentName),
+        persona: parsePersona(claudeMd),
+        isOrchestrator: parseOrchestrator(claudeMd, agentName),
+        avatarUrl: parseAvatar(claudeMd, `${projName}/${agentName}`),
+      });
+    }
+    if (agents.length) projects.push({ name: projName, agents });
+  }
+  return projects.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Short-lived cache so repeated handler calls don't each re-walk the filesystem.
+const ROSTER_TTL_MS = 15_000;
+let cache: { ts: number; data: Project[] } | null = null;
+
+/** The roster, cached for a few seconds to absorb bursts of Slack events. */
+export function getRoster(): Project[] {
+  if (cache && Date.now() - cache.ts < ROSTER_TTL_MS) return cache.data;
+  cache = { ts: Date.now(), data: scanWorkspace() };
+  return cache.data;
+}
+
+export function findAgent(id: string): Agent | undefined {
+  return getRoster()
+    .flatMap((p) => p.agents)
+    .find((a) => a.id === id);
+}
+
+export function findAgentByName(q: string): Agent | undefined {
+  const ql = q.toLowerCase();
+  const all = getRoster().flatMap((p) => p.agents);
+  return (
+    all.find((a) => a.id.toLowerCase() === ql) ??
+    all.find((a) => a.name.toLowerCase() === ql) ??
+    all.find(
+      (a) =>
+        a.name.toLowerCase().includes(ql) || a.title.toLowerCase().includes(ql)
+    )
+  );
+}
+
+const MAX_CONTEXT_CHARS = 9000;
+
+/** Assemble an agent's system prompt from its files + project context. */
+export function buildSystemPrompt(agent: Agent): string {
+  const claudeMd = readFileSafe(path.join(agent.dir, "claude.md"), "(missing)");
+  const memoryMd = readFileSafe(path.join(agent.dir, "memory.md"), "(empty)");
+
+  const ctxDir = path.join(WORKSPACE_ROOT, agent.project, "context");
+  let projectContext = "";
+  for (const f of listNames(ctxDir, "file")) {
+    if (!f.endsWith(".md")) continue;
+    projectContext += `\n--- context/${f} ---\n${readFileSafe(path.join(ctxDir, f))}`;
+  }
+  projectContext = trunc(projectContext, MAX_CONTEXT_CHARS, "\n…[truncated]");
+
+  return [
+    `You are "${agent.title}", a represented agent in Nick's workspace (project: ${agent.project}).`,
+    `You are speaking with Nick directly through Discord (your DMs and your own channel). Stay in character per your definition below.`,
+    `Be concise and useful for a chat interface. You can do real work via your tools: reads run freely; edits, shell, and delegation are gated by Nick's approval.`,
+    `Use the ask_user tool when you need information or a decision only Nick can give. Use the update_memory tool (Nick approves it) to save durable facts to your own memory.md.`,
+    ``,
+    `==== YOUR DEFINITION (claude.md) ====`,
+    claudeMd.trim(),
+    ``,
+    `==== YOUR MEMORY (memory.md) ====`,
+    memoryMd.trim(),
+    ``,
+    `==== PROJECT FOUNDATION (context/) ====`,
+    projectContext.trim() || "(none)",
+  ].join("\n");
+}

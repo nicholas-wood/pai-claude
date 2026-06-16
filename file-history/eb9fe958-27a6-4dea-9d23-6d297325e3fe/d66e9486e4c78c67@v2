@@ -1,0 +1,54 @@
+export const meta = {
+  name: 'cover-letter-trim-pass',
+  description: 'Trim each Seek cover letter to comfortably fit one page, preserving Nick\'s voice, style rules, positioning guardrails, JD evidence, closing line and sign-off',
+  phases: [{ title: 'Trim' }],
+}
+
+const BASE = '/home/nicholas-wood/Documents/workspace/career/artifacts/applications/2026/2026-06-16'
+
+const folders = [
+  '1 - SprintSuite - Product and Delivery Lead',
+  '2 - Kongo - AI-Native Integration Engineer',
+  '3 - Profusion PAC - Lead Engineer Golang',
+  '4 - Easygo - Senior Software Engineer Full-Stack',
+  '5 - Encompass - Engineering Manager (vintrace)',
+  '6 - UpperGround - Tech Lead',
+  '7 - TOM - Technical Product Manager',
+  '8 - DXC - Technical Product Owner',
+  '9 - Contour Education - Senior Product Manager',
+]
+
+const RULES = `
+NON-NEGOTIABLE STYLE RULES (must survive the trim):
+- NO em dashes, semicolons, or colons in prose. Periods and commas only. Hyphens inside compound words and the pipe in the sign-off contact line are fine.
+- Australian English spelling (organisation, recognise, prioritisation, practised, optimise).
+- NO comparative language ("few applicants", "most candidates", "what sets me apart").
+- Closing line EXACTLY: "I look forward to the opportunity to discuss the role further with you."
+- Sign-off EXACTLY (two lines):
+  Nicholas Wood
+  0427 081 551 | nicholas.h.wood@outlook.com
+
+POSITIONING GUARDRAILS (must survive the trim):
+- AccessBuddy = "live in production with real users" / solo founder / end-to-end. NEVER "paying" or "commercial".
+- LIMSOC = "national scaling strategy" / "independent consulting piece" / presented to the "national executive". NEVER "national product" or "CEO".
+- No "non-traditional background". No claim of formal multi-year PM tenure. No tenure-gap acknowledgement in the body.
+- Do not invent any new claim. Only cut and tighten existing content.
+`
+
+phase('Trim')
+const results = await parallel(folders.map((folder) => async () => {
+  const path = `${BASE}/${folder}/cover-letter.md`
+  const res = await agent(`Edit the cover letter at:
+${path}
+
+TASK: tighten it so it comfortably fits on a single page. Target 330 to 365 words of body (everything above the sign-off). Cut redundancy, compress long sentences, remove any phrase that repeats a point already made. Keep the strongest JD-mapped evidence and the overall structure (opener, evidence, motivation, close). Do NOT add new claims. Preserve voice (exec-ready, confident, specific, varied rhythm, paragraphs not bullets).
+
+${RULES}
+
+Use the Read then Edit/Write tools to update the file in place. After editing, count the body words (exclude the two sign-off lines) and report the final body word count. Confirm: no em dashes/semicolons/colons in prose, Australian English, closing line and sign-off intact, guardrails intact.`,
+    { label: `trim:${folder.split(' - ')[0]}`, phase: 'Trim' })
+  return { folder, res }
+})).then(r => r.filter(Boolean))
+
+log(`Trimmed ${results.length}/9 cover letters`)
+return results.map(r => ({ folder: r.folder }))

@@ -1,0 +1,200 @@
+export const meta = {
+  name: 'seek-application-pipeline',
+  description: 'For each saved Seek job: pick resume, draft cover letter, adversarially review against Nick\'s voice, then write assessment.md + cover-letter.md to a numbered application folder',
+  phases: [
+    { title: 'Draft', detail: 'resume choice + JD targets + cover letter draft' },
+    { title: 'Review', detail: 'thorough voice/style/positioning critique' },
+    { title: 'Write', detail: 'finalize and write the two artefact files' },
+  ],
+}
+
+const TMP = '/home/nicholas-wood/.claude/jobs/eb9fe958/tmp'
+const OUT = '/home/nicholas-wood/Documents/workspace/career/artifacts/applications/2026/2026-06-16'
+
+// Shared context every agent should ground in
+const CTX = `
+NICK CONTEXT FILES — read the ones relevant to your task before writing:
+- Career strategy + positioning guardrails: /home/nicholas-wood/.claude/PAI/USER/PROJECTS/career-pivot.md
+- Career ISA (system of record): /home/nicholas-wood/Documents/workspace/career/ISA.md
+- Resume sources: /home/nicholas-wood/Documents/workspace/career/artifacts/resumes/resume-hybrid.md, resume-swe.md, resume-consulting.md
+- Cover-letter bases: /home/nicholas-wood/Documents/workspace/career/artifacts/resumes/cover-letter-pm-base.md (PM roles), base-cover-letter-senior-software-engineer.md (eng roles)
+- Recent shipped cover letters (match this voice): /home/nicholas-wood/Documents/workspace/career/artifacts/cover-letters/wesfarmers.md, seek-jora.md
+- Writing style: /home/nicholas-wood/.claude/PAI/USER/WRITINGSTYLE.md, AI_WRITING_PATTERNS.md, RHETORICALSTYLE.md
+- Identity: /home/nicholas-wood/.claude/PAI/USER/PRINCIPAL_IDENTITY.md
+
+NON-NEGOTIABLE STYLE RULES (apply to all cover-letter prose):
+- NO em dashes, semicolons, or colons in prose. Periods and commas only. Hyphens inside compound words are fine. Parentheses are fine.
+- Australian English spelling (organisation, recognise, prioritisation, optimise).
+- NO comparative language ("few applicants", "most candidates", "what sets me apart from others"). State strengths directly and let the body prove them.
+- Single page, target 350-420 words.
+- Closing line: "I look forward to the opportunity to discuss the role further with you."
+- Sign-off: Nicholas Wood / 0427 081 551 | nicholas.h.wood@outlook.com
+
+NON-NEGOTIABLE POSITIONING GUARDRAILS:
+- AccessBuddy = "live in production with real users", NEVER "paying"/"commercial". Solo founder, end-to-end ownership.
+- LIMSOC = a "national scaling strategy" (an independent consulting piece presented to the national executive), NEVER "a national product".
+- Water safety policy = board-endorsed national standard adopted externally. Use sparingly, only when JD values multi-state stakeholder alignment.
+- NEVER use "non-traditional background" framing.
+- Do NOT claim "Product Manager with multi-year experience" / formal PM tenure. Lead with "product manager experience" earned through specific evidence.
+- Lead with product/strategy for PM roles; for engineering roles lead with engineering. Engineering depth is the differentiator, never framed as left behind.
+- Use "independent consulting piece" not "paid"; "national executive" not "CEO"; "$100M+ turnover organisation".
+- Do NOT put the tenure-gap acknowledgement in the cover letter body. It belongs only in a recruiter intro email if there is one.
+`
+
+const items = [
+  { p: 1, company: 'SprintSuite', role: 'Product and Delivery Lead', url: 'https://www.seek.com.au/job/92654742',
+    jd: `${TMP}/jd-1-sprintsuite-product-and-delivery-lead.txt`, resumeHint: 'resume-hybrid', baseHint: 'cover-letter-pm-base', isPm: true,
+    special: 'TOP PRIORITY and Seek flags Nick as a "Strong applicant match". Nick wants the written piece to state MORE EXPLICITLY why he is the obvious choice (without comparative language) — do this by directly mapping the JD core (own roadmap + all delivery functions, remove the CEO from delivery/eng bottlenecks, be the most senior person in the room, technical credibility to lead an EM, complex enterprise client implementations, scale delivery ops with process that outlasts the individual) onto his lived evidence (AccessBuddy = solo end-to-end owner of a live B2B SaaS; LIMSOC national scaling strategy to the national executive; scrum master scaling 2 to 6 squads = delivery cadence/release/QA governance; ANZ generative AI = technical depth and on-thesis with SprintSuite building agentic AI). The JD literally asks for "a short rationale of what makes you the obvious choice" so a confident, direct mapping close is correct. ALSO produce a separate short LinkedIn/email outreach message Nick can send to the SprintSuite CEO (warm, peer-tone, references the role reporting to them, 90-120 words, leads with the operating-shape match, ends with a low-friction ask for a short conversation) — include it in assessment.md under a "## CEO outreach message" heading.' },
+  { p: 2, company: 'Kongo', role: 'AI-Native Integration Engineer', url: 'https://www.seek.com.au/job/92361479',
+    jd: `${TMP}/jd-2-kongo-ai-native-integration-engineer.txt`, resumeHint: 'resume-swe', baseHint: 'base-cover-letter-senior-software-engineer', isPm: false,
+    special: 'Nick has agreed to compromise on the comp ($130-160k). This is the eng + AI + BA/integration intersection that is his exact differentiator and on-thesis with his recent AI-role applications (Virgin, Wesfarmers). Lean into AI-native delivery and integration/translation strength.' },
+  { p: 3, company: 'Profusion PAC', role: 'Lead Engineer Golang', url: 'https://www.seek.com.au/job/92304732',
+    jd: `${TMP}/jd-3-profusion-lead-engineer-golang.txt`, resumeHint: 'resume-swe', baseHint: 'base-cover-letter-senior-software-engineer', isPm: false,
+    special: 'Strong technical fit — mirrors his Trideca/Latitude Go-lead track, AI-enabled platforms (on-thesis), developer-experience / engineer-first tooling at scale. External apply (more friction). Stack: Go/Java/React/Next.' },
+  { p: 4, company: 'Easygo', role: 'Senior Software Engineer Full-Stack', url: 'https://www.seek.com.au/job/92385213',
+    jd: `${TMP}/jd-4-easygo-senior-software-engineer-fullstack.txt`, resumeHint: 'resume-swe', baseHint: 'base-cover-letter-senior-software-engineer', isPm: false,
+    special: 'JD ONLY A LISTING SUMMARY (full JD not captured). Build a solid cover letter from the summary + general knowledge but FLAG clearly in assessment.md that the full JD must be re-scraped/pasted before submission so JD-keyword mapping can be sharpened. Easygo = Stake/Kick, global consumer scale, strong comp. Senior IC full-stack.' },
+  { p: 5, company: 'Encompass', role: 'Engineering Manager (vintrace)', url: 'https://www.seek.com.au/job/92350273',
+    jd: `${TMP}/jd-5-encompass-engineering-manager-vintrace.txt`, resumeHint: 'resume-hybrid', baseHint: 'base-cover-letter-senior-software-engineer', isPm: false,
+    special: 'Leadership-bridge role. JD says "1-3 yrs leadership req" — a low bar Nick can frame against using his non-traditional but real leadership (LSV State Comms Officer, SLSA Deputy Chair, LIMSOC national strategy, leading without formal authority). Be honest: his gap is formal line-management of engineers; lean on technical leadership + governance + team-confidence-building. Java/React + AI-tooling stack.' },
+  { p: 6, company: 'UpperGround', role: 'Tech Lead', url: 'https://www.seek.com.au/job/92373675',
+    jd: `${TMP}/jd-6-upperground-tech-lead.txt`, resumeHint: 'resume-hybrid', baseHint: 'base-cover-letter-senior-software-engineer', isPm: false,
+    special: 'UpperGround by Hudson (recruiter-placed). Tech Lead leans technical-leadership not people-management, so the no-formal-line-management gap bites less. Stack is Java/React (adjacent to Nick\'s TS/Go/Postgres core — do not overclaim deep Java). Good comp $170-190k, Melbourne.' },
+  { p: 7, company: 'TOM', role: 'Technical Product Manager', url: 'https://www.seek.com.au/job/92213616',
+    jd: `${TMP}/jd-7-tom-technical-product-manager.txt`, resumeHint: 'resume-hybrid', baseHint: 'cover-letter-pm-base', isPm: true,
+    special: 'Nick\'s strongest PM-lane fit — Technical PM rewards the eng+product blend where his engineering credibility is the ASSET not the gap. Sydney role (note location). Good comp $160-180k+super.' },
+  { p: 8, company: 'DXC', role: 'Technical Product Owner', url: 'https://www.seek.com.au/job/92171239',
+    jd: `${TMP}/jd-8-dxc-technical-product-owner.txt`, resumeHint: 'resume-hybrid', baseHint: 'cover-letter-pm-base', isPm: true,
+    special: 'Melbourne TPO, customer & digital solutions. DXC is a large IT-services/outsourcing firm (slower, less product-led) — keep the motivation paragraph credible, do not overstate excitement. Cheap quick-apply volume play.' },
+  { p: 9, company: 'Contour Education', role: 'Senior Product Manager', url: 'https://www.seek.com.au/job/92560925',
+    jd: `${TMP}/jd-9-contour-senior-product-manager.txt`, resumeHint: 'resume-hybrid', baseHint: 'cover-letter-pm-base', isPm: true,
+    special: 'JD ONLY A LISTING SUMMARY (full JD not captured) — FLAG in assessment.md to re-scrape before submission. "First Senior PM" = founding hire; real tenure-gap risk because there is no senior PM above to learn from, so the screen likely weights demonstrated PM tenure. Calibrated shot: lean hard on AccessBuddy as genuine end-to-end product ownership and LIMSOC product/scaling strategy. Edtech (VCE/online learning).' },
+]
+
+const folderFor = (it) => `${OUT}/${it.p} - ${it.company} - ${it.role}`
+
+const DRAFT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['resume','resumeRationale','resumeTweaks','coverBase','keyJdInsights','jdTargets','coverLetter','applyMethod','salaryGuidance','specialNotes'],
+  properties: {
+    resume: { type: 'string', description: 'resume-hybrid | resume-swe | resume-consulting' },
+    resumeRationale: { type: 'string' },
+    resumeTweaks: { type: 'string', description: 'specific suggested tweaks for THIS role, or "none needed"' },
+    coverBase: { type: 'string', description: 'cover-letter-pm-base | base-cover-letter-senior-software-engineer' },
+    keyJdInsights: { type: 'array', items: { type: 'string' }, description: 'key insights from the JD' },
+    jdTargets: { type: 'array', items: { type: 'string' }, description: 'specific JD requirements/keywords the cover letter must hit' },
+    coverLetter: { type: 'string', description: 'full cover letter in markdown, following all style rules' },
+    applyMethod: { type: 'string' },
+    salaryGuidance: { type: 'string' },
+    specialNotes: { type: 'string', description: 'anything to particularly note for this job, incl portal questions and any CEO outreach message for SprintSuite' },
+  },
+}
+
+const REVIEW_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['verdict','reviewFindings','styleCheck','finalCoverLetter','assessmentExtras'],
+  properties: {
+    verdict: { type: 'string', description: 'PASS or NEEDS-FIX (after you apply fixes it should be PASS)' },
+    reviewFindings: { type: 'array', items: { type: 'string' }, description: 'every issue you found and how you resolved it' },
+    styleCheck: { type: 'string', description: 'confirm no em dashes/colons/semicolons, Australian English, no comparative language, word count, positioning guardrails honoured' },
+    finalCoverLetter: { type: 'string', description: 'the corrected, final cover letter in markdown' },
+    assessmentExtras: { type: 'string', description: 'any extra notes for the assessment file the writer should include (e.g. residual risks, CEO message if applicable)' },
+  },
+}
+
+phase('Draft')
+const results = await pipeline(
+  items,
+  // STAGE 1 — draft
+  async (it) => {
+    const draft = await agent(`${CTX}
+
+You are drafting a job application package for Nick (Nicholas Wood). Read the JD file at ${it.jd} and the relevant context files above.
+
+ROLE: ${it.company} — ${it.role}
+SEEK URL: ${it.url}
+Recommended resume (default unless the JD argues otherwise): ${it.resumeHint}
+Recommended cover base: ${it.baseHint}
+${it.isPm ? 'This is a PRODUCT-lane role — lead with product/strategy.' : 'This is an ENGINEERING-lane role — lead with engineering.'}
+SPECIAL INSTRUCTIONS: ${it.special}
+
+Produce: (1) which resume to use + rationale, (2) any specific resume tweaks for this role, (3) which cover base, (4) key JD insights, (5) the specific JD requirements to target, (6) a complete, submission-ready cover letter in Nick's voice following EVERY style rule and positioning guardrail above, (7) apply method, (8) salary guidance, (9) special notes (include any portal questions and, for SprintSuite, the CEO outreach message text).`,
+      { label: `draft:${it.p}-${it.company}`, phase: 'Draft', schema: DRAFT_SCHEMA })
+    return { it, draft }
+  },
+  // STAGE 2 — adversarial review
+  async (prev) => {
+    const { it, draft } = prev
+    const review = await agent(`${CTX}
+
+You are the senior reviewer. Adversarially review this cover-letter DRAFT for Nick's application to ${it.company} — ${it.role}. Read the JD at ${it.jd} and Nick's voice/style/positioning context files above, plus his recent shipped cover letters to match tone.
+
+DRAFT COVER LETTER:
+"""
+${draft.coverLetter}
+"""
+
+DRAFT DECISIONS: resume=${draft.resume}; base=${draft.coverBase}; targets=${JSON.stringify(draft.jdTargets)}.
+
+Review thoroughly for: (a) STYLE-RULE violations — scan character by character for em dashes, semicolons, colons in prose; non-Australian spelling; any comparative language; word count 350-420; correct closing line and sign-off. (b) POSITIONING guardrail breaches — AccessBuddy not "paying/commercial", LIMSOC "scaling strategy" not "product", no "non-traditional background", no formal-PM-tenure overclaim, tenure gap NOT in the body. (c) VOICE — does it sound like Nick (exec-ready, confident, specific, varied rhythm, paragraphs not bullets, no filler opener, no generic AI phrasing, no abrupt ending)? (d) JD ALIGNMENT — are the most important JD requirements actually hit with concrete evidence? (e) OVERCLAIMING — flag any tech/stack claim Nick can't back (e.g. deep Java if the role is Java but he is TS/Go).
+
+Then APPLY your fixes and output the corrected final cover letter. List every finding and how you resolved it. Confirm the style check passes.`,
+      { label: `review:${it.p}-${it.company}`, phase: 'Review', schema: REVIEW_SCHEMA })
+    return { it, draft, review }
+  },
+  // STAGE 3 — finalize + write files
+  async (prev) => {
+    const { it, draft, review } = prev
+    const folder = folderFor(it)
+    const writeRes = await agent(`You are writing the two artefact files for Nick's application to ${it.company} — ${it.role}. Use the Write tool. Create the folder if needed.
+
+Write EXACTLY two files into: ${folder}
+
+FILE 1 — ${folder}/cover-letter.md
+Write this cover letter verbatim (it is already finalised). Do not change a word:
+"""
+${review.finalCoverLetter}
+"""
+
+FILE 2 — ${folder}/assessment.md
+Compose it in markdown with these sections, filled from the data below:
+# ${it.p} - ${it.company} - ${it.role}
+- **Priority:** ${it.p} of 9
+- **Seek ad:** ${it.url}
+- **Apply method:** ${draft.applyMethod}
+- **Resume to use:** ${draft.resume} (rationale: ${draft.resumeRationale})
+- **Cover letter base:** ${draft.coverBase}
+
+## Key JD insights
+${draft.keyJdInsights.map(s => '- ' + s).join('\n')}
+
+## What to target from the JD
+${draft.jdTargets.map(s => '- ' + s).join('\n')}
+
+## Suggested resume tweaks
+${draft.resumeTweaks}
+
+## Reviewer findings (step 6)
+${review.reviewFindings.map(s => '- ' + s).join('\n')}
+
+Style check: ${review.styleCheck}
+
+## Portal questions / salary
+${draft.salaryGuidance}
+
+## Notes for this job
+${draft.specialNotes}
+
+${review.assessmentExtras ? '## Reviewer extras\n' + review.assessmentExtras : ''}
+
+Render that into clean markdown (expand bullets sensibly, keep the CEO outreach message if present as its own "## CEO outreach message" section). After writing both files, confirm the two paths.`,
+      { label: `write:${it.p}-${it.company}`, phase: 'Write' })
+    return { folder, company: it.company, role: it.role, p: it.p, resume: draft.resume, base: draft.coverBase, verdict: review.verdict, status: 'written', writeRes }
+  },
+)
+
+const ok = results.filter(Boolean)
+log(`Wrote ${ok.length}/9 application packages to ${OUT}`)
+return ok.map(r => ({ p: r.p, folder: r.folder, resume: r.resume, base: r.base, verdict: r.verdict }))

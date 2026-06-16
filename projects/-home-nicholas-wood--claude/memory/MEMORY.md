@@ -4,3 +4,4 @@
 - [OneDrive rclone push](gotcha-onedrive-rclone-push.md) — mount uploads stall silently; verify with rclone lsl, force-push with rclone copy
 - [Cover letter voice](feedback-cover-letter-voice.md) — thesis-led opener, no skill checklists, referral organic, past tense for ended roles
 - [Gitignored sub-repo migration](gotcha-gitignored-subrepo-migration.md) — nested gitignored repos didn't migrate from Mac; rsync over `ssh mac` to recover
+- [Job application selection criteria](feedback-job-application-selection-criteria.md) — Nick parks roles needing credentials he lacks (EM=management), non-product, Sydney/stale, design-leaning, stack-mismatch; rank by real fit not lane

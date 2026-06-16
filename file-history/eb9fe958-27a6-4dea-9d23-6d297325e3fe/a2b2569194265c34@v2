@@ -1,0 +1,68 @@
+export const meta = {
+  name: 'cover-letter-refine-pass',
+  description: 'Propagate Nick\'s SprintSuite positioning refinements across the other 8 Seek cover letters where relevant, preserving role fit, one-page length, style rules and guardrails',
+  phases: [{ title: 'Refine' }],
+}
+
+const BASE = '/home/nicholas-wood/Documents/workspace/career/artifacts/applications/2026/2026-06-16'
+
+// 8 remaining (SprintSuite #1 already refined). isPm flags product-lane roles; isEng flags engineering-lane.
+const letters = [
+  { folder: '2 - Kongo - AI-Native Integration Engineer', lane: 'eng' },
+  { folder: '3 - Profusion PAC - Lead Engineer Golang', lane: 'eng' },
+  { folder: '4 - Easygo - Senior Software Engineer Full-Stack', lane: 'eng' },
+  { folder: '5 - Encompass - Engineering Manager (vintrace)', lane: 'leadership' },
+  { folder: '6 - UpperGround - Tech Lead', lane: 'leadership' },
+  { folder: '7 - TOM - Technical Product Manager', lane: 'product' },
+  { folder: '8 - DXC - Technical Product Owner', lane: 'product' },
+  { folder: '9 - Contour Education - Senior Product Manager', lane: 'product' },
+]
+
+const REFINEMENTS = `
+REFINEMENTS TO APPLY (only where relevant to this letter — do not force any of them in if the letter does not touch the topic):
+
+1. ACCESSBUDDY DEMOTION (apply everywhere AccessBuddy appears). AccessBuddy must NOT be a headline or lead proof point. It is a personal/hobby SaaS build. Demote it to at most a brief supplementary clause.
+   - If the OPENER or any paragraph currently leads with or leans heavily on AccessBuddy / "a live multi-tenant B2B SaaS" / "solo founder of a live product", restructure so the letter leads with stronger proof instead: the LIMSOC national scaling strategy, the ANZ generative-AI engineering work, the scrum-master delivery scaling, or the role-specific evidence.
+   - For ENGINEERING-lane letters (this letter's lane is shown below): AccessBuddy MAY remain as a brief personal engineering example (solo full-stack build, GCP, APIs) but not overweighted and never framed as a commercial or paying product. One short clause maximum.
+   - For PRODUCT and LEADERSHIP lanes: reduce AccessBuddy to a single supplementary clause at most, ideally late in the letter, never in the opener.
+
+2. SEVEN JURISDICTIONS, NOT EIGHT. If the letter references the number of jurisdictions/states/federation members (usually via LIMSOC or Surf Life Saving), it must say SEVEN, never eight. The LIMSOC national scaling strategy had to take SEVEN different federation stakeholders and pull their needs together.
+
+3. AGILE STANCE. If the letter mentions agile or delivery methodology, frame it as Nick actually holds it: he believes in agile as a delivery approach, but the key is keeping it flexible to the specific company rather than applying it by the book, something he has seen and applied across multiple environments. Do not make him an agile zealot or anti-agile.
+
+4. TECHNICAL LEADERSHIP ANCHORED ON ENGINEERING (leadership-lane letters especially). Where the role wants technical credibility to lead engineers / review architecture / challenge scope, map that to his ENGINEERING career (ANZ generative AI platform, Macquarie real-time platform solution architecture), not product-side proof.
+
+5. DEPUTY CHAIR PROOF (use where multi-stakeholder leadership is relevant). As Deputy Chair of Surf Life Saving Australia he brought the seven jurisdictions together on national policy. Good evidence for "most senior person in the room aligning competing interests".
+
+HARD CONSTRAINTS (must survive):
+- Keep it comfortably ONE PAGE. Target 330-375 words of body (everything above the sign-off). If your edits push it longer, cut elsewhere to compensate.
+- NO em dashes, semicolons, or colons in prose. Periods and commas only. Pipe in the sign-off contact line is fine.
+- Australian English. No comparative language ("few applicants", "most candidates").
+- Closing line EXACTLY: "I look forward to the opportunity to discuss the role further with you."
+- Sign-off EXACTLY:
+  Nicholas Wood
+  0427 081 551 | nicholas.h.wood@outlook.com
+- Guardrails: LIMSOC = "national scaling strategy" / "independent consulting piece" / "national executive" (never "national product" or "CEO"). No "non-traditional background". No formal multi-year PM tenure claim. No tenure-gap acknowledgement in the body.
+- Do NOT invent new claims. Only restructure, demote, and correct existing content.
+- If NONE of refinements 1-5 are relevant to this letter, make NO changes and report "no change needed".
+`
+
+phase('Refine')
+const results = await parallel(letters.map((L) => async () => {
+  const path = `${BASE}/${L.folder}/cover-letter.md`
+  const res = await agent(`Refine the cover letter at:
+${path}
+
+This letter's lane: ${L.lane.toUpperCase()}.
+
+Read the current letter, then apply the refinements below WHERE RELEVANT. Use Read then Edit/Write to update the file in place. Be conservative: change only what the refinements call for, preserve the letter's voice and role fit, and keep it one page.
+
+${REFINEMENTS}
+
+After editing, report concisely: which refinements you applied (or "no change needed"), the final body word count, and confirm no em dashes/semicolons/colons, closing line and sign-off intact, guardrails intact.`,
+    { label: `refine:${L.folder.split(' - ')[0]}`, phase: 'Refine' })
+  return { folder: L.folder, res }
+})).then(r => r.filter(Boolean))
+
+log(`Refined ${results.length}/8 cover letters`)
+return results.map(r => ({ folder: r.folder, summary: r.res }))
