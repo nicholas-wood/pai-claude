@@ -1,0 +1,86 @@
+# Job Application Batch Playbook
+
+> How Nick and the DA run a batch of job applications end to end. Distilled from the 2026-06-16 Seek batch (9 roles: SprintSuite, Kongo, Profusion, Easygo, Encompass, UpperGround, TOM, DXC, Contour). Repeatable SOP. The career ISA (`workspace/career/ISA.md`) is the system of record; positioning rules live in `PAI/USER/PROJECTS/career-pivot.md` settled decisions.
+
+## Purpose
+
+Turn a list of saved/target roles into review-ready application packages (one assessment + one cover letter per role), ranked by real fit, with consistent positioning and ATS-safe exports, and a clean status trail. Nick reviews each package, then applies. **The DA never auto-submits — applying is Nick's action.**
+
+## Step 1 — Source the roles
+
+- Pull the saved-jobs list and each full JD via the **Interceptor skill run over the Mac** (`ssh mac 'export PATH=/opt/homebrew/bin:$PATH; interceptor ...'`). The Linux box has no Chrome/Interceptor; it only runs where Nick is logged in (the Mac). See the Interceptor skill's "Remote Execution" section.
+- Get each role's Seek job ID and the full JD text. Save JDs to a working dir.
+- Gotcha: the Chrome extension goes dormant between SSH calls ("no extensions connected") and `tab_create` can time out under load. Wake it and scrape within a single SSH session; reuse one tab via `navigate` rather than opening many tabs; retry. If it will not cooperate, ask Nick to paste the JD rather than burn turns.
+
+## Step 2 — Rank and triage
+
+Score every role on real fit, not lane bucketing. Weighting:
+
+- **Fit to actual credentials** (highest weight). Do NOT treat engineering-management (EM) roles as "safe engineering bridges" — they demand formal line-management of engineers, Nick's weakest credential. Technical-PM / Product-Owner roles that reward his eng+product blend outrank EM roles.
+- **Product-leaning** — Nick prefers product work; pure management or dev-experience roles rank low.
+- **Location and recency** — Melbourne preferred; Sydney and postings older than ~3-4 weeks rank down. Recency counts but is never the sole metric.
+- **Stack match** — his core is TS/Node + AI plus Java backend; heavy Svelte/other mismatches rank down.
+- **Comp / level** — should clear his level and runway.
+
+Produce a prioritised list and **park** roles that fail the filter (credential gap, non-product, Sydney/stale, design-leaning, stack mismatch). See memory `feedback-job-application-selection-criteria`. Expect Nick to prune the list hard — present a recommendation, not a fait accompli.
+
+## Step 3 — Per-role package pipeline
+
+Run each role through these stages (the 2026-06-16 batch ran this as a multi-agent workflow: draft -> adversarial review -> write, one chain per role, in parallel):
+
+1. **Resume choice** — Hybrid CV for product/leadership roles, SWE CV for engineering roles (Consulting CV for pure strategy). State the rationale.
+2. **Resume tweaks** — note any role-specific tweaks to the chosen CV (optional).
+3. **Cover-letter base** — `artifacts/resumes/cover-letter-pm-base.md` (product roles) or `artifacts/resumes/base-cover-letter-senior-software-engineer.md` (engineering roles).
+4. **JD targets** — extract the specific requirements/keywords the letter must hit.
+5. **Draft** — write the cover letter in Nick's voice, following the style rules and positioning guardrails (Step 5).
+6. **Adversarial review** — a second pass (ideally a separate agent) that scans character-by-character for style violations, checks positioning guardrails, JD alignment, voice, and overclaiming. Apply the fixes.
+7. **Write the artefacts** — two files per role (Step 4).
+
+## Step 4 — Artefact output structure
+
+```
+workspace/career/artifacts/applications/2026/<YYYY-MM-DD>/
+  <N - Company - Role>/
+    assessment.md
+    cover-letter.md
+    ceo-linkedin-outreach.md   # only when the role reports to a named exec worth a warm approach
+```
+
+- `<N>` is the priority rank (stable batch label; do not renumber after submission).
+- **`assessment.md` contract** — must contain: priority; Seek ad link; apply method; chosen resume + rationale; cover-letter base; key JD insights; what to target from the JD; suggested resume tweaks; reviewer findings (the Step 6 critique + style check); portal-question / salary guidance; job-specific notes. Add a top-line **STATUS** marker once acted on (see Step 7).
+- **`cover-letter.md`** — the finalised, one-page letter only.
+- **`ceo-linkedin-outreach.md`** (when used) — a short connection-request note (under LinkedIn's 300-char cap) plus a longer DM/InMail version, in Nick's warm peer tone.
+
+## Step 5 — Style rules and positioning guardrails (non-negotiable)
+
+Full list in `career-pivot.md` settled decisions. The load-bearing ones:
+
+- No em dashes, semicolons, or colons in prose. Australian English. No comparative language ("few applicants", "most candidates").
+- Single page, ~330-400 words. Closing line and name/phone/email sign-off exact.
+- Cover-letter shape: what sets me apart -> how I built it -> why this role. No filler openers, no abrupt endings.
+- **AccessBuddy is supplementary only** — a personal/hobby SaaS build, never a headline or in the opener. For engineering roles it may be a brief personal engineering example, never "commercial"/"paying".
+- LIMSOC = "national scaling strategy" / "independent consulting piece" / presented to the "national executive", never "national product" or "CEO".
+- **Seven** SLSA jurisdictions, not eight. Deputy Chair of Surf Life Saving Australia is the multi-stakeholder/governance proof.
+- Agile: believes in it but it must stay flexible to the company, applied across multiple environments. Not a zealot, not anti-agile.
+- For leadership/hybrid roles, map technical-credibility to the engineering career (ANZ generative AI, Macquarie architecture), not product-side proof.
+- Banned phrasing: never "you are describing the work I already do" / "this is the work I have been doing" and cousins. State capability directly.
+
+## Step 6 — Export and ATS QA
+
+- Cover letters and CVs live as markdown sources; export to `.docx`/`.pdf` for OneDrive (`02_Career/Job_Applications/2026/<Company - Role>/`). Markdown never goes into OneDrive.
+- **Word-on-macOS "Save as PDF" reproduces a ligature ATS bug** (`off`->`oB`, `different`->`diBerent`, `fi`/`fl` glyphs) that garbles for ATS. The `.docx` text is clean. So: submit the `.docx`, or export the PDF via a non-Word path (LibreOffice `soffice --convert-to pdf`, or Google Docs download). Always `pdftotext`-verify the PDF before submitting (check words with ff/fi/fl/ti extract cleanly). See memory `gotcha-word-pdf-ligature-ats`.
+- OneDrive local mount lies/lags — verify uploads with `rclone lsl onedrive:...`, not the mount. See memory `gotcha-onedrive-rclone-push`.
+
+## Step 7 — Status tracking
+
+- Add a top-line **STATUS** marker to each `assessment.md`: `SUBMITTED` / `APPLIED` / `PARKED` (with date + reason for parks).
+- Record submissions in the **career ISA changelog** and the **`career-pivot.md` Application Outcomes** (LIVE for applied; a PARKED line for worked-up-but-not-sent). Keep both current so "give me an update" is instant.
+
+## Tooling
+
+- Sourcing: Interceptor skill over `ssh mac`.
+- Drafting/review: multi-agent workflow (draft -> review -> write per role), or done inline for one-offs.
+- Export: non-Word PDF path + `pdftotext` verify; `rclone` for OneDrive.
+
+---
+*Source: 2026-06-16 Seek batch. First run: 3 applied (SprintSuite, Profusion, Encompass), 4 parked (Easygo, Contour, TOM, DXC), 2 left ready (Kongo, UpperGround).*

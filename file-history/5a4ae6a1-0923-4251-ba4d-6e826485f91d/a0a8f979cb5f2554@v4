@@ -1,0 +1,47 @@
+# Doc-version alignment changes — hybrid CV (against 2026-06-15 Hybrid)
+
+> Checked against `Resumè- Nick Wood 2026-06-15 - Hybrid.docx` (the version Nick dropped; copy verified in the Westfarmers application folder, 2026-06-15 21:45). This is the CORRECT product-led base: bold profile lead line, single "Experience" section (no Selected Engagements split), correct titles (Founder & Product Manager, Product Manager & Strategy Lead), ANZ product lead-in all present. Only the four Lendi tweaks remain, plus two minor flags. Source of truth is `artifacts/resumes/resume-hybrid.md`.
+
+---
+
+## STATUS (updated 2026-06-17 ~20:39 — Nick applied edits)
+
+- [x] **Tweak 2 (Technical AI Agents line)** — APPLIED (Cursor dropped, kept ChatGPT). Nit: missing space before `Microservices` → fix to `ChatGPT), Microservices`.
+- [x] **Tweak 4 (count)** — APPLIED as digit `7` (settled style was the word `seven`; cosmetic).
+- [ ] **Tweak 1 (AI Product Management)** — NOT accepted by Nick.
+- [ ] **Tweak 3 (AccessBuddy bullet rewrite)** — NOT accepted by Nick. (Highest-leverage one for this build-led JD; reconsider.)
+
+## The four Lendi tweaks (full reference)
+
+**1. Key Skills → Strategy & Delivery — insert `AI Product Management`** [OUTSTANDING]
+Currently starts: `Product Management, Product Discovery, Roadmap & Backlog Management...`
+Change to: `Product Management, AI Product Management, Product Discovery, Roadmap & Backlog Management...`
+
+**2. Key Skills → Technical — add the AI Agents line** [APPLIED]
+Now reads: `...AI/ML (Vertex AI, Gemini), AI Agents & Multi-Step Automation Workflows (Claude / Claude Code, ChatGPT),Microservices` — fix missing space → `ChatGPT), Microservices`.
+
+**3. AccessBuddy → second bullet — replace it** [OUTSTANDING]
+Current: *"Leveraged AI-assisted development (Claude Code) and custom personal AI tooling to operate as a solo founder at the velocity of a small team, from product design through to production deployment"*
+Replace with:
+> Built and operate custom AI agents and automation workflows (Claude / Claude Code and orchestration tooling) that turn manual, messy processes into scalable systems, operating as a solo founder at the velocity of a small team from product design through to production deployment
+
+**4. Jurisdiction count** [APPLIED as `7`]
+- LSV bullet: now `across 7 jurisdictions` (settled style: `seven`)
+- SLSA Deputy Chair paragraph: now `across 7 state bodies` (settled style: `seven`)
+
+---
+
+## Two minor flags (your call, not blockers)
+
+**A. SMLSC Director description differs from the markdown source.**
+This doc says: *"...strategic direction for a non for profit organisation."*
+Markdown source says: *"...strategic direction for a metropolitan surf lifesaving club."*
+Pick one. If you keep the "not-for-profit" framing, fix the typo: `non for profit` → `not-for-profit`.
+
+**B. Section heading** — doc says `Strategy and Leadership`; markdown uses `Strategy & Leadership`. Cosmetic.
+
+---
+
+## Export reminder (after edits)
+
+Non-Word PDF path (LibreOffice `soffice --convert-to pdf` or Google Docs download), then `pdftotext`-verify for the ti/tf ligature ATS bug before uploading to Easy Apply. See `gotcha-word-pdf-ligature-ats` memory.

@@ -1,0 +1,93 @@
+# Doc-version alignment changes — hybrid CV
+
+> The OneDrive doc `02_Career/CV_and_Resume/Historical_CVs/Resumè- Nick Wood 2026-05-14 - Hybrid.docx` (the live one Nick is editing, modified 2026-06-17 20:24) has reverted to an older engineering-led layout with a **Selected Engagements** section. It is missing the four Lendi tweaks AND several structural/profile/skills changes that the markdown source `artifacts/resumes/resume-hybrid.md` already carries. This is the full list to bring the doc back in line. Source of truth is the markdown.
+
+Numbered in apply order. (1-3 are structural, 4-7 are the four Lendi tweaks, 8 is minor.)
+
+---
+
+## 1. Structure — remove the "Selected Engagements" split
+
+The doc has two separate sections: **Selected Engagements** (LSV, then AccessBuddy) above a separate **Experience** (ANZ, Macquarie, Leidos). The target uses a **single "Experience" section** in this order:
+
+1. **AccessBuddy** (headline — kept prominent for this build-led role)
+2. **Life Saving Victoria**
+3. **ANZ**
+4. **Macquarie Group**
+5. **Leidos Australia**
+
+Action: delete the "Selected Engagements" heading, move AccessBuddy to the top of Experience (above LSV), and put both under the single "Experience" heading. Keep "Strategy, Governance & Leadership" as its own section after (target calls it "Strategy & Leadership" — either is fine, but the markdown uses "Strategy & Leadership").
+
+## 2. Profile — replace the engineering-led profile with the product-led one
+
+**Current doc (no bold lead line, opens straight into prose):**
+> I combine deep technical capability with strategic thinking and stakeholder engagement to help organisations make technology decisions that deliver real value. Seven years across ANZ, Macquarie, and Leidos have built my foundation in breaking down complex problems...
+
+**Target (add the bold summary line, then the product-led paragraph):**
+> **Product and strategy leader with experience across consulting engagements, founding a live SaaS, and national volunteer leadership, underpinned by a senior software engineering background across regulated finance, defence, and government.**
+>
+> I combine product ownership, strategic capability, and stakeholder engagement with a strong technical foundation to help organisations make technology decisions that deliver real value. Seven years across ANZ, Macquarie, and Leidos built the technical foundation in breaking down complex problems, architecting solutions, and delivering them at scale across regulated financial services, defence, and government. I have increasingly applied that foundation to product and strategic work, including directing a national platform strategy for a 199,000-member, $100M federated organisation and leading national policy reform now in effect across Australia. As technology becomes more accessible, the real value is shifting from the ability to build to the ability to understand deeply and communicate clearly to anyone, technical or not. That is where I excel.
+
+Key wording shifts: add the bold header line; "deep technical capability with strategic thinking" → "product ownership, strategic capability, and stakeholder engagement with a strong technical foundation"; "strategic and advisory work" → "product and strategic work".
+
+## 3. Key Skills — front-load product, condense Technical (includes Lendi tweaks)
+
+**Strategy & Delivery — current doc:**
+> Digital Transformation, Product Strategy, Operating Model Design, Stakeholder Engagement, Executive Communication, Governance Design, Problem Framing, Multi-Stakeholder Alignment
+
+**Strategy & Delivery — target (adds the product terms at the front, incl. `AI Product Management`):**
+> Product Management, AI Product Management, Product Discovery, Roadmap & Backlog Management, User Stories & Acceptance Criteria, Digital Transformation, Product Strategy, Operating Model Design, Stakeholder Engagement, Executive Communication, Governance Design, Problem Framing, Multi-Stakeholder Alignment
+
+**Technical — current doc (long engineering stack):**
+> Golang, Java, Python, TypeScript/React, GCP (Cloud Run, Spanner, Pub/Sub, Dataflow, BigQuery, GKE), AWS, Terraform, Docker, Kubernetes, Vertex AI / Gemini, Event-Driven Architecture, API Design (gRPC, Protobuf, REST), Microservices
+
+**Technical — target (condensed, with the AI Agents line):**
+> Cloud (GCP, AWS), API Design (REST, gRPC), Event-Driven Architecture, AI/ML (Vertex AI, Gemini), AI Agents & Multi-Step Automation Workflows (Claude / Claude Code, ChatGPT, Cursor), Microservices
+
+**Practices — current doc:**
+> TDD, CI/CD (GitHub Actions, Bitbucket Pipelines), Observability (OpenTelemetry, Sentry), Agile (Scrum, Kanban, SAFe)
+
+**Practices — target:**
+> Agile (Scrum, Kanban, SAFe), Observability, CI/CD, TDD
+
+(Note: if you prefer to keep the fuller Technical/Practices detail from the doc, that is a legitimate variant call — but the agreed hybrid source condenses them. The non-negotiable part is adding `AI Product Management` and the `AI Agents & Multi-Step Automation Workflows (Claude / Claude Code, ChatGPT, Cursor)` line.)
+
+## 4. AccessBuddy — title + second bullet (Lendi tweak 3)
+
+**Title:** doc says `Founder & Product Lead` → target `Founder & Product Manager`.
+
+**Second bullet — current doc:**
+> Leveraged AI-assisted development (Claude Code) and custom personal AI tooling to operate as a solo founder at the velocity of a small team, from product design through to production deployment
+
+**Replace with:**
+> Built and operate custom AI agents and automation workflows (Claude / Claude Code and orchestration tooling) that turn manual, messy processes into scalable systems, operating as a solo founder at the velocity of a small team from product design through to production deployment
+
+## 5. LSV title (Lendi tweak alignment)
+
+Doc says `Product & Strategy Lead (Independent Consultant)` → target `Product Manager & Strategy Lead (Independent Consultant)`.
+
+## 6. ANZ — add the product-collaboration lead-in
+
+**Current doc:**
+> Owned a key area of functionality within a 12-engineer team in ANZ Plus, driving technical design, AI integration strategy, and cloud architecture decisions in a regulated banking environment.
+
+**Target (adds the product framing at the front):**
+> Worked closely with product managers and stakeholders to define product requirements, then owned a key area of functionality within a 12-engineer team in ANZ Plus, driving technical design, AI integration strategy, and cloud architecture decisions in a regulated banking environment.
+
+## 7. Jurisdiction count — "7" → "seven" (Lendi tweak 4, mandatory)
+
+Two places, change the digit `7` to the word `seven`:
+- LSV bullet: `across 7 jurisdictions with divergent operational requirements` → `across seven jurisdictions`
+- SLSA Deputy Chair paragraph: `drives stakeholder alignment across 7 state bodies` → `across seven state bodies`
+
+(The doc currently uses the digit "7", not "8". The settled style is the word **seven**, so this is a wording fix, not a count fix. Either way the master markdown decision is seven spelled out.)
+
+## 8. Minor — Certifications order (optional)
+
+Markdown leads with `Certified Scrum Master`; doc leads with AWS. Also the doc uses an en-dash in `Certificate IV – Training and Assessment` where the markdown uses a hyphen `Certificate IV - Training and Assessment`. Low priority, fix only if doing a clean pass.
+
+---
+
+## Export reminder (after edits)
+
+Non-Word PDF path (LibreOffice `soffice --convert-to pdf` or Google Docs download), then `pdftotext`-verify for the ti/tf ligature ATS bug before uploading to Easy Apply. See `gotcha-word-pdf-ligature-ats` memory.
