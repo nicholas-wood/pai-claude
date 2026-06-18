@@ -1,0 +1,178 @@
+[
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/ 2>/dev/null | head -30 && echo \"---\" && grep -ril -i \"fable\" /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/ 2>/dev/null",
+      "description": "List memory files and grep for Fable"
+    },
+    "timestamp": "2026-06-12T00:51:22.803Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls -lt /home/nicholas-wood/.claude/PAI/MEMORY/WORK/ 2>/dev/null | head -20",
+      "description": "List recent WORK sessions"
+    },
+    "timestamp": "2026-06-12T00:51:23.474Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -rli \"fable\" /home/nicholas-wood/.claude/PAI/MEMORY/ 2>/dev/null | head -20",
+      "description": "Grep MEMORY tree for Fable"
+    },
+    "timestamp": "2026-06-12T00:51:27.973Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "find /home/nicholas-wood/.claude/projects -name \"*.jsonl\" -newermt \"2026-06-12 00:00\" 2>/dev/null | head -20",
+      "description": "Find today's transcripts"
+    },
+    "timestamp": "2026-06-12T00:51:29.494Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "find /home/nicholas-wood/.claude/projects -name \"*.jsonl\" -newermt \"2026-06-11\" 2>/dev/null | xargs grep -li \"fable\" 2>/dev/null | head -10",
+      "description": "Grep recent transcripts for Fable"
+    },
+    "timestamp": "2026-06-12T00:51:30.239Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "for f in /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/7ee0bdc5-a596-49f4-aaaf-ee32ace0f8bf.jsonl /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/486f7578-9a76-4642-8221-25f920c7c62d.jsonl /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/1a5a019a-cc35-49f9-a1f2-eb30a16a8f41.jsonl /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/8f549b46-85e8-44b7-a669-360d2b10796e.jsonl /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/a1d3d25a-6f2b-4529-8a2d-3706adde1990.jsonl; do\n  echo \"=== $f ===\"\n  stat -c \"mtime: %y  size: %s\" \"$f\"\n  grep -c -i \"fable\" \"$f\"\ndone",
+      "description": "Compare today's fable-mention transcripts"
+    },
+    "timestamp": "2026-06-12T00:51:38.421Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -i \"fable\" /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/486f7578-9a76-4642-8221-25f920c7c62d.jsonl | head -20",
+      "description": "Show fable mentions in 486f session"
+    },
+    "timestamp": "2026-06-12T00:51:45.526Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "for f in 7ee0bdc5-a596-49f4-aaaf-ee32ace0f8bf 1a5a019a-cc35-49f9-a1f2-eb30a16a8f41 8f549b46-85e8-44b7-a669-360d2b10796e a1d3d25a-6f2b-4529-8a2d-3706adde1990; do\n  echo \"==== $f ====\"\n  grep -o '\"aiTitle\":\"[^\"]*\"' /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/$f.jsonl | head -2\n  grep -o '\"lastPrompt\":\"[^\"]*\"' /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/$f.jsonl | head -3\ndone",
+      "description": "Get titles/last prompts of fable-mention sessions"
+    },
+    "timestamp": "2026-06-12T00:52:00.373Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -E '\"(content|text)\":\"[^\"]{0,200}\"' /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/486f7578-9a76-4642-8221-25f920c7c62d.jsonl | grep -iE 'review|fable' | head -20",
+      "description": "Look for review-related content in 486f session"
+    },
+    "timestamp": "2026-06-12T00:52:08.120Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -E '\"role\":\"user\"' /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/486f7578-9a76-4642-8221-25f920c7c62d.jsonl | grep -oE '\"content\":\"[^\"]{0,300}\"' | head -20",
+      "description": "List user messages from the fable session"
+    },
+    "timestamp": "2026-06-12T00:52:09.308Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "find /home/nicholas-wood/.claude -path '*/node_modules' -prune -o -type f -newermt \"2026-06-12 00:00\" -print 2>/dev/null | xargs grep -li \"lifesaver\" 2>/dev/null | head -20",
+      "description": "Find today's files mentioning lifesaver"
+    },
+    "timestamp": "2026-06-12T00:54:31.331Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "find /home/nicholas-wood -path '*/node_modules' -prune -o -type d -name \"lifesaveroncall*\" -print 2>/dev/null | head -5\necho \"---\"\nls -lt ~/Documents/workspace/ 2>/dev/null | grep -i lifesaver | head\necho \"---\"\nls -lt ~/Documents/workspace/lifesaveroncall/ 2>/dev/null | head -20",
+      "description": "Locate the lifesaveroncall project"
+    },
+    "timestamp": "2026-06-12T00:54:33.858Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -ril \"arbol\\|remote.*review\\|fable\" /home/nicholas-wood/.claude/PAI/MEMORY/ 2>/dev/null | head -20\necho \"---\"\nls -lt ~/Documents/workspace/lifesaveroncall/.claude/ 2>/dev/null\necho \"---\"\nfind ~/Documents/workspace -path '*/node_modules' -prune -o -newermt \"2026-06-12 00:00\" -type f -print 2>/dev/null | head -30",
+      "description": "Look for arbol logs and recent workspace edits today"
+    },
+    "timestamp": "2026-06-12T00:54:36.330Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "find /home/nicholas-wood/.claude/projects -name \"*.jsonl\" -newermt \"2026-06-12 00:00\" -not -newermt \"2026-06-12 12:00\" 2>/dev/null | xargs -I{} sh -c 'printf \"%s\\n  \" \"{}\"; stat -c \"%y\" \"{}\"' 2>/dev/null | head -60",
+      "description": "List all today-morning session files with mtimes"
+    },
+    "timestamp": "2026-06-12T01:42:39.497Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "find /home/nicholas-wood/.claude/projects -name \"*.jsonl\" -newermt \"2026-06-12 00:00\" 2>/dev/null | xargs grep -li \"lifesaver\\|LifesaverOnCall\\|loc-\" 2>/dev/null | head -20",
+      "description": "Grep today's sessions for LifesaverOnCall"
+    },
+    "timestamp": "2026-06-12T01:42:41.515Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls -lt /home/nicholas-wood/.claude/projects/ | head -30\necho \"---arbol---\"\nls -la /home/nicholas-wood/.claude/PAI/DOCUMENTATION/Arbol/ 2>/dev/null | head\necho \"---rc---\"\nwhich claude; claude --help 2>/dev/null | head -40",
+      "description": "Inspect projects directory and 'claude rc'"
+    },
+    "timestamp": "2026-06-12T01:42:43.256Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -o '\"aiTitle\":\"[^\"]*\"' /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/033e832d-429b-42ba-93e9-e697c0b09707.jsonl | tail -3\necho \"---\"\nls -la /home/nicholas-wood/.claude/jobs/033e832d/ 2>/dev/null | head\necho \"---\"\nls -la /home/nicholas-wood/.claude/jobs/ 2>/dev/null | head -30",
+      "description": "Check 033e832d session and jobs directory"
+    },
+    "timestamp": "2026-06-12T01:42:57.476Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "find /home/nicholas-wood/.claude/projects -name \"*.jsonl\" -newermt \"2026-06-12 00:00\" 2>/dev/null | while read f; do\n  hits=$(grep -ci \"lifesaver\" \"$f\" 2>/dev/null)\n  if [ \"$hits\" -gt 0 ]; then\n    title=$(grep -o '\"aiTitle\":\"[^\"]*\"' \"$f\" 2>/dev/null | tail -1)\n    echo \"$hits hits | $f | $title\"\n  fi\ndone",
+      "description": "Find today's sessions with lifesaver content, show titles"
+    },
+    "timestamp": "2026-06-12T01:43:06.398Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "stat -c \"size: %s bytes  mtime: %y\" /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/a46dfbad-ac10-4b89-9e0d-9dc1f25f1a67.jsonl\necho \"---user msgs---\"\ngrep -o '\"role\":\"user\",\"content\":\"[^\"]\\{0,400\\}' /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/a46dfbad-ac10-4b89-9e0d-9dc1f25f1a67.jsonl | head -20\necho \"---model---\"\ngrep -o '\"model\":\"[^\"]*\"' /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/a46dfbad-ac10-4b89-9e0d-9dc1f25f1a67.jsonl | sort -u",
+      "description": "Get session size, user prompts and models used"
+    },
+    "timestamp": "2026-06-12T01:43:15.604Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "jq -r 'select(.type==\"user\" or .type==\"assistant\") | \"\\(.timestamp) [\\(.type)] \\(.message.content // .message.content[0].text // \"\")\"' /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/a46dfbad-ac10-4b89-9e0d-9dc1f25f1a67.jsonl 2>/dev/null | head -10 | cut -c1-300",
+      "description": "Read a46dfbad session content"
+    },
+    "timestamp": "2026-06-12T01:43:32.052Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "find /home/nicholas-wood/.claude/projects -name \"*.jsonl\" -newermt \"2026-06-12 00:00\" -size +50k 2>/dev/null | while read f; do\n  hits=$(grep -ci \"lifesaver\\|loc-\\|on-call\\|oncall\" \"$f\" 2>/dev/null)\n  if [ \"$hits\" -gt 3 ]; then\n    title=$(grep -o '\"aiTitle\":\"[^\"]*\"' \"$f\" 2>/dev/null | tail -1)\n    sz=$(stat -c %s \"$f\")\n    echo \"$hits hits | size=$sz | $f | $title\"\n  fi\ndone",
+      "description": "Find substantial sessions today touching LOC"
+    },
+    "timestamp": "2026-06-12T01:43:34.720Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "f=/home/nicholas-wood/.claude/projects/-home-nicholas-wood/1951b19c-000b-4fa1-b12f-f3b7a471fd92.jsonl\necho \"=== models used ===\"\ngrep -o '\"model\":\"[^\"]*\"' \"$f\" | sort -u\necho \"=== first 5 user prompts ===\"\njq -r 'select(.type==\"user\" and (.message.content | type == \"string\")) | .timestamp + \" | \" + (.message.content[0:300])' \"$f\" 2>/dev/null | head -5\necho \"=== last 3 user prompts ===\"\njq -r 'select(.type==\"user\" and (.message.content | type == \"string\")) | .timestamp + \" | \" + (.message.content[0:300])' \"$f\" 2>/dev/null | tail -3\necho \"=== assistant final text ===\"\njq -r 'select(.type==\"assistant\") | .message.content[]? | select(.type==\"text\") | .text' \"$f\" 2>/dev/null | tail -120",
+      "description": "Read structure of session 1951b19c"
+    },
+    "timestamp": "2026-06-12T01:43:47.878Z"
+  }
+]

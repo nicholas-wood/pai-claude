@@ -1,0 +1,128 @@
+---
+project: club-renewal
+effort: E3
+phase: active
+progress: board-proposal-drafted
+mode: build
+started: 2026-06-02
+updated: 2026-06-02
+---
+
+# SMLSC Club - Project ISA
+
+> Project ISA (system of record). Lives in the project folder per PAI doctrine. Supersedes the `context/{facts,state,references,feedback}.md` foundation pattern: those files fold into the sections below and are retained as detailed appendices until fully absorbed. The `USER/PROJECTS/club-renewal.md` entry in PAI is the lightweight index that points here.
+
+## Problem
+
+South Melbourne Lifesaving Club (SMLSC) operates from a clubhouse that was never fully fitted out when the club moved in. Accumulated deferred maintenance, longstanding OH&S deficiencies, and fragmented storage create an uninviting and operationally difficult environment. The gear shed is the largest single source of OH&S risk: no engineered storage, makeshift solutions in active use, a dual-axle road trailer that must be turned by hand, and floor-level gear that obstructs the emergency access walkway. The function room has an unusable echo, inadequate AV, and insufficient storage. The operational wing has misaligned office configuration, an idle washing machine (four years unplumbed), and a PA microphone broken for years. The club has no funded, coordinated plan to address these issues.
+
+Separately, GS-03 (custom mobile rescue board racks) requires a fabricator-ready drawing pack. A Rev-A addendum was issued after a fabricator review found six blockers in the original drawings (height stack-up failed, frame perimeter ambiguous, roller geometry wrong); the Rev-B final pack is still in design.
+
+## Vision
+
+A single coordinated Clubhouse Renewal Project, funded through the Victorian Emergency Services Equipment Program (VESEP) on a 2:1 government-to-club contribution ratio, that transforms the clubhouse from compromise to fit-for-purpose in one program of works. The club's one-third contribution is drawn from its existing term deposit at maturity and fully repaid from 50% of net functions revenue within six months, leaving cash reserves at their starting level with no impact on operating cash flow.
+
+Alongside the capital program, a complete fabricator-ready drawing pack for the custom mobile board racks (GS-03) is delivered: two identical mobile racks for the NE quadrant of the gear shed, each carrying an IRB via a slide-then-tilt sled mechanism at safe handling height.
+
+The change in a line: from "wow, there is crap everywhere" to "wow, this is an impressive clubhouse."
+
+## Out of Scope
+
+- Final dollar figures and VESEP application submission (board has not yet approved the proposal; quotes have not been obtained).
+- LSV engagement on round dates and per-item eligibility (outstanding post-endorsement).
+- Items deliberately removed by Nick: OFF-02 (office clean-out), PA-02 (PA testing process), PA-03 (patrol tower volume controls), SEC-05 (uniform locks), original FB-01 (fishbowl door bolts), FB-08 (bar improvements), FB-10 (function room keypad), EXT-01 (letterbox). Do not reinstate without asking.
+- Risks section (removed from board paper).
+- A parallel "quick wins outside VESEP" tracker (backlog item only).
+- Structural sign-off process for board racks (not yet engaged).
+- Membership system integration or digital membership tooling.
+
+## Principles
+
+- Markdown is the source of truth; committee and board versions are circulated as Word (.docx).
+- Board papers authorise direction (VESEP application and funding model), not final dollar figures.
+- Scope is organised by area, not by priority tier; the project is a single coordinated program.
+- Do not reinstate items Nick has deliberately removed without asking.
+- For mechanical design: run the fabricator-review pass before producing drawings, never after. Validate stack-ups at the design phase; resolve all issues in the spec sheet first, then draw.
+- Ask up front about interfaced equipment, receiving fixtures, site constraints, and structural sign-off requirements before any fabrication design proceeds.
+
+## Constraints
+
+- **VESEP funding model is fixed at 2:1** (government:club). Club share = one-third of total project cost.
+- **Club contribution mechanism:** term deposit drawn at maturity; repaid from 50% of net functions revenue. Estimated repayment under six months at current performance.
+- **Term deposit balance and maturity date are not yet confirmed** -- final figures paper cannot be prepared until these are known.
+- **All item costs are $TBC** -- no quotes have been obtained; the master plan carries placeholders.
+- **Stable area IDs** are the reference system across all documents: OFF-##, HAL-##, FB-##, CHG-##, GS-##, KIT-##, CLN-##, PA-##, SEC-##, BLD-##, EXT-##, PT-##.
+- **Board-rack Rev-A** partly supersedes the original five SVGs; Rev-B final pack is in design.
+- **Output format:** Markdown source of truth; .docx for board and committee circulation.
+- Australian English, no em dashes, executive tone throughout all documents.
+
+## Goal
+
+The board endorses the Clubhouse Renewal Proposal, authorising a VESEP application and the term-deposit funding model. The sponsor then obtains firm quotes for all items, engages LSV on VESEP round dates and eligibility, and returns to the board with final figures before any binding commitment.
+
+In parallel, the GS-03 board-rack drawing pack reaches Rev-B fabricator-ready status: stack-ups verified at the design phase, fabricator pre-flight completed before drawings are produced, and a dimensioned drawing pack a fabricator can build from directly.
+
+Done is measured by: board resolution on file, all quotes obtained, VESEP application package prepared, and Rev-B drawing pack complete and fabricator-reviewed.
+
+## Criteria
+
+- [ ] ISC-1: Board endorses the Clubhouse Renewal Proposal by resolution (all four motions carried)
+- [ ] ISC-2: LSV engaged on VESEP endorsement pathway and round timing (within two weeks of board endorsement)
+- [ ] ISC-3: Firm quotes obtained for all items in scope (within six weeks of board endorsement)
+- [ ] ISC-4: Term deposit balance and maturity date confirmed (prerequisite for final figures paper)
+- [ ] ISC-5: Final figures paper returned to board with VESEP application package for sign-off (before submission)
+- [ ] ISC-6: VESEP application submitted in line with round dates
+- [ ] ISC-7: GS-03 Rev-B drawing pack: stack-ups and load paths verified at design phase before drawings produced
+- [ ] ISC-8: GS-03 Rev-B drawing pack: fabricator pre-flight (fabricator-reviewer subagent) completed before BUILD
+- [ ] ISC-9: GS-03 Rev-B: dimensioned drawing pack complete and fabricator-buildable
+- [ ] ISC-10: Gear shed before/after sketches added by Nick into the board-proposal .docx
+- [ ] ISC-11: Anti: no items deliberately removed by Nick are reinstated without his approval
+- [ ] ISC-12: Anti: no binding commitment made before final figures paper returns to the board [gap: board approval process not yet confirmed in writing]
+- [ ] ISC-13: Anti: fabricator-review pass is not skipped for any mechanical design task that produces quote-ready drawings
+
+## Test Strategy
+
+| isc | type | check | threshold | tool |
+|-----|------|-------|-----------|------|
+| ISC-1 | process | Board minutes record all four resolution clauses carried | resolution on file | board minutes |
+| ISC-2 | process | LSV contacted within two weeks of ISC-1 | contact logged | owner check |
+| ISC-3 | document | Quote register in master plan has no $TBC remaining | zero $TBC entries | Read master-plan.md |
+| ISC-4 | document | Term deposit balance + maturity date recorded in project context | values present | Read context/state.md |
+| ISC-7 | design | Stack-up and load-path notes recorded in GS-03 spec sheet before any SVG is authored | notes present | Read spec sheet |
+| ISC-8 | process | Fabricator-reviewer subagent run recorded in session before any drawing is produced | session note | agent memory |
+| ISC-9 | document | Rev-B drawing pack contains dimensioned drawings with no open blockers | zero open blockers | fabricator-reviewer pass |
+| ISC-11 | review | Removed-item list in state.md cross-checked against current proposal scope | zero reinstated items | Read state.md + board-proposal.md |
+| ISC-13 | process | No GS-03 drawing session proceeds without a fabricator pre-flight entry in memory | log present | Read mechanical-design/memory.md |
+
+## Features
+
+| name | satisfies | depends_on | parallelisable |
+|------|-----------|------------|----------------|
+| Board endorsement (proposal + resolution) | ISC-1 | - | no (gates all downstream) |
+| LSV engagement | ISC-2 | ISC-1 | yes |
+| Quote coordination (all items) | ISC-3 | ISC-1 | yes |
+| Term deposit confirmation | ISC-4 | - | yes |
+| Final figures paper | ISC-5 | ISC-3, ISC-4 | no |
+| VESEP application | ISC-6 | ISC-5 | no |
+| Gear shed sketches in .docx | ISC-10 | - | yes |
+| GS-03 Rev-B: design phase (spec sheet + stack-ups) | ISC-7 | ISC-8 | no |
+| GS-03 Rev-B: fabricator pre-flight | ISC-8 | ISC-7 | no |
+| GS-03 Rev-B: drawing pack | ISC-9 | ISC-8 | no |
+
+## Decisions
+
+- 2026-05-05: Master plan drafted. Scope catalogued across all areas using stable IDs. All quote placeholders set to $TBC pending formal quote process.
+- 2026-05-18 to 2026-05-20: Board proposal (Clubhouse Renewal Project) drafted. Supersedes the earlier Must/Should/Could + Renewal Bundle framing. Scope organised by area (single project). Owners confirmed in next steps: NW (Clubhouse Committee), NV (Club Captain), JQ (Director and Chair of Clubhouse Committee).
+- 2026-05-18: GS-03 board-rack design: original five SVGs + spec sheet produced, then fabricator review found six blockers (height stack-up failed, frame perimeter ambiguous, roller geometry wrong). Rev-A addendum issued. Learnt: fabricator-review must run before drawings, not after. Rev-B requires stack-up verification at design phase first.
+- 2026-06-02: Project converted to PAI project-ISA model. context/ foundation folds into this file; retained as appendix until fully absorbed. Two specialist agents rebuilt as PAI-registered subagents (facilities-planner/mechanical-design) with distinct voices.
+
+## Changelog
+
+- conjectured: GS-03 drawings can be produced in full before running a fabricator review. refuted_by: fabricator-review on the Rev-A pack found six blockers detectable at the THINK phase, before any SVG was written. learned: for any mechanical or fabrication design task, verify stack-ups and load paths in the spec sheet first, invoke the fabricator-reviewer at the end of THINK, then produce drawings. criterion_now: ISC-13 (no drawing session may skip the pre-flight).
+- conjectured: a flat context/{facts,state,references,feedback}.md set is the best project memory format. refuted_by: PAI's twelve-section ISA carries the same content plus testable Criteria, Test Strategy, and a verification trail the flat files lacked. learned: the ISA is a superset of the context pattern. criterion_now: project record is the ISA; context/ is appendix-only.
+
+## Verification
+
+- ISC-11: reviewed 2026-06-02 - cross-checked removed-item list (state.md) against board-proposal.md scope. OFF-02, PA-02, PA-03, SEC-05, original FB-01, FB-08, FB-10, EXT-01, and Risks section are absent from the proposal. Anti-criterion holds.
+- ISC-7/ISC-8/ISC-9: not yet verified. GS-03 Rev-B design session has not been run. Open.
+- ISC-1 through ISC-6: not yet verified. Board has not yet considered the proposal. Open.

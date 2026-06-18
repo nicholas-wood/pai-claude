@@ -1,0 +1,42 @@
+# Projects
+
+> Index of Nick's active projects. Loaded at session start via CLAUDE.md `@` import. Each entry links to its detail file. The DA uses this to know what Nick is working on and how to approach each.
+
+## Career & Consulting
+
+- **[Career Pivot](career-pivot.md)** - Engineering to digital strategy consulting. BCG submitted + ~13 roles in pipeline (as of May 2026). Engineering kept as differentiator.
+- **[LIMSOC National IMS](limsoc-national-ims.md)** - **Completed (2026).** Paid SLSA consulting engagement: national IMS architecture, governance, commercials, rollout. Now the lead case study for the consulting pivot.
+
+## Products (SaaS)
+
+- **[AccessBuddy](accessbuddy.md)** - Multi-tenant club access & credential management SaaS. Live at accessbuddy.com.au (v1.10.2); SMLSC is first tenant (192 members, 354 credentials). Next.js + Bun + Hono + Postgres + GCP. _SaaS pricing / second-club GTM still open._
+- **[LifesaverOnCall](lifesaveroncall.md)** - GoodSAM-style emergency dispatch product for LSV. Pre-launch; Phase 3 complete, Phase 4 blockers open.
+
+## Surf Lifesaving
+
+- **[LSV Communications Officer](lsv-comms-officer.md)** - Nick's volunteer State Lifesaving Communications Officer role at Life Saving Victoria. Scope: LIMSOC, Operational Communications, LSOCE.
+- **[SMLSC Club](club-renewal.md)** - South Melbourne Lifesaving Club. Master plan across area codes, VESEP funding model, board proposal.
+
+## Personal
+
+- **[Personal](personal.md)** - Gym / strength training, Hazel dog co-ownership, spare room rental, EV decision, home automation. (The former `life` project was retired 2026-06-02: its threads live here; its orchestration cadence is now a DA rhythm - see `Routines/weekly-review.md`.)
+
+## Systems / Tooling
+
+- **[Life OS Console](life-os-console.md)** - Local agent-operations cockpit: a Discord/Slack bot surfacing the workspace agents as a chat roster, routing through the PAI inference pipeline with approval gates.
+- **[PAI workspace tooling](pai.md)** - The hand-rolled workspace life-OS (AGENT_STANDARD, agent-onboarder, maintainer, OneDrive convention). Converging into the live PAI 5.x system.
+
+---
+
+## Convergence status (2026-06-02)
+
+All 10 projects converged onto PAI conventions: each has a twelve-section `<project>/ISA.md` in its repo (the system of record), specialist agents registered as PAI subagents with distinct voices and tool-scoping, and a KNOWLEDGE note indexed for retrieval. Recipe: `_CONVERGENCE_RECIPE.md`. Files stay in `~/Documents/workspace/`; only this index, the agent registry, and the knowledge index live under `~/.claude/PAI`.
+
+## Open Sessions to Resume
+
+- **Penny / envelope-os build** (parked 2026-06-18): zero-based envelope budgeting layer over PocketSmith, feeding Pulse. Project persisted at `~/Documents/workspace/projects/envelope-os/` with a full E3 twelve-section ISA (46 ISCs, all 13 design decisions locked), README, and source docs in `docs/`. Two architect-flagged contradictions are resolved in the ISA Changelog (rollover deficit-booking, every-dollar enforced at wizard completion) but marked provisional pending Nick's explicit confirm or flip. Next step when resumed: confirm the two provisional flag resolutions, then delegate Weekend 1 (PocketSmith OpenAPI-codegen client, SQLite schema, daily sync, two-year backfill) to a feature-dev subagent. Not yet registered in the Products/Systems index above.
+- **Programmatic resume export pipeline** (deferred 2026-06-12, from Virgin application thread): markdown → template-faithful `.docx` automation. Attempted: bun `docx` package (wrong styling), then pandoc `--reference-doc` + a transformer script (close, but final fidelity rejected). Decision: manual Word export for now; CLAUDE.md's "python-docx, no manual export" clause is aspirational until this is built (python-docx NOT installed; no pip on the Linux box). If resumed: install a docx toolchain, rebuild the transformer in `PAI/TOOLS/`, end the pipeline with explicit `rclone copy` push (mount uploads stall silently).
+- **LinkedIn recruiter reply — Senior Platform Engineer** (on hold per Nick 2026-06-11): draft reply template exists (peer-tone thanks + comp/hybrid/AI-focus/team-size questions); needs recruiter name, company, role link, and original message text before finalising.
+
+<!-- migrated from workspace + PAI 4.x on 2026-06-02 -->
+<!-- 2026-06-02: company_drafts/Proposal-to-Dave was the precursor pitch to the LIMSOC National IMS engagement (now completed). Old, not migrated separately. -->>

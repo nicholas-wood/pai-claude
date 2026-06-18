@@ -1,0 +1,18 @@
+---
+name: project-claude-tree-migrated-from-mac
+description: ~/.claude was copied from a Mac; stale /Users/nicholaswood paths break PAI and plugins on this Linux box
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: 95e3b54a-bf98-4cea-86b6-97b0682d6d71
+---
+
+Nick's `~/.claude` tree was migrated from a Mac (`/Users/nicholaswood/...`) to this Linux box (`/home/nicholas-wood/...`, home dir has a hyphen). The files transferred fine but several configs hardcoded the old macOS absolute path.
+
+Fixed 2026-06-03 (this session): `plugins/known_marketplaces.json` (installLocation) and `plugins/installed_plugins.json` (installPath) → caused `/doctor` plugin "cache-miss". And `settings.json` `PAI_DIR` + `PAI_CONFIG_DIR` → was causing the MODE classifier to fail every turn with `EACCES mkdir '/Users'`. settings.json now uses `${HOME}` (portable).
+
+**REGRESSED + re-fixed 2026-06-18:** `settings.json` `PAI_DIR` + `PAI_CONFIG_DIR` were back to `/Users/nicholaswood/...` again (a PAI sync/release overwrote settings.json after the 2026-06-03 fix). Re-set both to `${HOME}`. This time it surfaced as the recurring `Cannot find package 'yaml'` error from `hooks/security/inspectors/PatternInspector.ts` — two stacked bugs: (1) the `yaml` npm package wasn't installed (fixed via `bun add yaml` in `/home/nicholas-wood` → resolves from HOME/node_modules where the inspector looks); (2) the stale `PAI_DIR` made `SecurityPipeline.hook.ts` fail to find `PAI/USER/SECURITY/PATTERNS.yaml` → fail-CLOSED (`process.exit(2)`, hard-block). The yaml crash had been masking bug 2 by making the hook fail-OPEN; fixing yaml alone would have hard-blocked every Bash/Write/Edit. `getPaiDir()`/`expandPath()` resolve a literal `${HOME}` so the live session was safe without restart.
+
+**Still pointing at /Users (not yet fixed, lower priority):** `daemon.lock`, `daemon/roster.json`, `PAI/USER/Routines/weekly-review.md`. ~60 append-only history/log files (PRDs, transcripts, OBSERVABILITY/LEARNING jsonl) also contain the old path — these are *records*, leave them.
+
+**How to apply:** If PAI inference, the daemon, or plugins misbehave, first `grep -rl /Users/nicholaswood ~/.claude` and check whether a *live* config (not a log) still has the stale path. settings.json env changes need a session restart to take effect.

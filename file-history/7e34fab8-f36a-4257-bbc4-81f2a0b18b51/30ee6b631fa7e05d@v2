@@ -1,0 +1,218 @@
+---
+task: "Zero-based envelope budgeting layer over PocketSmith"
+project: envelope-os
+slug: 20260618-050156_penny-envelope-os
+effort: advanced
+effort_source: explicit
+phase: observe
+progress: 0/46
+mode: interactive
+started: 2026-06-18T05:01:56Z
+updated: 2026-06-18T05:07:00Z
+---
+
+# Penny (envelope-os) — Project ISA
+
+> Surface name **Penny**. Codebase folder `envelope-os`. Zero-based envelope budgeting layer on top of PocketSmith, feeding PAI Pulse. AUD, single user, personal-finance-grade security, local-first.
+
+## Problem
+
+PocketSmith owns Nick's bank feeds and categorisation across ANZ (primary), NAB (credit card), and Macquarie, but its envelope handling is weak and it does not implement zero-based envelope budgeting. Dave Ramsey's EveryDollar and similar apps do implement the methodology but cannot connect to Australian banks. The result is that Nick runs envelope budgeting in his head on top of PocketSmith, which does not scale, does not survive a credit-card statement cycle cleanly, and gives no trustworthy single number for "where am I against budget right now". There is no time-travel view of envelope balances at a past date, no enforced every-dollar-allocated discipline, and no surface that feeds the state into Pulse.
+
+## Vision
+
+Nick opens Pulse and sees one honest line. Unallocated dollars, the worst three overspends, and whether the credit-card holding balance still matches NAB. He opens Penny at the start of a month, clicks "apply last month", adjusts three envelopes, and every dollar of expected income has a name before the month begins. When a late transaction lands weeks later, the envelope it belongs to moves on the day it was spent, not when the statement closes, so the budget never lies about the past. The euphoric surprise is the holding-versus-NAB tripwire. A single number that, when it drifts, tells Nick something is wrong before he would otherwise have noticed, and that he could never have computed by hand.
+
+## Out of Scope
+
+The MVP does not split one category across multiple envelopes. Mapping stays many categories to one envelope. A dedicated sinking-fund target type is not built. Annual envelopes are treated as monthly target divided by twelve for the MVP. There is no PWA, no mobile quick-add of purchases, and no offline capture. There is no auto-allocation engine and no agent-proposed allocations. There is no reporting suite beyond what the grid and detail pages show, no PDF or CSV export, and no what-if replay queries against the event log. There is no multi-currency support. There is no joint-finance surface. The data model reserves an unused owner column for that future, but no joint behaviour is built. Direct bank-CSV reconciliation against PocketSmith feeds is a later trust layer, not MVP.
+
+## Principles
+
+- The envelope is the user-facing primitive. PocketSmith categories are inputs. Envelopes are how Nick thinks and decides.
+- Cash-basis fidelity to the envelope metaphor. A swipe decrements the envelope on the day it happens, regardless of which card moved.
+- Every dollar is conserved. A forgiven overspend is not free money. The deficit is always booked somewhere, never silently leaked.
+- Local-first. Personal financial data does not leave Nick's machine without a deliberate, per-action choice.
+- The event log is the source of truth and the audit log. Future-Nick can always ask why an envelope went negative on a given day and get an answer.
+- The thing is the source of truth, not the task. This ISA at the project root is iterated continuously, not recreated per task.
+
+## Constraints
+
+- bun plus TypeScript only. No Python. No npm or npx. Australian English. AUD only. No em dashes in prose.
+- Storage is SQLite via `bun:sqlite`, single file, single writer owned by one Bun process. Not Postgres.
+- The PocketSmith client is generated from the published OpenAPI 3 spec at `github.com/pocketsmith/api`, pinned to a commit SHA in-repo. The client is regenerated manually on a spec bump, never auto-tracked.
+- Auth to PocketSmith is the `X-Developer-Key` header, key held in the PAI secrets store. Not OAuth. The key never appears in env files, git, or logs.
+- Sync is daily pull only. PocketSmith publishes no webhooks, so no push or listener code path may exist. Incremental sync uses `updated_since`.
+- Mobile and remote access is Tailscale-only. No public internet exposure.
+- No cloud SaaS storage of financial data and no cloud AI inference over transactions by default. Opt-in is per query, never standing.
+
+## Goal
+
+Ship a local-first Penny that replaces Nick's PocketSmith-plus-mental-model setup with a real zero-based envelope view. Done means a daily PocketSmith pull lands transactions into a SQLite event-sourced ledger, envelopes decrement on spend-date with a visible Credit Card Holding envelope for NAB, a beginning-of-month wizard enforces every-dollar-allocated against expected income, the grid and a time-travel view render envelope balances, and a read-only Pulse widget surfaces unallocated dollars, top overspends, and the holding-versus-NAB tripwire. The four weekend phases each ship a coherent slice, and the holding-versus-NAB invariant is correct enough that its drift is trustworthy.
+
+## Criteria
+
+### Ingest and sync (Weekend 1)
+
+- [ ] ISC-1: PocketSmith TypeScript client generated from a pinned OpenAPI 3 commit SHA
+- [ ] ISC-2: Client authenticates using the X-Developer-Key header
+- [ ] ISC-3: Developer key resolved from the PAI secrets store at runtime
+- [ ] ISC-4: Backfill pages through the transactions endpoint to completion
+- [ ] ISC-5: Incremental sync passes updated_since equal to last successful run timestamp
+- [ ] ISC-6: Backfill script pulls two years from a parameterised start date
+- [ ] ISC-7: Daily sync runs from PAI cron at a fixed local time
+- [ ] ISC-8: Two consecutive failed syncs raise a Pulse or Telegram alert
+- [ ] ISC-9: Anti: No webhook listener or push-sync code path exists anywhere in the repo
+
+### Data model and store (Weekend 1 to 2)
+
+- [ ] ISC-10: SQLite database opens via bun:sqlite as a single file at a known path
+- [ ] ISC-11: Schema declares events, snapshots, transactions, categories, mappings, envelopes tables
+- [ ] ISC-12: Each transaction row stores the raw PocketSmith JSON for diffing
+- [ ] ISC-13: transaction_overrides table is keyed on pocketsmith id and field
+- [ ] ISC-14: An owner column exists on ledger entities, defaulted to the single principal
+- [ ] ISC-15: Every state change appends an event with timestamp, actor, and correlation id
+- [ ] ISC-16: End-of-day job writes one snapshot balance row per envelope per day
+- [ ] ISC-17: Anti: Re-sync never mutates a transaction beyond base-field refresh plus overlay
+
+### Envelope semantics (Weekend 2)
+
+- [ ] ISC-18: Envelope CRUD persists name, group, rollover_rule, target_type, target_amount
+- [ ] ISC-19: Category-to-envelope mapping is many-to-one and effective-dated
+- [ ] ISC-20: Unmapped category transactions resolve to the Inbox envelope at import
+- [ ] ISC-21: NAB card spend decrements the Credit Card Holding envelope on transaction date
+- [ ] ISC-22: Transactions flagged is_transfer are excluded from envelope decrement
+- [ ] ISC-23: Pending transactions appear in lists but do not decrement balances
+- [ ] ISC-24: Posted transactions decrement the mapped envelope on transaction date
+- [ ] ISC-25: Default rollover rolls positive and books a negative into next period available-to-allocate
+- [ ] ISC-26: A roll_all override carries an envelope negative as visible debt
+- [ ] ISC-27: Annual envelopes display as monthly target divided by twelve for the MVP
+- [ ] ISC-28: Anti: A forgiven overspend never leaves the ledger unbalanced
+
+### Allocation and every-dollar rule (Weekend 4)
+
+- [ ] ISC-29: Beginning-of-month wizard offers apply-last-month as the default action
+- [ ] ISC-30: Every-dollar rule is enforced at wizard completion against expected income
+- [ ] ISC-31: Dashboard shows the expected-versus-actual income delta when they diverge
+- [ ] ISC-32: Anti: Viewing the dashboard is never blocked by an unbalanced allocation
+
+### UI (Weekend 3)
+
+- [ ] ISC-33: Vite plus React plus shadcn SPA is served by Hono on a single port
+- [ ] ISC-34: Envelope grid renders current-period balances in a Dave Ramsey layout
+- [ ] ISC-35: Per-envelope detail page lists that envelope's transactions
+- [ ] ISC-36: Time-travel date picker renders envelope balances as at end-of-day T
+- [ ] ISC-37: Statement-period reconcile click confirms Holding matches NAB balance
+- [ ] ISC-38: App is reachable only over Tailscale, not the public internet
+- [ ] ISC-39: Session idle timeout is thirty minutes, unlocked by a secrets-store PIN
+
+### Pulse (Weekend 4)
+
+- [ ] ISC-40: Pulse job writes widget JSON to a known path on the daily cycle
+- [ ] ISC-41: Pulse tile A shows unallocated dollars for the current period
+- [ ] ISC-42: Pulse tile B shows the top three envelopes by overspend percent
+- [ ] ISC-43: Pulse tile C shows Holding balance against NAB statement balance
+- [ ] ISC-44: Every Pulse tile carries an as-of timestamp
+
+### Security and data lifecycle (cross-cutting)
+
+- [ ] ISC-45: Anti: No financial data is sent to cloud SaaS or cloud AI by default
+- [ ] ISC-46: A daily encrypted backup of the SQLite file runs via rclone crypt remote
+
+## Test Strategy
+
+| isc | type | check | threshold | tool |
+|-----|------|-------|-----------|------|
+| ISC-1 | build | generated client file exists, OpenAPI SHA pinned in config | file present, SHA matches | Read, Grep |
+| ISC-2 | api | request carries X-Developer-Key header | header present | curl -i against a live endpoint |
+| ISC-3 | security | key read from secrets store, absent from source | zero matches in repo | Grep secret value |
+| ISC-4 | api | backfill consumes all pages | page cursor exhausted | Bash run, count rows |
+| ISC-5 | api | sync request includes updated_since param | param equals last run ts | Grep request log |
+| ISC-6 | functional | backfill arg controls start date | two-year window pulled | Bash run with arg |
+| ISC-7 | operational | cron entry fires the sync at fixed time | job registered | Read cron config |
+| ISC-8 | operational | two failed runs trigger alert | alert emitted | Bash inject failure, observe |
+| ISC-9 | anti | no webhook or listener code present | zero matches | Grep webhook, listen, push |
+| ISC-10 | data | db file opens via bun:sqlite | connection succeeds | Bash open and query |
+| ISC-11 | data | all six tables present | schema matches | SELECT from sqlite_master |
+| ISC-12 | data | raw_json column populated | non-null on imported rows | SELECT raw_json |
+| ISC-13 | data | overrides keyed on id and field | composite key enforced | SELECT, attempt dup |
+| ISC-14 | data | owner column present, defaulted | default applied | SELECT owner |
+| ISC-15 | data | event rows carry ts, actor, correlation | columns non-null | SELECT from events |
+| ISC-16 | data | snapshot rows per envelope per day | one row per pair | SELECT count grouped |
+| ISC-17 | anti | re-sync leaves base row plus overlay only | no destructive update | Bash re-sync, diff rows |
+| ISC-18 | functional | envelope CRUD persists all fields | round-trip equal | SELECT after write |
+| ISC-19 | data | mapping is many-to-one effective-dated | constraint holds | SELECT, attempt second |
+| ISC-20 | functional | unmapped lands in Inbox | envelope_id is Inbox | SELECT on unmapped |
+| ISC-21 | logic | NAB spend decrements Holding on tx date | balance moved on date | SELECT balance delta |
+| ISC-22 | logic | is_transfer excluded from decrement | no envelope change | SELECT on transfer row |
+| ISC-23 | logic | pending shown not counted | listed, balance unchanged | SELECT, compare |
+| ISC-24 | logic | posted decrements on tx date | balance moved | SELECT balance delta |
+| ISC-25 | logic | default rollover books negative forward | next period available reduced | SELECT period rollover |
+| ISC-26 | logic | roll_all carries debt | negative persists | SELECT envelope balance |
+| ISC-27 | logic | annual shows target over twelve | monthly figure correct | SELECT computed target |
+| ISC-28 | anti | sum of envelopes plus available equals income | invariant holds | SELECT conservation check |
+| ISC-29 | functional | wizard default is apply-last-month | default preselected | Interceptor screenshot |
+| ISC-30 | logic | save blocked until balanced at completion | unbalanced rejected | Interceptor attempt save |
+| ISC-31 | functional | delta line shown on divergence | delta visible | Interceptor screenshot |
+| ISC-32 | anti | dashboard view never blocked | renders unbalanced | Interceptor load |
+| ISC-33 | build | SPA served by Hono on one port | 200 at root | curl -i root |
+| ISC-34 | ui | grid renders current balances | grid visible | Interceptor screenshot |
+| ISC-35 | ui | detail lists envelope transactions | list visible | Interceptor screenshot |
+| ISC-36 | logic | as-of date renders past balances | snapshot matches | Interceptor plus SELECT |
+| ISC-37 | functional | reconcile click confirms holding vs NAB | confirmation recorded | Interceptor click |
+| ISC-38 | security | not reachable off Tailscale | refused publicly | curl from non-tailnet |
+| ISC-39 | security | idle session locks at thirty minutes | re-auth required | Bash time-advance test |
+| ISC-40 | integration | widget JSON at known path | file present and valid | Read, jq |
+| ISC-41 | ui | tile A unallocated dollars | value matches db | Interceptor plus SELECT |
+| ISC-42 | ui | tile B top three overspends | order correct | Interceptor plus SELECT |
+| ISC-43 | ui | tile C holding vs NAB | both values shown | Interceptor screenshot |
+| ISC-44 | ui | as-of timestamp on every tile | timestamp present | Interceptor screenshot |
+| ISC-45 | anti | no cloud egress of financial data | zero external posts | Grep, egress inspector |
+| ISC-46 | operational | daily encrypted backup runs | backup file appears | Bash run, ls crypt remote |
+
+## Features
+
+| name | description | satisfies | depends_on | parallelizable |
+|------|-------------|-----------|------------|----------------|
+| ingest-spine | OpenAPI-codegen client, auth, backfill, daily sync, alert | ISC-1..9 | none | no |
+| store-schema | SQLite schema, event log, overrides, owner col, snapshot job | ISC-10..17 | ingest-spine | partly |
+| envelope-engine | CRUD, mapping, Inbox, holding model, rollover, transfers, pending | ISC-18..28 | store-schema | no |
+| allocation-wizard | beginning-of-month wizard, every-dollar rule, expected-vs-actual | ISC-29..32 | envelope-engine | no |
+| ui-v0 | Vite React shadcn SPA, grid, detail, time-travel, reconcile, Tailscale, auth | ISC-33..39 | envelope-engine | partly |
+| pulse-widget | daily widget JSON plus three tiles with as-of timestamp | ISC-40..44 | envelope-engine, ui-v0 | yes |
+| security-baseline | no-cloud-egress guarantee, encrypted backup | ISC-45..46 | store-schema | yes |
+
+Weekend mapping. Weekend 1 ships ingest-spine plus the schema half of store-schema. Weekend 2 ships envelope-engine plus the snapshot job. Weekend 3 ships ui-v0. Weekend 4 ships allocation-wizard plus pulse-widget. security-baseline is woven across all four.
+
+## Decisions
+
+- 2026-06-18 05:07: Persisted the project to `~/Documents/workspace/projects/envelope-os/`, alongside accessbuddy, life-os-console, lifesaveroncall, and inkwell. First attempt put it flat at the workspace root. Nick corrected the home to `workspace/projects/`.
+- 2026-06-18 05:07: Authored this ISA directly rather than via the ISA Scaffold workflow. A full architect review and requirements clarification already existed in `docs/`, so direct authoring is more faithful than a generic scaffold. The two source docs were copied into `docs/` so the project home is self-contained.
+- 2026-06-18 05:07: Tier set to E3 (advanced) per the project-ISA override. The classifier returned E2 for the persist task, but any `<project>/ISA.md` requires E3-plus structure regardless of task tier. Twelve-section body written.
+- 2026-06-18 05:07: LOAD-1 locked. Period is the calendar month. Every-dollar-allocated is a hard rule, enforced at wizard completion against expected income (see Changelog FLAG-2 refinement), not on every intermediate save.
+- 2026-06-18 05:07: LOAD-2 locked. Credit-card model A, spend-date decrement, with a visible Credit Card Holding envelope. The holding-versus-NAB drift is the system's most valuable invariant and the named euphoric surprise.
+- 2026-06-18 05:07: LOAD-3 locked with a contradiction fixed (see Changelog FLAG-1). Default rollover rolls positive and zeroes negative by booking the deficit into the next period's available-to-allocate. Carrying a negative as standing per-envelope debt applies only under the roll_all override.
+- 2026-06-18 05:07: LOAD-4 locked. Mapping is many categories to one envelope. Splits are out of MVP, in for v1.0.
+- 2026-06-18 05:07: LOAD-5 locked. Unmapped categories land in an Inbox envelope at import. Inbox takes no allocation, so unmapped spend drives it negative, which is the prompt to map.
+- 2026-06-18 05:07: LOAD-6 locked. Primary UI is the envelope grid (Dave Ramsey), not a YNAB list. Allocation ritual is a beginning-of-month wizard with apply-last-month as the default.
+- 2026-06-18 05:07: LOAD-7 locked. Three Pulse tiles. Unallocated dollars, top three overspends by percent, and Holding-versus-NAB drift. Feasibility confirmed against the PocketSmith API account-balance surface.
+- 2026-06-18 05:07: NEW-1 locked. Holding reconciliation cadence is an end-of-statement-period click in the UI that confirms Holding matches the NAB statement. This is what keeps model A from drifting silently.
+- 2026-06-18 05:07: NEW-2 locked. Income is expected-versus-actual with a dashboard delta line, because Nick may go independent and income stops being fixed monthly salary. This is why LOAD-1 enforces at wizard completion against expected income rather than blocking on every save.
+- 2026-06-18 05:07: NEW-3 locked. An unused owner column is baked into the ledger entities now. Near-zero cost as insurance against a painful retrofit of multi-principal into an event-sourced single-principal ledger.
+- 2026-06-18 05:07: S1 locked. Storage is SQLite via bun:sqlite, not Postgres. Single writer, single-file backup, JSON1 and window functions cover the time-travel queries, and there is no daemon or port tax at single-user scale.
+- 2026-06-18 05:07: S2 locked. Surface name is Penny. Folder stays envelope-os.
+- 2026-06-18 05:07: S3 locked. Backfill window is two years. Roughly fifty thousand transactions at most, runs in minutes, never repeats.
+- 2026-06-18 05:07: Decided per the architect review, not asked. Own-account transfers are filtered from envelope decrement and badged Transfer, with manual override when PocketSmith mis-classifies. Pending shows but does not decrement, posted only counts. PocketSmith splits are ingested as first-class sub-transactions, no mirror logic.
+- 2026-06-18 05:07: Provisional flag. The two flag resolutions below were my architect calls, not yet explicitly confirmed by Nick. They are encoded as the working default and are cheaply reversible if Nick flips them.
+
+## Changelog
+
+- conjectured: LOAD-3 as originally written said default rollover rolls positive, zeroes negative, and carries the negative as visible debt with no auto-true-up.
+  refuted_by: Those are two different rules. Zeroing a negative and carrying it as debt cannot both hold. Under zero-based budgeting a forgiven overspend is not free, so the deficit must be booked somewhere or the ledger leaks and the holding tripwire loses meaning.
+  learned: The YNAB resolution is correct here. Default zeroes the envelope by booking the deficit into next period available-to-allocate, surfaced as a visible line in the wizard. Standing per-envelope debt is the roll_all override only.
+  criterion_now: ISC-25, ISC-26, ISC-28.
+
+- conjectured: LOAD-1 every-dollar rule should hard-block save whenever income does not equal the sum of allocations.
+  refuted_by: With expected-versus-actual income (NEW-2) a hard per-save block fights reality. Mid-month edits, late actuals, and partial wizard sessions would all be blocked, and viewing must never be blocked.
+  learned: Enforce the every-dollar rule at wizard completion against expected income, not on every intermediate save. Divergence of actual from expected is shown as a dashboard delta and prompts re-allocation, never blocks viewing.
+  criterion_now: ISC-30, ISC-31, ISC-32.

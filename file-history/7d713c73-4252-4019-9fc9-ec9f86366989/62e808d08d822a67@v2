@@ -1,0 +1,94 @@
+# Inkwell — Thread State
+
+> Personal task system for the PAI Life OS. Working name committed: **Inkwell** (per architect review section 6). This file is the resumable state of the architecture thread. It is **pre-build**: no code yet, no ISA yet. The ISA at `inkwell/ISA.md` gets written once the five gating questions below are answered.
+>
+> Status: **AWAITING NICK'S ANSWERS to L1, L3, L4, L8, A4.**
+> Last updated: 2026-06-18.
+
+## What Inkwell is
+
+A personal task system built on PAI that replaces Nick's paper notebook for the things paper can't do (search, cross-project context, agent review, mobile capture, cross-day persistence) while preserving what paper does best (zero-friction capture, always-visible page, fast reorder, satisfying "done"). Single-user, multi-front (career pivot, AccessBuddy, LIMSOC, LifesaverOnCall, LSV Comms, SMLSC, Personal, PAI Tooling, Life OS Console). The agent is a first-class participant, not a UI nicety.
+
+The notebook is not a constraint — it is a **hypothesis to beat in a 14-day bake-off**. If Inkwell does not beat paper in two weeks, the project dies and the notebook wins.
+
+## Source documents
+
+- `~/.claude/PAI/MEMORY/WORK/pai-task-system/REQUIREMENTS_CLARIFICATION.md` — original 42-question staff-architect clarification.
+- `~/.claude/PAI/MEMORY/WORK/pai-task-system/ARCHITECT_REVIEW.md` — staff-architect critique; cut to 13 questions (absolute-minimum 5), committed the name, made three architecture flips, defined the 14-day bake-off as the done condition.
+
+(These live in PAI MEMORY for now. They move into this directory when the ISA is written.)
+
+## The five gating questions (build is blocked on these)
+
+The absolute minimum to unblock the build. Everything else defaults.
+
+### L1 — Primary capture device (phone or laptop?)
+- **Options:** phone-first (voice-to-Telegram canonical, mobile in MVP) vs laptop-first (CLI canonical, mobile waits).
+- **Jarvis position:** the binary is softer than framed — the MVP ships BOTH CLI and Telegram regardless (the 17:00 check-in needs the bot). So L1 really decides one thing: **is voice-note transcription in MVP or v1.0?** Declare laptop-primary, include Telegram text capture for free, add voice-note transcription to MVP only if paper captures mostly happen away from the desk.
+- **Nick's answer:** _pending._
+
+### L3 — Canonical store (SQLite / markdown / Postgres?)
+- **Options:** SQLite canonical (architect flip) vs markdown canonical + SQLite read-model (original) vs Postgres (overkill).
+- **Jarvis position:** **agree with the flip, no reservations.** SQLite canonical at `~/.claude/PAI/MEMORY/INKWELL/inkwell.db`, markdown daily-page export as a view. Single user means no merge problem, the agent writes constantly, "hand-editable" is a phantom benefit (the Telos files never get hand-edited either). This is the boring correct answer.
+- **Nick's answer:** _pending._
+
+### L4 — Agent autonomy boundary
+- **Options:** propose-and-confirm (agent never silently mutates) vs autonomous (act-and-log).
+- **Jarvis position:** **propose-and-confirm for the first 30 days**, with one boundary clarification — the rule binds **unprompted** mutation only. When Nick replies to the 17:00 check-in with "done A, roll B, drop C," applying those edits is instructed, not autonomy; the agent must not re-confirm what Nick just told it. Agent-initiated silent edits: forbidden. Edits Nick dictated in natural language: applied immediately.
+- **Nick's answer:** _pending._
+
+### L8 — Bake-off success metric (the done condition / headline ISC)
+- **Architect proposal:** after 14 days of parallel use, Nick prefers Inkwell for ≥80% of new captures and reviews next-day items in Inkwell ≥90% of mornings. Miss either → kill, notebook won.
+- **Jarvis position:** **accept 80/90 intent, fix the measurement mechanics.** Measuring "≥80% of captures went to Inkwell" requires tallying paper captures too, and instrumenting paper adds friction that rigs the bake-off. Cleaner instrument, same intent: **count notebook lines written per day (one glance at the page each evening, agent logs it at check-in); target a falling trend reaching ≤1 line/day by day 14**, plus the ≥90% next-day-review-in-Inkwell condition unchanged. Kill condition unchanged.
+- **Nick's answer:** _pending._
+
+### A4 — Relationship to the Algorithm's ISA/ISC system
+- **Options:** parallel (both stores exist) / tasks subordinate to ISCs / tasks subsume ISCs for personal execution.
+- **Jarvis position:** **agree with parallel for MVP**, but buy the hedge now — the schema carries a nullable `isc_ref` column from day one. Costs nothing at MVP and makes the v1.0 revisit (subordinate vs subsume) a feature decision rather than a data migration. This question decides whether Inkwell is "a todo app on top of PAI" or "the personal execution layer of the PAI Life OS."
+- **Nick's answer:** _pending._
+
+## The deferred eight (default unless an L/A answer disturbs them)
+
+L2, L5, L6, L7, A1, A2, A3, A5 — Jarvis read is Nick's five answers leave none genuinely open. Defaults to apply (all from the architect review):
+
+| # | Question | Default |
+|---|----------|---------|
+| L2 | Time blocks: planning, tracking, or both? | Flat ordered today-list in MVP; blocks deferred to v1.0 once the flat list proves inadequate. |
+| L5 | Sync topology | Single canonical host + thin mobile client over Tailscale + offline capture queue. No CRDTs. |
+| L6 | Project/area taxonomy | PROJECTS.md is the registry (hardcoded 10 projects + "inbox"); area dropped from MVP, re-add in v1.0 if missing; tags forbidden until v2. |
+| L7 | Agent check-in surface + tolerance | Telegram for MVP; hard cap 3 nudges/day. |
+| A1 | Replace notebook or coexist? | Replace — notebook goes in the drawer for the bake-off. No photo-transcription flow in MVP. |
+| A2 | Failure mode when Pulse is down | CLI writes direct to the SQLite store; capture survives Pulse being down. |
+| A3 | Is Inkwell's own build tracked in Inkwell? | Yes — dogfood from day one. |
+| A5 | Relationship to AccessBuddy/LIMSOC/LifesaverOnCall artefacts | Meta-layer that links to them; does not duplicate. |
+
+## Architecture decisions carried (from the review, pending final lock on answers)
+
+- Name: **Inkwell** (committed, single name, no internal/external split).
+- Store: SQLite canonical (pending L3 confirm), markdown daily-page export to `~/OneDrive/04_Inkwell/{YYYY-MM-DD}.md` as a view.
+- GitHub-backed store / mirror: **killed entirely.** Capture latency and privacy.
+- Voice framing: "Telegram voice note → Pulse → store," not "ElevenLabs flow."
+- Views in MVP: **Today, Everything** (two, not three — Inbox/Backlog is a filter, not a view).
+
+## MVP scope (the two-week bake-off build)
+
+In:
+- SQLite store at `~/.claude/PAI/MEMORY/INKWELL/inkwell.db`.
+- CLI: `ink add "..."`, `ink today`, `ink done <id>`, `ink mv <id> today`.
+- Telegram bot: text capture (+ voice-note capture pending L1).
+- Daily Telegram check-in at 17:00 Melbourne: "What got done? Anything to roll?" Agent updates the store on Nick's reply.
+- Daily markdown export to OneDrive (the notebook-page artefact).
+- Project allocation defaults to "inbox"; agent guesses project from title and proposes on capture (one-tap accept).
+
+Out of MVP: web app, mobile PWA, time blocks, Pulse widget, calendar integration, recurring tasks, Telos rollup, backlog-hygiene automation.
+
+## Next actions (on Nick's answers)
+
+1. Write the project ISA at `~/Documents/workspace/projects/inkwell/ISA.md` — E3 tier, twelve-section v2.7 shape (Problem, Vision, Out of Scope, Constraints, Goal, Criteria, Features, Test Strategy required at E3). The bake-off metric (L8) is the headline ISC.
+2. If any L/A answer disturbs a deferred-eight default, surface only the disturbed question; otherwise default the lot.
+3. Delegate the MVP build to a feature-dev subagent against the ISA: CLI + SQLite + Telegram capture + 17:00 check-in.
+4. Bake-off starts the Monday after MVP ships; runs 14 days against the paper notebook.
+
+## Operating mode for this project
+
+PAI conventions. bun + TypeScript, no Python. No npm/npx. No em dashes. Australian English. Algorithm mode for multi-step work. Nick is a peer — strong opinions loosely held, pushback welcome. This is a Life OS project, not a todo app: build the smallest thing that beats the paper notebook.

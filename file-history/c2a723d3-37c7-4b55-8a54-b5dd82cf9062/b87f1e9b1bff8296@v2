@@ -1,0 +1,26 @@
+// Extract plain text from a .docx by reading word/document.xml
+import { execSync } from "node:child_process";
+
+const file = process.argv[2];
+if (!file) { console.error("usage: docx2txt.ts <file.docx>"); process.exit(1); }
+
+const xml = execSync(`unzip -p "${file}" word/document.xml`, { maxBuffer: 50 * 1024 * 1024 }).toString();
+
+let out = xml
+  // paragraph and line breaks -> newlines
+  .replace(/<w:p[ >]/g, "\n<w:p ")
+  .replace(/<w:br\s*\/>/g, "\n")
+  .replace(/<\/w:tab>|<w:tab\s*\/>/g, "\t");
+
+// pull text runs
+const text = out
+  .replace(/<[^>]+>/g, "")            // strip all tags
+  .replace(/&amp;/g, "&")
+  .replace(/&lt;/g, "<")
+  .replace(/&gt;/g, ">")
+  .replace(/&#x?[0-9a-fA-F]+;/g, "")  // misc entities
+  .replace(/[ \t]+\n/g, "\n")
+  .replace(/\n{3,}/g, "\n\n")
+  .trim();
+
+console.log(text);

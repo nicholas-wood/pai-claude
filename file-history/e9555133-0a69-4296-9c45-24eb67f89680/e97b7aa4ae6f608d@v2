@@ -1,0 +1,18 @@
+// Naive XML pretty-printer for human/agent reading of OOXML parts.
+const path = process.argv[2];
+const raw = await Bun.file(path).text();
+// Insert newlines between tags, then indent by depth.
+const withBreaks = raw.replace(/></g, ">\n<");
+let depth = 0;
+const out: string[] = [];
+for (const lineRaw of withBreaks.split("\n")) {
+  const line = lineRaw.trim();
+  if (!line) continue;
+  const isClose = /^<\//.test(line);
+  const isSelfOrInline = /\/>$/.test(line) || /^<[^>]+>[^<]*<\/[^>]+>$/.test(line);
+  const isOpenOnly = /^<[^/!?][^>]*[^/]>$/.test(line) && !isSelfOrInline;
+  if (isClose) depth = Math.max(0, depth - 1);
+  out.push("  ".repeat(depth) + line);
+  if (isOpenOnly) depth += 1;
+}
+console.log(out.join("\n"));

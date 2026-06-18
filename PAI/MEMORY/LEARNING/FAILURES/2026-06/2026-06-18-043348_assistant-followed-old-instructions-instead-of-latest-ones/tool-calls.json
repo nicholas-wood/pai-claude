@@ -1,0 +1,769 @@
+[
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cat /home/nicholas-wood/.claude/PAI/ALGORITHM/LATEST 2>/dev/null; echo \"---WORKSPACE---\"; ls -la ~/Documents/workspace/ 2>/dev/null | head -30; echo \"---PROJECTS DIR---\"; ls ~/Documents/workspace/projects/ 2>/dev/null",
+      "description": "Read Algorithm version and list workspace"
+    },
+    "timestamp": "2026-06-18T05:51:59.201Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo \"=== Find OneDrive ===\"; ls -d ~/OneDrive* 2>/dev/null; find ~ -maxdepth 3 -iname \"*onedrive*\" -type d 2>/dev/null | head; echo \"=== rclone remotes ===\"; rclone listremotes 2>/dev/null",
+      "description": "Locate OneDrive mount and rclone remotes"
+    },
+    "timestamp": "2026-06-18T05:52:01.084Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo \"=== python-docx ? ===\"; python3 -c \"import docx; print('python-docx', docx.__version__)\" 2>&1 | head -2; echo \"=== pip ? ===\"; which pip pip3 2>/dev/null; echo \"=== pandoc ? ===\"; which pandoc 2>/dev/null && pandoc --version 2>/dev/null | head -1; echo \"=== bun/node ? ===\"; which bun node 2>/dev/null; echo \"=== libreoffice ? ===\"; which libreoffice soffice 2>/dev/null; echo \"=== unzip ? ===\"; which unzip 2>/dev/null",
+      "description": "Check available docx toolchains"
+    },
+    "timestamp": "2026-06-18T05:52:03.390Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo \"=== OneDrive top ===\"; ls ~/OneDrive/ 2>/dev/null; echo \"=== Career ===\"; ls -R ~/OneDrive/02_Career/ 2>/dev/null | head -60",
+      "description": "List OneDrive career folders"
+    },
+    "timestamp": "2026-06-18T05:52:23.586Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo \"=== all docx/pdf under OneDrive (career-ish) ===\"; find ~/OneDrive -type f \\( -iname \"*.docx\" -o -iname \"*.pdf\" \\) 2>/dev/null | grep -iE \"resume|cv|cover|career|application|letter\" | head -60",
+      "description": "Find resume and cover letter source files"
+    },
+    "timestamp": "2026-06-18T05:52:24.841Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/tmp/claude-1000/-home-nicholas-wood--claude/e9555133-0a69-4296-9c45-24eb67f89680/tasks/brpceo32f.output"
+    },
+    "timestamp": "2026-06-18T06:02:34.335Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo \"=== Job_Applications tree (docx only) ===\"; find ~/OneDrive/02_Career/Job_Applications/ -type f -iname \"*.docx\" 2>/dev/null | head -40; echo \"=== cover letters anywhere ===\"; find ~/OneDrive -type f -iname \"*cover*\" 2>/dev/null | head -20",
+      "description": "Find cover letter originals"
+    },
+    "timestamp": "2026-06-18T06:02:35.882Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo \"=== zip available? ===\"; which zip; echo \"=== sudo non-interactive? ===\"; sudo -n true 2>&1 && echo \"SUDO OK\" || echo \"NO SUDO\"; echo \"=== set up workdir ===\"; mkdir -p /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/ref-resume /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/ref-cover && echo \"workdir ready\"",
+      "description": "Check zip/sudo and create working directory"
+    },
+    "timestamp": "2026-06-18T06:03:53.647Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "RES=\"/home/nicholas-wood/OneDrive/02_Career/CV_and_Resume/Historical_CVs/Resumè- Nick Wood 2026-06-15 - Hybrid.docx\"\nCOV=\"/home/nicholas-wood/OneDrive/02_Career/Job_Applications/2026/McKinsey/Cover Letter - Nicholas Wood.docx\"\ncd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work\ncp \"$RES\" ref-resume.docx && cp \"$COV\" ref-cover.docx\nunzip -o -q ref-resume.docx -d ref-resume\nunzip -o -q ref-cover.docx -d ref-cover\necho \"=== resume parts ===\"; find ref-resume -type f | sort\necho \"=== cover parts ===\"; find ref-cover -type f | sort",
+      "description": "Extract both canonical docx packages"
+    },
+    "timestamp": "2026-06-18T06:03:56.560Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "which xmllint 2>/dev/null && echo \"xmllint OK\" || echo \"no xmllint\"\ncd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work\nmkdir -p pretty\nfor f in ref-cover/word/document.xml ref-cover/word/settings.xml ref-cover/word/styles.xml ref-resume/word/document.xml ref-resume/word/settings.xml ref-resume/word/styles.xml ref-resume/word/numbering.xml; do\n  out=\"pretty/$(echo $f | tr '/' '_')\"\n  if command -v xmllint >/dev/null 2>&1; then\n    xmllint --format \"$f\" > \"$out\" 2>/dev/null && echo \"formatted $out ($(wc -l < \"$out\") lines)\"\n  fi\ndone",
+      "description": "Pretty-print key XML parts"
+    },
+    "timestamp": "2026-06-18T06:08:36.223Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/fmt.ts",
+      "content": "// Naive XML pretty-printer for human/agent reading of OOXML parts.\nconst path = process.argv[2];\nconst raw = await Bun.file(path).text();\n// Insert newlines between tags, then indent by depth.\nconst withBreaks = raw.replace(/></g, \">\\n<\");\nlet depth = 0;\nconst out: string[] = [];\nfor (const lineRaw of withBreaks.split(\"\\n\")) {\n  const line = lineRaw.trim();\n  if (!line) continue;\n  const isClose = /^<\\//.test(line);\n  const isSelfOrInline = /\\/>$/.test(line) || /^<[^>]+>[^<]*<\\/[^>]+>$/.test(line);\n  const isOpenOnly = /^<[^/!?][^>]*[^/]>$/.test(line) && !isSelfOrInline;\n  if (isClose) depth = Math.max(0, depth - 1);\n  out.push(\"  \".repeat(depth) + line);\n  if (isOpenOnly) depth += 1;\n}\nconsole.log(out.join(\"\\n\"));\n"
+    },
+    "timestamp": "2026-06-18T06:08:45.630Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work\nmkdir -p pretty\nfor f in ref-cover/word/document.xml ref-cover/word/settings.xml ref-cover/word/styles.xml ref-resume/word/document.xml ref-resume/word/settings.xml ref-resume/word/styles.xml ref-resume/word/numbering.xml ref-resume/word/header1.xml ref-resume/word/footer1.xml; do\n  out=\"pretty/$(echo $f | tr '/' '_').txt\"\n  bun fmt.ts \"$f\" > \"$out\" 2>/dev/null && echo \"$(wc -l < \"$out\" | tr -d ' ') lines -> $out\"\ndone",
+      "description": "Pretty-print all key XML parts with bun"
+    },
+    "timestamp": "2026-06-18T09:40:17.586Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/pretty/ref-cover_word_document.xml.txt"
+    },
+    "timestamp": "2026-06-18T09:40:22.672Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/pretty/ref-cover_word_settings.xml.txt"
+    },
+    "timestamp": "2026-06-18T09:40:43.991Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/pretty/ref-cover_word_styles.xml.txt",
+      "limit": 120
+    },
+    "timestamp": "2026-06-18T09:40:45.248Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work\nD=ref-resume/word/document.xml\necho \"=== counts of structural markers ===\"\nfor tag in \"w:pStyle\" \"w:numPr\" \"w:pBdr\" \"w:tbl\" \"w:jc\" \"w:b/\" \"w:b \" \"w:i/\" \"w:u \" \"w:sz \" \"w:spacing\" \"w:ind \" \"w:tab\" \"w:hyperlink\" \"w:br\" \"w:color\" \"w:sectPr\"; do\n  c=$(grep -o \"$tag\" \"$D\" | wc -l | tr -d ' '); echo \"$c  $tag\"\ndone\necho \"=== distinct pStyle values ===\"\ngrep -o 'w:pStyle w:val=\"[^\"]*\"' \"$D\" | sort | uniq -c\necho \"=== distinct rStyle values ===\"\ngrep -o 'w:rStyle w:val=\"[^\"]*\"' \"$D\" | sort | uniq -c\necho \"=== distinct sz values in document ===\"\ngrep -o 'w:sz w:val=\"[^\"]*\"' \"$D\" | sort | uniq -c\necho \"=== distinct numId refs ===\"\ngrep -o 'w:numId w:val=\"[^\"]*\"' \"$D\" | sort | uniq -c",
+      "description": "Map distinct structural patterns in resume body"
+    },
+    "timestamp": "2026-06-18T09:41:06.570Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/pretty/ref-resume_word_document.xml.txt",
+      "offset": 2,
+      "limit": 360
+    },
+    "timestamp": "2026-06-18T09:41:26.571Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/pretty/ref-resume_word_document.xml.txt",
+      "offset": 357,
+      "limit": 340
+    },
+    "timestamp": "2026-06-18T09:42:05.417Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\nmkdir -p src profiles tests\ncat > package.json <<'EOF'\n{\n  \"name\": \"docx-export\",\n  \"version\": \"0.1.0\",\n  \"type\": \"module\",\n  \"private\": true,\n  \"description\": \"Template-surgery md->docx exporter for Nick's resumes and cover letters\",\n  \"module\": \"src/export.ts\"\n}\nEOF\nbun add fflate 2>&1 | tail -5\necho \"--- installed ---\"; ls node_modules/fflate >/dev/null 2>&1 && echo \"fflate OK\"",
+      "description": "Init project and install fflate"
+    },
+    "timestamp": "2026-06-18T09:42:42.976Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/ooxml.ts",
+      "content": "// OOXML / docx low-level helpers for template-surgery export.\n// A .docx is a zip. We read every entry, regenerate ONLY word/document.xml,\n// and rewrite the zip with every other part byte-identical. That makes the\n// output's fonts, ligatures, spacing, page setup, numbering, headers/footers\n// and theme identical to the template by construction.\n\nimport { unzipSync, zipSync } from \"fflate\";\n\nexport type Entries = Record<string, Uint8Array>;\n\nexport function readDocx(path: string): Entries {\n  const buf = require(\"fs\").readFileSync(path);\n  return unzipSync(new Uint8Array(buf));\n}\n\nexport function writeDocx(path: string, entries: Entries): void {\n  // Keep deflate; docx has no stored-mimetype-first requirement (unlike ODF/epub).\n  const out = zipSync(entries, { level: 6 });\n  require(\"fs\").writeFileSync(path, out);\n}\n\nconst dec = new TextDecoder();\nconst enc = new TextEncoder();\n\nexport function partText(entries: Entries, name: string): string {\n  const e = entries[name];\n  if (!e) throw new Error(`missing part: ${name}`);\n  return dec.decode(e);\n}\n\nexport function setPart(entries: Entries, name: string, text: string): void {\n  entries[name] = enc.encode(text);\n}\n\n// XML escape for text nodes / attribute values.\nexport function xmlEscape(s: string): string {\n  return s\n    .replace(/&/g, \"&amp;\")\n    .replace(/</g, \"&lt;\")\n    .replace(/>/g, \"&gt;\");\n}\n\n// ---- Lightweight structural parsing (w:p never nests; resume has no tables) ----\n\nexport interface Run {\n  rPrXml: string; // inner XML of <w:rPr>...</w:rPr> (\"\" if none)\n  text: string; // concatenated decoded text from <w:t>\n  isBreak?: boolean; // run contained a <w:br/>\n  inHyperlink?: { rid?: string };\n}\n\nexport interface Para {\n  raw: string; // full <w:p ...>...</w:p>\n  pPrXml: string; // inner XML of <w:pPr> (\"\" if none)\n  pStyle?: string;\n  numId?: string;\n  ilvl?: string;\n  jc?: string;\n  text: string; // concatenated visible text\n  runs: Run[];\n  hasSectPr: boolean;\n}\n\nfunction attr(xml: string, tag: string, name = \"w:val\"): string | undefined {\n  const m = xml.match(new RegExp(`<${tag}\\\\b[^>]*\\\\b${name}=\"([^\"]*)\"`));\n  return m ? m[1] : undefined;\n}\n\nfunction inner(xml: string, tag: string): string {\n  // inner content of first <tag ...>...</tag>; \"\" if self-closing or absent.\n  const open = xml.match(new RegExp(`<${tag}\\\\b[^>]*?>`));\n  if (!open) return \"\";\n  if (open[0].endsWith(\"/>\")) return \"\";\n  const start = (open.index ?? 0) + open[0].length;\n  const close = xml.indexOf(`</${tag}>`, start);\n  if (close < 0) return \"\";\n  return xml.slice(start, close);\n}\n\nexport function getBody(documentXml: string): string {\n  return inner(documentXml, \"w:body\");\n}\n\nexport function parseParagraphs(documentXml: string): Para[] {\n  const body = getBody(documentXml);\n  const paras: Para[] = [];\n  const re = /<w:p\\b[^>]*>[\\s\\S]*?<\\/w:p>/g;\n  let m: RegExpExecArray | null;\n  while ((m = re.exec(body))) {\n    const raw = m[0];\n    const pPrXml = inner(raw, \"w:pPr\");\n    const numPr = inner(pPrXml, \"w:numPr\");\n    const runs: Run[] = [];\n    // walk runs in order\n    const runRe = /<w:r\\b[^>]*>[\\s\\S]*?<\\/w:r>/g;\n    let rm: RegExpExecArray | null;\n    while ((rm = runRe.exec(raw))) {\n      const rraw = rm[0];\n      const rPrXml = inner(rraw, \"w:rPr\");\n      // concat all <w:t ...>text</w:t>\n      let text = \"\";\n      const tRe = /<w:t\\b[^>]*>([\\s\\S]*?)<\\/w:t>/g;\n      let tm: RegExpExecArray | null;\n      while ((tm = tRe.exec(rraw))) text += decodeEntities(tm[1]);\n      const isBreak = /<w:br\\b/.test(rraw);\n      runs.push({ rPrXml, text, isBreak });\n    }\n    let visible = runs.map((r) => r.text).join(\"\");\n    paras.push({\n      raw,\n      pPrXml,\n      pStyle: attr(pPrXml, \"w:pStyle\"),\n      numId: numPr ? attr(numPr, \"w:numId\") : undefined,\n      ilvl: numPr ? attr(numPr, \"w:ilvl\") : undefined,\n      jc: attr(pPrXml, \"w:jc\"),\n      text: visible,\n      runs,\n      hasSectPr: /<w:sectPr\\b/.test(pPrXml),\n    });\n  }\n  return paras;\n}\n\nfunction decodeEntities(s: string): string {\n  return s\n    .replace(/&lt;/g, \"<\")\n    .replace(/&gt;/g, \">\")\n    .replace(/&quot;/g, '\"')\n    .replace(/&apos;/g, \"'\")\n    .replace(/&amp;/g, \"&\");\n}\n\n// Compact one-line summary of a run's rPr for human/agent inspection.\nexport function rPrSummary(rPrXml: string): string {\n  if (!rPrXml.trim()) return \"(default)\";\n  const bits: string[] = [];\n  const rStyle = attr(rPrXml, \"w:rStyle\");\n  if (rStyle) bits.push(`rStyle=${rStyle}`);\n  const font =\n    attr(rPrXml, \"w:rFonts\", \"w:ascii\") ??\n    attr(rPrXml, \"w:rFonts\", \"w:asciiTheme\");\n  if (font) bits.push(`font=${font}`);\n  const sz = attr(rPrXml, \"w:sz\");\n  if (sz) bits.push(`sz=${sz}`);\n  if (/<w:b\\/>|<w:b\\s/.test(rPrXml) && !/<w:b\\s+w:val=\"0\"/.test(rPrXml))\n    bits.push(\"b\");\n  if (/<w:b\\s+w:val=\"0\"/.test(rPrXml)) bits.push(\"b=0\");\n  if (/<w:i\\/>|<w:i\\s/.test(rPrXml) && !/<w:i\\s+w:val=\"0\"/.test(rPrXml))\n    bits.push(\"i\");\n  if (/<w:u\\b/.test(rPrXml)) bits.push(`u=${attr(rPrXml, \"w:u\") ?? \"single\"}`);\n  const color = attr(rPrXml, \"w:color\");\n  if (color && color !== \"auto\") bits.push(`color=${color}`);\n  return bits.join(\" \") || \"(default)\";\n}\n\nexport function pPrSummary(p: Para): string {\n  const bits: string[] = [];\n  if (p.pStyle) bits.push(`pStyle=${p.pStyle}`);\n  if (p.numId) bits.push(`numId=${p.numId}/il${p.ilvl ?? \"0\"}`);\n  if (p.jc) bits.push(`jc=${p.jc}`);\n  const spacing = inner(p.pPrXml, \"w:spacing\") === \"\" ? p.pPrXml.match(/<w:spacing\\b[^>]*\\/?>/)?.[0] : undefined;\n  const sp = p.pPrXml.match(/<w:spacing\\b[^>]*\\/?>/);\n  if (sp) bits.push(sp[0].replace(/<w:|\\/>|w:/g, \"\").trim());\n  const ind = p.pPrXml.match(/<w:ind\\b[^>]*\\/?>/);\n  if (ind) bits.push(ind[0].replace(/<w:|\\/>|w:/g, \"\").trim());\n  if (p.hasSectPr) bits.push(\"SECTPR\");\n  return bits.join(\"  \");\n}\n\nexport { attr, inner };\n"
+    },
+    "timestamp": "2026-06-18T09:43:22.123Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/inspect.ts",
+      "content": "// inspect.ts — dump the exact style skeleton of a .docx, plus the\n// global formatting facts that drive visual fidelity (page setup, default\n// font, ligature setting). Used as ground truth for the exporter and as the\n// verifier's parser.\n//\n// Usage: bun src/inspect.ts <file.docx> [--json]\n\nimport {\n  readDocx,\n  partText,\n  parseParagraphs,\n  pPrSummary,\n  rPrSummary,\n  attr,\n} from \"./ooxml.ts\";\n\nconst path = process.argv[2];\nconst asJson = process.argv.includes(\"--json\");\nif (!path) {\n  console.error(\"usage: bun src/inspect.ts <file.docx> [--json]\");\n  process.exit(1);\n}\n\nconst entries = readDocx(path);\nconst doc = partText(entries, \"word/document.xml\");\nconst styles = entries[\"word/styles.xml\"]\n  ? partText(entries, \"word/styles.xml\")\n  : \"\";\nconst settings = entries[\"word/settings.xml\"]\n  ? partText(entries, \"word/settings.xml\")\n  : \"\";\n\n// ---- Global facts ----\nfunction firstMatch(s: string, re: RegExp): string | undefined {\n  const m = s.match(re);\n  return m ? m[0] : undefined;\n}\nconst pgSz = firstMatch(doc, /<w:pgSz\\b[^>]*\\/?>/);\nconst pgMar = firstMatch(doc, /<w:pgMar\\b[^>]*\\/?>/);\nconst sectTypes = [...doc.matchAll(/<w:type\\s+w:val=\"([^\"]*)\"/g)].map(\n  (m) => m[1]\n);\nconst cols = [...doc.matchAll(/<w:cols\\b[^>]*\\/?>/g)].map((m) => m[0]);\nconst ligatures = firstMatch(styles, /<w14:ligatures\\b[^>]*\\/?>/);\nconst docDefaultsRpr = (() => {\n  const m = styles.match(/<w:rPrDefault>[\\s\\S]*?<\\/w:rPrDefault>/);\n  return m ? m[0] : undefined;\n})();\nconst defSz = docDefaultsRpr ? attr(docDefaultsRpr, \"w:sz\") : undefined;\nconst defKern = docDefaultsRpr ? attr(docDefaultsRpr, \"w:kern\") : undefined;\nconst themeFontMinor = (() => {\n  const theme = entries[\"word/theme/theme1.xml\"]\n    ? partText(entries, \"word/theme/theme1.xml\")\n    : \"\";\n  const m = theme.match(/<a:minorFont>[\\s\\S]*?<a:latin\\s+typeface=\"([^\"]*)\"/);\n  return m ? m[1] : undefined;\n})();\n\nconst paras = parseParagraphs(doc);\n\nif (asJson) {\n  console.log(\n    JSON.stringify(\n      {\n        parts: Object.keys(entries).sort(),\n        page: { pgSz, pgMar, sectTypes, cols },\n        defaults: { defSz, defKern, ligatures, themeFontMinor },\n        paragraphs: paras.map((p, i) => ({\n          i,\n          pStyle: p.pStyle,\n          numId: p.numId,\n          jc: p.jc,\n          hasSectPr: p.hasSectPr,\n          summary: pPrSummary(p),\n          runs: p.runs.map((r) => ({\n            rpr: rPrSummary(r.rPrXml),\n            text: r.text,\n          })),\n          text: p.text,\n        })),\n      },\n      null,\n      2\n    )\n  );\n} else {\n  console.log(`FILE: ${path}`);\n  console.log(`PARTS: ${Object.keys(entries).length}`);\n  console.log(`PAGE:  ${pgSz}  ${pgMar}`);\n  console.log(`SECTS: types=[${sectTypes.join(\",\")}]  cols=${cols.length}`);\n  console.log(\n    `DEFAULTS: themeMinorFont=${themeFontMinor} defSz=${defSz} kern=${defKern}`\n  );\n  console.log(`LIGATURES: ${ligatures ?? \"(none set)\"}`);\n  console.log(`PARAGRAPHS: ${paras.length}`);\n  console.log(\"─\".repeat(100));\n  paras.forEach((p, i) => {\n    const head = `${String(i).padStart(3)} │ ${pPrSummary(p) || \"(plain)\"}`;\n    console.log(head);\n    // dominant run summary + text preview\n    const domRpr =\n      p.runs.find((r) => r.text.trim())?.rPrXml ?? p.runs[0]?.rPrXml ?? \"\";\n    const preview = p.text.length > 90 ? p.text.slice(0, 90) + \"…\" : p.text;\n    console.log(`    │   run: ${rPrSummary(domRpr)}`);\n    if (preview.trim()) console.log(`    │   text: \"${preview}\"`);\n    // show distinct run styles if mixed\n    const styleSet = new Set(\n      p.runs.filter((r) => r.text.trim()).map((r) => rPrSummary(r.rPrXml))\n    );\n    if (styleSet.size > 1)\n      console.log(`    │   mixed runs: ${[...styleSet].join(\" | \")}`);\n  });\n}\n"
+    },
+    "timestamp": "2026-06-18T09:43:45.134Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\necho \"############ COVER LETTER ############\"\nbun src/inspect.ts \".work/ref-cover.docx\" 2>&1 | head -60\necho \"\"\necho \"############ RESUME (global facts only) ############\"\nbun src/inspect.ts \".work/ref-resume.docx\" 2>&1 | head -8",
+      "description": "Run inspector on both originals"
+    },
+    "timestamp": "2026-06-18T09:43:50.671Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\nbun src/inspect.ts \".work/ref-resume.docx\" > .work/resume-skeleton.txt 2>&1\nwc -l .work/resume-skeleton.txt\nsed -n '8,120p' .work/resume-skeleton.txt",
+      "description": "Dump full resume skeleton, show first part"
+    },
+    "timestamp": "2026-06-18T09:44:04.938Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\nsed -n '120,194p' .work/resume-skeleton.txt",
+      "description": "Show resume skeleton tail"
+    },
+    "timestamp": "2026-06-18T09:45:23.921Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\n# Canonical style-source templates (copied originals; body gets replaced at export time)\ncp \".work/ref-resume.docx\" \"profiles/resume.template.docx\"\ncp \".work/ref-cover.docx\"  \"profiles/coverletter.template.docx\"\nls -la profiles/\necho \"--- sanity: templates re-zippable losslessly? ---\"\nbun -e '\nimport {readDocx, writeDocx, readDocx as r} from \"./src/ooxml.ts\";\nfor (const t of [\"resume\",\"coverletter\"]) {\n  const e = readDocx(`profiles/${t}.template.docx`);\n  writeDocx(`.work/roundtrip-${t}.docx`, e);\n  const e2 = readDocx(`.work/roundtrip-${t}.docx`);\n  const ok = Object.keys(e).length === Object.keys(e2).length;\n  console.log(t, \"parts\", Object.keys(e).length, \"roundtrip parts\", Object.keys(e2).length, ok?\"OK\":\"MISMATCH\");\n}\n'",
+      "description": "Stage templates and verify lossless zip roundtrip"
+    },
+    "timestamp": "2026-06-18T09:46:06.032Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/build.ts",
+      "content": "// build.ts — paragraph/run construction helpers shared by all exporters.\n// Every property block (pPr inner, rPr inner) is captured verbatim from the\n// template, so output formatting is identical to the original by construction.\n\nimport { xmlEscape, parseParagraphs, type Para } from \"./ooxml.ts\";\n\nexport interface RunSpec {\n  rPrInner: string; // inner XML of <w:rPr> to clone\n  text: string;\n  preserveSpace?: boolean; // emit xml:space=\"preserve\"\n  breakBefore?: boolean; // emit <w:br/> before the text (within same run grouping)\n  hyperlinkRid?: string; // wrap run in <w:hyperlink r:id=\"...\">\n}\n\nexport function makeRun(spec: RunSpec): string {\n  const rpr = spec.rPrInner.trim() ? `<w:rPr>${spec.rPrInner}</w:rPr>` : \"\";\n  const space =\n    spec.preserveSpace || /^\\s|\\s$/.test(spec.text) ? ' xml:space=\"preserve\"' : \"\";\n  const br = spec.breakBefore ? \"<w:br/>\" : \"\";\n  const t = spec.text === \"\" && !spec.breakBefore ? \"\" : `<w:t${space}>${xmlEscape(spec.text)}</w:t>`;\n  const inner = `${rpr}${br}${t}`;\n  const run = `<w:r>${inner}</w:r>`;\n  if (spec.hyperlinkRid) {\n    return `<w:hyperlink r:id=\"${spec.hyperlinkRid}\" w:history=\"1\">${run}</w:hyperlink>`;\n  }\n  return run;\n}\n\nexport function makePara(pPrInner: string, runs: RunSpec[]): string {\n  const ppr = pPrInner.trim() ? `<w:pPr>${pPrInner}</w:pPr>` : \"\";\n  const body = runs.map(makeRun).join(\"\");\n  return `<w:p>${ppr}${body}</w:p>`;\n}\n\n// Replace the <w:body>…</w:body> inner content while preserving the body's\n// trailing <w:sectPr> (the document-final section properties) unless the\n// generated content supplies its own.\nexport function replaceBody(\n  documentXml: string,\n  newBodyInner: string\n): string {\n  return documentXml.replace(\n    /(<w:body>)[\\s\\S]*(<\\/w:body>)/,\n    (_m, open, close) => `${open}${newBodyInner}${close}`\n  );\n}\n\n// Extract the document-final sectPr (the one that is a direct child of body,\n// i.e. the last top-level <w:sectPr> not inside a <w:p>).\nexport function finalSectPr(documentXml: string): string {\n  // The body-level sectPr is the last <w:sectPr>…</w:sectPr> that appears\n  // after the last </w:p>.\n  const lastP = documentXml.lastIndexOf(\"</w:p>\");\n  const tail = lastP >= 0 ? documentXml.slice(lastP) : documentXml;\n  const m = tail.match(/<w:sectPr\\b[\\s\\S]*?<\\/w:sectPr>/);\n  return m ? m[0] : \"\";\n}\n\n// Capture the pPr inner XML of a representative paragraph matching a predicate.\nexport function findArchetype(\n  paras: Para[],\n  pred: (p: Para) => boolean\n): Para | undefined {\n  return paras.find(pred);\n}\n\n// Pull the dominant run's rPr inner from a paragraph (first run with text,\n// else first run).\nexport function dominantRpr(p: Para): string {\n  const r = p.runs.find((x) => x.text.trim()) ?? p.runs[0];\n  return r ? r.rPrXml : \"\";\n}\n\nexport { parseParagraphs };\n"
+    },
+    "timestamp": "2026-06-18T09:49:28.593Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/inline.ts",
+      "content": "// inline.ts — minimal, dependency-free inline markdown → run segments.\n// Supports **bold**, *italic* / _italic_, and literal text. Markers are only\n// honoured when balanced; otherwise the characters are treated literally so we\n// never corrupt prose containing stray asterisks.\n\nexport interface Seg {\n  text: string;\n  bold: boolean;\n  italic: boolean;\n}\n\nexport function parseInline(src: string): Seg[] {\n  const segs: Seg[] = [];\n  let i = 0;\n  let bold = false;\n  let italic = false;\n  let buf = \"\";\n  const push = () => {\n    if (buf) segs.push({ text: buf, bold, italic });\n    buf = \"\";\n  };\n  while (i < src.length) {\n    const two = src.slice(i, i + 2);\n    const ch = src[i];\n    if (two === \"**\" && hasCloser(src, i + 2, \"**\")) {\n      push();\n      bold = !bold;\n      i += 2;\n      continue;\n    }\n    if ((ch === \"*\" || ch === \"_\") && hasCloser(src, i + 1, ch)) {\n      push();\n      italic = !italic;\n      i += 1;\n      continue;\n    }\n    buf += ch;\n    i += 1;\n  }\n  push();\n  return segs.length ? segs : [{ text: src, bold: false, italic: false }];\n}\n\nfunction hasCloser(src: string, from: number, marker: string): boolean {\n  return src.indexOf(marker, from) !== -1;\n}\n\n// Merge bold/italic flags into a base rPr inner XML by appending toggles.\nexport function applyToggles(baseRpr: string, seg: Seg): string {\n  let rpr = baseRpr;\n  // Insert toggles right after rStyle/rFonts if present, else prepend.\n  const extra =\n    (seg.bold ? \"<w:b/><w:bCs/>\" : \"\") + (seg.italic ? \"<w:i/><w:iCs/>\" : \"\");\n  if (!extra) return rpr;\n  // Avoid duplicating an existing <w:b/> etc.\n  let add = extra;\n  if (/<w:b\\/>|<w:b\\s/.test(rpr)) add = add.replace(\"<w:b/><w:bCs/>\", \"\");\n  if (/<w:i\\/>|<w:i\\s/.test(rpr)) add = add.replace(\"<w:i/><w:iCs/>\", \"\");\n  return rpr + add;\n}\n"
+    },
+    "timestamp": "2026-06-18T09:49:48.025Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/coverletter.ts",
+      "content": "// coverletter.ts — regenerate a cover letter's body from markdown using the\n// template's exact paragraph/run formatting.\n//\n// Markdown contract (a .md file):\n//   - Paragraphs separated by blank lines.\n//   - A single newline inside a paragraph becomes a line break (<w:br/>) — used\n//     for the \"Yours sincerely,\\nNicholas Wood\" sign-off.\n//   - Inline **bold** and *italic* supported.\n//   - Leading vertical spacers are taken from the template (not the markdown).\n\nimport { partText, setPart, parseParagraphs, type Para } from \"./ooxml.ts\";\nimport { makePara, replaceBody, type RunSpec } from \"./build.ts\";\nimport { parseInline, applyToggles } from \"./inline.ts\";\nimport type { Entries } from \"./ooxml.ts\";\n\nexport interface CoverArchetypes {\n  spacerPpr: string; // pPr inner of a leading empty paragraph\n  bodyPpr: string; // pPr inner of a body paragraph\n  bodyRpr: string; // rPr inner of a body run\n  leadingSpacers: number; // count of leading empty paragraphs in template\n  finalSectPr: string; // body-final sectPr (empty for cover letter — uses default)\n}\n\nexport function captureCoverArchetypes(entries: Entries): CoverArchetypes {\n  const doc = partText(entries, \"word/document.xml\");\n  const paras = parseParagraphs(doc);\n  // Leading empty paragraphs = spacers.\n  let leadingSpacers = 0;\n  while (leadingSpacers < paras.length && !paras[leadingSpacers].text.trim())\n    leadingSpacers++;\n  const firstBody = paras.find((p) => p.text.trim());\n  if (!firstBody) throw new Error(\"cover template has no body paragraph\");\n  const bodyRun = firstBody.runs.find((r) => r.text.trim()) ?? firstBody.runs[0];\n  const spacerPara = paras[0];\n  // body-final sectPr lives inside the LAST paragraph's pPr or at body end\n  const last = paras[paras.length - 1];\n  const sectMatch = last.pPrXml.match(/<w:sectPr\\b[\\s\\S]*?<\\/w:sectPr>/);\n  // For the cover letter the sectPr is a direct child of body (self-contained).\n  const bodySect = doc.match(/<\\/w:p>\\s*(<w:sectPr\\b[\\s\\S]*?<\\/w:sectPr>)/);\n  return {\n    spacerPpr: spacerPara.pPrXml,\n    bodyPpr: firstBody.pPrXml,\n    bodyRpr: bodyRun?.rPrXml ?? \"\",\n    leadingSpacers,\n    finalSectPr: (sectMatch?.[0] ?? bodySect?.[1] ?? \"\"),\n  };\n}\n\n// Split markdown into content paragraphs (blocks separated by blank lines).\nexport function splitParagraphs(md: string): string[] {\n  const norm = md.replace(/\\r\\n?/g, \"\\n\").trim();\n  // Drop an optional leading markdown H1 title and any HTML comments.\n  const cleaned = norm\n    .replace(/<!--[\\s\\S]*?-->/g, \"\")\n    .replace(/^#\\s.*$/m, \"\")\n    .trim();\n  return cleaned\n    .split(/\\n\\s*\\n/)\n    .map((b) => b.trim())\n    .filter((b) => b.length > 0);\n}\n\nexport function exportCoverLetter(entries: Entries, md: string): Entries {\n  const a = captureCoverArchetypes(entries);\n  const blocks = splitParagraphs(md);\n\n  const out: string[] = [];\n  // Leading spacers, verbatim from template formatting.\n  for (let i = 0; i < a.leadingSpacers; i++) out.push(makePara(a.spacerPpr, []));\n\n  for (const block of blocks) {\n    const lines = block.split(\"\\n\");\n    const runs: RunSpec[] = [];\n    lines.forEach((line, li) => {\n      const segs = parseInline(line);\n      segs.forEach((seg, si) => {\n        runs.push({\n          rPrInner: applyToggles(a.bodyRpr, seg),\n          text: seg.text,\n          breakBefore: li > 0 && si === 0, // line break between wrapped lines\n          preserveSpace: true,\n        });\n      });\n    });\n    out.push(makePara(a.bodyPpr, runs));\n  }\n\n  const sect = a.finalSectPr ? a.finalSectPr : \"\";\n  const doc = partText(entries, \"word/document.xml\");\n  const newDoc = replaceBody(doc, out.join(\"\") + sect);\n  setPart(entries, \"word/document.xml\", newDoc);\n  return entries;\n}\n"
+    },
+    "timestamp": "2026-06-18T09:50:06.345Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/export.ts",
+      "content": "// export.ts — CLI entry. Template-surgery md -> docx exporter.\n//\n// Usage:\n//   bun src/export.ts coverletter <input.md> <output.docx> [--template <docx>]\n//   bun src/export.ts resume      <input.md> <output.docx> [--template <docx>]\n//\n// The output reuses the template's styles, theme, fonts, settings (ligatures),\n// numbering, headers/footers and page setup byte-for-byte; only the document\n// body is regenerated from the markdown.\n\nimport { dirname, resolve } from \"path\";\nimport { fileURLToPath } from \"url\";\nimport { readDocx, writeDocx } from \"./ooxml.ts\";\nimport { exportCoverLetter } from \"./coverletter.ts\";\nimport { exportResume } from \"./resume.ts\";\n\nconst HERE = dirname(fileURLToPath(import.meta.url));\nconst ROOT = resolve(HERE, \"..\");\n\nfunction arg(name: string): string | undefined {\n  const i = process.argv.indexOf(name);\n  return i >= 0 ? process.argv[i + 1] : undefined;\n}\n\nconst type = process.argv[2];\nconst input = process.argv[3];\nconst output = process.argv[4];\n\nif (!type || !input || !output || ![\"coverletter\", \"resume\"].includes(type)) {\n  console.error(\n    \"usage: bun src/export.ts <coverletter|resume> <input.md> <output.docx> [--template <docx>]\"\n  );\n  process.exit(1);\n}\n\nconst template =\n  arg(\"--template\") ?? resolve(ROOT, \"profiles\", `${type}.template.docx`);\n\nconst md = require(\"fs\").readFileSync(resolve(input), \"utf8\");\nconst entries = readDocx(template);\n\nconst result =\n  type === \"coverletter\"\n    ? exportCoverLetter(entries, md)\n    : exportResume(entries, md);\n\nwriteDocx(resolve(output), result);\nconsole.log(`✓ wrote ${output} (from ${type} template: ${template})`);\n"
+    },
+    "timestamp": "2026-06-18T09:50:17.866Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/resume.ts",
+      "content": "// resume.ts — placeholder; full implementation follows after cover-letter path\n// is proven exact.\nimport type { Entries } from \"./ooxml.ts\";\nexport function exportResume(_entries: Entries, _md: string): Entries {\n  throw new Error(\"resume exporter not yet implemented\");\n}\n"
+    },
+    "timestamp": "2026-06-18T09:50:23.900Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\n# Extract original cover letter text -> markdown (paragraph per non-empty para, br for sign-off)\nbun -e '\nimport {readDocx, partText, parseParagraphs} from \"./src/ooxml.ts\";\nconst e = readDocx(\".work/ref-cover.docx\");\nconst paras = parseParagraphs(partText(e,\"word/document.xml\"));\nconst blocks:string[] = [];\nfor (const p of paras) {\n  const t = p.text.trim();\n  if (!t) continue;\n  // reconstruct line breaks: original sign-off uses <w:br/>; detect by joining runs\n  let s = \"\";\n  p.runs.forEach(r => { if (r.isBreak) s += \"\\n\"; s += r.text; });\n  blocks.push(s.trim());\n}\nrequire(\"fs\").writeFileSync(\".work/mckinsey.md\", blocks.join(\"\\n\\n\")+\"\\n\");\nconsole.log(\"wrote .work/mckinsey.md\");\n'\necho \"=== extracted markdown ===\"; cat .work/mckinsey.md\necho \"=== run exporter ===\"\nbun src/export.ts coverletter .work/mckinsey.md .work/out-cover.docx",
+      "description": "Extract McKinsey letter to md and regenerate"
+    },
+    "timestamp": "2026-06-18T09:50:31.682Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/verify.ts",
+      "content": "// verify.ts — compare two .docx files on the dimensions that determine visual\n// appearance, and report PASS/FAIL with specifics. Designed to catch exactly\n// the failures that make an export \"look different\": wrong font, size,\n// spacing, ligatures, page setup, headings, bullets/indents.\n//\n// Usage: bun src/verify.ts <expected.docx> <actual.docx> [--json]\n\nimport {\n  readDocx,\n  partText,\n  parseParagraphs,\n  pPrSummary,\n  rPrSummary,\n  attr,\n  type Para,\n} from \"./ooxml.ts\";\n\nfunction facts(path: string) {\n  const e = readDocx(path);\n  const doc = partText(e, \"word/document.xml\");\n  const styles = e[\"word/styles.xml\"] ? partText(e, \"word/styles.xml\") : \"\";\n  const m = (s: string, re: RegExp) => s.match(re)?.[0];\n  const paras = parseParagraphs(doc);\n  return {\n    entries: e,\n    parts: Object.keys(e).sort(),\n    pgSz: m(doc, /<w:pgSz\\b[^>]*\\/?>/) ?? \"\",\n    pgMar: m(doc, /<w:pgMar\\b[^>]*\\/?>/) ?? \"\",\n    ligatures: m(styles, /<w14:ligatures\\b[^>]*\\/?>/) ?? \"(none)\",\n    defSz: (() => {\n      const d = styles.match(/<w:rPrDefault>[\\s\\S]*?<\\/w:rPrDefault>/)?.[0] ?? \"\";\n      return attr(d, \"w:sz\") ?? \"\";\n    })(),\n    sectBreaks: [...doc.matchAll(/<w:type\\s+w:val=\"([^\"]*)\"/g)].map((x) => x[1]),\n    paras,\n    // normalized non-empty content paragraphs\n    content: paras\n      .filter((p) => p.text.trim())\n      .map((p) => ({\n        pPr: pPrSummary(p),\n        text: p.text.replace(/\\s+/g, \" \").trim(),\n        rprs: [\n          ...new Set(p.runs.filter((r) => r.text.trim()).map((r) => rPrSummary(r.rPrXml))),\n        ].sort(),\n      })),\n  };\n}\n\nconst expPath = process.argv[2];\nconst actPath = process.argv[3];\nconst asJson = process.argv.includes(\"--json\");\nif (!expPath || !actPath) {\n  console.error(\"usage: bun src/verify.ts <expected.docx> <actual.docx> [--json]\");\n  process.exit(1);\n}\n\nconst E = facts(expPath);\nconst A = facts(actPath);\n\ninterface Issue {\n  level: \"FAIL\" | \"WARN\";\n  dim: string;\n  detail: string;\n}\nconst issues: Issue[] = [];\n\nfunction eq(dim: string, a: string, b: string, level: \"FAIL\" | \"WARN\" = \"FAIL\") {\n  if (a !== b) issues.push({ level, dim, detail: `expected ${a || \"(empty)\"} | actual ${b || \"(empty)\"}` });\n}\n\n// Global invariants\neq(\"page-size\", E.pgSz, A.pgSz);\neq(\"page-margins\", E.pgMar, A.pgMar);\neq(\"ligatures\", E.ligatures, A.ligatures);\neq(\"default-size\", E.defSz, A.defSz);\n// Parts: every template part must survive (actual must be superset of expected core parts)\nconst styleParts = E.parts.filter((p) => /styles|theme|fontTable|settings|numbering|header|footer/.test(p));\nfor (const p of styleParts)\n  if (!A.parts.includes(p)) issues.push({ level: \"FAIL\", dim: \"missing-part\", detail: p });\n\n// Content alignment (text + per-paragraph formatting)\nconst n = Math.max(E.content.length, A.content.length);\nif (E.content.length !== A.content.length)\n  issues.push({\n    level: \"WARN\",\n    dim: \"paragraph-count\",\n    detail: `expected ${E.content.length} content paras | actual ${A.content.length}`,\n  });\nfor (let i = 0; i < n; i++) {\n  const e = E.content[i];\n  const a = A.content[i];\n  if (!e || !a) continue;\n  if (e.text !== a.text)\n    issues.push({\n      level: \"FAIL\",\n      dim: `text[${i}]`,\n      detail: `\\n   exp: ${e.text.slice(0, 80)}\\n   act: ${a.text.slice(0, 80)}`,\n    });\n  if (e.pPr !== a.pPr)\n    issues.push({ level: \"FAIL\", dim: `pPr[${i}]`, detail: `exp {${e.pPr}} | act {${a.pPr}}` });\n  if (JSON.stringify(e.rprs) !== JSON.stringify(a.rprs))\n    issues.push({\n      level: \"FAIL\",\n      dim: `rPr[${i}]`,\n      detail: `exp [${e.rprs.join(\"; \")}] | act [${a.rprs.join(\"; \")}]`,\n    });\n}\n\nconst fails = issues.filter((i) => i.level === \"FAIL\");\nconst warns = issues.filter((i) => i.level === \"WARN\");\n\nif (asJson) {\n  console.log(JSON.stringify({ pass: fails.length === 0, fails, warns }, null, 2));\n} else {\n  console.log(`VERIFY: ${expPath}  vs  ${actPath}`);\n  console.log(\n    `  page=${A.pgSz ? \"ok\" : \"?\"} ligatures=${A.ligatures} defSz=${A.defSz} sects=[${A.sectBreaks.join(\",\")}]`\n  );\n  if (!issues.length) console.log(\"  ✓ no differences on tracked dimensions\");\n  for (const it of issues) console.log(`  ${it.level} ${it.dim}: ${it.detail}`);\n  console.log(fails.length === 0 ? \"RESULT: PASS\" : `RESULT: FAIL (${fails.length} fails, ${warns.length} warns)`);\n}\nprocess.exit(fails.length === 0 ? 0 : 1);\n"
+    },
+    "timestamp": "2026-06-18T09:50:58.956Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\nbun src/verify.ts .work/ref-cover.docx .work/out-cover.docx",
+      "description": "Verify regenerated cover letter vs original"
+    },
+    "timestamp": "2026-06-18T09:51:02.108Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\nbun -e '\nimport {readDocx, partText} from \"./src/ooxml.ts\";\nconst e = readDocx(\".work/out-cover.docx\");\nconst doc = partText(e,\"word/document.xml\");\nconsole.log(\"sectPr count:\", (doc.match(/<w:sectPr\\b/g)||[]).length);\nconsole.log(\"paragraphs:\", (doc.match(/<w:p\\b/g)||[]).length);\nconsole.log(\"proofErr present:\", /proofErr/.test(doc));\nconsole.log(\"body tail:\", doc.slice(-260));\n'\necho \"=== XML well-formedness (python expat via node? use bun XML) ===\"\nbun -e '\nimport {readDocx, partText} from \"./src/ooxml.ts\";\nconst e = readDocx(\".work/out-cover.docx\");\n// crude well-formedness: balanced w:p and w:r and no raw & \nconst doc = partText(e,\"word/document.xml\");\nconst opens=(doc.match(/<w:p\\b/g)||[]).length, closes=(doc.match(/<\\/w:p>/g)||[]).length;\nconst ro=(doc.match(/<w:r\\b/g)||[]).length, rc=(doc.match(/<\\/w:r>/g)||[]).length;\nconst badAmp = /&(?!amp;|lt;|gt;|quot;|apos;|#)/.test(doc);\nconsole.log(\"w:p balanced:\", opens===closes, opens, closes);\nconsole.log(\"w:r balanced:\", ro===rc, ro, rc);\nconsole.log(\"unescaped ampersand:\", badAmp);\n'",
+      "description": "Structural sanity of generated cover letter"
+    },
+    "timestamp": "2026-06-18T09:51:16.885Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\nbun -e '\nimport {readDocx, partText} from \"./src/ooxml.ts\";\nconst doc = partText(readDocx(\".work/ref-resume.docx\"),\"word/document.xml\");\nconst sects = [...doc.matchAll(/<w:sectPr\\b[\\s\\S]*?<\\/w:sectPr>/g)].map(m=>m[0]);\nsects.forEach((s,i)=>{\n  const insideP = (()=>{ const idx=doc.indexOf(s); const beforeClose=doc.lastIndexOf(\"</w:p>\",idx); const beforeOpenP=doc.lastIndexOf(\"<w:p \",idx); return beforeOpenP>beforeClose; })();\n  console.log(`\\n=== sectPr #${i} (${insideP?\"inside paragraph\":\"BODY-FINAL\"}) ===`);\n  console.log(s.replace(/></g,\">\\n  <\"));\n});\n'",
+      "description": "Extract and classify all resume sectPr blocks"
+    },
+    "timestamp": "2026-06-18T09:52:15.717Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/pretty/ref-resume_word_header1.xml.txt"
+    },
+    "timestamp": "2026-06-18T09:53:03.696Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\nbun -e '\nimport {readDocx, partText} from \"./src/ooxml.ts\";\nconst num = partText(readDocx(\".work/ref-resume.docx\"),\"word/numbering.xml\");\n// map num -> abstractNum\nconst map = [...num.matchAll(/<w:num w:numId=\"(\\d+)\"[^>]*>\\s*<w:abstractNumId w:val=\"(\\d+)\"/g)].map(m=>({numId:m[1],abs:m[2]}));\nconsole.log(\"numId -> abstractNumId:\", JSON.stringify(map));\n// for each abstractNum, get lvl0 numFmt + lvlText\nconst absBlocks = [...num.matchAll(/<w:abstractNum w:abstractNumId=\"(\\d+)\"[\\s\\S]*?<\\/w:abstractNum>/g)];\nfor (const b of absBlocks) {\n  const id=b[1]; const lvl0=b[0].match(/<w:lvl w:ilvl=\"0\"[\\s\\S]*?<\\/w:lvl>/)?.[0]||\"\";\n  const fmt=lvl0.match(/<w:numFmt w:val=\"([^\"]*)\"/)?.[1];\n  const txt=lvl0.match(/<w:lvlText w:val=\"([^\"]*)\"/)?.[1];\n  const font=lvl0.match(/<w:rFonts[^>]*w:ascii=\"([^\"]*)\"/)?.[1];\n  console.log(`abs ${id}: fmt=${fmt} lvlText=${JSON.stringify(txt)} font=${font}`);\n}\n'",
+      "description": "Inspect numbering.xml bullet definitions"
+    },
+    "timestamp": "2026-06-18T09:53:34.719Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/resume.ts",
+      "content": "// resume.ts — regenerate a resume's body from markdown using the template's\n// exact archetypes (captured from the template at runtime) and a clean\n// 2-section page model that preserves the header/footer + titlePg behaviour.\n//\n// MARKDOWN CONTRACT\n//   # Name\n//   <contact line>            (one or more lines; ' | ' splits into items)\n//                             (blank line ends the contact block)\n//   **Bold headline summary.**\n//   Plain summary paragraph.\n//   ## Section Header\n//   - *Label:* skill text     (bullets under \"Key Skills\" render italic w/ label)\n//   ### Org | Role | Dates | Location   (bold entry header)\n//   Intro sentence            (plain line directly under a ### entry)\n//   - Bullet                  (job bullets)\n//   Plain line directly under ## (no ### yet) -> NoSpacing body line (Education etc.)\n//   **Bold** - rest           -> NoSpacing line with bold lead (degree line)\n//\n// Inline **bold** / *italic* supported everywhere.\n\nimport {\n  partText,\n  setPart,\n  parseParagraphs,\n  attr,\n  type Entries,\n  type Para,\n} from \"./ooxml.ts\";\nimport { makePara, replaceBody, type RunSpec } from \"./build.ts\";\nimport { parseInline, applyToggles } from \"./inline.ts\";\n\n// ---------- archetype capture ----------\ninterface ResumeArch {\n  namePpr: string;\n  nameRpr: string;\n  contactPpr: string; // Title centered pPr WITHOUT sectPr\n  contactPlainRpr: string; // phone etc.\n  contactLinkRpr: string; // hyperlink run rPr\n  summaryPpr: string; // Heading2 ind\n  summaryBoldRpr: string; // bold (no b=0)\n  summaryPlainRpr: string; // b=0\n  sectionHeaderPpr: string; // Heading2\n  sectionHeaderRpr: string; // u=single\n  skillPpr: string; // Heading2 numId=1\n  skillRpr: string; // italic\n  jobHeaderPpr: string; // plain spacing after=0\n  jobHeaderRpr: string; // bold\n  jobIntroPpr: string; // plain\n  jobIntroRpr: string; // default\n  bulletPpr: string; // ListParagraph numId\n  bulletRpr: string; // default\n  noSpacingPpr: string; // NoSpacing\n  noSpacingBoldRpr: string; // bold (cert/degree lead)\n  noSpacingPlainRpr: string;\n  sect0: string; // contact-block sectPr (header/footer/titlePg) verbatim\n  sectFinal: string; // body-final sectPr (no header refs, no titlePg)\n}\n\nfunction dom(p: Para): string {\n  return (p.runs.find((r) => r.text.trim()) ?? p.runs[0])?.rPrXml ?? \"\";\n}\nfunction pprNoSect(p: Para): string {\n  return p.pPrXml.replace(/<w:sectPr\\b[\\s\\S]*?<\\/w:sectPr>/, \"\");\n}\nconst has = (s: string, re: RegExp) => re.test(s);\n\nexport function captureResumeArch(entries: Entries): ResumeArch {\n  const doc = partText(entries, \"word/document.xml\");\n  const paras = parseParagraphs(doc);\n\n  const find = (pred: (p: Para) => boolean) => paras.find(pred);\n  const isTitle = (p: Para) => p.pStyle === \"Title\";\n  const isH2 = (p: Para) => p.pStyle === \"Heading2\";\n\n  const nameP = find((p) => isTitle(p) && has(dom(p), /w:sz w:val=\"36\"/))!;\n  const phoneP = find(\n    (p) => isTitle(p) && has(dom(p), /w:sz w:val=\"20\"/) && !has(dom(p), /Hyperlink/)\n  )!;\n  const linkP = find((p) => isTitle(p) && has(dom(p), /Hyperlink/))!;\n  const summaryBoldP = find(\n    (p) => isH2(p) && !p.numId && p.runs.some((r) => r.text.trim()) &&\n      !has(dom(p), /w:val=\"0\"/) && !has(dom(p), /u w:val=\"single\"/)\n  )!;\n  const summaryPlainP = find(\n    (p) => isH2(p) && !p.numId && has(dom(p), /<w:b w:val=\"0\"/) && !has(dom(p), /u w:val=\"single\"/)\n  )!;\n  const sectionHeaderP = find((p) => isH2(p) && !p.numId && has(dom(p), /u w:val=\"single\"/))!;\n  const skillP = find((p) => isH2(p) && p.numId)!;\n  const jobHeaderP = find(\n    (p) => !p.pStyle && p.runs.some((r) => r.text.trim()) && has(dom(p), /<w:b\\/>/)\n  )!;\n  const jobIntroP = find(\n    (p) => !p.pStyle && p.runs.some((r) => r.text.trim()) && !has(dom(p), /<w:b\\/>/)\n  )!;\n  const bulletP = find((p) => p.pStyle === \"ListParagraph\" && p.numId)!;\n  const noSpacingBoldP = find(\n    (p) => p.pStyle === \"NoSpacing\" && has(dom(p), /<w:b\\/>/)\n  );\n  const noSpacingPlainP = find(\n    (p) => p.pStyle === \"NoSpacing\" && p.runs.some((r) => r.text.trim()) && !has(dom(p), /<w:b\\/>/)\n  );\n\n  // section properties\n  const sectPrs = [...doc.matchAll(/<w:sectPr\\b[\\s\\S]*?<\\/w:sectPr>/g)].map((m) => m[0]);\n  const sect0 = sectPrs.find((s) => /headerReference/.test(s)) ?? sectPrs[0];\n  const sectFinal = sect0\n    .replace(/<w:headerReference\\b[^>]*\\/>/g, \"\")\n    .replace(/<w:footerReference\\b[^>]*\\/>/g, \"\")\n    .replace(/<w:titlePg\\b[^>]*\\/?>/g, \"\");\n\n  return {\n    namePpr: pprNoSect(nameP),\n    nameRpr: dom(nameP),\n    contactPpr: pprNoSect(phoneP),\n    contactPlainRpr: dom(phoneP),\n    contactLinkRpr: dom(linkP),\n    summaryPpr: pprNoSect(summaryBoldP),\n    summaryBoldRpr: dom(summaryBoldP),\n    summaryPlainRpr: dom(summaryPlainP),\n    sectionHeaderPpr: pprNoSect(sectionHeaderP),\n    sectionHeaderRpr: dom(sectionHeaderP),\n    skillPpr: pprNoSect(skillP),\n    skillRpr: dom(skillP),\n    jobHeaderPpr: pprNoSect(jobHeaderP),\n    jobHeaderRpr: dom(jobHeaderP),\n    jobIntroPpr: pprNoSect(jobIntroP),\n    jobIntroRpr: dom(jobIntroP),\n    bulletPpr: pprNoSect(bulletP),\n    bulletRpr: dom(bulletP),\n    noSpacingPpr: noSpacingBoldP ? pprNoSect(noSpacingBoldP) : pprNoSect(bulletP),\n    noSpacingBoldRpr: noSpacingBoldP ? dom(noSpacingBoldP) : \"<w:b/><w:bCs/>\",\n    noSpacingPlainRpr: noSpacingPlainP ? dom(noSpacingPlainP) : \"\",\n    sect0,\n    sectFinal,\n  };\n}\n\n// ---------- relationships (hyperlinks) ----------\nfunction addHyperlinkRel(entries: Entries, target: string): string {\n  const relsName = \"word/_rels/document.xml.rels\";\n  let rels = partText(entries, relsName);\n  const ids = [...rels.matchAll(/Id=\"rId(\\d+)\"/g)].map((m) => Number(m[1]));\n  const next = \"rId\" + (Math.max(0, ...ids) + 1);\n  const rel = `<Relationship Id=\"${next}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"${target.replace(/&/g, \"&amp;\")}\" TargetMode=\"External\"/>`;\n  rels = rels.replace(/<\\/Relationships>/, rel + \"</Relationships>\");\n  setPart(entries, relsName, rels);\n  return next;\n}\n\nfunction linkTarget(text: string): string | null {\n  const t = text.trim();\n  if (/^[\\w.+-]+@[\\w.-]+\\.\\w+$/.test(t)) return \"mailto:\" + t;\n  if (/^https?:\\/\\//.test(t)) return t;\n  if (/^www\\./.test(t) || /\\b(linkedin\\.com|github\\.com|[\\w-]+\\.(com|au|io|dev|net|org))\\b/.test(t))\n    return \"https://\" + t.replace(/^\\/+/, \"\");\n  return null; // phone / plain\n}\n\n// ---------- inline -> runs ----------\nfunction inlineRuns(baseRpr: string, text: string): RunSpec[] {\n  return parseInline(text).map((seg) => ({\n    rPrInner: applyToggles(baseRpr, seg),\n    text: seg.text,\n    preserveSpace: true,\n  }));\n}\n\n// skill bullet: \"*Label:* rest\" -> italic label + italic rest (label kept as lead-in)\nfunction skillRuns(a: ResumeArch, text: string): RunSpec[] {\n  return inlineRuns(a.skillRpr, text);\n}\n\n// ---------- main ----------\nexport function exportResume(entries: Entries, md: string): Entries {\n  const a = captureResumeArch(entries);\n  const lines = md.replace(/\\r\\n?/g, \"\\n\").replace(/<!--[\\s\\S]*?-->/g, \"\").split(\"\\n\");\n\n  const out: string[] = [];\n  let i = 0;\n\n  // ---- title + contact block ----\n  // first non-blank line must be \"# Name\"\n  while (i < lines.length && !lines[i].trim()) i++;\n  const nameLine = lines[i]?.replace(/^#\\s+/, \"\").trim() ?? \"Nicholas Wood\";\n  out.push(makePara(a.namePpr, inlineRuns(a.nameRpr, nameLine)));\n  i++;\n\n  // contact lines until blank\n  const contactItems: string[] = [];\n  while (i < lines.length && lines[i].trim()) {\n    for (const part of lines[i].split(\"|\")) {\n      const t = part.trim();\n      if (t) contactItems.push(t);\n    }\n    i++;\n  }\n  contactItems.forEach((item, idx) => {\n    const tgt = linkTarget(item);\n    const runs: RunSpec[] = tgt\n      ? [{ rPrInner: a.contactLinkRpr, text: item, hyperlinkRid: addHyperlinkRel(entries, tgt), preserveSpace: true }]\n      : inlineRuns(a.contactPlainRpr, item);\n    // last contact paragraph carries sect0\n    const ppr = idx === contactItems.length - 1 ? a.contactPpr + a.sect0 : a.contactPpr;\n    out.push(makePara(ppr, runs));\n  });\n\n  // ---- body ----\n  type Ctx = \"top\" | \"section\" | \"entry\";\n  let ctx: Ctx = \"top\";\n  let inSkills = false;\n\n  const flushBlank = () => {};\n\n  for (; i < lines.length; i++) {\n    const raw = lines[i];\n    const line = raw.trim();\n    if (!line) continue;\n\n    if (line.startsWith(\"## \")) {\n      const title = line.replace(/^##\\s+/, \"\").trim();\n      out.push(makePara(a.sectionHeaderPpr, inlineRuns(a.sectionHeaderRpr, title)));\n      inSkills = /key skills|skills/i.test(title);\n      ctx = \"section\";\n      continue;\n    }\n    if (line.startsWith(\"### \")) {\n      const title = line.replace(/^###\\s+/, \"\").trim();\n      out.push(makePara(a.jobHeaderPpr, inlineRuns(a.jobHeaderRpr, title)));\n      ctx = \"entry\";\n      continue;\n    }\n    if (line.startsWith(\"- \") || line.startsWith(\"* \")) {\n      const text = line.replace(/^[-*]\\s+/, \"\");\n      if (inSkills) {\n        out.push(makePara(a.skillPpr, skillRuns(a, text)));\n      } else {\n        out.push(makePara(a.bulletPpr, inlineRuns(a.bulletRpr, text)));\n      }\n      continue;\n    }\n    // plain paragraph\n    if (ctx === \"top\") {\n      // summary: fully-bold => bold archetype, else plain\n      const isBold = /^\\*\\*[\\s\\S]+\\*\\*$/.test(line);\n      if (isBold) {\n        const inner = line.replace(/^\\*\\*([\\s\\S]+)\\*\\*$/, \"$1\");\n        out.push(makePara(a.summaryPpr, [{ rPrInner: a.summaryBoldRpr, text: inner, preserveSpace: true }]));\n      } else {\n        out.push(makePara(a.summaryPpr, inlineRuns(a.summaryPlainRpr, line)));\n      }\n    } else if (ctx === \"entry\") {\n      out.push(makePara(a.jobIntroPpr, inlineRuns(a.jobIntroRpr, line)));\n    } else {\n      // directly under a ## section (Education / Certifications) -> NoSpacing line\n      // support \"**Bold** - rest\"\n      const m = line.match(/^\\*\\*([\\s\\S]+?)\\*\\*\\s*(.*)$/);\n      if (m) {\n        const runs: RunSpec[] = [{ rPrInner: a.noSpacingBoldRpr, text: m[1], preserveSpace: true }];\n        if (m[2]) runs.push({ rPrInner: a.noSpacingPlainRpr, text: \" \" + m[2], preserveSpace: true });\n        out.push(makePara(a.noSpacingPpr, runs));\n      } else {\n        out.push(makePara(a.noSpacingPpr, inlineRuns(a.noSpacingPlainRpr, line)));\n      }\n    }\n  }\n\n  const doc = partText(entries, \"word/document.xml\");\n  setPart(entries, \"word/document.xml\", replaceBody(doc, out.join(\"\") + a.sectFinal));\n  return entries;\n}\n"
+    },
+    "timestamp": "2026-06-18T09:55:20.413Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/extract.ts",
+      "content": "// extract.ts — convert an existing resume/cover .docx into markdown in this\n// tool's authoring contract. Lets Nick pull any historical doc into editable\n// markdown, and serves as the fidelity-test fixture.\n//\n// Usage: bun src/extract.ts <resume|coverletter> <file.docx>\n\nimport { readDocx, partText, parseParagraphs, type Para } from \"./ooxml.ts\";\n\nconst type = process.argv[2];\nconst path = process.argv[3];\nif (!type || !path) {\n  console.error(\"usage: bun src/extract.ts <resume|coverletter> <file.docx>\");\n  process.exit(1);\n}\n\nconst paras = parseParagraphs(partText(readDocx(path), \"word/document.xml\"));\nconst dom = (p: Para) => (p.runs.find((r) => r.text.trim()) ?? p.runs[0])?.rPrXml ?? \"\";\nconst has = (s: string, re: RegExp) => re.test(s);\n\n// reconstruct inline text with bold/italic markers from runs\nfunction inlineMd(p: Para): string {\n  let s = \"\";\n  for (const r of p.runs) {\n    if (!r.text) continue;\n    const b = has(r.rPrXml, /<w:b\\/>/) && !has(r.rPrXml, /<w:b w:val=\"0\"/);\n    let t = r.text;\n    if (b) t = `**${t}**`;\n    s += t;\n  }\n  return s.replace(/\\*\\*\\s*\\*\\*/g, \"\").trim();\n}\n\nconst out: string[] = [];\n\nif (type === \"coverletter\") {\n  for (const p of paras) {\n    let s = \"\";\n    p.runs.forEach((r) => {\n      if (r.isBreak) s += \"\\n\";\n      s += r.text;\n    });\n    if (s.trim()) out.push(s.trim());\n  }\n  console.log(out.join(\"\\n\\n\"));\n} else {\n  let lastBlank = true;\n  const contact: string[] = [];\n  let nameDone = false;\n  for (const p of paras) {\n    const txt = p.text.trim();\n    const d = dom(p);\n    if (p.pStyle === \"Title\" && has(d, /w:sz w:val=\"36\"/)) {\n      out.push(`# ${txt}`);\n      nameDone = true;\n      continue;\n    }\n    if (p.pStyle === \"Title\") {\n      if (txt) contact.push(txt);\n      continue;\n    }\n    if (nameDone && contact.length && !out.includes(contact.join(\" | \"))) {\n      // flush contact block once we leave Title paragraphs\n      out.push(contact.join(\" | \"));\n      out.push(\"\");\n      contact.length = 0;\n    }\n    if (!txt) continue;\n    if (p.pStyle === \"Heading2\" && p.numId) {\n      out.push(`- ${inlineMd(p)}`);\n    } else if (p.pStyle === \"Heading2\" && has(d, /u w:val=\"single\"/)) {\n      out.push(\"\", `## ${txt}`);\n    } else if (p.pStyle === \"Heading2\") {\n      const bold = !has(d, /<w:b w:val=\"0\"/);\n      out.push(bold ? `**${txt}**` : txt);\n    } else if (p.pStyle === \"NoSpacing\" && has(d, /u w:val=\"single\"/)) {\n      out.push(\"\", `## ${txt}`);\n    } else if (p.pStyle === \"NoSpacing\") {\n      out.push(inlineMd(p) || txt);\n    } else if (p.pStyle === \"ListParagraph\") {\n      out.push(`- ${txt}`);\n    } else if (!p.pStyle && has(d, /<w:b\\/>/)) {\n      out.push(\"\", `### ${txt}`);\n    } else {\n      out.push(txt);\n    }\n  }\n  if (contact.length) {\n    out.push(contact.join(\" | \"), \"\");\n  }\n  console.log(out.join(\"\\n\").replace(/\\n{3,}/g, \"\\n\\n\").trim());\n}\n"
+    },
+    "timestamp": "2026-06-18T09:55:45.044Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\nbun src/extract.ts resume \".work/ref-resume.docx\" > .work/resume.md 2>&1\necho \"=== extracted resume.md ===\"; cat .work/resume.md\necho \"\"; echo \"=== EXPORT ===\"\nbun src/export.ts resume .work/resume.md .work/out-resume.docx",
+      "description": "Extract resume to md and regenerate"
+    },
+    "timestamp": "2026-06-18T09:55:48.982Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\nbun src/verify.ts .work/ref-resume.docx .work/out-resume.docx 2>&1 | head -70",
+      "description": "Verify regenerated resume vs original"
+    },
+    "timestamp": "2026-06-18T11:03:45.164Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\nbun -e '\nimport {readDocx, partText} from \"./src/ooxml.ts\";\nconst num = partText(readDocx(\".work/ref-resume.docx\"),\"word/numbering.xml\");\nconst want = {\"10\":\"numId13\",\"3\":\"numId3\",\"2\":\"numId4\",\"7\":\"numId10\",\"6\":\"numId6\",\"11\":\"numId7\",\"9\":\"numId1(skills)\"};\nconst absBlocks = [...num.matchAll(/<w:abstractNum w:abstractNumId=\"(\\d+)\"[\\s\\S]*?<\\/w:abstractNum>/g)];\nfor (const b of absBlocks) {\n  const id=b[1]; if(!(id in want)) continue;\n  const lvl0=b[0].match(/<w:lvl w:ilvl=\"0\"[\\s\\S]*?<\\/w:lvl>/)?.[0]||\"\";\n  const fmt=lvl0.match(/<w:numFmt w:val=\"([^\"]*)\"/)?.[1];\n  const txtHex=[...(lvl0.match(/<w:lvlText w:val=\"([^\"]*)\"/)?.[1]||\"\")].map(c=>c.charCodeAt(0).toString(16)).join(\",\");\n  const ind=lvl0.match(/<w:ind\\b[^>]*\\/?>/)?.[0]||\"(none)\";\n  const font=lvl0.match(/<w:rFonts[^>]*w:ascii=\"([^\"]*)\"/)?.[1]||lvl0.match(/<w:rFonts[^>]*w:hint=\"([^\"]*)\"/)?.[1];\n  console.log(`abs ${id} (${want[id]}): fmt=${fmt} glyphHex=[${txtHex}] font=${font} ${ind}`);\n}\n'",
+      "description": "Compare bullet abstractNum level-0 definitions"
+    },
+    "timestamp": "2026-06-18T11:05:07.168Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/resume.ts",
+      "old_string": "  const bulletP = find((p) => p.pStyle === \"ListParagraph\" && p.numId)!;",
+      "new_string": "  // Dominant bullet list: the numId used by the most ListParagraph paragraphs.\n  // Reusing one consistent bullet (rather than the original's per-job mix of\n  // numIds at 360/720/1080 indents) gives uniform indentation across the whole\n  // resume — a deliberate normalisation of the originals' inconsistency.\n  const bulletParas = paras.filter((p) => p.pStyle === \"ListParagraph\" && p.numId);\n  const numIdCounts = new Map<string, number>();\n  for (const p of bulletParas) numIdCounts.set(p.numId!, (numIdCounts.get(p.numId!) ?? 0) + 1);\n  const dominantBulletNumId =\n    [...numIdCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? \"6\";\n  const bulletP = find((p) => p.pStyle === \"ListParagraph\" && p.numId)!;"
+    },
+    "timestamp": "2026-06-18T11:06:48.671Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/resume.ts",
+      "old_string": "    bulletPpr: pprNoSect(bulletP),\n    bulletRpr: dom(bulletP),",
+      "new_string": "    // Clean, consistent bullet: ListParagraph + dominant bullet numId, with no\n    // per-paragraph indent/spacing overrides (those are the source of the\n    // originals' drift). Indentation then comes purely from the list definition.\n    bulletPpr: `<w:pStyle w:val=\"ListParagraph\"/><w:numPr><w:ilvl w:val=\"0\"/><w:numId w:val=\"${dominantBulletNumId}\"/></w:numPr>`,\n    bulletRpr: dom(bulletP),"
+    },
+    "timestamp": "2026-06-18T11:06:54.262Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/resume.ts",
+      "old_string": "// skill bullet: \"*Label:* rest\" -> italic label + italic rest (label kept as lead-in)\nfunction skillRuns(a: ResumeArch, text: string): RunSpec[] {\n  return inlineRuns(a.skillRpr, text);\n}",
+      "new_string": "// skill bullet: \"Label: rest\" -> bold-italic label + plain-italic rest, exactly\n// as the template (the category label is bold-italic, the listing is italic).\nfunction skillRuns(a: ResumeArch, text: string): RunSpec[] {\n  const clean = text.replace(/\\*\\*/g, \"\").replace(/(^|[^*])\\*(?!\\*)/g, \"$1\"); // drop md markers\n  const idx = clean.indexOf(\":\");\n  if (idx >= 0) {\n    const label = clean.slice(0, idx + 1); // include colon\n    const rest = clean.slice(idx + 1); // keeps leading space\n    return [\n      { rPrInner: a.skillRpr, text: label, preserveSpace: true },\n      { rPrInner: a.skillRpr + '<w:b w:val=\"0\"/><w:bCs w:val=\"0\"/>', text: rest, preserveSpace: true },\n    ];\n  }\n  return inlineRuns(a.skillRpr, clean);\n}"
+    },
+    "timestamp": "2026-06-18T11:07:03.362Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/resume.ts",
+      "old_string": "      // directly under a ## section (Education / Certifications) -> NoSpacing line\n      // support \"**Bold** - rest\"\n      const m = line.match(/^\\*\\*([\\s\\S]+?)\\*\\*\\s*(.*)$/);\n      if (m) {\n        const runs: RunSpec[] = [{ rPrInner: a.noSpacingBoldRpr, text: m[1], preserveSpace: true }];\n        if (m[2]) runs.push({ rPrInner: a.noSpacingPlainRpr, text: \" \" + m[2], preserveSpace: true });\n        out.push(makePara(a.noSpacingPpr, runs));\n      } else {",
+      "new_string": "      // directly under a ## section (Education / Certifications) -> NoSpacing line\n      // support \"**Bold**<rest>\" preserving the exact spacing of <rest>.\n      const m = line.match(/^\\*\\*([\\s\\S]+?)\\*\\*([\\s\\S]*)$/);\n      if (m) {\n        const runs: RunSpec[] = [{ rPrInner: a.noSpacingBoldRpr, text: m[1], preserveSpace: true }];\n        if (m[2]) runs.push({ rPrInner: a.noSpacingPlainRpr, text: m[2], preserveSpace: true });\n        out.push(makePara(a.noSpacingPpr, runs));\n      } else {"
+    },
+    "timestamp": "2026-06-18T11:07:11.127Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\nbun -e '\nimport {readDocx, partText, parseParagraphs} from \"./src/ooxml.ts\";\nconst paras = parseParagraphs(partText(readDocx(\".work/ref-resume.docx\"),\"word/document.xml\"));\nconst deg = paras.find(p=>p.text.includes(\"Bachelor of Science\"));\ndeg.runs.forEach((r,i)=>console.log(i, JSON.stringify(r.text), \"| bold:\", /<w:b\\/>/.test(r.rPrXml)));\n'",
+      "description": "Inspect degree paragraph runs"
+    },
+    "timestamp": "2026-06-18T11:07:26.590Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/extract.ts",
+      "old_string": "// reconstruct inline text with bold/italic markers from runs\nfunction inlineMd(p: Para): string {\n  let s = \"\";\n  for (const r of p.runs) {\n    if (!r.text) continue;\n    const b = has(r.rPrXml, /<w:b\\/>/) && !has(r.rPrXml, /<w:b w:val=\"0\"/);\n    let t = r.text;\n    if (b) t = `**${t}**`;\n    s += t;\n  }\n  return s.replace(/\\*\\*\\s*\\*\\*/g, \"\").trim();\n}",
+      "new_string": "// reconstruct inline text with bold markers, merging consecutive same-style\n// runs and keeping whitespace OUTSIDE the ** markers (so \"** **\" never forms).\nfunction inlineMd(p: Para): string {\n  type Seg = { text: string; bold: boolean };\n  const segs: Seg[] = [];\n  for (const r of p.runs) {\n    if (!r.text) continue;\n    const bold = has(r.rPrXml, /<w:b\\/>/) && !has(r.rPrXml, /<w:b w:val=\"0\"/);\n    const last = segs[segs.length - 1];\n    if (last && last.bold === bold) last.text += r.text;\n    else segs.push({ text: r.text, bold });\n  }\n  let s = \"\";\n  for (const seg of segs) {\n    if (seg.bold && seg.text.trim()) {\n      const lead = seg.text.match(/^\\s*/)![0];\n      const trail = seg.text.match(/\\s*$/)![0];\n      s += lead + \"**\" + seg.text.trim() + \"**\" + trail;\n    } else {\n      s += seg.text;\n    }\n  }\n  return s.trim();\n}"
+    },
+    "timestamp": "2026-06-18T11:07:47.819Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\nbun src/extract.ts resume \".work/ref-resume.docx\" > .work/resume.md 2>&1\nbun src/export.ts resume .work/resume.md .work/out-resume.docx 2>&1 | tail -1\necho \"=== degree line in md ===\"; grep -i \"Bachelor\" .work/resume.md\necho \"=== skills line in md ===\"; grep -i \"Strategy & Delivery\" .work/resume.md | head -1\necho \"\"\necho \"=== verify (expect only documented normalizations) ===\"\nbun src/verify.ts .work/ref-resume.docx .work/out-resume.docx 2>&1 | grep -E \"RESULT|page=\" \necho \"--- categorize fails ---\"\nbun src/verify.ts .work/ref-resume.docx .work/out-resume.docx 2>&1 | grep FAIL | sed -E 's/\\[[0-9]+\\]//' | sort | uniq -c | sort -rn | head -20",
+      "description": "Re-run round-trip and categorize remaining diffs"
+    },
+    "timestamp": "2026-06-18T11:07:58.903Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/resume.ts",
+      "old_string": "  const noSpacingBoldP = find(\n    (p) => p.pStyle === \"NoSpacing\" && has(dom(p), /<w:b\\/>/)\n  );",
+      "new_string": "  // bold-but-NOT-underlined NoSpacing line (the degree line). Underlined\n  // NoSpacing-bold paragraphs are section headers and are routed via \"## \".\n  const noSpacingBoldP =\n    find((p) => p.pStyle === \"NoSpacing\" && has(dom(p), /<w:b\\/>/) && !has(dom(p), /u w:val=\"single\"/)) ??\n    find((p) => p.pStyle === \"NoSpacing\" && has(dom(p), /<w:b\\/>/));"
+    },
+    "timestamp": "2026-06-18T11:08:29.512Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\nbun add docx-preview jszip 2>&1 | tail -3\necho \"--- locate UMD/dist bundles ---\"\nfind node_modules/docx-preview/dist -maxdepth 1 -type f 2>/dev/null\nfind node_modules/jszip/dist -maxdepth 1 -name \"*.min.js\" 2>/dev/null",
+      "description": "Install docx-preview and jszip, find dist bundles"
+    },
+    "timestamp": "2026-06-18T11:08:48.205Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/render.ts",
+      "content": "// render.ts — produce a standalone HTML that renders a .docx visually via\n// docx-preview (reads styles/numbering/theme/fonts), with the libraries and the\n// document inlined as base64 so there are zero external requests (works over\n// file://). Open the HTML in Chrome and screenshot to judge appearance.\n//\n// Usage: bun src/render.ts <file.docx> <out.html> [title]\n\nimport { readFileSync, writeFileSync } from \"fs\";\nimport { dirname, resolve } from \"path\";\nimport { fileURLToPath } from \"url\";\n\nconst HERE = dirname(fileURLToPath(import.meta.url));\nconst ROOT = resolve(HERE, \"..\");\n\nconst docxPath = process.argv[2];\nconst outPath = process.argv[3];\nconst title = process.argv[4] ?? docxPath;\nif (!docxPath || !outPath) {\n  console.error(\"usage: bun src/render.ts <file.docx> <out.html> [title]\");\n  process.exit(1);\n}\n\nconst jszip = readFileSync(resolve(ROOT, \"node_modules/jszip/dist/jszip.min.js\"), \"utf8\");\nconst preview = readFileSync(\n  resolve(ROOT, \"node_modules/docx-preview/dist/docx-preview.min.js\"),\n  \"utf8\"\n);\nconst b64 = readFileSync(resolve(docxPath)).toString(\"base64\");\n\nconst html = `<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>${title}</title>\n<style>\n  body { margin:0; background:#888; font-family:sans-serif; }\n  .label { background:#222; color:#fff; padding:6px 12px; font-size:13px; }\n  .docx-wrapper { background:#888 !important; padding:24px !important; }\n  .docx-wrapper > section.docx { box-shadow:0 0 12px rgba(0,0,0,.4); margin-bottom:24px; }\n</style></head>\n<body>\n<div class=\"label\">${title}</div>\n<div id=\"container\"></div>\n<script>${jszip}</script>\n<script>${preview}</script>\n<script>\n  const b64 = \"${b64}\";\n  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));\n  const blob = new Blob([bytes], {type:\"application/vnd.openxmlformats-officedocument.wordprocessingml.document\"});\n  docx.renderAsync(blob, document.getElementById(\"container\"), null, {\n    className:\"docx\", inWrapper:true, ignoreWidth:false, ignoreHeight:false,\n    breakPages:true, experimental:true, useBase64URL:true\n  }).then(()=>{ document.title=\"RENDERED:\"+${JSON.stringify(title)}; window.__rendered=true; })\n   .catch(e=>{ document.body.insertAdjacentHTML(\"beforeend\",\"<pre style='color:red'>\"+e+\"</pre>\"); window.__rendered=\"error\"; });\n</script>\n</body></html>`;\n\nwriteFileSync(resolve(outPath), html);\nconsole.log(`✓ ${outPath}`);\n"
+    },
+    "timestamp": "2026-06-18T11:09:10.075Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\n# regenerate resume with the degree-underline fix\nbun src/export.ts resume .work/resume.md .work/out-resume.docx 2>&1 | tail -1\nmkdir -p .work/render\nbun src/render.ts .work/ref-cover.docx   .work/render/ref-cover.html   \"ORIGINAL — Cover Letter (McKinsey)\"\nbun src/render.ts .work/out-cover.docx   .work/render/out-cover.html   \"EXPORTED — Cover Letter (McKinsey)\"\nbun src/render.ts .work/ref-resume.docx  .work/render/ref-resume.html  \"ORIGINAL — Resume (2026-06-15 Hybrid)\"\nbun src/render.ts .work/out-resume.docx  .work/render/out-resume.html  \"EXPORTED — Resume (2026-06-15 Hybrid)\"\nls -la .work/render/",
+      "description": "Generate render HTML for all four docs"
+    },
+    "timestamp": "2026-06-18T11:09:16.648Z"
+  },
+  {
+    "name": "Skill",
+    "input": {
+      "skill": "Interceptor",
+      "args": "screenshot the local file file:///home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/render/ref-cover.html (full page) and save it to /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/render/ref-cover.png"
+    },
+    "timestamp": "2026-06-18T11:13:27.607Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Running the Interceptor workflow to screenshot resume and cover letter renders for visual fidelity comparison\"}' > /dev/null 2>&1 &\necho \"notification sent\"\necho \"=== preflight Mac ===\"\ntimeout 30 ssh mac 'export PATH=/opt/homebrew/bin:$PATH; interceptor status 2>&1 | head -5; pgrep -lf \"Google Chrome\" | head -1' 2>&1 | head -10",
+      "description": "Send notification and preflight Mac interceptor"
+    },
+    "timestamp": "2026-06-18T11:13:43.043Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/render\ntimeout 60 ssh mac 'mkdir -p /tmp/docx-render' 2>&1\nfor f in ref-cover out-cover ref-resume out-resume; do\n  timeout 90 scp -q \"$f.html\" mac:/tmp/docx-render/ 2>&1 && echo \"copied $f.html\"\ndone\necho \"=== list on mac ===\"\ntimeout 30 ssh mac 'ls -la /tmp/docx-render/' 2>&1 | head",
+      "description": "Copy render HTML files to Mac"
+    },
+    "timestamp": "2026-06-18T11:13:49.787Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 90 ssh mac 'export PATH=/opt/homebrew/bin:$PATH\ninterceptor open \"file:///tmp/docx-render/ref-cover.html\" --no-wait >/dev/null 2>&1\ninterceptor wait 2500 >/dev/null 2>&1\ninterceptor screenshot --save --full >/dev/null 2>&1\nls -t ~/Downloads/*.png 2>/dev/null | head -1' 2>&1 | tail -3",
+      "description": "Open and screenshot original cover letter on Mac"
+    },
+    "timestamp": "2026-06-18T11:13:56.841Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 90 ssh mac 'export PATH=/opt/homebrew/bin:$PATH\ninterceptor open \"file:///tmp/docx-render/ref-cover.html\" --no-wait >/dev/null 2>&1\ninterceptor wait 2500 >/dev/null 2>&1\necho \"--- screenshot output ---\"\ninterceptor screenshot --save --full --format png 2>&1 | tail -5' 2>&1 | tail -8",
+      "description": "Screenshot original cover letter, capture output path"
+    },
+    "timestamp": "2026-06-18T11:14:06.334Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 90 ssh mac 'export PATH=/opt/homebrew/bin:$PATH\necho \"--- plain screenshot ---\"\ninterceptor screenshot --save 2>&1 | tail -3\necho \"--- newest downloads png ---\"\nls -t ~/Downloads/*.png 2>/dev/null | head -2' 2>&1 | tail -6",
+      "description": "Try plain screenshot on Mac"
+    },
+    "timestamp": "2026-06-18T11:14:21.656Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 40 ssh mac 'export PATH=/opt/homebrew/bin:$PATH\ncd /tmp/docx-render\n# kill any prior server on 8745\nlsof -ti:8745 2>/dev/null | xargs kill -9 2>/dev/null\nnohup python3 -m http.server 8745 >/tmp/docx-render/server.log 2>&1 &\nsleep 1.5\ncurl -s -o /dev/null -w \"server http %{http_code}\\n\" http://localhost:8745/ref-cover.html' 2>&1 | tail -3",
+      "description": "Start HTTP server on Mac for render files"
+    },
+    "timestamp": "2026-06-18T11:14:32.025Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 40 ssh mac 'which python3 python 2>&1; echo \"--- log ---\"; cat /tmp/docx-render/server.log 2>&1 | head' 2>&1 | head",
+      "description": "Check python and server log on Mac"
+    },
+    "timestamp": "2026-06-18T11:14:41.560Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 120 ssh mac 'export PATH=/opt/homebrew/bin:$PATH\ncd /tmp/docx-render\nlsof -ti:8745 2>/dev/null | xargs kill -9 2>/dev/null\nnohup python3 -m http.server 8745 >/tmp/docx-render/server.log 2>&1 &\nSRV=$!\nsleep 2\ncurl -s -o /dev/null -w \"server http %{http_code}\\n\" http://localhost:8745/ref-cover.html\ninterceptor open \"http://localhost:8745/ref-cover.html\" --no-wait >/dev/null 2>&1\ninterceptor wait 3000 >/dev/null 2>&1\necho \"--- screenshot ---\"\ninterceptor screenshot --save 2>&1 | tail -4\nkill $SRV 2>/dev/null' 2>&1 | tail -8",
+      "description": "Single-session server+screenshot test over HTTP"
+    },
+    "timestamp": "2026-06-18T11:14:58.848Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 120 ssh mac 'CHROME=\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\"\ncd /tmp/docx-render\nout=/tmp/docx-render/shot-ref-cover.png\n\"$CHROME\" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 --window-size=1100,1500 --screenshot=\"$out\" --virtual-time-budget=5000 \"file:///tmp/docx-render/ref-cover.html\" >/tmp/docx-render/chrome.log 2>&1\necho \"exit $?\"; ls -la \"$out\" 2>&1' 2>&1 | tail -6",
+      "description": "Headless Chrome screenshot of original cover letter"
+    },
+    "timestamp": "2026-06-18T11:15:22.628Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 180 ssh mac 'CHROME=\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\"\ncd /tmp/docx-render\nfor n in ref-cover out-cover; do\n  \"$CHROME\" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 --window-size=1100,1500 --screenshot=\"/tmp/docx-render/shot-$n.png\" --virtual-time-budget=5000 \"file:///tmp/docx-render/$n.html\" >/dev/null 2>&1\ndone\nfor n in ref-resume out-resume; do\n  \"$CHROME\" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 --window-size=1100,3200 --screenshot=\"/tmp/docx-render/shot-$n.png\" --virtual-time-budget=6000 \"file:///tmp/docx-render/$n.html\" >/dev/null 2>&1\ndone\nls -la /tmp/docx-render/shot-*.png' 2>&1 | tail -6\necho \"=== pull back to linux ===\"\ncd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/render\nfor n in ref-cover out-cover ref-resume out-resume; do\n  timeout 60 scp -q \"mac:/tmp/docx-render/shot-$n.png\" \"./shot-$n.png\" 2>&1 && echo \"got shot-$n.png\"\ndone",
+      "description": "Render all four to PNG and copy to Linux"
+    },
+    "timestamp": "2026-06-18T11:15:38.912Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/render/shot-ref-cover.png"
+    },
+    "timestamp": "2026-06-18T11:15:53.481Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/render/shot-out-cover.png"
+    },
+    "timestamp": "2026-06-18T11:15:57.957Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/render/shot-ref-resume.png"
+    },
+    "timestamp": "2026-06-18T11:16:04.532Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/render/shot-out-resume.png"
+    },
+    "timestamp": "2026-06-18T11:16:22.856Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Visual fidelity staff tester",
+      "subagent_type": "general-purpose",
+      "prompt": "You are a staff QA tester reviewing a md→docx export tool for visual/layout fidelity. Your ONLY job is to compare rendered screenshots and report differences that a human would notice.\n\nCompare these PNG pairs (use the Read tool to view each image):\n- ORIGINAL cover letter: /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/render/shot-ref-cover.png\n- EXPORTED cover letter: /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/render/shot-out-cover.png\n- ORIGINAL resume: /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/render/shot-ref-resume.png\n- EXPORTED resume: /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/render/shot-out-resume.png\n\nThese are rendered via docx-preview in headless Chrome. KNOWN RENDERER ARTIFACTS to IGNORE (present equally in both, not defects):\n1. Bullets render as hollow squares □ instead of • (Symbol font missing in headless Chrome; Word shows • correctly).\n2. Page 1 looks mostly empty with content pushed to later pages — docx-preview wrongly treats Word \"continuous\" section breaks as page breaks. Real Word flows the content continuously. Pagination differences between the two are therefore NOT meaningful.\n\nINTENTIONAL, DOCUMENTED NORMALIZATIONS for the resume (do NOT report these as bugs, but DO confirm they look clean/professional):\n- All body bullets use one consistent indent (the original mixed 0.25\"/0.5\"/0.75\" indents per job — an accidental inconsistency).\n- Section headers are uniformly styled (the original mixed two header styles).\n- The mid-document section break was dropped.\n\nFor EACH of the two document types, assess these dimensions and report concrete differences: overall page margins, font appearance, font sizes/hierarchy, line spacing / paragraph spacing, heading styles (bold/underline/size), the name & contact block layout, bold vs plain text, italic text, alignment (centered title, justified/left body), and any text that is missing, duplicated, garbled, or mis-positioned.\n\nBe specific and cite what you see in each image. For each finding give a SEVERITY: BLOCKER (Nick would immediately see it's not his original), MINOR (subtle), or COSMETIC. If a pair looks equivalent (ignoring the known artifacts), say so explicitly.\n\nReturn a concise structured report:\n- COVER LETTER: verdict (MATCH / ISSUES) + findings list\n- RESUME: verdict (MATCH / ISSUES) + findings list\n- Top 3 things to fix, ranked.\nDo not dump file contents. Return only your findings."
+    },
+    "timestamp": "2026-06-18T11:17:40.672Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Exporter code robustness reviewer",
+      "subagent_type": "general-purpose",
+      "prompt": "You are a staff engineer doing a robustness/code review of a TypeScript (bun) md→docx export tool at /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/. \n\nThe tool does \"template surgery\": it keeps an original .docx's styles/theme/fonts/settings/numbering/headers byte-identical and regenerates only word/document.xml from markdown. Entry: src/export.ts (dispatches to src/coverletter.ts and src/resume.ts). Helpers: src/ooxml.ts, src/build.ts, src/inline.ts. Templates: profiles/coverletter.template.docx, profiles/resume.template.docx.\n\nRead the source files, then STRESS-TEST the exporter by authoring tricky markdown inputs and running it. Use the working dir /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport and run e.g.:\n  bun src/export.ts coverletter <input.md> /tmp/test-out.docx\n  bun src/export.ts resume <input.md> /tmp/test-out.docx\nPut your test .md files in /home/nicholas-wood/.claude/jobs/e9555133/tmp/ .\n\nAfter each export, sanity-check the output is a valid docx and well-formed XML, e.g.:\n  bun -e 'import {readDocx,partText} from \"/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/ooxml.ts\"; const d=partText(readDocx(\"/tmp/test-out.docx\"),\"word/document.xml\"); console.log(\"p:\",(d.match(/<w:p\\b/g)||[]).length); console.log(\"badAmp:\", /&(?!amp;|lt;|gt;|quot;|apos;|#)/.test(d)); console.log(\"rbal:\", (d.match(/<w:r\\b/g)||[]).length===(d.match(/<\\/w:r>/g)||[]).length);'\n\nSpecifically probe these failure modes and report which break:\n1. Text containing XML-special chars: &, <, >, \", ' (e.g. \"R&D\", \"<script>\", quotes/apostrophes). Does escaping work? Any double-escaping?\n2. Inline markdown: **bold**, *italic*, unbalanced markers (single * or **), markers spanning the whole line, nested.\n3. Contact line edge cases: an email, a URL, a phone, a plain word, multiple items separated by \" | \". Are hyperlink relationships added correctly and is word/_rels/document.xml.rels still valid XML?\n4. Empty inputs / missing sections / a resume with no ## sections / a cover letter with one line.\n5. Very long lines, unicode (em dash, é, ●, smart quotes), leading/trailing whitespace.\n6. A markdown bullet \"- \" with a colon inside (skill bullet label split) and without a colon.\n\nFor each real bug, give: the input that triggers it, the symptom (error or malformed output), the file:line of the likely cause, and a suggested fix. Rank by severity. Also note any code-quality issues (correctness risks, not style nits). Be concise; do not dump whole files. Return only your findings and the ranked bug list."
+    },
+    "timestamp": "2026-06-18T11:17:56.236Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "XML fidelity staff tester",
+      "subagent_type": "general-purpose",
+      "prompt": "You are a staff QA tester verifying XML-level formatting fidelity of a md→docx \"template surgery\" export tool at /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.\n\nThe claim under test: the exported docx reuses the template's exact formatting DNA (fonts, sizes, ligatures, page setup, numbering, headers/footers, theme) and only the body text changes; for cover letters the output should be formatting-identical to the original, and for resumes it should conform to the template's archetypes with a few DOCUMENTED normalizations.\n\nThere is an inspector and a verifier:\n  bun src/inspect.ts <file.docx>            # dumps page setup, default font, ligatures, per-paragraph style skeleton\n  bun src/verify.ts <expected.docx> <actual.docx>   # diffs formatting dimensions, prints PASS/FAIL\n\nReference originals and regenerated outputs are in .work/:\n  .work/ref-cover.docx   vs  .work/out-cover.docx\n  .work/ref-resume.docx  vs  .work/out-resume.docx\n(out-* were regenerated from markdown extracted from the originals.)\n\nDo the following from /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport:\n1. Run `bun src/verify.ts .work/ref-cover.docx .work/out-cover.docx`. Confirm it PASSES with zero formatting differences. If not, report exactly what differs.\n2. Run `bun src/inspect.ts .work/out-cover.docx` and `bun src/inspect.ts .work/ref-cover.docx`; confirm page size, margins, ligature setting (w14:ligatures), default font, and every paragraph's run formatting match.\n3. For the resume: run `bun src/verify.ts .work/ref-resume.docx .work/out-resume.docx`. The remaining FAILs SHOULD all be explainable by the documented normalizations: (a) all body bullets unified to one numId, (b) two section headers unified to the Heading2-underline style, (c) the mid-document continuous section break dropped, (d) minor right-indent unification. CATEGORIZE every FAIL line: is it one of these accepted normalizations, or is it an UNEXPECTED fidelity defect? List any unexpected ones explicitly.\n4. Independently verify the output preserves these template parts UNCHANGED vs the template (compare bytes): word/styles.xml, word/theme/theme1.xml, word/fontTable.xml, word/settings.xml, word/numbering.xml, headers/footers. Use bun to compare. Report any that changed (document.xml and document.xml.rels are EXPECTED to change; nothing else should).\n5. Confirm the resume output still contains the header reference and titlePg (so the page header survives) and the correct A4 page size (11906x16838).\n\nReturn a concise structured report: cover-letter verdict (PASS/FAIL), resume verdict (every FAIL categorized accepted-vs-defect), part-preservation table (changed/unchanged), and a ranked list of any REAL defects found. Do not dump whole files."
+    },
+    "timestamp": "2026-06-18T11:18:09.453Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/inline.ts",
+      "content": "// inline.ts — dependency-free inline markdown -> run segments.\n// Supports **bold**, *italic*, _italic_. Uses simplified CommonMark flanking\n// rules so emphasis only triggers on real markers: an opener must be followed\n// by non-whitespace and have a valid closer; a closer must be preceded by\n// non-whitespace; underscores never emphasise intra-word (snake_case safe);\n// unbalanced markers are emitted literally. Toggles are inserted into rPr at\n// the schema-correct position (right after rStyle/rFonts), per OOXML CT_RPr.\n\nexport interface Seg {\n  text: string;\n  bold: boolean;\n  italic: boolean;\n}\n\nfunction findCloser(src: string, start: number, marker: string): number {\n  let j = start;\n  while (j < src.length) {\n    j = src.indexOf(marker, j);\n    if (j < 0) return -1;\n    if (marker === \"*\" && (src[j + 1] === \"*\" || src[j - 1] === \"*\")) {\n      j += 1; // part of a ** run; not a single-* closer\n      continue;\n    }\n    const before = src[j - 1];\n    if (before && !/\\s/.test(before)) return j;\n    j += marker.length;\n  }\n  return -1;\n}\n\nexport function parseInline(src: string): Seg[] {\n  const segs: Seg[] = [];\n  let i = 0;\n  let bold = false;\n  let italic = false;\n  let buf = \"\";\n  const flush = () => {\n    if (buf) segs.push({ text: buf, bold, italic });\n    buf = \"\";\n  };\n  while (i < src.length) {\n    if (src.startsWith(\"**\", i)) {\n      if (bold) {\n        if (!/\\s/.test(src[i - 1] ?? \"\")) {\n          flush();\n          bold = false;\n          i += 2;\n          continue;\n        }\n      } else {\n        const next = src[i + 2];\n        if (next && !/\\s/.test(next) && findCloser(src, i + 2, \"**\") >= 0) {\n          flush();\n          bold = true;\n          i += 2;\n          continue;\n        }\n      }\n      buf += \"**\";\n      i += 2;\n      continue;\n    }\n    const c = src[i];\n    if (c === \"*\" || c === \"_\") {\n      if (italic) {\n        if (!/\\s/.test(src[i - 1] ?? \"\")) {\n          flush();\n          italic = false;\n          i += 1;\n          continue;\n        }\n      } else {\n        const next = src[i + 1];\n        const leftOk = c === \"*\" ? true : !/[A-Za-z0-9]/.test(src[i - 1] ?? \"\");\n        if (next && !/\\s/.test(next) && leftOk && findCloser(src, i + 1, c) >= 0) {\n          flush();\n          italic = true;\n          i += 1;\n          continue;\n        }\n      }\n      buf += c;\n      i += 1;\n      continue;\n    }\n    buf += c;\n    i += 1;\n  }\n  flush();\n  return segs.length ? segs : [{ text: src, bold: false, italic: false }];\n}\n\n// Insert an rPr fragment (e.g. \"<w:b/><w:bCs/>\") at the schema-correct position:\n// immediately after <w:rFonts.../> if present, else after <w:rStyle.../>, else\n// at the start of the rPr inner XML.\nexport function insertRpr(rprInner: string, frag: string): string {\n  if (!frag) return rprInner;\n  const f = rprInner.match(/<w:rFonts\\b[^>]*\\/>/);\n  if (f) {\n    const idx = (f.index ?? 0) + f[0].length;\n    return rprInner.slice(0, idx) + frag + rprInner.slice(idx);\n  }\n  const s = rprInner.match(/<w:rStyle\\b[^>]*\\/>/);\n  if (s) {\n    const idx = (s.index ?? 0) + s[0].length;\n    return rprInner.slice(0, idx) + frag + rprInner.slice(idx);\n  }\n  return frag + rprInner;\n}\n\n// Merge a segment's bold/italic into a base rPr at the schema-correct position,\n// without duplicating toggles already present on the base.\nexport function applyToggles(baseRpr: string, seg: Seg): string {\n  let frag = \"\";\n  if (seg.bold && !/<w:b\\b/.test(baseRpr)) frag += \"<w:b/><w:bCs/>\";\n  if (seg.italic && !/<w:i\\b/.test(baseRpr)) frag += \"<w:i/><w:iCs/>\";\n  return insertRpr(baseRpr, frag);\n}\n"
+    },
+    "timestamp": "2026-06-18T11:23:31.878Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/build.ts",
+      "old_string": "export { parseParagraphs };",
+      "new_string": "// Remove all external hyperlink relationships from word/_rels/document.xml.rels.\n// Safe because we fully regenerate document.xml: the only hyperlinks in the\n// output are the ones the exporter re-adds. Prevents stale template URLs (e.g.\n// a OneDrive autosave path) from shipping in the deliverable.\nimport { partText, setPart, type Entries } from \"./ooxml.ts\";\nexport function pruneHyperlinkRels(entries: Entries): void {\n  const name = \"word/_rels/document.xml.rels\";\n  if (!entries[name]) return;\n  const rels = partText(entries, name).replace(\n    /<Relationship\\b[^>]*Type=\"[^\"]*\\/hyperlink\"[^>]*\\/>/g,\n    \"\"\n  );\n  setPart(entries, name, rels);\n}\n\n// Escape a value for use inside an XML attribute (rels Target).\nexport function attrEscape(s: string): string {\n  return s\n    .replace(/&/g, \"&amp;\")\n    .replace(/</g, \"&lt;\")\n    .replace(/>/g, \"&gt;\")\n    .replace(/\"/g, \"&quot;\");\n}\n\nexport { parseParagraphs };"
+    },
+    "timestamp": "2026-06-18T11:23:40.524Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/resume.ts",
+      "old_string": "import { makePara, replaceBody, type RunSpec } from \"./build.ts\";\nimport { parseInline, applyToggles } from \"./inline.ts\";",
+      "new_string": "import { makePara, replaceBody, pruneHyperlinkRels, attrEscape, type RunSpec } from \"./build.ts\";\nimport { parseInline, applyToggles, insertRpr } from \"./inline.ts\";"
+    },
+    "timestamp": "2026-06-18T11:23:48.460Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/resume.ts",
+      "old_string": "  const ids = [...rels.matchAll(/Id=\"rId(\\d+)\"/g)].map((m) => Number(m[1]));\n  const next = \"rId\" + (Math.max(0, ...ids) + 1);\n  const rel = `<Relationship Id=\"${next}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"${target.replace(/&/g, \"&amp;\")}\" TargetMode=\"External\"/>`;",
+      "new_string": "  const ids = [...rels.matchAll(/Id=\"rId(\\d+)\"/g)].map((m) => Number(m[1]));\n  const next = \"rId\" + (ids.reduce((a, b) => Math.max(a, b), 0) + 1);\n  const rel = `<Relationship Id=\"${next}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"${attrEscape(target)}\" TargetMode=\"External\"/>`;"
+    },
+    "timestamp": "2026-06-18T11:23:54.922Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/resume.ts",
+      "old_string": "    return [\n      { rPrInner: a.skillRpr, text: label, preserveSpace: true },\n      { rPrInner: a.skillRpr + '<w:b w:val=\"0\"/><w:bCs w:val=\"0\"/>', text: rest, preserveSpace: true },\n    ];",
+      "new_string": "    return [\n      { rPrInner: a.skillRpr, text: label, preserveSpace: true },\n      { rPrInner: insertRpr(a.skillRpr, '<w:b w:val=\"0\"/><w:bCs w:val=\"0\"/>'), text: rest, preserveSpace: true },\n    ];"
+    },
+    "timestamp": "2026-06-18T11:24:00.222Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/resume.ts",
+      "old_string": "export function exportResume(entries: Entries, md: string): Entries {\n  const a = captureResumeArch(entries);\n  const lines = md.replace(/\\r\\n?/g, \"\\n\").replace(/<!--[\\s\\S]*?-->/g, \"\").split(\"\\n\");",
+      "new_string": "export function exportResume(entries: Entries, md: string): Entries {\n  if (!md.replace(/<!--[\\s\\S]*?-->/g, \"\").trim()) {\n    throw new Error(\"resume markdown is empty — nothing to export\");\n  }\n  pruneHyperlinkRels(entries);\n  const a = captureResumeArch(entries);\n  const lines = md.replace(/\\r\\n?/g, \"\\n\").replace(/<!--[\\s\\S]*?-->/g, \"\").split(\"\\n\");"
+    },
+    "timestamp": "2026-06-18T11:24:06.343Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/coverletter.ts",
+      "old_string": "import { makePara, replaceBody, type RunSpec } from \"./build.ts\";",
+      "new_string": "import { makePara, replaceBody, pruneHyperlinkRels, type RunSpec } from \"./build.ts\";"
+    },
+    "timestamp": "2026-06-18T11:24:10.504Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/coverletter.ts",
+      "old_string": "export function exportCoverLetter(entries: Entries, md: string): Entries {\n  const a = captureCoverArchetypes(entries);\n  const blocks = splitParagraphs(md);",
+      "new_string": "export function exportCoverLetter(entries: Entries, md: string): Entries {\n  const a = captureCoverArchetypes(entries);\n  const blocks = splitParagraphs(md);\n  if (!blocks.length) throw new Error(\"cover letter markdown is empty — nothing to export\");\n  pruneHyperlinkRels(entries);"
+    },
+    "timestamp": "2026-06-18T11:24:15.284Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\n# Regenerate from the extracted fixtures\nbun src/export.ts coverletter .work/mckinsey.md .work/out-cover.docx 2>&1 | tail -1\nbun src/export.ts resume .work/resume.md .work/out-resume.docx 2>&1 | tail -1\necho \"=== COVER must still be byte-identical formatting ===\"\nbun src/verify.ts .work/ref-cover.docx .work/out-cover.docx 2>&1 | grep RESULT\necho \"=== RESUME conformance (expect same documented-normalization FAIL count, no NEW defects) ===\"\nbun src/verify.ts .work/ref-resume.docx .work/out-resume.docx 2>&1 | grep -E \"RESULT|text\\[\"\necho \"\"\necho \"=== BUG1: inline parser on tricky inputs ===\"\nbun -e '\nimport {parseInline} from \"./src/inline.ts\";\nconst t=(s)=>console.log(JSON.stringify(s),\"=>\",parseInline(s).map(x=>(x.bold?\"B\":\"\")+(x.italic?\"I\":\"\")+\":\"+x.text).join(\" | \"));\nt(\"**bold**\"); t(\"Built **bold** & *italic* features\"); t(\"*it*\"); t(\"**unclosed\"); t(\"path/to_file.ts\"); t(\"a_b_c\"); t(\"5 * 3 = 15\"); t(\"snake_case_var\");\n'",
+      "description": "Regression test cover, resume, and inline parser fixes"
+    },
+    "timestamp": "2026-06-18T11:24:26.978Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\necho \"=== BUG2: rPr schema order (b/i must come right after rFonts, before sz) ===\"\nbun -e '\nimport {readDocx,partText} from \"./src/ooxml.ts\";\nconst d=partText(readDocx(\".work/out-resume.docx\"),\"word/document.xml\");\n// find a skill content run (italic, b=0) and a bold job header run\nconst m=d.match(/<w:rPr>[^]*?<w:b w:val=\"0\"[^]*?<\\/w:rPr>/);\nconsole.log(\"skill content rPr order sample:\");\nconsole.log(\" \", (m?m[0]:\"(none)\").replace(/></g,\"> <\").slice(0,200));\n// check pattern: rFonts ... then b/bCs ... then sz  (no sz before b)\nconst ok = !/<w:sz[^>]*\\/>[^]*?<w:b\\b/.test(d.match(/<w:rPr>[^]*?<\\/w:rPr>/g)?.find(r=>/<w:b w:val=\"0\"/.test(r))||\"\");\nconsole.log(\"no sz-before-b in skill run:\", ok);\n'\necho \"\"\necho \"=== BUG3: stale OneDrive hyperlink rels pruned, fresh ones valid ===\"\nbun -e '\nimport {readDocx,partText} from \"./src/ooxml.ts\";\nconst rels=partText(readDocx(\".work/out-resume.docx\"),\"word/_rels/document.xml.rels\");\nconsole.log(\"contains stale d.docs.live.net:\", /d\\.docs\\.live\\.net/.test(rels));\nconsole.log(\"hyperlink rels:\", [...rels.matchAll(/Target=\"([^\"]*)\"[^>]*hyperlink|hyperlink\"[^>]*Target=\"([^\"]*)\"/g)].length);\nconsole.log(\"targets:\", [...rels.matchAll(/Type=\"[^\"]*\\/hyperlink\"\\s+Target=\"([^\"]*)\"/g)].map(m=>m[1]));\nconsole.log(\"rels well-formed (single Relationships root):\", (rels.match(/<Relationships\\b/g)||[]).length===1 && (rels.match(/<\\/Relationships>/g)||[]).length===1);\n'\necho \"\"\necho \"=== BUG4: empty input now errors ===\"\nprintf \"\" > .work/empty.md\nbun src/export.ts resume .work/empty.md /tmp/e.docx 2>&1 | tail -1\nbun src/export.ts coverletter .work/empty.md /tmp/e.docx 2>&1 | tail -1",
+      "description": "Verify schema order, rel pruning, empty guard"
+    },
+    "timestamp": "2026-06-18T11:24:45.288Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\necho \"=== skill bullet runs (label bold-italic, content italic-only, schema order) ===\"\nbun -e '\nimport {readDocx,partText,parseParagraphs} from \"./src/ooxml.ts\";\nconst paras=parseParagraphs(partText(readDocx(\".work/out-resume.docx\"),\"word/document.xml\"));\nconst skill=paras.find(p=>p.text.includes(\"Strategy & Delivery\"));\nskill.runs.forEach((r,i)=>console.log(i, JSON.stringify(r.text.slice(0,28)), \"| rPr:\", r.rPrXml.replace(/></g,\"><\").slice(0,120)));\n'\necho \"\"\necho \"=== empty input: full error + file not written ===\"\nrm -f /tmp/e.docx\nbun src/export.ts resume .work/empty.md /tmp/e.docx 2>&1 | grep -iE \"empty|error\" | head -2\necho \"file written? $([ -f /tmp/e.docx ] && echo YES || echo NO)\"",
+      "description": "Inspect skill runs and confirm empty-input behavior"
+    },
+    "timestamp": "2026-06-18T11:25:05.597Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/src/selftest.ts",
+      "content": "// selftest.ts — regression harness. Proves the fidelity guarantees hold:\n//   1. Cover letter: regenerating from the original's own text is byte-identical\n//      on every tracked formatting dimension (verify PASS).\n//   2. Resume: every non-body template part is byte-preserved; header ref,\n//      titlePg and A4 survive; body text is intact.\n//   3. Inline markdown parser handles the tricky cases without corruption.\n//   4. Empty input errors instead of emitting a junk document.\n//\n// Usage: bun src/selftest.ts   (exit 0 = all pass)\n\nimport { dirname, resolve } from \"path\";\nimport { fileURLToPath } from \"url\";\nimport { readDocx, writeDocx, partText, parseParagraphs } from \"./ooxml.ts\";\nimport { exportCoverLetter } from \"./coverletter.ts\";\nimport { exportResume } from \"./resume.ts\";\nimport { parseInline } from \"./inline.ts\";\n\nconst HERE = dirname(fileURLToPath(import.meta.url));\nconst ROOT = resolve(HERE, \"..\");\nconst W = resolve(ROOT, \".work\");\n\nlet pass = 0;\nlet fail = 0;\nfunction check(name: string, cond: boolean, detail = \"\") {\n  if (cond) {\n    pass++;\n    console.log(`  ✓ ${name}`);\n  } else {\n    fail++;\n    console.log(`  ✗ ${name}${detail ? \"  — \" + detail : \"\"}`);\n  }\n}\n\nconst dec = new TextDecoder();\nconst bytesEq = (a?: Uint8Array, b?: Uint8Array) =>\n  !!a && !!b && a.length === b.length && a.every((v, i) => v === b[i]);\n\n// ---- 1. cover letter byte-identical formatting ----\nconsole.log(\"COVER LETTER\");\n{\n  const ref = readDocx(resolve(W, \"ref-cover.docx\"));\n  const md = require(\"fs\").readFileSync(resolve(W, \"mckinsey.md\"), \"utf8\");\n  const out = exportCoverLetter(readDocx(resolve(ROOT, \"profiles/coverletter.template.docx\")), md);\n  const rp = parseParagraphs(partText(ref, \"word/document.xml\")).filter((p) => p.text.trim());\n  const op = parseParagraphs(partText(out, \"word/document.xml\")).filter((p) => p.text.trim());\n  check(\"same content-paragraph count\", rp.length === op.length, `${rp.length} vs ${op.length}`);\n  let textMatch = true,\n    fmtMatch = true;\n  for (let i = 0; i < Math.min(rp.length, op.length); i++) {\n    if (rp[i].text.replace(/\\s+/g, \" \").trim() !== op[i].text.replace(/\\s+/g, \" \").trim()) textMatch = false;\n    if (rp[i].pPrXml !== op[i].pPrXml) fmtMatch = false;\n  }\n  check(\"every paragraph text identical\", textMatch);\n  check(\"every paragraph pPr identical\", fmtMatch);\n  // non-body parts preserved\n  const tmpl = readDocx(resolve(ROOT, \"profiles/coverletter.template.docx\"));\n  const parts = Object.keys(tmpl).filter((p) => !/document\\.xml/.test(p));\n  check(\"all non-body parts byte-preserved\", parts.every((p) => bytesEq(tmpl[p], out[p])));\n}\n\n// ---- 2. resume part preservation + page invariants ----\nconsole.log(\"RESUME\");\n{\n  const md = require(\"fs\").readFileSync(resolve(W, \"resume.md\"), \"utf8\");\n  const tmpl = readDocx(resolve(ROOT, \"profiles/resume.template.docx\"));\n  const out = exportResume(readDocx(resolve(ROOT, \"profiles/resume.template.docx\")), md);\n  const mustPreserve = Object.keys(tmpl).filter(\n    (p) => !/word\\/document\\.xml$/.test(p) && !/document\\.xml\\.rels$/.test(p)\n  );\n  const changed = mustPreserve.filter((p) => !bytesEq(tmpl[p], out[p]));\n  check(\"styles/theme/fontTable/settings/numbering/headers byte-preserved\", changed.length === 0, `changed: ${changed.join(\", \")}`);\n  const doc = partText(out, \"word/document.xml\");\n  check(\"A4 page size preserved\", /<w:pgSz w:w=\"11906\" w:h=\"16838\"\\/>/.test(doc));\n  check(\"header reference survives\", /<w:headerReference\\b/.test(doc));\n  check(\"titlePg survives\", /<w:titlePg\\b/.test(doc));\n  check(\"no stale OneDrive rels\", !/d\\.docs\\.live\\.net/.test(partText(out, \"word/_rels/document.xml.rels\")));\n  // body integrity: name present, all section headers present\n  for (const s of [\"Nicholas Wood\", \"Key Skills\", \"Experience\", \"Education\", \"Certifications\"])\n    check(`body contains \"${s}\"`, doc.includes(s));\n  // well-formedness\n  check(\"balanced <w:p>\", (doc.match(/<w:p\\b/g) || []).length === (doc.match(/<\\/w:p>/g) || []).length);\n  check(\"no unescaped ampersand\", !/&(?!amp;|lt;|gt;|quot;|apos;|#)/.test(doc));\n}\n\n// ---- 3. inline parser ----\nconsole.log(\"INLINE PARSER\");\n{\n  const fmt = (s: string) => parseInline(s).map((x) => (x.bold ? \"B\" : \"\") + (x.italic ? \"I\" : \"\") + \":\" + x.text).join(\"|\");\n  check(\"**bold** has no stray asterisk\", fmt(\"**bold**\") === \"B:bold\");\n  check(\"mixed bold/italic spans correctly\", fmt(\"a **b** & *i* c\") === \":a |B:b|: & |I:i|: c\");\n  check(\"snake_case not italicised\", fmt(\"snake_case_var\") === \":snake_case_var\");\n  check(\"path underscores literal\", fmt(\"path/to_file.ts\") === \":path/to_file.ts\");\n  check(\"unbalanced ** literal\", fmt(\"**unclosed\") === \":**unclosed\");\n  check(\"arithmetic asterisks literal\", fmt(\"5 * 3 = 15\") === \":5 * 3 = 15\");\n}\n\n// ---- 4. empty-input guard ----\nconsole.log(\"GUARDS\");\n{\n  let threw = false;\n  try {\n    exportResume(readDocx(resolve(ROOT, \"profiles/resume.template.docx\")), \"   \\n  \");\n  } catch {\n    threw = true;\n  }\n  check(\"empty resume markdown throws\", threw);\n  threw = false;\n  try {\n    exportCoverLetter(readDocx(resolve(ROOT, \"profiles/coverletter.template.docx\")), \"\");\n  } catch {\n    threw = true;\n  }\n  check(\"empty cover markdown throws\", threw);\n}\n\nconsole.log(`\\n${fail === 0 ? \"ALL PASS\" : \"FAILURES\"}: ${pass} passed, ${fail} failed`);\nprocess.exit(fail === 0 ? 0 : 1);\n"
+    },
+    "timestamp": "2026-06-18T11:25:55.299Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\nbun src/selftest.ts",
+      "description": "Run the regression harness"
+    },
+    "timestamp": "2026-06-18T11:25:59.175Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\nbun src/render.ts .work/out-cover.docx  .work/render/out-cover.html  \"EXPORTED — Cover Letter (final)\"\nbun src/render.ts .work/out-resume.docx .work/render/out-resume.html \"EXPORTED — Resume (final)\"\ntimeout 90 scp -q .work/render/out-cover.html .work/render/out-resume.html mac:/tmp/docx-render/ 2>&1 && echo \"copied\"\ntimeout 150 ssh mac 'CHROME=\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\"\n\"$CHROME\" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 --window-size=1100,1500 --screenshot=\"/tmp/docx-render/shot-out-cover.png\" --virtual-time-budget=5000 \"file:///tmp/docx-render/out-cover.html\" >/dev/null 2>&1\n\"$CHROME\" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 --window-size=1100,3200 --screenshot=\"/tmp/docx-render/shot-out-resume.png\" --virtual-time-budget=6000 \"file:///tmp/docx-render/out-resume.html\" >/dev/null 2>&1\necho screenshots done' 2>&1 | tail -1\ntimeout 60 scp -q \"mac:/tmp/docx-render/shot-out-resume.png\" .work/render/shot-out-resume.png && echo \"got resume shot\"\ntimeout 60 scp -q \"mac:/tmp/docx-render/shot-out-cover.png\" .work/render/shot-out-cover.png && echo \"got cover shot\"",
+      "description": "Re-render and screenshot final outputs"
+    },
+    "timestamp": "2026-06-18T11:26:11.416Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/.work/render/shot-out-resume.png"
+    },
+    "timestamp": "2026-06-18T11:26:24.373Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/README.md",
+      "content": "# DocxExport — markdown → .docx, formatting-faithful\n\nExports Nick's resumes and cover letters from markdown to `.docx` that match the\noriginals exactly: same font, sizes, ligatures, spacing, headings, bullets,\nmargins, header/footer. No more \"the formatting came out too simple.\"\n\n## How it works (template surgery)\n\nA `.docx` is a zip of XML parts. Prior export attempts *regenerated* styling from\nscratch (and got it wrong). This tool instead **keeps the original document as a\ntemplate and replaces only the body**:\n\n- `word/styles.xml`, `theme1.xml`, `fontTable.xml`, `settings.xml` (ligatures),\n  `numbering.xml`, headers/footers, `docProps`, theme — all preserved **byte for\n  byte**.\n- Only `word/document.xml` (the body text) and its `.rels` are regenerated.\n- Every paragraph/run in the new body is built by **cloning the exact property\n  blocks** captured from the template at runtime.\n\nSo fidelity is a *consequence* of reusing the originals, not something re-derived.\nThe cover-letter output is byte-identical to the original on every formatting\ndimension; see `bun src/selftest.ts`.\n\n## Usage\n\n```bash\ncd ~/.claude/PAI/TOOLS/DocxExport\n\n# Cover letter\nbun src/export.ts coverletter letter.md \"out.docx\"\n\n# Resume\nbun src/export.ts resume resume.md \"out.docx\"\n\n# Use a different original as the style template (e.g. a specific historical CV)\nbun src/export.ts resume resume.md out.docx --template \"/path/to/Original.docx\"\n```\n\nWrite straight to OneDrive (exports only — never put `.md` in OneDrive):\n\n```bash\nbun src/export.ts coverletter letter.md \\\n  \"$HOME/OneDrive/02_Career/Job_Applications/2026/<Company>/Cover Letter - Nicholas Wood.docx\"\n```\n\n### Other tools\n\n```bash\nbun src/inspect.ts <file.docx>                 # dump a docx's style skeleton\nbun src/extract.ts resume <file.docx> > out.md # docx -> editable markdown (this contract)\nbun src/verify.ts <expected.docx> <actual.docx># diff two docx on formatting dimensions\nbun src/render.ts <file.docx> out.html         # standalone HTML preview (open in Chrome)\nbun src/selftest.ts                            # regression harness (24 checks)\n```\n\n## Markdown contract\n\n### Cover letter\nJust the letter text; blank lines separate paragraphs. The three leading vertical\nspacers come from the template (don't add them). A single newline inside a\nparagraph becomes a line break (used for the sign-off). `**bold**` / `*italic*`\nsupported.\n\n```\nDear <Company> Recruiting Team,\n\nFirst paragraph…\n\nSecond paragraph…\n\nYours sincerely,\nNicholas Wood\n```\n\n### Resume\nSee `templates/resume.md` for a full annotated example.\n\n| Markdown | Renders as |\n|---|---|\n| `# Nicholas Wood` | Centered name (18pt, IntenseEmphasis) |\n| contact lines under the name, ` \\| ` splits items | Centered contact paragraphs; emails/URLs become hyperlinks, phone stays plain |\n| `**One bold line.**` (before first `##`) | Bold headline summary |\n| plain paragraph (before first `##`) | Plain summary paragraph |\n| `## Section` | Underlined section header |\n| `### Org \\| Role \\| Dates \\| Location` | Bold entry header |\n| plain line under a `###` | Plain intro sentence for that entry |\n| `- bullet` under `## Key Skills` | Italic skill bullet; text before the first `:` is the bold-italic label |\n| `- bullet` elsewhere | Standard job bullet |\n| `**Degree** - Institution` under `## Education` | Bold degree + plain remainder |\n| plain line under `## Certifications` | Plain line |\n\n## Documented normalizations (resume only)\n\nThe historical resumes are internally inconsistent from years of hand-editing.\nThe exporter normalises these to the dominant, cleanest variant (consistent and\nprofessional, occasionally differing from a given original's quirk):\n\n1. **Bullet indent** — all body bullets use one indent (originals mixed\n   0.25\"/0.5\"/0.75\" per job). Key-Skills bullets keep their own indent.\n2. **Section headers** — one uniform underlined style (originals mixed two).\n3. **Section model** — two sections (title block + body). The original's extra\n   mid-document section breaks, which only nudged margins, are dropped. The\n   first-page header/footer and `titlePg` behaviour are preserved.\n\nEverything else (font, sizes, ligatures, page size, spacing scale, bullet glyph,\nheader/footer content) is preserved exactly.\n\n## Verification\n\n- `src/selftest.ts` — proves cover-letter byte-fidelity, resume part-preservation,\n  page invariants, the inline parser, and input guards. **24/24 pass.**\n- `src/render.ts` + headless Chrome screenshots give a visual A/B. (docx-preview\n  renders Symbol bullets as □ and page-breaks on continuous sections — both are\n  renderer artifacts, not output defects; Word shows • and flows correctly.)\n\n## Adding a new template\n\nDrop a clean original at `profiles/<type>.template.docx` (or pass `--template`).\nThe exporter captures archetypes from whatever template you give it, so the\noutput always tracks that document's styling.\n"
+    },
+    "timestamp": "2026-06-18T11:27:01.158Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\nmkdir -p templates\n# .gitignore\ncat > .gitignore <<'EOF'\nnode_modules/\n.work/\n*.docx.bak\nEOF\n# Cover letter template\ncat > templates/coverletter.md <<'EOF'\nDear <Company> Recruiting Team,\n\nOpening paragraph: who I am and the throughline. Blank lines separate paragraphs.\nInline **bold** and *italic* work if needed (rarely used in a letter).\n\nSecond paragraph: evidence and specifics.\n\nThird paragraph: why this company, what I want.\n\nYours sincerely,\nNicholas Wood\nEOF\necho \"wrote templates/coverletter.md ($(wc -l < templates/coverletter.md) lines)\"",
+      "description": "Write gitignore and cover letter template"
+    },
+    "timestamp": "2026-06-18T11:27:08.166Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/TOOLS/DocxExport/templates/resume.md",
+      "content": "# Nicholas Wood\n0427 081 551 | nicholas.h.wood@outlook.com | linkedin.com/in/nicholas-wood/\n\n**One-line bold headline summary that frames the positioning.**\nLonger plain summary paragraph giving the fuller narrative and proof points. This sits directly under the headline, before the first section.\n\n## Key Skills\n- Strategy & Delivery: comma, separated, list (text before the first colon becomes the bold-italic label)\n- Technical: Cloud (GCP, AWS), API Design, Event-Driven Architecture\n- Practices: Agile, Observability, CI/CD, TDD\n\n## Experience\n\n### Company | Role | Dates | Location\nOptional plain intro sentence describing the engagement (no bullet).\n- Achievement bullet with impact and metrics\n- Another achievement bullet\n\n### Next Company | Role | Dates | Location\n- Bullet\n- Bullet\n\n## Strategy and Leadership\n\n### Organisation | Role | Dates\nOptional intro sentence.\n- Bullet\n\n## Education\n**Bachelor of Science, Computing and Software Systems** - The University of Melbourne\n\n## Certifications\nCert | Cert | Cert\n"
+    },
+    "timestamp": "2026-06-18T11:29:52.640Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/TOOLS/DocxExport\necho \"=== export the authoring templates ===\"\nbun src/export.ts coverletter templates/coverletter.md /tmp/tmpl-cover.docx 2>&1 | tail -1\nbun src/export.ts resume templates/resume.md /tmp/tmpl-resume.docx 2>&1 | tail -1\necho \"=== validate both outputs ===\"\nbun -e '\nimport {readDocx,partText} from \"./src/ooxml.ts\";\nfor (const f of [\"/tmp/tmpl-cover.docx\",\"/tmp/tmpl-resume.docx\"]) {\n  const d=partText(readDocx(f),\"word/document.xml\");\n  const pbal=(d.match(/<w:p\\b/g)||[]).length===(d.match(/<\\/w:p>/g)||[]).length;\n  const rbal=(d.match(/<w:r\\b/g)||[]).length===(d.match(/<\\/w:r>/g)||[]).length;\n  const amp=/&(?!amp;|lt;|gt;|quot;|apos;|#)/.test(d);\n  console.log(f.split(\"/\").pop(), \"p-balanced:\",pbal,\"r-balanced:\",rbal,\"badAmp:\",amp,\"paras:\",(d.match(/<w:p\\b/g)||[]).length);\n}\n'\necho \"=== final regression ===\"\nbun src/selftest.ts 2>&1 | tail -2\necho \"=== tree ===\"\nfind . -type f -not -path './node_modules/*' -not -path './.work/*' -not -path './.git/*' | sort",
+      "description": "Export templates, validate, final regression, show tree"
+    },
+    "timestamp": "2026-06-18T11:30:03.441Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/reference-docx-export-tool.md",
+      "content": "---\nname: reference-docx-export-tool\ndescription: Formatting-faithful md→docx exporter for Nick's resumes/cover letters; use instead of ad-hoc docx generation\nmetadata:\n  type: reference\n---\n\nTool at `~/.claude/PAI/TOOLS/DocxExport/` exports resumes and cover letters from markdown to `.docx` that match Nick's originals exactly (font, sizes, ligatures, spacing, headings, bullets, margins, header/footer). Built 2026-06-18 to fix the recurring \"export came out with simple/wrong formatting\" failure.\n\n**Always use this instead of generating docx from scratch** (the old failure mode). bun/TypeScript, no python-docx needed.\n\n```bash\ncd ~/.claude/PAI/TOOLS/DocxExport\nbun src/export.ts coverletter letter.md \"out.docx\"\nbun src/export.ts resume resume.md \"out.docx\"   # --template <docx> to use a specific original\nbun src/selftest.ts   # 24-check regression, all pass\n```\n\n**Approach = template surgery:** keep the original `.docx` as a style template, preserve every part (styles/theme/fontTable/settings-with-ligatures/numbering/headers) byte-for-byte, regenerate only `word/document.xml` by cloning the template's exact property blocks. Cover-letter output is byte-identical formatting to the original; resume conforms to template archetypes with 3 documented normalizations (uniform bullet indent, uniform section headers, 2-section model). Markdown contract in `README.md` + `templates/`.\n\nWrite exports straight to OneDrive paths; never put `.md` in OneDrive (see [[gotcha-onedrive-rclone-push]]). Verify visually with `src/render.ts` → headless Chrome screenshot on the Mac (no LibreOffice/Word on the Linux box). This supersedes the deferred \"programmatic resume export pipeline\" in PROJECTS.md.\n"
+    },
+    "timestamp": "2026-06-18T11:30:22.451Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/MEMORY.md"
+    },
+    "timestamp": "2026-06-18T11:30:25.497Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/MEMORY.md",
+      "old_string": "- [Job application selection criteria](feedback-job-application-selection-criteria.md) — Nick parks roles needing credentials he lacks (EM=management), non-product, Sydney/stale, design-leaning, stack-mismatch; rank by real fit not lane",
+      "new_string": "- [Job application selection criteria](feedback-job-application-selection-criteria.md) — Nick parks roles needing credentials he lacks (EM=management), non-product, Sydney/stale, design-leaning, stack-mismatch; rank by real fit not lane\n- [Docx export tool](reference-docx-export-tool.md) — formatting-faithful md→docx for resumes/cover letters at PAI/TOOLS/DocxExport; use instead of ad-hoc docx generation"
+    },
+    "timestamp": "2026-06-18T11:30:32.061Z"
+  }
+]

@@ -1,0 +1,41 @@
+import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
+import { getRoster } from "./roster";
+
+/** Runs the named agent in its own channel and returns its result. */
+export type OnDelegate = (agentKey: string, task: string) => Promise<string>;
+
+export const DELEGATE_TOOL_NAME = "mcp__delegation__delegate";
+
+/**
+ * An in-process MCP server exposing a `delegate` tool, given to orchestrator
+ * agents (the Chief of Staff). Calling it runs the target agent in ITS OWN
+ * channel, as itself, as its own tracked task — then returns its result to the
+ * orchestrator. This is how "the CoS gets an engineer to do a job (in the
+ * engineer's channel) and reports back" works.
+ */
+export function delegateServer(excludeId: string, onDelegate: OnDelegate) {
+  const roster = getRoster()
+    .flatMap((p) => p.agents)
+    .filter((a) => a.id !== excludeId);
+  const list = roster.map((a) => `- ${a.id} — ${a.title}`).join("\n");
+
+  return createSdkMcpServer({
+    name: "delegation",
+    version: "1.0.0",
+    tools: [
+      tool(
+        "delegate",
+        `Delegate a task to one of Nick's agents. They run in their own channel, as themselves, and report back to you. Use this instead of doing the work yourself. Available agents:\n${list}`,
+        {
+          agent: z.string().describe("The agent id (e.g. accessbuddy/feature-dev) or name to delegate to"),
+          task: z.string().describe("The task or question to hand that agent"),
+        },
+        async (args) => {
+          const result = await onDelegate(args.agent, args.task);
+          return { content: [{ type: "text" as const, text: result }] };
+        }
+      ),
+    ],
+  });
+}

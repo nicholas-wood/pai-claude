@@ -1,0 +1,54 @@
+# Base Cover Letter — Senior Software Engineer roles
+
+> Reusable master letter. Pair it with a JD and tailor only the marked spots, rather than rebuilding from scratch.
+> Distilled 2026-06-15 from the Virgin, Wesfarmers, Jora/SEEK, and Canva letters + the captured cover-letter voice rules.
+> Source of truth is this `.md`. Export to `.docx` at submission time (same boundary as the resumes).
+
+## How to use it (90 seconds per role)
+
+1. Fill the two header fields: `[ROLE TITLE]` and `[COMPANY]`.
+2. Rewrite only the **why-company paragraph** `[TAILOR]` — one genuine reason the company/role matters, grounded in what they actually do. This is the paragraph that earns the letter.
+3. Optional **JD bridge**: if the JD leans hard on one thing (a language, a domain, a platform), add one honest sentence connecting your work to it. Do not add a stack checklist — the resume carries the keywords.
+4. Optional **emphasis toggle**: for an AI-forward role keep the thesis as-is; for a pure-backend role, swap the opening thesis for the backend-led variant at the bottom of this file.
+5. Optional **referral**: drop the referral line into the why-company paragraph only (never the opener).
+6. Tense: ANZ, Macquarie, Leidos are past ("I was", "I architected"). AccessBuddy and LIMSOC are present ("I act as", "I run").
+7. Before the PDF goes out: cross-check JD keyword coverage at the application level (resume + letter together), and pdftotext-verify the export for the ti/tf ligature bug.
+8. Banned phrasing: never use the "you are describing the work I already do" construction or its cousins ("this is the work I have been doing", "is exactly the work I have been doing", "is the work I have done for years", "the role you describe is what I already do"). Nick dislikes it. State the capability directly instead.
+9. **AccessBuddy is supplementary only — never lead a paragraph with it.** Every paragraph must lead with paid or professional proof (ANZ, Macquarie, Leidos, or the LIMSOC national strategy). AccessBuddy may appear at most as a brief closing clause ("Outside paid work I keep building, most recently AccessBuddy, a multi-tenant SaaS I shipped solo"). Never "commercial" or "paying", never the first concrete proof in a paragraph, never in the opener. See `career-pivot.md` settled decisions.
+10. **Mentoring and leadership are first-class proof.** When the JD asks for leading or mentoring engineers (most senior roles do), make it explicit, not implied. Concrete receipts: led a four-engineer team at Macquarie through design and delivery; scaled a delivery practice from two teams to six at Leidos, mentoring engineers into the standards set and lifting team satisfaction by 80 per cent. Do not rely on "lifting the people around me" alone to carry it.
+
+---
+
+## Base letter
+
+Dear Hiring Team,
+
+I would like to apply for the [ROLE TITLE] role at [COMPANY].
+
+The thing I have found about AI in practice is that it changes what one person can do, and I have been on both sides of that change. I was one of the leads developing the AI-enabled search APIs at ANZ Plus, on a generative AI platform built on Vertex AI and Gemini, owning technical design, model selection, and the practical guardrails a tier-one bank needs without compromising compliance or reliability. Before that I architected and led real-time, event-driven backend systems at Macquarie in Java and Spring Boot. I am hands-on first and I write a lot of code.
+
+What I bring alongside the engineering is a genuine product and strategy head, and I am comfortable and practised at leading and growing teams. Beyond my paid roles I act as product manager for a mission-critical incident management system used across the country, recently authoring its national scaling strategy and presenting it to the national executive. I have led engineering teams through delivery and mentored engineers into the standards I set. Translating frontline needs into sound technical decisions, and lifting the people around me as I go, is just how I work. Outside paid work I keep building, most recently AccessBuddy, a multi-tenant SaaS I designed and shipped solo end to end.
+
+[TAILOR — why this company and role. One short paragraph, one genuine reason grounded in what they actually do. Open with the constant: "My motivation has always been work with real impact." Then the company-specific reason, for example reach and consequence at scale, a domain where reliability really matters, or a team clearly investing in genuine engineering rather than gesture. If you have a referral, place it here: "[Name] spoke highly of the company and team, and his judgment is one I trust from working with him directly." Close the paragraph with: "That is the environment I want to be in."]
+
+I look forward to the opportunity to discuss the role further.
+
+Nicholas Wood
+0427 081 551 | nicholas.h.wood@outlook.com
+
+---
+
+## Swap-in: backend-led opener (for roles with little or no AI angle)
+
+> Replace the first body paragraph with this when the role is pure backend / platform and AI is not the headline.
+
+I have spent the last few years building systems that other things depend on. I architected and led real-time, event-driven backend systems at Macquarie in Java and Spring Boot, and most recently I was one of the leads developing AI-enabled search APIs at ANZ Plus on a generative AI platform built on Vertex AI and Gemini, owning technical design and the guardrails a tier-one bank needs without compromising compliance or reliability. I am hands-on first and I write a lot of code.
+
+---
+
+## Reusable building blocks (lift as needed)
+
+- **Claude Code pilot:** "I was on ANZ Plus's early Claude Code trial, and AI-assisted development is now second nature to me."
+- **Leidos breadth:** "Earlier I built data and mission systems for government in Java, including a data discovery platform that cut analyst tasks from months to seconds."
+- **Influence without authority:** "I am used to moving teams and stakeholders without formal authority, across frontline operations, executives, and engineering."
+- **Honest-gap line (when the JD names a tool you have not used commercially):** "[Tool] I have not used commercially, but selecting the right tool for the use case, and ramping quickly into new languages and codebases, is squarely how I operate."

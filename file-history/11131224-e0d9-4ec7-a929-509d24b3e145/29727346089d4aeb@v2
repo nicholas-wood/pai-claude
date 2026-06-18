@@ -1,0 +1,57 @@
+import type { Agent } from "./roster";
+import { trunc } from "./util";
+
+/** Read-only tools that are safe to run without asking. */
+export const SAFE_TOOLS = ["Read", "Grep", "Glob", "WebSearch", "WebFetch", "TodoWrite"];
+
+/** Tools that mutate files, run commands, or act outward — require explicit approval. */
+export const GATED_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit", "Bash", "Agent"];
+
+export interface AgentPolicy {
+  cwd: string;
+  allowedTools: string[];
+  isOrchestrator: boolean;
+}
+
+/** Per-agent execution policy: where it runs and what it may do without approval. */
+export function policyFor(agent: Agent): AgentPolicy {
+  const { isOrchestrator } = agent;
+  // Orchestrators may delegate freely (the Agent tool is their core job); doers may not.
+  const allowedTools = isOrchestrator ? [...SAFE_TOOLS, "Agent"] : [...SAFE_TOOLS];
+  return {
+    cwd: agent.projectDir,
+    allowedTools,
+    isOrchestrator,
+  };
+}
+
+/** A short human-readable summary of a tool call, for the Slack timeline. */
+export function summarizeTool(tool: string, input: Record<string, unknown>): string {
+  const s = (v: unknown): string => (typeof v === "string" ? v : JSON.stringify(v ?? ""));
+  switch (tool) {
+    case "Bash":
+      return `Bash: ${trunc(s(input.command), 140)}`; // trunc imported from ./util
+    case "Read":
+    case "Edit":
+    case "Write":
+    case "MultiEdit":
+    case "NotebookEdit":
+      return `${tool}: ${s(input.file_path ?? input.path ?? input.notebook_path ?? "")}`;
+    case "Grep":
+      return `Grep: ${s(input.pattern ?? "")}`;
+    case "Glob":
+      return `Glob: ${s(input.pattern ?? "")}`;
+    case "WebSearch":
+      return `WebSearch: ${s(input.query ?? "")}`;
+    case "WebFetch":
+      return `WebFetch: ${s(input.url ?? "")}`;
+    case "Agent":
+      return `delegate → ${s(input.subagent_type ?? input.description ?? "agent")}`;
+    case "mcp__memory__update_memory":
+      return `remember: ${trunc(s(input.note ?? ""), 140)}`;
+    case "mcp__askuser__ask_user":
+      return `ask Nick: ${trunc(s(input.question ?? ""), 140)}`;
+    default:
+      return tool;
+  }
+}

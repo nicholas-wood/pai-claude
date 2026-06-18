@@ -1,0 +1,78 @@
+---
+name: LifesaverOnCall Replacement-Paging Build Spec
+description: Parked feat/replacement-paging design from the Fable review, re-captured from transcript, plus Nick's outage-confirmation/alerting decisions. Code now on Linux; ready to build.
+type: project
+captured: 2026-06-18
+---
+
+Continues from `project_lifesaveroncall_next_session.md`. The replacement-paging
+work was DESIGNED in a `claude-fable-5` review this morning (run via remote-control
+against the Mac) but NEVER written - an Anthropic permission-classifier outage
+blocked all write tools before any code landed. No branch, no commit, no files
+existed. This note re-captures the design so the build is self-sufficient.
+
+## Environment state (2026-06-18)
+
+- LOC product code now lives on the Linux box at
+  `~/Documents/workspace/projects/lifesaveroncall/code/` (moved under the new
+  `projects/` workspace bucket). Transferred from the Mac via **tar-over-ssh**
+  because Apple's `openrsync` (proto 29) cannot negotiate with Linux GNU rsync
+  3.4.1 (proto 32) - rsync fails with protocol error code 12. Use tar-over-ssh
+  (or git clone) for future Mac->Linux pulls of this repo, not rsync.
+- On `dev` @ `693cfc7` (matches Mac). 129 branches, git integrity clean.
+- `bun install` done (2472 packages). `bun test packages/domain` = 45 pass / 0 fail.
+- Pre-existing failures to ignore (per next_session note): TS6310 + bun-types on
+  `--filter typecheck`; eslint parser errors on `packages/events`,
+  `packages/observability`, `scripts/`.
+
+## What the review found (the why)
+
+1. **Headline gap - replacement paging does not exist.** Comments at
+   `apps/sweeper/src/page-timeout-sweep.ts:10` and
+   `apps/api/src/features/callouts/responder-actions.ts:9` promise that when a
+   paged responder times out / rejects / drops, the system re-pages a
+   replacement ("recompose"). That logic exists NOWHERE. The dispatch loop has
+   no recovery arm - a paged responder going silent stalls the callout.
+2. **Safety violation - outages silently self-clear.**
+   `apps/sweeper/src/outage-auto-clear.ts` flips a capability outage back to
+   `online` automatically once `expected_return_at` passes, with no confirmation
+   the capability actually returned. Violates FR-3.5 / FR-N-3.1. The file's own
+   docstring quotes FR-3.5 then overrides it. Flagged, not fixed.
+3. **Eligibility bypass.** `compose-pages.ts:103-112` - paging named individuals
+   skips `checkDispatchEligibility`.
+
+## Nick's decisions (2026-06-18)
+
+- **Outage auto-clear -> require confirmation.** Remove the silent auto-flip to
+  `online`. An outage stays in its current state until a human confirms the
+  capability has actually returned.
+- **Add stale-outage alerting.** If an outage passes its `expected_return_at`
+  (or some threshold) WITHOUT being confirmed resolved, raise an alert so we
+  don't accumulate stale/forgotten outages. The auto-clear logic becomes an
+  auto-ALERT instead of an auto-clear.
+
+## Replacement-paging design (re-derived from the review transcript)
+
+- `packages/domain/src/recompose.ts` - PURE shortfall logic. Reuse `decideNext`
+  (already in domain). Given a callout's target vs current confirmed responders,
+  compute the shortfall and who to page next. Unit-tested in isolation like the
+  other domain modules (`dispatch-eligibility.ts`, `cross-org-consent.ts`).
+- `apps/api/src/features/callouts/recompose-callout.ts` - orchestrator. Reuse
+  `findClosestDispatchable` with `exclude_member_ids` (already-paged/declined),
+  honour cross-org consent (`cross-org-consent.ts`), and go THROUGH
+  `checkDispatchEligibility` (fixes finding 3 - no bypass).
+- **Wire recompose into** the timeout sweep (`page-timeout-sweep.ts`), the reject
+  handler, and the drop handler (`responder-actions.ts`) - the three events the
+  existing comments already promise trigger a recompose.
+- **Tests** against the existing baseline (review cited ~1213 pass; verify
+  current number first). Add recompose unit tests + an integration test for the
+  timeout -> recompose -> re-page path.
+
+## Build approach (proposed, NOT yet started)
+
+1. Branch `feat/replacement-paging` off current `dev` (`693cfc7`), NOT the stale
+   `bc2a0a7` the review cited (that commit isn't in history).
+2. Use the worktree pattern: `~/Documents/workspace/lifesaveroncall-wt/feat-replacement-paging/`.
+3. Domain-first (recompose.ts + tests), then orchestrator, then wire the three
+   handlers, then the outage confirmation/alerting change.
+4. `bun run lint:au` before any push. Containers need manual rebuild - merged != deployed.
