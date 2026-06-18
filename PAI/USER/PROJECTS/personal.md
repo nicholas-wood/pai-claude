@@ -60,7 +60,7 @@ When Nick raises a topic from this project, read the relevant thread below befor
 
 **Progression rule:** Advance load/rep scheme only when top of rep range is consistently hit across all working sets. This is what triggered Block 2 from Block 1.
 
-**Full program detail:** `~/Documents/workspace/gym/artifacts/legacy-gym/gym-training-program-2026-05-20.md`
+**Full program detail:** `~/Documents/workspace/personal/projects/gym/artifacts/legacy-gym/gym-training-program-2026-05-20.md`
 
 ---
 

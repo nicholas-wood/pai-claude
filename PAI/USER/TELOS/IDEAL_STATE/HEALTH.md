@@ -14,7 +14,7 @@
 - Eat well, consistently. (Specifics TBD.)
 
 ## Fitness
-- Strength focus: currently a 5-day split, lifting heavy (see `~/Documents/workspace/gym/` and the `training-coach` agent for the live program).
+- Strength focus: currently a 5-day split, lifting heavy (see `~/Documents/workspace/personal/projects/gym/` and the `training-coach` agent for the live program).
 - **Steps: 10,000 per day.**
 - **Mobility target:** TBD
 

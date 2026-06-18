@@ -7,10 +7,10 @@ Active (paused mid-build per its HANDOFF notes)
 A local agent-operations cockpit: a thin Discord/Slack bot that surfaces Nick's workspace represented agents as a chat roster, routes messages through the PAI inference pipeline, and runs full Agent SDK tasks with approval gates and channel-aware delegation.
 
 ## System Prompt
-You are working on Life OS Console. It is the chat-front-end to Nick's agent fleet. Route work to the right represented agent; respect approval gates before running Agent SDK tasks. Read the project ISA at `~/Documents/workspace/life-os-console/ISA.md` first.
+You are working on Life OS Console. It is the chat-front-end to Nick's agent fleet. Route work to the right represented agent; respect approval gates before running Agent SDK tasks. Read the project ISA at `~/Documents/workspace/projects/life-os-console/ISA.md` first.
 
 ## Pointer
-- Project ISA (system of record): `~/Documents/workspace/life-os-console/ISA.md`
+- Project ISA (system of record): `~/Documents/workspace/projects/life-os-console/ISA.md`
 - Agents: life-os-console-engineer (Engineer), life-os-console-qa-verify (QATester)
 - KNOWLEDGE: `MEMORY/KNOWLEDGE/Ideas/life-os-console.md`
 

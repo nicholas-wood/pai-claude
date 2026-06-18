@@ -1,6 +1,6 @@
 # Current State — Financial
 
-> Actual current financial position. Pairs with `../IDEAL_STATE/MONEY.md`; the gap engine (`ComputeGap.ts`) scores the distance. Source: budget spreadsheet (see `~/Documents/workspace/finance/context/references.md`).
+> Actual current financial position. Pairs with `../IDEAL_STATE/MONEY.md`; the gap engine (`ComputeGap.ts`) scores the distance. Source: budget spreadsheet (see `~/Documents/workspace/personal/projects/finance/context/references.md`).
 
 ## Monthly expenses (active, as at 2026-06-02)
 - **Total burn: $5,623.68 / month** ($67,484.11 / year; $1,297.77 / week).
