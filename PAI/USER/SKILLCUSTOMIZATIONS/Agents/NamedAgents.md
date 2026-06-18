@@ -21,8 +21,8 @@ Durable, project-bound agents composed for Nick's projects. These are PAI-native
 ## SMLSC Club
 | Agent | Base | Voice | Voice ID | Tools |
 |-------|------|-------|----------|-------|
-| smlsc-club-facilities-planner | general (planning) | James | ZQe5CZNOzWyzPSCn5a3c | analysis-only |
-| smlsc-club-mechanical-design | Architect/Engineer (design) | Baron | onwK4e9ZLuTAKqWW03F9 | analysis-only |
+| club-renewal-facilities-planner | general (planning) | James | ZQe5CZNOzWyzPSCn5a3c | analysis-only |
+| club-renewal-mechanical-design | Architect/Engineer (design) | Baron | onwK4e9ZLuTAKqWW03F9 | analysis-only |
 
 ## Career
 | Agent | Base | Voice | Voice ID | Tools |

@@ -15,7 +15,7 @@
 ## Surf Lifesaving
 
 - **[LSV Communications Officer](lsv-comms-officer.md)** - Nick's volunteer State Lifesaving Communications Officer role at Life Saving Victoria. Scope: LIMSOC, Operational Communications, LSOCE.
-- **[SMLSC Club](smlsc-club.md)** - South Melbourne Lifesaving Club. Master plan across area codes, VESEP funding model, board proposal.
+- **[SMLSC Club](club-renewal.md)** - South Melbourne Lifesaving Club. Master plan across area codes, VESEP funding model, board proposal.
 
 ## Personal
 

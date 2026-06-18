@@ -20,7 +20,7 @@ SMLSC is Nick's club, not his LSV state or SLSA national role - keep those conte
 - **Board paper scope:** Single coordinated project across operational wing, function room, and gear shed. Supersedes the earlier Must/Should/Could + Renewal Bundle framing.
 - **Items deliberately removed by Nick (do not reinstate without asking):** OFF-02 office clean-out, PA-02 testing process, PA-03 tower volume, SEC-05 uniform locks, original FB-01 fishbowl door bolt framing, FB-08 bar improvements, FB-10 function room keypad, EXT-01 letterbox. Risks section also removed from board paper.
 - **Board-rack design (GS-03):** Rev A produced 5 dimensioned SVGs + spec sheet; fabricator-review found 6 blockers (height stack-up failed, frame perimeter ambiguous, roller geometry wrong); Rev-A addendum issued and partly superseded original SVGs.
-- **Workspace location:** `~/Documents/workspace/smlsc-club/` (consolidated project root as of 2026-06).
+- **Workspace location:** `~/Documents/workspace/lifesaving/smlsc/club-renewal/` (consolidated project root as of 2026-06).
 
 ## Current State
 
