@@ -1,35 +1,37 @@
 {
   "proto": 1,
-  "supervisorPid": 274901,
-  "updatedAt": 1781787239658,
+  "supervisorPid": 2089504,
+  "updatedAt": 1781871961136,
   "workers": {
-    "4cb7639b": {
-      "pid": 3759918,
-      "procStart": "138683071",
-      "sessionId": "4cb7639b-c663-42f4-bb60-ef307d2ef67e",
-      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/4cb7639b.sock",
-      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/e0c79779.pty.sock",
-      "cliVersion": "2.1.181",
-      "startedAt": 1781758320524,
+    "11131224": {
+      "pid": 2279712,
+      "procStart": "149609520",
+      "sessionId": "11131224-e0d9-4ec7-a929-509d24b3e145",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/11131224.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/26c5992b.pty.sock",
+      "cliVersion": "2.1.183",
+      "startedAt": 1781866748371,
       "attempt": 1,
       "cwd": "/home/nicholas-wood/.claude",
       "dispatch": {
         "proto": 1,
-        "short": "4cb7639b",
-        "nonce": "aa74fa96",
-        "sessionId": "4cb7639b-c663-42f4-bb60-ef307d2ef67e",
-        "createdAt": 1781758320520,
+        "short": "11131224",
+        "nonce": "6dcdfeb4",
+        "sessionId": "11131224-e0d9-4ec7-a929-509d24b3e145",
+        "createdAt": 1781866748369,
         "source": "fleet",
         "cwd": "/home/nicholas-wood/.claude",
         "launch": {
           "mode": "resume",
-          "sessionId": "4cb7639b-c663-42f4-bb60-ef307d2ef67e",
+          "sessionId": "11131224-e0d9-4ec7-a929-509d24b3e145",
           "fork": false,
           "flagArgs": [
             "--agent",
             "claude",
+            "--permission-mode",
+            "acceptEdits",
             "--model",
-            "fable"
+            "opus[1m]"
           ]
         },
         "env": {},
@@ -37,15 +39,17 @@
         "respawnFlags": [
           "--agent",
           "claude",
+          "--permission-mode",
+          "acceptEdits",
           "--model",
-          "fable"
+          "opus[1m]"
         ],
         "agent": "claude",
         "seed": {
           "intent": ""
         },
-        "cols": 239,
-        "rows": 78
+        "cols": 214,
+        "rows": 52
       },
       "decModes": [
         1000,
@@ -56,8 +60,60 @@
         1004,
         2031
       ],
-      "rvAuth": "aab30a5fa182960b16db1452581d3f13",
-      "ptyAuth": "2b43a085ac42ed46353bf51701207ffa"
+      "rvAuth": "a012ffafe17390085a12f96ca8c7fea7",
+      "ptyAuth": "09cedb1ecad2f3270d7b050082db63d0"
+    },
+    "e9555133": {
+      "pid": 2266570,
+      "procStart": "149600939",
+      "sessionId": "e9555133-0a69-4296-9c45-24eb67f89680",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/e9555133.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/ac88947f.pty.sock",
+      "cliVersion": "2.1.183",
+      "startedAt": 1781866703248,
+      "attempt": 1,
+      "cwd": "/home/nicholas-wood/.claude",
+      "dispatch": {
+        "proto": 1,
+        "short": "e9555133",
+        "nonce": "e7cbc2af",
+        "sessionId": "e9555133-0a69-4296-9c45-24eb67f89680",
+        "createdAt": 1781866703246,
+        "source": "fleet",
+        "cwd": "/home/nicholas-wood/.claude",
+        "launch": {
+          "mode": "resume",
+          "sessionId": "e9555133-0a69-4296-9c45-24eb67f89680",
+          "fork": false,
+          "flagArgs": [
+            "--agent",
+            "claude"
+          ]
+        },
+        "env": {},
+        "isolation": "none",
+        "respawnFlags": [
+          "--agent",
+          "claude"
+        ],
+        "agent": "claude",
+        "seed": {
+          "intent": ""
+        },
+        "cols": 214,
+        "rows": 52
+      },
+      "decModes": [
+        1000,
+        1002,
+        1003,
+        1006,
+        2004,
+        1004,
+        2031
+      ],
+      "rvAuth": "95a81ca9851eaab9acd34f6b87c7c577",
+      "ptyAuth": "20e22ca3db079f32525ef667c9b02251"
     }
   }
 }

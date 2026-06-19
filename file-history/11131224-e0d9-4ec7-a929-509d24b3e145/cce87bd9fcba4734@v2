@@ -1,0 +1,53 @@
+import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
+import { getBots } from "./roster";
+
+export type DelegateTask = { agent: string; task: string };
+export type DelegateResult = { agent: string; result: string };
+
+/** Run one dependency phase: the given tasks in parallel, each posting into the thread. */
+export type OnDelegate = (tasks: DelegateTask[]) => Promise<DelegateResult[]>;
+
+export const DELEGATE_TOOL_NAME = "mcp__delegation__delegate";
+
+/**
+ * The orchestrator's (Jarvis's) delegation tool. Each call runs a wave of agents
+ * IN THE CURRENT THREAD — they post their work as themselves and report back.
+ * Jarvis calls it once per dependency phase (architecture → build → test),
+ * putting agents that can run together in one call (they run in parallel).
+ */
+export function delegateServer(excludeName: string, onDelegate: OnDelegate) {
+  const roster = getBots().filter((b) => b.name !== excludeName && !b.isOrchestrator);
+  const list = roster.map((b) => `- ${b.name} — ${b.agents[0]?.title ?? b.name}`).join("\n");
+
+  return createSdkMcpServer({
+    name: "delegation",
+    version: "1.0.0",
+    tools: [
+      tool(
+        "delegate",
+        `Delegate work to Nick's agents. They run in THIS thread, post their work as themselves, and report back to you.\n\n` +
+          `Call this once per dependency PHASE. Put agents that can run at the same time in a single call (they run in parallel); ` +
+          `wait for a phase's results before starting a phase that depends on it. Typical order: architecture → build → test. ` +
+          `You may list the same agent more than once to run parallel instances of it.\n\n` +
+          `Available agents:\n${list}`,
+        {
+          tasks: z
+            .array(
+              z.object({
+                agent: z.string().describe("Agent name (e.g. architect, feature-dev, qa-verify)"),
+                task: z.string().describe("The concrete task for that agent"),
+              })
+            )
+            .describe("Agents to run in parallel in this phase"),
+        },
+        async (args) => {
+          const results = await onDelegate(args.tasks);
+          const text =
+            results.map((r) => `### ${r.agent}\n${r.result}`).join("\n\n") || "(no results)";
+          return { content: [{ type: "text" as const, text }] };
+        }
+      ),
+    ],
+  });
+}

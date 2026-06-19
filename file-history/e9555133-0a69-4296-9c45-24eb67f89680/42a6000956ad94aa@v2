@@ -1,0 +1,29 @@
+DocxExport — visual fidelity proof
+==================================
+
+Compare side by side:
+  cover-letter_1-ORIGINAL.png  vs  cover-letter_2-EXPORTED.png
+  resume_1-ORIGINAL.png        vs  resume_2-EXPORTED.png
+
+Both rendered through the same engine (docx-preview in headless Chrome), so a
+true A/B: if the pair looks the same, the formatting is the same.
+
+Cover letter: byte-identical formatting to the original (also proven at the XML
+level — only the body text changes). Visually indistinguishable.
+
+Resume: matches the original's character, with three deliberate normalizations
+of the originals' own inconsistencies (uniform bullet indent, uniform section
+headers, clean 2-section page model). Where the latest resume disagrees with
+itself, the exporter follows its predominant style.
+
+TWO RENDER ARTIFACTS TO IGNORE (limitations of the preview renderer, NOT defects
+in the exported .docx — Word renders both correctly):
+  1. Bullets show as hollow squares. The Symbol bullet font isn't installed in
+     headless Chrome; Word shows round bullets.
+  2. Page 1 looks mostly empty with content pushed down. docx-preview wrongly
+     page-breaks on Word "continuous" section breaks; Word flows it normally.
+
+The cover-letter images use a representative letter's text. Cover-letter
+formatting is identical across all your letters, so the comparison holds for any.
+
+Tool: ~/.claude/PAI/TOOLS/DocxExport/  (see README.md there for usage)

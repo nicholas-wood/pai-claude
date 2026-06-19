@@ -1,0 +1,164 @@
+# LifeOS Console
+
+Chat with and run your workspace agents from **Discord** (default) or Slack, locally on your laptop.
+The bot presents your real represented agents (everything under
+`~/Documents/workspace/<project>/agents/<name>/`).
+
+**On Discord:** a **category per project** and a **channel per agent** — your agents as contacts,
+sorted into projects. Type a task in an agent's channel and it runs (Agent SDK, tools, approval
+gates, delegation); the agent replies **under its own name** via a webhook, so it feels like the agent
+is messaging you. Free, unlimited history.
+
+## Discord setup (default)
+
+1. **Create a server you own** (if you don't have one): Discord → **+** → *Create My Own*. Free, unlimited.
+2. **Create the app + bot:** https://discord.com/developers/applications → **New Application** (`LifeOS`)
+   → **Bot** → **Reset Token** → copy it → that's `DISCORD_BOT_TOKEN`.
+3. **Enable the message intent:** Bot → *Privileged Gateway Intents* → turn on **MESSAGE CONTENT INTENT** → Save.
+4. **Invite the bot:** OAuth2 → **URL Generator** → scopes `bot` + `applications.commands`; for a personal
+   server the simplest bot permission is **Administrator** (or tick: View Channels, Manage Channels,
+   Manage Webhooks, Send Messages, Read Message History, Use Application Commands) → open the generated
+   URL → add it to your server.
+5. **Get your server ID:** Discord → User Settings → Advanced → enable **Developer Mode**; right-click
+   your server → **Copy Server ID** → that's `DISCORD_GUILD_ID`.
+6. **Configure + run:**
+   ```bash
+   cd ~/Documents/workspace/life-os-console/code
+   # put DISCORD_BOT_TOKEN and DISCORD_GUILD_ID into .env
+   npm install && npm start
+   ```
+   On first start it creates a category per project + a channel per agent and registers the slash commands.
+
+**Using it:** open an agent's channel → type a task (it runs with tools + Approve/Deny buttons; the
+agent answers as itself). Slash commands: `/agents`, `/ask <q>` (quick, no tools), `/tasks`, `/status`,
+`/setup` (re-create channels).
+
+> The **Slack** frontend still works via `npm run start:slack` (setup below) — it's the legacy path.
+
+---
+
+_The sections below describe the legacy **Slack** frontend (`npm run start:slack`)._
+
+**No API key. No public server. No remote.** Every reply goes through the PAI inference tool
+(`~/.claude/PAI/Tools/Inference.ts`), which uses your Claude **subscription** via the `claude` CLI.
+
+---
+
+## How it works
+
+```
+Slack (Socket Mode) ──► Bolt app (this) ──► roster.ts scans your workspace agent files
+                                       └──► inference.ts ──► bun Inference.ts ──► Claude (subscription)
+```
+
+- **Data model:** your agent directories. Nothing is duplicated — edit a `claude.md` and the bot picks it up.
+- **Two modes:**
+  - **`/ask <q>`** — quick answer via the PAI inference tool (no tools, no API key).
+  - **DM the bot** — full **task execution** via the Claude Agent SDK: the agent runs tools, streams
+    its tool/skill activity live, and (for the Chief of Staff) can **delegate** to other agents.
+- **Approval gates:** read-only tools (Read/Grep/Glob/Web) auto-run; anything that writes, runs a
+  command, or delegates (Edit/Write/Bash/Agent) prompts you with **Approve/Deny** buttons first.
+- Auth is your Claude **subscription** (no API key); spawned agents do not load your PAI hooks/settings.
+
+---
+
+## Prerequisites
+
+- **Node 20+** and **bun** (you have Node 25 + bun 1.3).
+- The **`claude` CLI installed and logged in** (you use Claude Code, so this is already true). The
+  inference tool shells out to it; no `ANTHROPIC_API_KEY` is needed.
+- A **Slack workspace** you can add an app to (a free personal workspace is fine — create one at
+  https://slack.com/create if needed).
+
+---
+
+> 🔒 **Never paste Slack tokens into a chat, an issue, or anywhere outside `.env`.** If you do, revoke
+> and regenerate them in Slack immediately. `.env` is git-ignored; keep it that way.
+
+## Setup (~3 minutes)
+
+### Option A — from a manifest
+1. **https://api.slack.com/apps** → **Create New App** → **From a manifest**.
+2. Pick your workspace → set the editor toggle to **JSON** and paste [`manifest.json`](./manifest.json)
+   (or toggle **YAML** and paste [`manifest.yml`](./manifest.yml) — match the toggle to the file).
+3. **Install to Workspace** → authorise.
+
+### Option B — from scratch (if the manifest errors)
+1. **Create New App → From scratch** → name `LifeOS` → pick workspace.
+2. **Socket Mode** → enable → generate an app-level token with scope `connections:write` → that's `SLACK_APP_TOKEN`.
+3. **OAuth & Permissions → Bot Token Scopes:** `chat:write`, `commands`, `app_mentions:read`, `im:history`, `im:read`, `im:write`, `users:read`.
+4. **App Home:** enable Home Tab + Messages Tab (allow messages from the tab).
+5. **Event Subscriptions:** enable → bot events `app_home_opened`, `app_mention`, `message.im`.
+6. **Interactivity & Shortcuts:** toggle On (no URL — Socket Mode).
+7. **Slash Commands:** create `/agents`, `/agent`, `/ask`, `/tasks`, `/status` (descriptions below; no Request URL in Socket Mode).
+8. **Install App** → copy the **Bot User OAuth Token** (`xoxb-…`) → that's `SLACK_BOT_TOKEN`.
+
+**Slash-command descriptions** (and usage hints):
+
+| Command | Description | Usage hint |
+|---|---|---|
+| `/agents` | List your agents | — |
+| `/agent` | Switch active agent | `<name>` |
+| `/ask` | Quick answer from your active agent (no tools) | `<question>` |
+| `/tasks` | Recent task instances | — |
+| `/status` | Chief of Staff status register | — |
+
+### 2. Grab the two tokens
+- **Bot token** (`xoxb-…`): Settings → **Install App** → *Bot User OAuth Token*.
+- **App-level token** (`xapp-…`): Settings → **Basic Information** → *App-Level Tokens* →
+  **Generate Token and Scopes** → add the **`connections:write`** scope → **Generate**.
+
+### 3. Configure and run
+```bash
+cd ~/Documents/workspace/life-os-console/code
+cp .env.example .env          # then paste your two tokens into .env
+npm install                   # or: bun install
+npm start                     # or: npm run dev  (auto-reload)
+```
+You should see: `⚡️ LifeOS Slack console is running (Socket Mode).`
+
+> If you prefer to run the `claude` login yourself in this session, type:
+> `! claude` (then `/login`) — the `claude` CLI must be authenticated for the inference tool to work.
+
+---
+
+## Using it
+
+- Open the **LifeOS** app → **Home** tab → agents grouped by project. Click **Chat** to pick one.
+- **DM the bot a task** → it runs as the active agent with tools; you'll see the live tool/skill
+  timeline and Approve/Deny prompts for any gated action. The final answer posts when it finishes.
+- Slash commands: `/agents`, `/agent <name>`, **`/ask <q>`** (quick no-tools answer), **`/tasks`**
+  (recent task instances), `/status` (Chief of Staff register).
+
+Task instances are kept in `.data/tasks.json`; `/ask` history in `.data/store.json` (both gitignored).
+Tune with `.env`: `DEFAULT_LEVEL` (for `/ask`), `AGENT_MODEL` + `MAX_TURNS` (for task execution).
+
+---
+
+## Scripts
+
+| Command | Does |
+|---|---|
+| `npm start` | Run the bot |
+| `npm run dev` | Run with auto-reload (tsx watch) |
+| `npm run typecheck` | `tsc --noEmit` |
+| `AGENT_MODEL=haiku npx tsx scripts/smoke.ts <agent> [prompt]` | Run one agent task in the terminal (no Slack) — handy for verifying execution |
+
+---
+
+## Security notes
+
+- Local-only: Socket Mode means no inbound URL is exposed.
+- The bot reads your workspace markdown and calls the local `claude` CLI. It does **not** execute the
+  agents' tools, push git, or touch OneDrive in this phase.
+- `.env` and `.data/` are gitignored — don't commit your tokens.
+
+---
+
+## Roadmap
+
+- ✅ **Phase 1** — roster + chat (now `/ask`).
+- ✅ **Phase 2** — Agent SDK execution, visible tool/skill timeline, approval gates, task instances,
+  and Chief-of-Staff delegation to read-only doer subagents.
+- ⬜ **Next** — per-project channels; steerable/cancelable task threads; mutation-via-delegation
+  (gated); throttle `chat.update`/task persistence under heavy use; optional remote execution.

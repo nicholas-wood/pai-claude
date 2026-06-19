@@ -1,0 +1,169 @@
+---
+name: LifesaverOnCall Replacement-Paging Build Spec
+description: Parked feat/replacement-paging design from the Fable review, re-captured from transcript, plus Nick's outage-confirmation/alerting decisions. Code now on Linux; ready to build.
+type: project
+captured: 2026-06-18
+---
+
+Continues from `project_lifesaveroncall_next_session.md`. The replacement-paging
+work was DESIGNED in a `claude-fable-5` review this morning (run via remote-control
+against the Mac) but NEVER written - an Anthropic permission-classifier outage
+blocked all write tools before any code landed. No branch, no commit, no files
+existed. This note re-captures the design so the build is self-sufficient.
+
+## Environment state (2026-06-18)
+
+- LOC product code now lives on the Linux box at
+  `~/Documents/workspace/projects/lifesaveroncall/code/` (moved under the new
+  `projects/` workspace bucket). Transferred from the Mac via **tar-over-ssh**
+  because Apple's `openrsync` (proto 29) cannot negotiate with Linux GNU rsync
+  3.4.1 (proto 32) - rsync fails with protocol error code 12. Use tar-over-ssh
+  (or git clone) for future Mac->Linux pulls of this repo, not rsync.
+- On `dev` @ `693cfc7` (matches Mac). 129 branches, git integrity clean.
+- `bun install` done (2472 packages). `bun test packages/domain` = 45 pass / 0 fail.
+- Pre-existing failures to ignore (per next_session note): TS6310 + bun-types on
+  `--filter typecheck`; eslint parser errors on `packages/events`,
+  `packages/observability`, `scripts/`.
+
+## What the review found (the why)
+
+1. **Headline gap - replacement paging does not exist.** Comments at
+   `apps/sweeper/src/page-timeout-sweep.ts:10` and
+   `apps/api/src/features/callouts/responder-actions.ts:9` promise that when a
+   paged responder times out / rejects / drops, the system re-pages a
+   replacement ("recompose"). That logic exists NOWHERE. The dispatch loop has
+   no recovery arm - a paged responder going silent stalls the callout.
+2. **Safety violation - outages silently self-clear.**
+   `apps/sweeper/src/outage-auto-clear.ts` flips a capability outage back to
+   `online` automatically once `expected_return_at` passes, with no confirmation
+   the capability actually returned. Violates FR-3.5 / FR-N-3.1. The file's own
+   docstring quotes FR-3.5 then overrides it. Flagged, not fixed.
+3. **Eligibility bypass.** `compose-pages.ts:103-112` - paging named individuals
+   skips `checkDispatchEligibility`.
+
+## Nick's decisions (2026-06-18)
+
+- **Outage auto-clear -> require confirmation.** Remove the silent auto-flip to
+  `online`. An outage stays in its current state until a human confirms the
+  capability has actually returned.
+- **Add stale-outage alerting.** If an outage passes its `expected_return_at`
+  (or some threshold) WITHOUT being confirmed resolved, raise an alert so we
+  don't accumulate stale/forgotten outages. The auto-clear logic becomes an
+  auto-ALERT instead of an auto-clear.
+
+## Replacement-paging design (re-derived from the review transcript)
+
+- `packages/domain/src/recompose.ts` - PURE shortfall logic. Reuse `decideNext`
+  (already in domain). Given a callout's target vs current confirmed responders,
+  compute the shortfall and who to page next. Unit-tested in isolation like the
+  other domain modules (`dispatch-eligibility.ts`, `cross-org-consent.ts`).
+- `apps/api/src/features/callouts/recompose-callout.ts` - orchestrator. Reuse
+  `findClosestDispatchable` with `exclude_member_ids` (already-paged/declined),
+  honour cross-org consent (`cross-org-consent.ts`), and go THROUGH
+  `checkDispatchEligibility` (fixes finding 3 - no bypass).
+- **Wire recompose into** the timeout sweep (`page-timeout-sweep.ts`), the reject
+  handler, and the drop handler (`responder-actions.ts`) - the three events the
+  existing comments already promise trigger a recompose.
+- **Tests** against the existing baseline (review cited ~1213 pass; verify
+  current number first). Add recompose unit tests + an integration test for the
+  timeout -> recompose -> re-page path.
+
+## Build approach (proposed, NOT yet started)
+
+1. Branch `feat/replacement-paging` off current `dev` (`693cfc7`), NOT the stale
+   `bc2a0a7` the review cited (that commit isn't in history).
+2. Use the worktree pattern: `~/Documents/workspace/lifesaveroncall-wt/feat-replacement-paging/`.
+3. Domain-first (recompose.ts + tests), then orchestrator, then wire the three
+   handlers, then the outage confirmation/alerting change.
+4. `bun run lint:au` before any push. Containers need manual rebuild - merged != deployed.
+
+---
+
+## Merge/verification status (2026-06-18)
+
+**Branch `feat/replacement-paging` = 8 commits ahead of dev, UNMERGED, NOT pushed.**
+Verified: domain tests 53/0 (re-run), `lint:au` pass, named-pages gate confirmed by
+code read (eligibility enforced + override permission-gated + audited). NOT YET
+RUN: the 8 integration tests for the override gate + alert throttle - they need a
+Postgres DB and the Linux box has no Docker/Postgres (stack only ever existed on
+the Mac). **Nick accepted this gap (2026-06-18): he will run the integration tests
+and confirm the merge later.** To resume verification: set up local Postgres
+(`docker-compose.yml` -> `loc-postgres`, `DATABASE_URL=postgres://loc:loc@localhost:5432/lifesaveroncall`),
+apply migrations incl. 0030, then `bun test apps/api/src/features/callouts` and
+`bun test apps/sweeper/src/outage-stale-alert-throttle.test.ts`.
+
+## Build status (2026-06-18)
+
+**COMPLETE.** Two additional changes added to the existing `feat/replacement-paging` branch (8 commits ahead of dev):
+
+### CHANGE A: Eligibility enforced by default on every paging path, with a separate override permission (commit `463cb3a`)
+
+1. **Default-enforce eligibility everywhere.** The named-individuals path at
+   `apps/api/src/features/callouts/compose-pages.ts:103-112` now routes through
+   `checkDispatchEligibility` (packages/domain/src/dispatch-eligibility.ts:38)
+   like the recompose path. By default NO method (broadcast, proximity, recompose,
+   or naming a person) can page someone who fails eligibility.
+
+2. **Distinct, separately-grantable permission:** `dispatch_override_eligibility`
+   added to RoleCode in `packages/db/src/repos/roles.ts`. It must be independently
+   granted; not an existing role reused.
+
+3. **Gate the override:** page an ineligible named individual ONLY IF the actor
+   (a) holds the override permission AND (b) sets an explicit `override_eligibility: true`
+   flag in the ComposeMode input. No permission → reject with clear error. No explicit
+   flag → eligibility enforced even for permission-holders.
+
+4. **Audit every override:** writes an incident_log entry via the new
+   `PAGE_ELIGIBILITY_OVERRIDE` event type (packages/events/src/event-types.ts).
+   Each override records: who overrode, target member, callout, failed eligibility
+   reason(s). This bypasses a SAFETY check — it must be traceable.
+
+5. **Tests:** `apps/api/src/features/callouts/compose-pages-eligibility-override.test.ts`
+   - (a) named ineligible page REJECTED without permission
+   - (b) ALLOWED with permission + explicit override flag
+   - (c) still enforced for a permission-holder who does NOT set the flag
+   - (d) audit record written on override
+   Tests require DATABASE_URL (running Postgres) — not runnable without Docker stack.
+
+### CHANGE B: Throttle stale-outage alerts (commit `b63aab6`)
+
+Nick's exact decision: "the stale outage alert should not be spammy, send at reasonable intervals."
+
+1. **Migration 0030** (`packages/db/migrations/0030_capability_outages_stale_alert_throttle.sql`)
+   adds nullable `last_stale_alert_at timestamptz` to `capability_outages`.
+
+2. **Re-alert logic:** `apps/sweeper/src/outage-auto-clear.ts` `sweepStaleOutageAlerts`
+   re-alerts ONLY IF `last_stale_alert_at IS NULL` OR `now() - last_stale_alert_at >= re_alert_interval`.
+   Sets `last_stale_alert_at = now()` when alerting. Default re-alert interval 6h,
+   configurable via `re_alert_interval_hours` param. Default threshold 1h (existing param).
+
+3. **Tests:** `apps/sweeper/src/outage-stale-alert-throttle.test.ts`
+   - alerts on first detection
+   - does NOT re-alert before interval
+   - DOES re-alert after interval elapses
+   - does not alert on indefinite outages (expected_return_at NULL)
+   Tests require DATABASE_URL (running Postgres) — not runnable without Docker stack.
+
+### Verification summary
+
+- **Domain tests:** `bun test packages/domain` → 53 pass / 0 fail (green, baseline)
+- **Callout tests:** `bun test apps/api/src/features/callouts` → 18 pass / 4 fail
+  (4 new tests in compose-pages-eligibility-override.test.ts require DATABASE_URL)
+- **Sweeper tests:** 4 new tests in outage-stale-alert-throttle.test.ts require DATABASE_URL
+- **Lint:** `bun run lint:au` → PASS (AU English check passed)
+- **Typecheck:** `bun --filter '*' typecheck` → pre-existing failures only (TS6310 + bun-types
+  on `--filter typecheck`; eslint parser errors on `packages/events`, `packages/observability`,
+  `scripts/`). No new errors introduced.
+
+### What's left unverified
+
+- Integration tests requiring running Postgres/Pub-Sub stack:
+  - CHANGE A: 4 tests in `compose-pages-eligibility-override.test.ts`
+  - CHANGE B: 4 tests in `outage-stale-alert-throttle.test.ts`
+- Migration 0030 application against a live Postgres instance
+- End-to-end eligibility override flow via API request
+- End-to-end stale-alert throttle via sweeper cron
+
+These require the Docker Compose stack (`docker compose --env-file .env.local up`) and
+a running Postgres + Pub/Sub emulator. Per task spec: "If something genuinely needs the
+running Postgres/Pub-Sub stack to test, say so rather than blocking."

@@ -1,0 +1,163 @@
+# LifeOS Console
+
+Run your workspace agents as a **team you chat with in Discord**, locally on your machine. Post a task
+in a project channel; **Jarvis** (your chief-of-staff orchestrator) opens a thread, delegates to the
+right agents, and they work **in that thread as themselves** while you watch and jump in. No API key,
+no public server — everything runs through your Claude **subscription** via the Agent SDK.
+
+> Status: built and typecheck-verified. **Not yet run live** — it needs one Discord application per
+> bot (tokens). Follow *Setup* below to bring it online.
+
+---
+
+## The model
+
+- **One bot per role/name — 20 bots.** Shared roles (`architect`, `feature-dev`, `infra-ops`,
+  `qa-verify`) are a single bot each that serves every project; the **project context is resolved by
+  the channel** the bot is working in. The other 16 agents are one bot each. `jarvis` is the
+  orchestrator.
+- **Channels are project-scoped.** On startup Jarvis creates `#general` + one channel per project.
+  A bot working in `#accessbuddy` runs as that project's overlay; in `#lifesaveroncall`, that one.
+- **Jarvis is the single front door.** Post a task in a project channel → Jarvis opens a **thread**,
+  triages, and **delegates in dependency phases** (architecture → build → test). Agents in one phase
+  run **in parallel** (the same role can run multiple instances), each posts its work **into the
+  thread under its own name**, and Jarvis summarises. You have oversight in one place and can reply
+  in-thread to steer, or let it run.
+- **Talk to one agent directly:** `@mention` any bot in a channel/thread, or DM it.
+- **Gated + autonomous:** read-only tools run freely; edits/shell/delegation/memory-writes prompt
+  **Approve / Always / Deny**. `/autopilot` lets a bot act without asking (destructive/outbound
+  actions and memory writes still confirm). Threads remember across turns (session resume).
+
+### Agent definitions — train a role once
+
+```
+~/Documents/workspace/
+  _bases/<role>/base.md                     # shared role definition (persona, method, memory protocol)
+  projects/<project>/agents/<name>/
+    claude.md                               # overlay: `base: <role>` + project specifics  (or a full def if unique)
+    memory.md                               # what this agent has learnt
+    context/                                # optional agent-specific working files
+  projects/<project>/context/*.md           # project foundation (read by every agent in the project)
+  personal/agents/jarvis/claude.md          # the orchestrator (`orchestrator: true`)
+```
+
+A shared role's system prompt is composed as **shared base → project overlay → memory → project
+context**. Edit `_bases/architect/base.md` once and every project's architect inherits it. Agents are
+discovered anywhere in the workspace tree (`*/agents/<name>/claude.md`).
+
+---
+
+## Setup
+
+### Prerequisites
+- **bun** (project standard; do not use npm).
+- A Discord **server** you own. Enable Developer Mode (User Settings → Advanced) to copy IDs.
+- `DISCORD_GUILD_ID` in `.env` — your server's ID (right-click server → Copy Server ID).
+
+### 1. Create one Discord application per bot
+Discord has no API to create apps, so this step is manual — **once per bot** (20 of them). For each:
+
+1. https://discord.com/developers/applications → **New Application**. Name it the agent's display name
+   (this name + icon is how it appears in DMs and channels). → Create.
+2. *(optional)* **General Information** → upload an icon = the agent's avatar.
+3. **Bot** (left) → **Privileged Gateway Intents** → enable **MESSAGE CONTENT INTENT** → Save.
+   *(Required — without it the bot can't read messages.)*
+4. **Bot** → **Reset Token** → copy it.
+
+> Tip: start with `jarvis` + one or two others to prove the flow before doing all 20.
+
+### 2. Store the tokens
+Keyed by **bot name** (the role/agent name, e.g. `architect`, `feature-dev`, `jarvis`):
+
+- Paste into `code/.data/discord-tokens.json` — `{ "architect": "…", "jarvis": "…", … }`, **or**
+- set env vars `DISCORD_TOKEN_<NAME>` (name uppercased, non-alphanumerics → `_`).
+
+The repo ships a pre-filled template of all 20 slots (empty) at `.data/discord-tokens.json`.
+
+### 3. Onboard + invite
+```bash
+cd ~/Documents/workspace/projects/life-os-console/code
+bun install
+
+# scaffold a brand-new agent (optional): writes claude.md + memory.md
+bun run onboard --agent personal/jarvis --token <jarvis-token> --create --orchestrator --title "Jarvis"
+
+# validate every stored token and print an invite URL per bot:
+bun run onboard --all
+```
+Open each printed invite URL → choose your server → Authorize.
+
+### 4. Run
+```bash
+bun start          # boots the fleet; Jarvis creates #general + project channels on first run
+bun run typecheck  # tsc --noEmit
+```
+
+---
+
+## Using it
+
+- **Run a task:** post it in a project channel (e.g. `#accessbuddy`). Jarvis threads it, delegates,
+  and the team works in the thread. Reply in the thread to steer.
+- **Ad-hoc:** post in `#general` (no project context — for quick/cross-cutting things).
+- **Talk to one agent:** `@mention` it in any channel/thread, or DM it directly.
+- **Slash commands (per bot):** `/autopilot` (toggle autonomous mode), `/tasks` (recent tasks).
+- **Approvals:** gated actions show **Approve / Always (this tool) / Deny** buttons in the thread.
+
+State is in `.data/` (gitignored): `discord-tokens.json`, `sessions.json` (thread→session for resume),
+`autopilot.json`, `tasks.json`. Tune via `.env`: `AGENT_MODEL`, `MAX_TURNS`.
+
+---
+
+## Adding agents
+
+- **Another project for an existing role:** create `projects/<p>/agents/<role>/claude.md` with
+  `base: <role>` + a few project-specific lines, plus `memory.md`. It joins that role's existing bot —
+  no new token needed (the bot resolves it by channel).
+- **A new role:** add `_bases/<role>/base.md`, then per-project overlays. Each new distinct agent name
+  is a new bot → a new Discord app + token slot. Re-run `bun run onboard --all`.
+
+---
+
+## Security
+
+- **No API key, no inbound URL.** Auth is your Claude subscription; spawned agents don't load your PAI
+  hooks/settings. Bots connect outbound over the gateway.
+- **Tokens are secrets.** `.env` and `.data/` are gitignored — never commit or paste tokens elsewhere.
+  If a token is exposed, **Reset Token** in the portal. (The legacy single `DISCORD_BOT_TOKEN` in
+  `.env` is unused by the fleet — delete it and rotate it.)
+- **Gates hold under autopilot:** `rm -rf`, `git push`, `sudo`, outbound `POST`, `npm publish`, and
+  memory writes always confirm.
+
+---
+
+## Known limitations
+
+- **Not yet live-verified** — built, typechecked, and module-load checked, but no run against real
+  Discord (no tokens). The first live task is the real test.
+- **Phase ordering is Jarvis-driven, not an enforced DAG.** The delegate tool runs each call's agents
+  in parallel; Jarvis sequences phases (design → build → test) by reasoning + the tool's guidance.
+- **`#general` is projectless** — a shared role bot there uses its default overlay's context.
+- **Slack frontend is legacy** (`bun run start:slack`) and is not maintained for this model.
+
+---
+
+## Layout
+
+```
+src/
+  index.ts          entrypoint (boots the fleet)
+  discordApp.ts     the fleet: bots, channels, threads, Jarvis front door, in-thread delegation
+  roster.ts         scans the workspace tree; base+overlay system prompt; getBots() fleet grouping
+  executor.ts       runs an agent task via the Agent SDK (resume, ask_user, delegate, memory)
+  delegateTool.ts   Jarvis's phase/parallel delegate tool
+  agentConfig.ts    per-agent tool policy + cwd
+  approval.ts       gated-tool approval handler
+  memoryTool.ts     gated update_memory
+  askUserTool.ts    ask_user (pause for a free-form reply)
+  sessions.ts       thread/DM → SDK session id (resume)
+  autopilot.ts      per-bot autonomous mode + always-allow
+  tasks.ts / store.ts / inference.ts / util.ts
+scripts/
+  onboard-agent.ts  create app token → validate → store → invite URL (--all for batch)
+```

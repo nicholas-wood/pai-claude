@@ -1,0 +1,25 @@
+{
+  "slug": "stale-context",
+  "theme": "Using stale or cached context rather than re-reading live state",
+  "rootCause": "Answer was based on outdated file content, logs, or memory rather than current on-disk state.",
+  "proposedRuleName": "feedback-stale-context",
+  "proposedRuleBody": "Answer was based on outdated file content, logs, or memory rather than current on-disk state.\n\n**Why:** Evidence from 7 signal(s) across 2 session(s) and 3 project(s). Recurring root cause: Using stale or cached context rather than re-reading live state.\n\n**How to apply:** When acting on file content or log output, re-read the live file rather than relying on earlier read results. Logs especially change; re-fetch before referencing.\n\n**Evidence examples:**\n- \"# Implicit Low Rating Captured: 3/10\"\n- \"FAILURE: assistant followed old instructions instead of latest ones\"\n- \"FAILURE: previous answer was based on template content not\"",
+  "evidenceCount": 7,
+  "sessions": [
+    "e9555133-0a69-4296-9c45-24eb67f89680",
+    "aa57fd93-cb32-4a60-8608-0a6e4850db78"
+  ],
+  "projects": [
+    "failure:2026-06-18-213338_LEARNING_sen",
+    "export-exactly",
+    "unknown"
+  ],
+  "topExamples": [
+    "# Implicit Low Rating Captured: 3/10",
+    "FAILURE: assistant followed old instructions instead of latest ones",
+    "FAILURE: previous answer was based on template content not"
+  ],
+  "dedupNote": "NEW -- no existing rule covers this theme.",
+  "queuedAt": "2026-06-18T20:30:10.057Z",
+  "status": "pending"
+}
