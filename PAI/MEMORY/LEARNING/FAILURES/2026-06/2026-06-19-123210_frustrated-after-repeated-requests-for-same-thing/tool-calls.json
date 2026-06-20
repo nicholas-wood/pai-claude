@@ -1,0 +1,601 @@
+[
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/ 2>/dev/null | head -30 && echo \"---\" && grep -ril -i \"fable\" /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/ 2>/dev/null",
+      "description": "List memory files and grep for Fable"
+    },
+    "timestamp": "2026-06-12T00:51:22.803Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls -lt /home/nicholas-wood/.claude/PAI/MEMORY/WORK/ 2>/dev/null | head -20",
+      "description": "List recent WORK sessions"
+    },
+    "timestamp": "2026-06-12T00:51:23.474Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -rli \"fable\" /home/nicholas-wood/.claude/PAI/MEMORY/ 2>/dev/null | head -20",
+      "description": "Grep MEMORY tree for Fable"
+    },
+    "timestamp": "2026-06-12T00:51:27.973Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "find /home/nicholas-wood/.claude/projects -name \"*.jsonl\" -newermt \"2026-06-12 00:00\" 2>/dev/null | head -20",
+      "description": "Find today's transcripts"
+    },
+    "timestamp": "2026-06-12T00:51:29.494Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "find /home/nicholas-wood/.claude/projects -name \"*.jsonl\" -newermt \"2026-06-11\" 2>/dev/null | xargs grep -li \"fable\" 2>/dev/null | head -10",
+      "description": "Grep recent transcripts for Fable"
+    },
+    "timestamp": "2026-06-12T00:51:30.239Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "for f in /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/7ee0bdc5-a596-49f4-aaaf-ee32ace0f8bf.jsonl /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/486f7578-9a76-4642-8221-25f920c7c62d.jsonl /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/1a5a019a-cc35-49f9-a1f2-eb30a16a8f41.jsonl /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/8f549b46-85e8-44b7-a669-360d2b10796e.jsonl /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/a1d3d25a-6f2b-4529-8a2d-3706adde1990.jsonl; do\n  echo \"=== $f ===\"\n  stat -c \"mtime: %y  size: %s\" \"$f\"\n  grep -c -i \"fable\" \"$f\"\ndone",
+      "description": "Compare today's fable-mention transcripts"
+    },
+    "timestamp": "2026-06-12T00:51:38.421Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -i \"fable\" /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/486f7578-9a76-4642-8221-25f920c7c62d.jsonl | head -20",
+      "description": "Show fable mentions in 486f session"
+    },
+    "timestamp": "2026-06-12T00:51:45.526Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "for f in 7ee0bdc5-a596-49f4-aaaf-ee32ace0f8bf 1a5a019a-cc35-49f9-a1f2-eb30a16a8f41 8f549b46-85e8-44b7-a669-360d2b10796e a1d3d25a-6f2b-4529-8a2d-3706adde1990; do\n  echo \"==== $f ====\"\n  grep -o '\"aiTitle\":\"[^\"]*\"' /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/$f.jsonl | head -2\n  grep -o '\"lastPrompt\":\"[^\"]*\"' /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/$f.jsonl | head -3\ndone",
+      "description": "Get titles/last prompts of fable-mention sessions"
+    },
+    "timestamp": "2026-06-12T00:52:00.373Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -E '\"(content|text)\":\"[^\"]{0,200}\"' /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/486f7578-9a76-4642-8221-25f920c7c62d.jsonl | grep -iE 'review|fable' | head -20",
+      "description": "Look for review-related content in 486f session"
+    },
+    "timestamp": "2026-06-12T00:52:08.120Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -E '\"role\":\"user\"' /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/486f7578-9a76-4642-8221-25f920c7c62d.jsonl | grep -oE '\"content\":\"[^\"]{0,300}\"' | head -20",
+      "description": "List user messages from the fable session"
+    },
+    "timestamp": "2026-06-12T00:52:09.308Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "find /home/nicholas-wood/.claude -path '*/node_modules' -prune -o -type f -newermt \"2026-06-12 00:00\" -print 2>/dev/null | xargs grep -li \"lifesaver\" 2>/dev/null | head -20",
+      "description": "Find today's files mentioning lifesaver"
+    },
+    "timestamp": "2026-06-12T00:54:31.331Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "find /home/nicholas-wood -path '*/node_modules' -prune -o -type d -name \"lifesaveroncall*\" -print 2>/dev/null | head -5\necho \"---\"\nls -lt ~/Documents/workspace/ 2>/dev/null | grep -i lifesaver | head\necho \"---\"\nls -lt ~/Documents/workspace/lifesaveroncall/ 2>/dev/null | head -20",
+      "description": "Locate the lifesaveroncall project"
+    },
+    "timestamp": "2026-06-12T00:54:33.858Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -ril \"arbol\\|remote.*review\\|fable\" /home/nicholas-wood/.claude/PAI/MEMORY/ 2>/dev/null | head -20\necho \"---\"\nls -lt ~/Documents/workspace/lifesaveroncall/.claude/ 2>/dev/null\necho \"---\"\nfind ~/Documents/workspace -path '*/node_modules' -prune -o -newermt \"2026-06-12 00:00\" -type f -print 2>/dev/null | head -30",
+      "description": "Look for arbol logs and recent workspace edits today"
+    },
+    "timestamp": "2026-06-12T00:54:36.330Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "find /home/nicholas-wood/.claude/projects -name \"*.jsonl\" -newermt \"2026-06-12 00:00\" -not -newermt \"2026-06-12 12:00\" 2>/dev/null | xargs -I{} sh -c 'printf \"%s\\n  \" \"{}\"; stat -c \"%y\" \"{}\"' 2>/dev/null | head -60",
+      "description": "List all today-morning session files with mtimes"
+    },
+    "timestamp": "2026-06-12T01:42:39.497Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "find /home/nicholas-wood/.claude/projects -name \"*.jsonl\" -newermt \"2026-06-12 00:00\" 2>/dev/null | xargs grep -li \"lifesaver\\|LifesaverOnCall\\|loc-\" 2>/dev/null | head -20",
+      "description": "Grep today's sessions for LifesaverOnCall"
+    },
+    "timestamp": "2026-06-12T01:42:41.515Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls -lt /home/nicholas-wood/.claude/projects/ | head -30\necho \"---arbol---\"\nls -la /home/nicholas-wood/.claude/PAI/DOCUMENTATION/Arbol/ 2>/dev/null | head\necho \"---rc---\"\nwhich claude; claude --help 2>/dev/null | head -40",
+      "description": "Inspect projects directory and 'claude rc'"
+    },
+    "timestamp": "2026-06-12T01:42:43.256Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -o '\"aiTitle\":\"[^\"]*\"' /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/033e832d-429b-42ba-93e9-e697c0b09707.jsonl | tail -3\necho \"---\"\nls -la /home/nicholas-wood/.claude/jobs/033e832d/ 2>/dev/null | head\necho \"---\"\nls -la /home/nicholas-wood/.claude/jobs/ 2>/dev/null | head -30",
+      "description": "Check 033e832d session and jobs directory"
+    },
+    "timestamp": "2026-06-12T01:42:57.476Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "find /home/nicholas-wood/.claude/projects -name \"*.jsonl\" -newermt \"2026-06-12 00:00\" 2>/dev/null | while read f; do\n  hits=$(grep -ci \"lifesaver\" \"$f\" 2>/dev/null)\n  if [ \"$hits\" -gt 0 ]; then\n    title=$(grep -o '\"aiTitle\":\"[^\"]*\"' \"$f\" 2>/dev/null | tail -1)\n    echo \"$hits hits | $f | $title\"\n  fi\ndone",
+      "description": "Find today's sessions with lifesaver content, show titles"
+    },
+    "timestamp": "2026-06-12T01:43:06.398Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "stat -c \"size: %s bytes  mtime: %y\" /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/a46dfbad-ac10-4b89-9e0d-9dc1f25f1a67.jsonl\necho \"---user msgs---\"\ngrep -o '\"role\":\"user\",\"content\":\"[^\"]\\{0,400\\}' /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/a46dfbad-ac10-4b89-9e0d-9dc1f25f1a67.jsonl | head -20\necho \"---model---\"\ngrep -o '\"model\":\"[^\"]*\"' /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/a46dfbad-ac10-4b89-9e0d-9dc1f25f1a67.jsonl | sort -u",
+      "description": "Get session size, user prompts and models used"
+    },
+    "timestamp": "2026-06-12T01:43:15.604Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "jq -r 'select(.type==\"user\" or .type==\"assistant\") | \"\\(.timestamp) [\\(.type)] \\(.message.content // .message.content[0].text // \"\")\"' /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/a46dfbad-ac10-4b89-9e0d-9dc1f25f1a67.jsonl 2>/dev/null | head -10 | cut -c1-300",
+      "description": "Read a46dfbad session content"
+    },
+    "timestamp": "2026-06-12T01:43:32.052Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "find /home/nicholas-wood/.claude/projects -name \"*.jsonl\" -newermt \"2026-06-12 00:00\" -size +50k 2>/dev/null | while read f; do\n  hits=$(grep -ci \"lifesaver\\|loc-\\|on-call\\|oncall\" \"$f\" 2>/dev/null)\n  if [ \"$hits\" -gt 3 ]; then\n    title=$(grep -o '\"aiTitle\":\"[^\"]*\"' \"$f\" 2>/dev/null | tail -1)\n    sz=$(stat -c %s \"$f\")\n    echo \"$hits hits | size=$sz | $f | $title\"\n  fi\ndone",
+      "description": "Find substantial sessions today touching LOC"
+    },
+    "timestamp": "2026-06-12T01:43:34.720Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "f=/home/nicholas-wood/.claude/projects/-home-nicholas-wood/1951b19c-000b-4fa1-b12f-f3b7a471fd92.jsonl\necho \"=== models used ===\"\ngrep -o '\"model\":\"[^\"]*\"' \"$f\" | sort -u\necho \"=== first 5 user prompts ===\"\njq -r 'select(.type==\"user\" and (.message.content | type == \"string\")) | .timestamp + \" | \" + (.message.content[0:300])' \"$f\" 2>/dev/null | head -5\necho \"=== last 3 user prompts ===\"\njq -r 'select(.type==\"user\" and (.message.content | type == \"string\")) | .timestamp + \" | \" + (.message.content[0:300])' \"$f\" 2>/dev/null | tail -3\necho \"=== assistant final text ===\"\njq -r 'select(.type==\"assistant\") | .message.content[]? | select(.type==\"text\") | .text' \"$f\" 2>/dev/null | tail -120",
+      "description": "Read structure of session 1951b19c"
+    },
+    "timestamp": "2026-06-12T01:43:47.878Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -sk -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Executing using PAI native mode\", \"voice_id\": \"pNInz6obpgDQGcFmaJgB\", \"voice_enabled\": true}' >/dev/null 2>&1; echo done",
+      "description": "Native mode voice notification"
+    },
+    "timestamp": "2026-06-18T04:52:54.486Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaveroncall 2>/dev/null && pwd && echo \"---BRANCHES---\" && git branch -a 2>/dev/null | cat && echo \"---CURRENT---\" && git rev-parse --abbrev-ref HEAD 2>/dev/null && echo \"---STATUS---\" && git status --short 2>/dev/null | head -30 && echo \"---RECENT-LOG---\" && git log --oneline -8 2>/dev/null | cat",
+      "description": "Inspect LOC repo git state"
+    },
+    "timestamp": "2026-06-18T04:55:45.146Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo \"===LOC workspace dir listing===\"; ls -la ~/Documents/workspace/lifesaveroncall 2>/dev/null | head -40\necho; echo \"===Search for the real app code (outage-auto-clear.ts)===\"\nfd -t f 'outage-auto-clear' ~ 2>/dev/null | head\necho \"---\"\nfd -t d 'lifesaveroncall|lifesaver-on-call|loc' ~ -d 4 2>/dev/null | grep -iv node_modules | head -20",
+      "description": "Find actual LOC app codebase"
+    },
+    "timestamp": "2026-06-18T04:55:59.614Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo \"===compose-pages.ts / page-timeout-sweep.ts anywhere===\"\nfd -t f -H 'compose-pages|page-timeout-sweep|recompose' ~ 2>/dev/null | grep -iv node_modules | head\necho \"===apps/sweeper dirs anywhere===\"\nfd -t d -H 'sweeper' ~ 2>/dev/null | grep -iv node_modules | head\necho \"===any REQUIREMENTS.md mentioning FR-3.5===\"\nrg -l 'FR-3\\.5|FR-N-3\\.1' ~ -g '!node_modules' 2>/dev/null | head\necho \"===candidate code roots===\"\nfor d in ~/code ~/Projects ~/projects ~/dev ~/repos; do [ -d \"$d\" ] && echo \"EXISTS: $d\" && ls \"$d\" 2>/dev/null | head; done",
+      "description": "Broad search for LOC app code artifacts"
+    },
+    "timestamp": "2026-06-18T04:56:12.572Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sleep 8; cat /tmp/claude-1000/-home-nicholas-wood--claude/4cb7639b-c663-42f4-bb60-ef307d2ef67e/tasks/bozfmepu7.output 2>/dev/null",
+      "description": "Read background search output"
+    },
+    "timestamp": "2026-06-18T05:06:17.663Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sleep 20; echo \"===FINAL OUTPUT===\"; cat /tmp/claude-1000/-home-nicholas-wood--claude/4cb7639b-c663-42f4-bb60-ef307d2ef67e/tasks/bozfmepu7.output 2>/dev/null; echo \"===PS check===\"; pgrep -af 'rg|fd' | grep -v claude | head",
+      "description": "Wait and read final search output"
+    },
+    "timestamp": "2026-06-18T05:06:31.089Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo \"===outage-auto-clear (no-ignore)===\"\nfd -t f -H -I 'outage-auto-clear|compose-pages|page-timeout-sweep|recompose' ~/Documents 2>/dev/null | grep -iv node_modules | head\necho \"===sweeper/domain dirs (no-ignore)===\"\nfd -t d -H -I 'sweeper' ~/Documents 2>/dev/null | grep -iv node_modules | head\necho \"===nested .git inside workspace (gitignored sub-repos)===\"\nfd -t d -H -I '^\\.git$' ~/Documents/workspace 2>/dev/null | head -20\necho \"===package.json with workspaces/apps in lifesaveroncall tree===\"\nfd -t f -H -I 'REQUIREMENTS.md' ~/Documents 2>/dev/null | grep -iv node_modules | head",
+      "description": "Search ignoring gitignore for nested LOC repo"
+    },
+    "timestamp": "2026-06-18T05:07:14.688Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo \"===full workspace listing===\"; ls -la ~/Documents/workspace 2>/dev/null\necho; echo \"===workspace .gitignore (what's excluded)===\"; cat ~/Documents/workspace/.gitignore 2>/dev/null | head -40\necho; echo \"===ssh mac host configured?===\"; grep -iA3 'Host mac' ~/.ssh/config 2>/dev/null | head; ssh -o ConnectTimeout=4 -o BatchMode=yes mac 'echo REACHABLE; ls ~/Documents/workspace/lifesaveroncall 2>/dev/null | head' 2>&1 | head",
+      "description": "Check workspace contents, gitignore, and mac reachability"
+    },
+    "timestamp": "2026-06-18T05:07:23.810Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ssh -o ConnectTimeout=6 -o BatchMode=yes mac 'cd ~/Documents/workspace/lifesaveroncall/code 2>/dev/null && pwd && echo \"===BRANCH===\" && git rev-parse --abbrev-ref HEAD && echo \"===ALL BRANCHES===\" && git branch -a 2>/dev/null && echo \"===bc2a0a7?===\" && git log --oneline -1 bc2a0a7 2>/dev/null && echo \"===STATUS===\" && git status --short 2>/dev/null | head -30 && echo \"===recompose files exist?===\" && ls -la packages/domain/src/recompose.ts apps/api/src/features/callouts/recompose-callout.ts 2>&1 && echo \"===recent log===\" && git log --oneline -6 2>/dev/null' 2>&1 | head -60",
+      "description": "Read parked branch state on Mac"
+    },
+    "timestamp": "2026-06-18T05:07:48.802Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ssh -o ConnectTimeout=6 -o BatchMode=yes mac 'cd ~/Documents/workspace/lifesaveroncall/code 2>/dev/null\necho \"===replacement-paging branch exists?===\"; git branch -a | grep -i \"replacement\\|recompose\" || echo \"NONE\"\necho \"===bc2a0a7 baseline commit===\"; git log --oneline -1 bc2a0a7 2>/dev/null || echo \"bc2a0a7 NOT FOUND\"\necho \"===dev HEAD===\"; git log --oneline -1 dev\necho \"===working tree status===\"; git status --short | head -20; echo \"(end status)\"\necho \"===recompose files present?===\"; ls packages/domain/src/recompose.ts apps/api/src/features/callouts/recompose-callout.ts 2>&1\necho \"===outage-auto-clear present?===\"; ls apps/sweeper/src/outage-auto-clear.ts 2>&1\necho \"===grep recompose promises in comments===\"; grep -rn \"recompose\" apps/sweeper/src/page-timeout-sweep.ts apps/api/src/features/callouts/responder-actions.ts 2>/dev/null | head' 2>&1 | head -40",
+      "description": "Get parked-work specifics from Mac repo"
+    },
+    "timestamp": "2026-06-18T05:08:02.035Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo \"===source size (full)===\"; ssh -o ConnectTimeout=6 -o BatchMode=yes mac 'du -sh ~/Documents/workspace/lifesaveroncall/code 2>/dev/null'\necho \"===source size excluding heavy dirs===\"; ssh -o ConnectTimeout=6 -o BatchMode=yes mac 'cd ~/Documents/workspace/lifesaveroncall/code && du -sh --exclude=node_modules --exclude=.next --exclude=dist --exclude=.turbo --exclude=.expo --exclude=coverage . 2>/dev/null || du -sh . 2>/dev/null'\necho \"===.git size===\"; ssh -o ConnectTimeout=6 -o BatchMode=yes mac 'du -sh ~/Documents/workspace/lifesaveroncall/code/.git 2>/dev/null'\necho \"===linux dest currently===\"; ls -la ~/Documents/workspace/lifesaveroncall/ | grep -i code || echo \"no code/ dir yet (expected)\"\necho \"===disk free on linux===\"; df -h ~/Documents | tail -1",
+      "description": "Size source and check Linux disk before rsync"
+    },
+    "timestamp": "2026-06-18T05:11:27.906Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo \"===linux workspace top level NOW===\"; ls -la ~/Documents/workspace/ 2>/dev/null\necho; echo \"===find lifesaveroncall anywhere under workspace===\"; fd -t d -H -I 'lifesaveroncall' ~/Documents/workspace 2>/dev/null\necho; echo \"===the literal \\${HOME} dir — what's inside?===\"; ls -la ~/Documents/workspace/'${HOME}' 2>/dev/null | head\necho; echo \"===mac: is code directly under lifesaveroncall?===\"; ssh -o ConnectTimeout=6 -o BatchMode=yes mac 'ls -d ~/Documents/workspace/lifesaveroncall/code 2>/dev/null && echo MAC_PATH_OK'",
+      "description": "Re-locate lifesaveroncall on Linux amid reorg"
+    },
+    "timestamp": "2026-06-18T05:11:53.542Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo \"===inside lifesaving/===\"; ls -la ~/Documents/workspace/lifesaving/ 2>/dev/null\necho; echo \"===inside projects/===\"; ls -la ~/Documents/workspace/projects/ 2>/dev/null\necho; echo \"===find ISA.md files that mention LifesaverOnCall / dispatch===\"; rg -l -i 'lifesaveroncall|GoodSAM|dispatch' ~/Documents/workspace --glob '*.md' -g '!node_modules' 2>/dev/null | head\necho; echo \"===is a reorg process running? (mv/rsync/maintainer/node)===\"; ps aux | grep -iE 'rsync|mv |maintainer|reorg|migrate' | grep -v grep | head\necho; echo \"===workspace git: recent commits + status===\"; cd ~/Documents/workspace && git log --oneline -5 2>/dev/null | cat && echo \"--status--\" && git status --short 2>/dev/null | grep -i 'lifesav\\|club\\|rename\\|R ' | head",
+      "description": "Trace where lifesaveroncall moved and whether a reorg is running"
+    },
+    "timestamp": "2026-06-18T05:12:19.224Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo \"===Mac code/ top-level dir sizes===\"; ssh -o ConnectTimeout=8 -o BatchMode=yes mac 'cd ~/Documents/workspace/lifesaveroncall/code && du -sh */ .git 2>/dev/null | sort -rh | head -25'\necho; echo \"===node_modules count/size===\"; ssh -o ConnectTimeout=8 -o BatchMode=yes mac 'cd ~/Documents/workspace/lifesaveroncall/code && du -sch $(find . -type d -name node_modules -prune 2>/dev/null) 2>/dev/null | tail -1'\necho; echo \"===linux dest parent ready?===\"; ls -ld ~/Documents/workspace/projects/lifesaveroncall ~/Documents/workspace/projects/lifesaveroncall/code 2>&1",
+      "description": "Profile big dirs in Mac code repo"
+    },
+    "timestamp": "2026-06-18T05:12:46.214Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/lifesaveroncall\nrsync -az --info=stats2 \\\n  --exclude='node_modules/' --exclude='.next/' --exclude='dist/' --exclude='build/' \\\n  --exclude='.turbo/' --exclude='.expo/' --exclude='coverage/' --exclude='.DS_Store' \\\n  -e 'ssh -o ConnectTimeout=10 -o BatchMode=yes' \\\n  mac:Documents/workspace/lifesaveroncall/code/ \\\n  ~/Documents/workspace/projects/lifesaveroncall/code/ \\\n  > \"$CLAUDE_JOB_DIR/tmp/loc-rsync.log\" 2>&1\necho \"rsync exit: $?\"\ntail -20 \"$CLAUDE_JOB_DIR/tmp/loc-rsync.log\"",
+      "description": "rsync LOC code repo from Mac to Linux",
+      "run_in_background": true
+    },
+    "timestamp": "2026-06-18T05:13:04.921Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sleep 30; echo \"===rsync task output===\"; cat /tmp/claude-1000/-home-nicholas-wood--claude/4cb7639b-c663-42f4-bb60-ef307d2ef67e/tasks/bo2bcfmh3.output 2>/dev/null; echo \"===still running?===\"; pgrep -af 'rsync.*lifesaveroncall' | grep -v grep | head",
+      "description": "Check rsync progress"
+    },
+    "timestamp": "2026-06-18T05:13:19.906Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo \"===rsync log===\"; cat /tmp/claude-1000/-home-nicholas-wood--claude/4cb7639b-c663-42f4-bb60-ef307d2ef67e/tasks/bo2bcfmh3.output 2>/dev/null | tail -15\necho; echo \"===landed size===\"; du -sh ~/Documents/workspace/projects/lifesaveroncall/code 2>/dev/null\ncd ~/Documents/workspace/projects/lifesaveroncall/code 2>/dev/null\necho \"===git ok? branch + count===\"; git rev-parse --abbrev-ref HEAD 2>/dev/null; echo \"branches: $(git branch -a 2>/dev/null | wc -l)\"\necho \"===dev HEAD matches Mac (693cfc7)?===\"; git log --oneline -1 dev 2>/dev/null\necho \"===key source files present===\"; ls apps/sweeper/src/outage-auto-clear.ts apps/sweeper/src/page-timeout-sweep.ts apps/api/src/features/callouts/responder-actions.ts packages/domain/src 2>&1 | head\necho \"===top-level===\"; ls -la | grep -vE '^total' | awk '{print $NF}' | grep -vE '^\\.$|^\\.\\.$' | head -30",
+      "description": "Verify rsynced LOC repo integrity"
+    },
+    "timestamp": "2026-06-18T05:13:28.169Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo \"===Mac rsync version/path===\"; ssh -o ConnectTimeout=8 -o BatchMode=yes mac 'which -a rsync; echo \"---\"; rsync --version 2>&1 | head -2; echo \"---brew rsync?---\"; ls /opt/homebrew/bin/rsync /usr/local/bin/rsync 2>/dev/null'\necho; echo \"===Linux rsync version===\"; rsync --version | head -1\necho; echo \"===does Mac ssh emit a banner before commands? (should be clean)===\"; ssh -o ConnectTimeout=8 -o BatchMode=yes mac 'echo CLEAN_MARKER' 2>&1",
+      "description": "Diagnose Mac rsync compatibility"
+    },
+    "timestamp": "2026-06-18T05:14:08.442Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/lifesaveroncall\nrsync -az --protocol=29 --info=stats2 \\\n  --exclude='node_modules/' --exclude='.next/' --exclude='dist/' --exclude='build/' \\\n  --exclude='.turbo/' --exclude='.expo/' --exclude='coverage/' --exclude='.DS_Store' \\\n  -e 'ssh -o ConnectTimeout=10 -o BatchMode=yes' \\\n  mac:Documents/workspace/lifesaveroncall/code/ \\\n  ~/Documents/workspace/projects/lifesaveroncall/code/ \\\n  > \"$CLAUDE_JOB_DIR/tmp/loc-rsync2.log\" 2>&1\necho \"rsync exit: $?\"\ntail -15 \"$CLAUDE_JOB_DIR/tmp/loc-rsync2.log\"",
+      "description": "Retry rsync forcing protocol 29",
+      "run_in_background": true
+    },
+    "timestamp": "2026-06-18T05:14:25.420Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cat /tmp/claude-1000/-home-nicholas-wood--claude/4cb7639b-c663-42f4-bb60-ef307d2ef67e/tasks/bt11vi3rg.output 2>/dev/null | tail -15; echo \"---running?---\"; pgrep -af 'rsync.*lifesaveroncall' | grep -v grep | head -3",
+      "description": "Peek at protocol-29 rsync progress"
+    },
+    "timestamp": "2026-06-18T05:14:45.254Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "DEST=~/Documents/workspace/projects/lifesaveroncall/code\nmkdir -p \"$DEST\"\nssh -o ConnectTimeout=10 -o BatchMode=yes mac 'cd ~/Documents/workspace/lifesaveroncall/code && COPYFILE_DISABLE=1 tar czf - --exclude=node_modules --exclude=.next --exclude=dist --exclude=build --exclude=.turbo --exclude=.expo --exclude=coverage --exclude=.DS_Store .' 2> \"$CLAUDE_JOB_DIR/tmp/loc-tar-remote.log\" \\\n  | tar xzf - -C \"$DEST\" 2> \"$CLAUDE_JOB_DIR/tmp/loc-tar-local.log\"\necho \"pipe exit (local tar): ${PIPESTATUS[1]}  remote ssh: ${PIPESTATUS[0]}\"\necho \"===remote stderr===\"; tail -5 \"$CLAUDE_JOB_DIR/tmp/loc-tar-remote.log\"\necho \"===local stderr===\"; tail -5 \"$CLAUDE_JOB_DIR/tmp/loc-tar-local.log\"",
+      "description": "Transfer LOC code via tar over ssh",
+      "run_in_background": true
+    },
+    "timestamp": "2026-06-18T05:15:05.713Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cat /tmp/claude-1000/-home-nicholas-wood--claude/4cb7639b-c663-42f4-bb60-ef307d2ef67e/tasks/bsm0jyxl2.output 2>/dev/null | tail -12; echo \"---running?---\"; pgrep -af 'tar xzf' | grep -v grep | head -2",
+      "description": "Peek at tar transfer progress"
+    },
+    "timestamp": "2026-06-18T05:15:10.462Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/lifesaveroncall/code 2>/dev/null || { echo \"DEST MISSING\"; exit 1; }\necho \"===size===\"; du -sh . 2>/dev/null\necho \"===git current branch===\"; git rev-parse --abbrev-ref HEAD 2>/dev/null\necho \"===branch count (local+remote)===\"; git branch -a 2>/dev/null | wc -l\necho \"===dev HEAD (expect 693cfc7)===\"; git log --oneline -1 dev 2>/dev/null\necho \"===git integrity===\"; git rev-parse --is-inside-work-tree 2>/dev/null && git count-objects -H 2>/dev/null | head -1\necho \"===KEY SOURCE FILES the review cited===\"; ls -la apps/sweeper/src/outage-auto-clear.ts apps/sweeper/src/page-timeout-sweep.ts apps/api/src/features/callouts/responder-actions.ts apps/api/src/features/callouts/compose-pages.ts 2>&1\necho \"===packages/domain present (where recompose.ts will go)===\"; ls packages/domain/src/ 2>&1 | head\necho \"===top-level sanity===\"; ls -d apps packages docs scripts terraform .git 2>&1",
+      "description": "Verify transferred LOC repo integrity"
+    },
+    "timestamp": "2026-06-18T05:15:20.701Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/lifesaveroncall/code\necho \"===workspace layout===\"; cat package.json 2>/dev/null | grep -A6 '\"workspaces\"' | head -10\necho \"===bun version===\"; bun --version 2>/dev/null || echo \"bun not found\"\necho \"===kicking install===\"\nbun install > \"$CLAUDE_JOB_DIR/tmp/loc-bun-install.log\" 2>&1\necho \"bun install exit: $?\"\ntail -8 \"$CLAUDE_JOB_DIR/tmp/loc-bun-install.log\"",
+      "description": "bun install on transferred LOC monorepo",
+      "run_in_background": true
+    },
+    "timestamp": "2026-06-18T05:15:48.120Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/lifesaveroncall\necho \"===context dir===\"; ls -la context/ 2>/dev/null\necho \"===next_session note (tail)===\"; tail -30 context/project_lifesaveroncall_next_session.md 2>/dev/null\necho \"===state.md (tail)===\"; tail -20 context/state.md 2>/dev/null",
+      "description": "Inspect LOC context notes for spec capture"
+    },
+    "timestamp": "2026-06-18T05:16:01.487Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/lifesaveroncall/code\necho \"===bun install tail===\"; tail -6 \"$CLAUDE_JOB_DIR/tmp/loc-bun-install.log\"\necho \"===node_modules present?===\"; ls -d node_modules 2>/dev/null && du -sh node_modules 2>/dev/null\necho \"===test script defined?===\"; cat package.json | grep -A15 '\"scripts\"' | head -18",
+      "description": "Confirm install + find test command"
+    },
+    "timestamp": "2026-06-18T05:16:11.451Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/lifesaveroncall/code\necho \"===domain package tests (pure logic baseline)===\"\ntimeout 120 bun test packages/domain 2>&1 | tail -15",
+      "description": "Run domain package test baseline"
+    },
+    "timestamp": "2026-06-18T05:16:22.079Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/lifesaveroncall/context/project_lifesaveroncall_replacement_paging_spec.md",
+      "content": "---\nname: LifesaverOnCall Replacement-Paging Build Spec\ndescription: Parked feat/replacement-paging design from the Fable review, re-captured from transcript, plus Nick's outage-confirmation/alerting decisions. Code now on Linux; ready to build.\ntype: project\ncaptured: 2026-06-18\n---\n\nContinues from `project_lifesaveroncall_next_session.md`. The replacement-paging\nwork was DESIGNED in a `claude-fable-5` review this morning (run via remote-control\nagainst the Mac) but NEVER written - an Anthropic permission-classifier outage\nblocked all write tools before any code landed. No branch, no commit, no files\nexisted. This note re-captures the design so the build is self-sufficient.\n\n## Environment state (2026-06-18)\n\n- LOC product code now lives on the Linux box at\n  `~/Documents/workspace/projects/lifesaveroncall/code/` (moved under the new\n  `projects/` workspace bucket). Transferred from the Mac via **tar-over-ssh**\n  because Apple's `openrsync` (proto 29) cannot negotiate with Linux GNU rsync\n  3.4.1 (proto 32) - rsync fails with protocol error code 12. Use tar-over-ssh\n  (or git clone) for future Mac->Linux pulls of this repo, not rsync.\n- On `dev` @ `693cfc7` (matches Mac). 129 branches, git integrity clean.\n- `bun install` done (2472 packages). `bun test packages/domain` = 45 pass / 0 fail.\n- Pre-existing failures to ignore (per next_session note): TS6310 + bun-types on\n  `--filter typecheck`; eslint parser errors on `packages/events`,\n  `packages/observability`, `scripts/`.\n\n## What the review found (the why)\n\n1. **Headline gap - replacement paging does not exist.** Comments at\n   `apps/sweeper/src/page-timeout-sweep.ts:10` and\n   `apps/api/src/features/callouts/responder-actions.ts:9` promise that when a\n   paged responder times out / rejects / drops, the system re-pages a\n   replacement (\"recompose\"). That logic exists NOWHERE. The dispatch loop has\n   no recovery arm - a paged responder going silent stalls the callout.\n2. **Safety violation - outages silently self-clear.**\n   `apps/sweeper/src/outage-auto-clear.ts` flips a capability outage back to\n   `online` automatically once `expected_return_at` passes, with no confirmation\n   the capability actually returned. Violates FR-3.5 / FR-N-3.1. The file's own\n   docstring quotes FR-3.5 then overrides it. Flagged, not fixed.\n3. **Eligibility bypass.** `compose-pages.ts:103-112` - paging named individuals\n   skips `checkDispatchEligibility`.\n\n## Nick's decisions (2026-06-18)\n\n- **Outage auto-clear -> require confirmation.** Remove the silent auto-flip to\n  `online`. An outage stays in its current state until a human confirms the\n  capability has actually returned.\n- **Add stale-outage alerting.** If an outage passes its `expected_return_at`\n  (or some threshold) WITHOUT being confirmed resolved, raise an alert so we\n  don't accumulate stale/forgotten outages. The auto-clear logic becomes an\n  auto-ALERT instead of an auto-clear.\n\n## Replacement-paging design (re-derived from the review transcript)\n\n- `packages/domain/src/recompose.ts` - PURE shortfall logic. Reuse `decideNext`\n  (already in domain). Given a callout's target vs current confirmed responders,\n  compute the shortfall and who to page next. Unit-tested in isolation like the\n  other domain modules (`dispatch-eligibility.ts`, `cross-org-consent.ts`).\n- `apps/api/src/features/callouts/recompose-callout.ts` - orchestrator. Reuse\n  `findClosestDispatchable` with `exclude_member_ids` (already-paged/declined),\n  honour cross-org consent (`cross-org-consent.ts`), and go THROUGH\n  `checkDispatchEligibility` (fixes finding 3 - no bypass).\n- **Wire recompose into** the timeout sweep (`page-timeout-sweep.ts`), the reject\n  handler, and the drop handler (`responder-actions.ts`) - the three events the\n  existing comments already promise trigger a recompose.\n- **Tests** against the existing baseline (review cited ~1213 pass; verify\n  current number first). Add recompose unit tests + an integration test for the\n  timeout -> recompose -> re-page path.\n\n## Build approach (proposed, NOT yet started)\n\n1. Branch `feat/replacement-paging` off current `dev` (`693cfc7`), NOT the stale\n   `bc2a0a7` the review cited (that commit isn't in history).\n2. Use the worktree pattern: `~/Documents/workspace/lifesaveroncall-wt/feat-replacement-paging/`.\n3. Domain-first (recompose.ts + tests), then orchestrator, then wire the three\n   handlers, then the outage confirmation/alerting change.\n4. `bun run lint:au` before any push. Containers need manual rebuild - merged != deployed.\n"
+    },
+    "timestamp": "2026-06-18T05:16:58.797Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/gotcha-mac-linux-rsync-openrsync.md",
+      "content": "---\nname: gotcha-mac-linux-rsync-openrsync\ndescription: rsync Mac->Linux fails (protocol error 12); Mac ships openrsync proto 29, incompatible with GNU rsync 3.x. Use tar-over-ssh.\nmetadata:\n  type: reference\n---\n\nPulling a repo from the Mac (`ssh mac`) to the Linux box with `rsync` fails with\n`rsync error: error in rsync protocol data stream (code 12)` and a dumped rsync\nusage message. Cause: macOS ships Apple's **openrsync** (`/usr/bin/rsync`,\n\"protocol version 29, rsync 2.6.9 compatible\") with no Homebrew GNU rsync, and it\ncannot negotiate with the Linux box's **GNU rsync 3.4.1 (protocol 32)**. Forcing\n`--protocol=29` on the client does NOT fix it - openrsync's server mode rejects\nthe GNU server args.\n\n**Fix: use tar-over-ssh** (both `tar` and `ssh` work fine independently; ssh is\nbanner-clean):\n\n```\nssh mac 'cd ~/path/to/repo && COPYFILE_DISABLE=1 tar czf - \\\n  --exclude=node_modules --exclude=.next --exclude=dist --exclude=.turbo .' \\\n  | tar xzf - -C ~/dest/path\n```\n\n`COPYFILE_DISABLE=1` suppresses AppleDouble `._*` junk. Linux tar prints harmless\n`Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.*'` warnings -\nsafe to ignore. For a git repo, `git clone ssh://...` is an alternative but loses\nuncommitted working-tree state. This is the concrete recovery method for the\n[[gotcha-gitignored-subrepo-migration]] problem (LOC `code/` is gitignored and\nMac-only). Reinstall deps with `bun install` after transfer - never copy\nnode_modules (native modules differ by platform).\n"
+    },
+    "timestamp": "2026-06-18T05:20:35.221Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/MEMORY.md",
+      "old_string": "- [Gitignored sub-repo migration](gotcha-gitignored-subrepo-migration.md) — nested gitignored repos didn't migrate from Mac; rsync over `ssh mac` to recover",
+      "new_string": "- [Gitignored sub-repo migration](gotcha-gitignored-subrepo-migration.md) — nested gitignored repos didn't migrate from Mac; rsync over `ssh mac` to recover\n- [Mac→Linux rsync broken](gotcha-mac-linux-rsync-openrsync.md) — Mac openrsync proto 29 vs GNU rsync 3.x fails (code 12); use tar-over-ssh"
+    },
+    "timestamp": "2026-06-18T05:20:40.822Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/MEMORY.md"
+    },
+    "timestamp": "2026-06-18T05:20:44.320Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/MEMORY.md",
+      "old_string": "- [Gitignored sub-repo migration](gotcha-gitignored-subrepo-migration.md) — nested gitignored repos didn't migrate from Mac; rsync over `ssh mac` to recover",
+      "new_string": "- [Gitignored sub-repo migration](gotcha-gitignored-subrepo-migration.md) — nested gitignored repos didn't migrate from Mac; rsync over `ssh mac` to recover\n- [Mac→Linux rsync broken](gotcha-mac-linux-rsync-openrsync.md) — Mac openrsync proto 29 vs GNU rsync 3.x fails (code 12); use tar-over-ssh"
+    },
+    "timestamp": "2026-06-18T05:20:49.203Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo \"===workspace \\${HOME} dir contents (recursive, files)===\"; find ~/Documents/workspace/'${HOME}' -type f 2>/dev/null | head -30; echo \"(count: $(find ~/Documents/workspace/'${HOME}' -type f 2>/dev/null | wc -l))\"\necho; echo \"===.claude \\${HOME} dir contents===\"; find ~/.claude/'${HOME}' -type f 2>/dev/null | head -30; echo \"(count: $(find ~/.claude/'${HOME}' -type f 2>/dev/null | wc -l))\"\necho; echo \"===any other literal \\${HOME} dirs===\"; fd -t d -H -I '^\\$\\{HOME\\}$' ~ 2>/dev/null | head\necho; echo \"===session-names registry===\"; ls -la ~/.claude/PAI/MEMORY/STATE/session-names.json 2>/dev/null; echo \"---existing entries (sample)---\"; cat ~/.claude/PAI/MEMORY/STATE/session-names.json 2>/dev/null | head -c 600\necho; echo; echo \"===rename tool?===\"; fd -t f -i 'session.*name|name.*session|rename' ~/.claude/PAI/Tools ~/.claude/PAI/Pulse 2>/dev/null | head",
+      "description": "Inspect stray dirs and find rename mechanism"
+    },
+    "timestamp": "2026-06-18T05:23:43.373Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo \"===do the empty \\${HOME} dirs still exist?===\"\nfor d in ~/Documents/workspace/'${HOME}' ~/.claude/'${HOME}'; do\n  if [ -d \"$d\" ]; then echo \"EXISTS (empty=$(find \"$d\" -mindepth 1 2>/dev/null | wc -l) entries): $d\"; else echo \"GONE: $d\"; fi\ndone\necho; echo \"===removing empty stray dirs if present===\"\nrmdir -p ~/Documents/workspace/'${HOME}'/.claude 2>/dev/null; rmdir ~/Documents/workspace/'${HOME}' 2>/dev/null\nrmdir -p ~/.claude/'${HOME}'/.claude 2>/dev/null; rmdir ~/.claude/'${HOME}' 2>/dev/null\necho \"after cleanup:\"\nfor d in ~/Documents/workspace/'${HOME}' ~/.claude/'${HOME}'; do [ -d \"$d\" ] && echo \"STILL EXISTS: $d (contents below)\" && find \"$d\" 2>/dev/null || echo \"GONE: $d\"; done",
+      "description": "Remove empty stray HOME dirs"
+    },
+    "timestamp": "2026-06-18T05:24:08.935Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/STATE/session-names.json"
+    },
+    "timestamp": "2026-06-18T05:24:13.368Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/STATE/session-names.json",
+      "old_string": "  \"4cb7639b-c663-42f4-bb60-ef307d2ef67e\": \"Build Rsync Outage Confirmation Alerting\",",
+      "new_string": "  \"4cb7639b-c663-42f4-bb60-ef307d2ef67e\": \"lifesaver-on-call-paging-fix\","
+    },
+    "timestamp": "2026-06-18T05:24:17.104Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/lifesaveroncall/code\necho \"===ensure clean-ish base on dev===\"; git stash list 2>/dev/null | head; git status --short 2>/dev/null | head\necho \"===create branch off dev===\"; git checkout dev 2>&1 | tail -1; git checkout -b feat/replacement-paging 2>&1 | tail -2\necho \"===confirm===\"; git rev-parse --abbrev-ref HEAD; git log --oneline -1 | cat\necho; echo \"===locate the APIs the design reuses===\"\necho \"--decideNext--\"; rg -n 'export (function|const) decideNext|function decideNext' packages apps 2>/dev/null | head\necho \"--findClosestDispatchable--\"; rg -n 'findClosestDispatchable' packages apps -l 2>/dev/null | head\necho \"--checkDispatchEligibility--\"; rg -n 'export.*checkDispatchEligibility' packages apps 2>/dev/null | head\necho \"--domain exports--\"; sed -n '1,40p' packages/domain/src/index.ts 2>/dev/null",
+      "description": "Create feature branch and locate reused APIs"
+    },
+    "timestamp": "2026-06-18T05:25:24.276Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Build replacement-paging feature",
+      "subagent_type": "lifesaveroncall-feature-dev",
+      "prompt": "Implement the `feat/replacement-paging` feature for LifesaverOnCall. The branch is ALREADY created and checked out for you.\n\n## Working location (do not change branch or clone)\n- Repo: `~/Documents/workspace/projects/lifesaveroncall/code`\n- Branch: `feat/replacement-paging` (already checked out, based on `dev` @ `693cfc7`)\n- IMPORTANT: the working tree carries some PRE-EXISTING unrelated uncommitted changes from dev (deleted `brand/logos/*.png`, modified `apps/mobile/tsconfig.json`, deleted `apps/mobile/expo-env.d.ts`, stray `flag-non-op.png` / `running man.jpeg` / `running person.html`). These are NOT yours. Do NOT stage, commit, revert, or touch them. Only stage the files you create/modify for this feature.\n\n## Full spec (read this first)\n`~/Documents/workspace/projects/lifesaveroncall/context/project_lifesaveroncall_replacement_paging_spec.md`\nIt contains the review findings, Nick's decisions, and the design. Treat it as the source of truth. This brief adds the verified API locations.\n\n## What you are building (two pieces)\n\n### Piece 1 — Replacement paging (the headline gap)\nToday, when a paged responder times out / rejects / drops, nothing re-pages a replacement. Comments at `apps/sweeper/src/page-timeout-sweep.ts:10` and `apps/api/src/features/callouts/responder-actions.ts:9` already PROMISE a \"recompose\" step that does not exist. Build it:\n\n- `packages/domain/src/recompose.ts` — PURE shortfall logic (no I/O, no framework). Compute, for a callout, the gap between target and current confirmed/pending responders and decide who to page next. REUSE `decideNext` from `packages/domain/src/page-composition.ts:53` (`decideNext(policy: PageBatchPolicy, state: CandidatePoolState): ComposeDecision`). Add `recompose.ts` to the barrel `packages/domain/src/index.ts`. Write `packages/domain/src/recompose.test.ts` matching the style of `dispatch-eligibility.test.ts` / `page-composition.test.ts`.\n- `apps/api/src/features/callouts/recompose-callout.ts` — orchestrator. REUSE `findClosestDispatchable` (see `packages/db/src/repos/dispatch-candidates.ts` and its use in `compose-pages.ts`) passing the already-paged/declined member ids as `exclude_member_ids`. Honour cross-org consent via `packages/domain/src/cross-org-consent.ts`. CRITICAL: route through `checkDispatchEligibility` (`packages/domain/src/dispatch-eligibility.ts:38`) so replacement paging cannot dispatch ineligible members — this also fixes finding 3 (the named-individuals bypass at `compose-pages.ts:103-112`; make that path go through eligibility too).\n- Wire the recompose trigger into all three events the comments promise: the timeout sweep (`page-timeout-sweep.ts`), the reject handler and the drop handler (`responder-actions.ts`).\n\n### Piece 2 — Outage confirmation + stale-outage alerting (Nick's decisions)\n`apps/sweeper/src/outage-auto-clear.ts` currently silently flips a capability outage back to `online` once `expected_return_at` passes — this violates FR-3.5 / FR-N-3.1 (the file's own docstring quotes FR-3.5 then overrides it).\n- Change it so an outage is NEVER auto-cleared. Clearing requires explicit human confirmation that the capability has returned. (Find/extend the existing manual outage-clear path — see `feat/outage-mark-and-clear` history and `apps/api` outage endpoints — rather than inventing a parallel one.)\n- Replace the auto-clear behaviour with auto-ALERT: when an outage passes `expected_return_at` (or a sensible threshold) WITHOUT being confirmed resolved, raise an alert/notification so stale outages don't accumulate. Use the existing notification/push or sweeper-alert mechanism already in the codebase; do not build a new channel from scratch. Keep the FR-3.5 docstring and make the code actually honour it now.\n\n## Build order & checkpoints\nDomain-first (recompose.ts + tests, get them green) → orchestrator → wire the three handlers → outage confirmation/alerting. Commit in logical chunks with clear messages (do not merge, do not push).\n\n## Verification (must do, report results)\n- `bun test packages/domain` (baseline before you start = 45 pass / 0 fail; keep it green and add your recompose tests).\n- Run the broader callout/sweeper tests you can without external infra; note anything that needs docker/postgres/pubsub emulators (don't block on infra you can't start, but say what's unverified).\n- `bun run lint:au` (Australian English gate) must pass before you consider it done.\n- KNOWN pre-existing failures to IGNORE (not introduced by you): TS6310 + bun-types on `bun run --filter typecheck`; eslint parser errors on `packages/events`, `packages/observability`, `scripts/`.\n\n## Constraints\n- bun/bunx only, TypeScript only, no hardcoded absolute paths.\n- Match existing code style and the FR/NFR conventions in the repo.\n- Do NOT merge to dev, do NOT push to origin. Leave it on the branch for review.\n\n## Return to me (structured)\n1. Files created/modified (path + one-line purpose each).\n2. How recompose reuses decideNext / findClosestDispatchable / checkDispatchEligibility (so I can confirm no bypass).\n3. Exactly how the outage flow now works (confirmation path + alerting trigger + what threshold).\n4. Test results: domain pass/fail count, any other tests run, what's left unverified and why.\n5. `bun run lint:au` result.\n6. Any decisions you made under ambiguity, and anything you deliberately left out of scope."
+    },
+    "timestamp": "2026-06-18T05:26:11.132Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/lifesaveroncall/code\necho \"===commits on branch (vs dev)===\"; git log --oneline dev..HEAD | cat\necho \"===diff stat (committed)===\"; git diff --stat dev..HEAD | cat\necho \"===uncommitted now (should still be ONLY the pre-existing strays)===\"; git status --short | cat\necho \"===new files present?===\"; ls -la packages/domain/src/recompose.ts packages/domain/src/recompose.test.ts apps/api/src/features/callouts/recompose-callout.ts 2>&1",
+      "description": "Verify branch commits and working tree"
+    },
+    "timestamp": "2026-06-18T05:49:42.622Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/lifesaveroncall/code\necho \"===domain tests===\"; timeout 120 bun test packages/domain 2>&1 | tail -4\necho \"===callout feature tests===\"; timeout 180 bun test apps/api/src/features/callouts 2>&1 | tail -4\necho \"===lint:au===\"; timeout 120 bun run lint:au 2>&1 | tail -3\necho \"===recompose enforces eligibility? (grep proof)===\"; rg -n 'checkDispatchEligibility' apps/api/src/features/callouts/recompose-callout.ts | head",
+      "description": "Independently re-run tests + lint"
+    },
+    "timestamp": "2026-06-18T05:49:51.143Z"
+  },
+  {
+    "name": "ToolSearch",
+    "input": {
+      "query": "select:SendMessage",
+      "max_results": 3
+    },
+    "timestamp": "2026-06-18T05:50:26.652Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Eligibility override perm + alert throttle",
+      "subagent_type": "lifesaveroncall-feature-dev",
+      "run_in_background": true,
+      "prompt": "Continue the `feat/replacement-paging` work on LifesaverOnCall. Two changes, both committed to the SAME existing branch. Nick has decided these explicitly.\n\n## Working location (do NOT change/clone branch)\n- Repo: `~/Documents/workspace/projects/lifesaveroncall/code`\n- Branch: `feat/replacement-paging` is already checked out (6 commits ahead of dev). Add to it.\n- The working tree has PRE-EXISTING unrelated strays (deleted `brand/logos/*.png`, `apps/mobile/tsconfig.json`, `apps/mobile/expo-env.d.ts`, stray `flag-non-op.png` / `running man.jpeg` / `running person.html`). Do NOT touch, stage, commit, or revert them. Only stage YOUR files.\n- Context/spec: `~/Documents/workspace/projects/lifesaveroncall/context/project_lifesaveroncall_replacement_paging_spec.md` (read it). Update it at the end with these two decisions.\n\n## CHANGE A — Eligibility enforced by default on every paging path, with a separate override permission\n\nNick's exact decision: \"There should be a separate permission set to be able to bypass eligibility checks. The default should be: you cannot call someone out if they are not qualified, doesn't matter the method.\"\n\nRequirements:\n1. **Default-enforce eligibility everywhere.** The named-individuals paging path at `apps/api/src/features/callouts/compose-pages.ts:103-112` currently BYPASSES `checkDispatchEligibility` (the review's finding 3). Make it route through `checkDispatchEligibility` (`packages/domain/src/dispatch-eligibility.ts:38`) like the recompose path already does. By default, no method — broadcast, proximity, recompose, OR explicitly naming a person — can page someone who fails eligibility.\n2. **Add a distinct, separately-grantable permission** that allows bypassing eligibility (e.g. a `dispatch:override-eligibility` permission/scope — follow the EXISTING permission/role conventions in the codebase; find them first, likely in `packages/domain` member/role logic and the `apps/api` auth/permission gate used by the leader endpoints such as the outage-clear gate in `apps/api/src/routes/leaders.ts`). It must be a SEPARATE permission, not an existing role reused — something that can be granted on its own.\n3. **Gate the override:** an actor may page an ineligible named individual ONLY IF (a) they hold the override permission AND (b) they explicitly opt to override (an explicit flag in the request, not implicit). Without the permission, the request is rejected with a clear error. Without the explicit override flag, eligibility is enforced even for permission-holders.\n4. **Audit every override:** when an ineligible person is paged under override, write an audit record capturing who overrode, the target member, the callout, and the failed eligibility reason(s). This is a privilege to bypass a SAFETY check — it must be traceable.\n5. Tests: domain-level eligibility-gate tests + an api-level test that (a) named-individual ineligible page is REJECTED without permission, (b) ALLOWED with permission + explicit override flag, (c) still enforced for a permission-holder who does NOT set the override flag.\n\n## CHANGE B — Throttle stale-outage alerts (no spam)\n\nNick's exact decision: \"the stale outage alert should not be spammy, send at reasonable intervals.\"\nCurrent behaviour (from prior commit `bc49ca3`): `sweepStaleOutageAlerts` in `apps/sweeper/src/outage-auto-clear.ts` re-publishes an `outage.stale` alert EVERY sweep tick until the outage is cleared. Fix:\n1. Add a DB migration adding a nullable timestamp column (e.g. `last_stale_alert_at timestamptz`) to the `capability_outages` table. Check current migration numbering and use the next number (next_session note says 0001-0029 are applied, so likely 0030 — verify against `packages/db` migrations dir).\n2. The sweep re-alerts for a stale outage ONLY IF `last_stale_alert_at IS NULL` OR `now() - last_stale_alert_at >= re_alert_interval`. On publishing an alert, set `last_stale_alert_at = now()`. Pick a sensible default interval (suggest 6 hours) and make it configurable like the existing threshold param. When an outage is cleared/confirmed, the column is irrelevant (row no longer stale).\n3. Tests: stale outage alerts on first detection; does NOT re-alert before the interval; DOES re-alert after the interval elapses.\n\n## Build & verify\n- bun/bunx only, TypeScript only, no hardcoded absolute paths. Match existing conventions (FR/NFR refs, permission patterns, migration style).\n- Commit in logical chunks (Change A, Change B separately). Do NOT merge, do NOT push.\n- Run and report: `bun test packages/domain` (currently 53/0 — keep green + add yours), `bun test apps/api/src/features/callouts` (currently 18/0), any auth/permission and db tests you can run without the Docker stack, and `bun run lint:au` (must pass).\n- KNOWN pre-existing failures to IGNORE: TS6310 + bun-types on `--filter typecheck`; eslint parser errors on `packages/events`, `packages/observability`, `scripts/`.\n- If a change genuinely needs the running Postgres/Pub-Sub stack to test, say so rather than blocking.\n\n## Return to me (structured)\n1. Files created/modified (path + one-line purpose).\n2. CHANGE A: the exact permission you added (name + how it's granted/checked), how the override flag works, where the audit record is written, and confirmation that the named-individuals path now enforces eligibility by default.\n3. CHANGE B: the migration number/column, the re-alert interval + default, and the throttle logic.\n4. Test results (counts) + lint:au result + what's left unverified and why.\n5. Any ambiguity decisions or anything left out of scope."
+    },
+    "timestamp": "2026-06-18T05:54:40.164Z"
+  },
+  {
+    "name": "ToolSearch",
+    "input": {
+      "query": "select:Monitor",
+      "max_results": 3
+    },
+    "timestamp": "2026-06-18T05:54:53.673Z"
+  },
+  {
+    "name": "Monitor",
+    "input": {
+      "description": "Agent watchdog",
+      "persistent": true,
+      "timeout_ms": 3600000,
+      "command": "bun $HOME/.claude/PAI/TOOLS/AgentWatchdog.ts"
+    },
+    "timestamp": "2026-06-18T05:55:04.203Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Eligibility override perm + alert throttle",
+      "subagent_type": "lifesaveroncall-feature-dev",
+      "prompt": "Continue the `feat/replacement-paging` work on LifesaverOnCall. Two changes, both committed to the SAME existing branch. You HAVE Edit/Write access here — proceed and actually make the changes (a prior background attempt stalled on permissions; this run can write).\n\n## Working location (do NOT change/clone branch)\n- Repo: `~/Documents/workspace/projects/lifesaveroncall/code`\n- Branch: `feat/replacement-paging` already checked out (6 commits ahead of dev). Add to it.\n- The working tree has PRE-EXISTING unrelated strays (deleted `brand/logos/*.png`, `apps/mobile/tsconfig.json`, `apps/mobile/expo-env.d.ts`, stray `flag-non-op.png` / `running man.jpeg` / `running person.html`). Do NOT touch/stage/commit/revert them. Stage only YOUR files (use explicit `git add <path>`).\n- Spec to read and update at the end: `~/Documents/workspace/projects/lifesaveroncall/context/project_lifesaveroncall_replacement_paging_spec.md`\n\n## CHANGE A — Eligibility enforced by default on every paging path, with a separate override permission\nNick's exact decision: \"There should be a separate permission set to be able to bypass eligibility checks. The default should be: you cannot call someone out if they are not qualified, doesn't matter the method.\"\n\n1. **Default-enforce eligibility everywhere.** The named-individuals path at `apps/api/src/features/callouts/compose-pages.ts:103-112` bypasses `checkDispatchEligibility` (review finding 3). Route it through `checkDispatchEligibility` (`packages/domain/src/dispatch-eligibility.ts:38`) like the recompose path. By default NO method (broadcast, proximity, recompose, or naming a person) can page someone who fails eligibility.\n2. **Add a distinct, separately-grantable permission** to bypass eligibility (you identified `dispatch_override_eligibility` in `packages/db/src/repos/roles.ts` — good; follow the existing role/permission conventions there). It must be independently grantable, not an existing role reused.\n3. **Gate the override:** page an ineligible named individual ONLY IF the actor (a) holds the override permission AND (b) sets an explicit override flag in the request. No permission → reject with a clear error. No explicit flag → eligibility enforced even for permission-holders.\n4. **Audit every override:** write an audit record (who overrode, target member, callout, failed eligibility reason(s)). This bypasses a SAFETY check — it must be traceable.\n5. Tests: (a) named ineligible page REJECTED without permission; (b) ALLOWED with permission + explicit override flag; (c) still enforced for a permission-holder who does NOT set the flag; plus domain tests for the override logic.\n\n## CHANGE B — Throttle stale-outage alerts\nNick's exact decision: \"the stale outage alert should not be spammy, send at reasonable intervals.\"\nCurrent (commit `bc49ca3`): `sweepStaleOutageAlerts` in `apps/sweeper/src/outage-auto-clear.ts` re-alerts EVERY sweep tick until cleared.\n1. Migration 0030 (verify next number against `packages/db` migrations dir) adding nullable `last_stale_alert_at timestamptz` to `capability_outages`.\n2. Re-alert ONLY IF `last_stale_alert_at IS NULL` OR `now() - last_stale_alert_at >= re_alert_interval`; set `last_stale_alert_at = now()` when alerting. Sensible default interval (suggest 6h), configurable like the existing threshold param.\n3. Tests: alerts on first detection; does NOT re-alert before interval; DOES re-alert after interval elapses.\n\n## Build & verify\n- bun/bunx only, TypeScript only, no hardcoded absolute paths. Match existing conventions.\n- Commit Change A and Change B as separate logical commits. Do NOT merge, do NOT push.\n- Run + report: `bun test packages/domain` (currently 53/0 — keep green, add yours), `bun test apps/api/src/features/callouts` (currently 18/0), any auth/permission/db tests runnable without the Docker stack, and `bun run lint:au` (must pass).\n- KNOWN pre-existing failures to IGNORE: TS6310 + bun-types on `--filter typecheck`; eslint parser errors on `packages/events`, `packages/observability`, `scripts/`.\n- If something genuinely needs the running Postgres/Pub-Sub stack to test, say so rather than blocking.\n\n## Return to me (structured)\n1. Files created/modified (path + one-line purpose).\n2. CHANGE A: exact permission name + how granted/checked, how the override flag works, where the audit record is written, and confirmation the named-individuals path now enforces eligibility by default.\n3. CHANGE B: migration number/column, re-alert interval + default, throttle logic.\n4. Test results (counts) + lint:au result + what's left unverified and why.\n5. Any ambiguity decisions or out-of-scope items."
+    },
+    "timestamp": "2026-06-18T05:56:19.072Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/lifesaveroncall/code\necho \"===commits ahead of dev===\"; git log --oneline dev..HEAD | cat\necho \"===diff stat for the 2 new commits===\"; git diff --stat 'HEAD~2..HEAD' | cat\necho \"===working tree still only strays?===\"; git status --short | cat\necho \"===PROOF: named path enforces eligibility + permission gate + audit===\"\nrg -n 'checkDispatchEligibility|dispatch_override_eligibility|override_eligibility|PAGE_ELIGIBILITY_OVERRIDE' apps/api/src/features/callouts/compose-pages.ts | head -20\necho \"===migration 0030 present?===\"; ls packages/db/migrations/0030_* 2>&1\necho \"===Docker available + stack state===\"; which docker 2>/dev/null && docker ps --format '{{.Names}}\\t{{.Status}}' 2>&1 | head",
+      "description": "Static verification + probe Docker stack"
+    },
+    "timestamp": "2026-06-18T06:13:19.070Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/lifesaveroncall/code\necho \"===docker installed?===\"; command -v docker && docker --version 2>&1 | head -1 || echo \"NO docker binary\"\necho \"===docker daemon up?===\"; docker info >/dev/null 2>&1 && echo \"daemon RUNNING\" || echo \"daemon NOT available\"\necho \"===any postgres listening locally?===\"; (command -v pg_isready >/dev/null && pg_isready 2>&1) || ss -ltnp 2>/dev/null | grep -E ':5432|:8085' || echo \"no pg/pubsub ports\"\necho \"===what DATABASE_URL do tests expect?===\"; rg -n 'DATABASE_URL' .env .env.example apps/api/.env* 2>/dev/null | head; echo \"--- compose services ---\"; rg -n '^\\s+\\w+:' docker-compose.yml compose.yaml 2>/dev/null | head -20\necho \"===re-confirm domain green + lint===\"; bun test packages/domain 2>&1 | tail -3",
+      "description": "Probe local infra for integration tests"
+    },
+    "timestamp": "2026-06-18T06:13:38.149Z"
+  },
+  {
+    "name": "ToolSearch",
+    "input": {
+      "query": "select:TaskStop",
+      "max_results": 3
+    },
+    "timestamp": "2026-06-19T11:00:42.095Z"
+  },
+  {
+    "name": "TaskStop",
+    "input": {
+      "task_id": "b9lop1v11"
+    },
+    "timestamp": "2026-06-19T11:00:49.510Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/lifesaveroncall/context/project_lifesaveroncall_replacement_paging_spec.md",
+      "old_string": "## Build status (2026-06-18)\n\n**COMPLETE.**",
+      "new_string": "## Merge/verification status (2026-06-18)\n\n**Branch `feat/replacement-paging` = 8 commits ahead of dev, UNMERGED, NOT pushed.**\nVerified: domain tests 53/0 (re-run), `lint:au` pass, named-pages gate confirmed by\ncode read (eligibility enforced + override permission-gated + audited). NOT YET\nRUN: the 8 integration tests for the override gate + alert throttle - they need a\nPostgres DB and the Linux box has no Docker/Postgres (stack only ever existed on\nthe Mac). **Nick accepted this gap (2026-06-18): he will run the integration tests\nand confirm the merge later.** To resume verification: set up local Postgres\n(`docker-compose.yml` -> `loc-postgres`, `DATABASE_URL=postgres://loc:loc@localhost:5432/lifesaveroncall`),\napply migrations incl. 0030, then `bun test apps/api/src/features/callouts` and\n`bun test apps/sweeper/src/outage-stale-alert-throttle.test.ts`.\n\n## Build status (2026-06-18)\n\n**COMPLETE.**"
+    },
+    "timestamp": "2026-06-19T11:00:57.859Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/lifesaveroncall/code\necho \"===branch + commits ahead of dev===\"; git rev-parse --abbrev-ref HEAD; git log --oneline dev..HEAD | wc -l; git log --oneline dev..HEAD | cat\necho \"===domain tests (final)===\"; bun test packages/domain 2>&1 | tail -3\necho \"===working tree (should be only pre-existing strays)===\"; git status --short | grep -vE 'brand/logos|expo-env|mobile/tsconfig|flag-non-op|running (man|person)' || echo \"clean apart from known strays\"",
+      "description": "Final sanity check before completion"
+    },
+    "timestamp": "2026-06-19T19:31:55.934Z"
+  }
+]

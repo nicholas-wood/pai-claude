@@ -39,15 +39,7 @@ for (const dir of REPOS) {
 
     await $`git -C ${dir} fetch -q`.quiet().nothrow()
     const ahead = (await $`git -C ${dir} rev-list --count @{u}..HEAD`.quiet().nothrow().text()).trim()
-    if (ahead === "0") {
-      // Purely behind (e.g. another machine pushed): fast-forward to catch up.
-      const behind = (await $`git -C ${dir} rev-list --count HEAD..@{u}`.quiet().nothrow().text()).trim()
-      if (behind !== "0" && behind !== "") {
-        const ff = await $`git -C ${dir} merge --ff-only @{u}`.quiet().nothrow()
-        console.log(ff.exitCode === 0 ? `pulled ${dir} (${behind} behind)` : `behind ${dir} (${behind}) but ff failed — diverged`)
-      } else console.log(`clean ${dir}`)
-      continue
-    }
+    if (ahead === "0") { console.log(`clean ${dir}`); continue }
 
     await $`git -C ${dir} pull --rebase --autostash`.quiet().nothrow()
     const push = await $`git -C ${dir} push`.quiet().nothrow()
