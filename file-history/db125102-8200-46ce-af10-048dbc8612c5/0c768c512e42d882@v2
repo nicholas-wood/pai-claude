@@ -1,0 +1,48 @@
+# AccessBuddy — Tech Stack Overview
+
+> Snapshot as at 2026-06-23 (v1.10.2, live at accessbuddy.com.au).
+> Multi-tenant SaaS for club building-access and credential management.
+> Source: `PROJECTS/accessbuddy.md` "Tech stack (settled)" + Confirmed Facts. See `ISA.md` for full system of record.
+
+## Frontend
+- Next.js (App Router)
+- shadcn on **@base-ui/react** (NOT Radix)
+- PWA: manifest, service worker, icons; OTP sign-in for standalone mode
+- Mobile bottom-sheet navigation drawers
+
+## Backend
+- **Bun + Hono**
+- TypeScript throughout
+
+## Database
+- **Postgres 16** via **Drizzle ORM** (migrations in `packages/db/drizzle`)
+- Multi-tenancy enforced via Postgres **RLS** (`set_config('app.current_tenant_id', ..., true)`) — fail-closed if unset
+
+## Auth
+- **Firebase Auth** — magic link, OTP, WebAuthn passkey/Face ID
+
+## Infrastructure (GCP, australia-southeast1, all Terraform-managed)
+- Cloud Run (min 0 / max 10, 1 vCPU / 1Gi, CPU-throttled, startup_cpu_boost, Direct VPC egress — no connector)
+- Cloud SQL (db-f1-micro, private IP only, daily backups 7-day retention)
+- Cloud Storage, Cloud DNS, Secret Manager, Cloud Scheduler, Artifact Registry
+- Global External ALB + static IP `136.110.185.146` (Cloud Run custom domains unavailable in the region)
+- Cloud Scheduler: daily 2am AEST → `GET /api/cron/daily` (auth via `x-cron-secret` header)
+- ~$60-75 AUD/month post cost-optimisation (2026-05-05)
+
+## Integrations
+- **Stripe Connect Express** — dual webhooks (connect + platform events)
+- **Resend** for email — 27 registered events, per-tenant block-based template editor with live preview and per-tenant overrides
+- **Sentry** for error monitoring
+
+## CI/CD
+- GitHub Actions + **release-please** with Workload Identity Federation
+- `main` = production (auto-deploys on `feat:`/`fix:` commits); `dev` = working branch
+- `NEXT_PUBLIC_*` vars are 8 Docker build args baked at build time (not runtime env)
+- `.release-please-manifest.json` is the version source of truth (shown in UI footer)
+- Claude Code Review on PRs
+
+## Key Operational Hard Rules
+- `gcloud run --set-env-vars` REPLACES all env vars — always use `--update-env-vars` (caused a prod outage)
+- Access level lives on `tenantMemberships.accessLevelId`, not on the credential
+- `chore:` commits merge but never deploy — use `feat:`/`fix:` for a prod ship
+- Always `setEmailBranding()` before rendering any email template

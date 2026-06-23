@@ -1,0 +1,148 @@
+# Google Cloud AI & ML Concepts: Cheat Sheet
+
+A consolidated reference for every AI/ML concept on the Google Cloud "Discover" learning hub
+(<https://cloud.google.com/discover>), grouped by theme. Definitions are faithful to Google
+Cloud's own framing. A few concepts the hub links inline (transformer, embeddings, computer
+vision, speech, recommendations) live under `/learn/`, `/use-cases/`, or product pages rather
+than `/discover/`; those are flagged with their real URL.
+
+> Compiled 2026-06-23. Source convention: `cloud.google.com/discover/<slug>` unless noted.
+
+---
+
+## 1. Foundations
+
+| Concept | One-line definition |
+|---|---|
+| **Artificial intelligence (AI)** | A set of technologies that let computers learn, reason, and perform tasks that used to require human intelligence (understanding language, analysing data, making suggestions). A broad field, not a single technology, relying on data, algorithms, and compute. `/learn/what-is-artificial-intelligence` |
+| **AI vs machine learning** | AI is the broad umbrella (sense, reason, act, adapt like a human); ML is a subset that learns and improves from data without explicit programming. AI is categorised by capability into ANI (narrow, today), AGI (human-level), ASI (theoretical super-intelligence). `/learn/artificial-intelligence-vs-machine-learning` |
+| **Machine learning (ML)** | A subset of AI where systems autonomously learn and improve from large datasets without being explicitly programmed, getting better as more data is processed. Powers fraud detection, personalisation, translation, automated support. `/learn/what-is-machine-learning` |
+| **Deep learning** | A type of ML using multi-layered artificial neural networks (inspired by the brain) where each layer learns a feature (edges, then shapes, then objects). Trained via backpropagation; powers image recognition, NLP, and text-to-image. `/discover/what-is-deep-learning` |
+| **Deep learning vs ML** | Deep learning is a specialised subdivision of ML: ML can use simpler statistical models, while deep learning uses many-layered neural networks that handle complex, unstructured data with less manual feature engineering. `/discover/deep-learning-vs-machine-learning` |
+| **Neural network** | A brain-inspired ML algorithm of interconnected "neurons" arranged in weighted layers; weights are tuned during training to minimise prediction error. Types: feedforward, recurrent (RNN), convolutional (CNN). `/discover/what-is-a-neural-network` |
+| **Convolutional neural networks (CNNs)** | A neural-network architecture specialised for grid-like data such as images, using convolution layers to detect spatial features (edges, textures, shapes). The workhorse behind image classification and object detection. `/discover/what-are-convolutional-neural-networks` |
+| **AI model** | A program trained on a large dataset to learn patterns so it can predict or decide on new, unseen data. Hierarchy: AI models (broad) contain ML models, which contain deep-learning models. Lifecycle: train, test, deploy, evaluate. `/discover/what-is-an-ai-model` |
+| **Cognitive computing** | Systems that simulate human thought processes (learning, reasoning, understanding natural language) to augment human decision-making, often over large, ambiguous, unstructured data. `/discover/what-is-cognitive-computing` |
+| **Artificial general intelligence (AGI)** | Hypothetical machine intelligence able to understand or learn any intellectual task a human can. Does not yet exist; distinguished by generalisation across domains and common-sense knowledge. `/discover/what-is-artificial-general-intelligence` |
+
+---
+
+## 2. Learning paradigms
+
+| Concept | One-line definition |
+|---|---|
+| **Supervised learning** | Trains on labelled data (inputs paired with correct outputs) so the model learns the input-to-output relationship. Used for risk assessment, image classification, fraud detection, recommendations. `/discover/what-is-supervised-learning` |
+| **Unsupervised learning** | Learns from unlabelled data, discovering patterns and structure on its own (clustering, association). Used for anomaly detection, customer segmentation, recommendation engines. `/discover/what-is-unsupervised-learning` |
+| **Supervised vs unsupervised** | Supervised needs labelled data and predicts known targets; unsupervised finds hidden structure in unlabelled data. Choice depends on whether you have labels and what you are trying to find. `/discover/supervised-vs-unsupervised-learning` |
+| **Reinforcement learning (RL)** | An agent learns optimal behaviour by trial and error in an environment, guided by rewards and penalties, to maximise reward over time. Four elements: agent, environment, actions, rewards. `/discover/what-is-reinforcement-learning` |
+| **Federated learning** | Trains a shared model across many decentralised devices or servers without moving the raw local data, preserving privacy and reducing bandwidth. Frameworks: TensorFlow Federated, Flower, NVIDIA FLARE, FATE. `/discover/what-is-federated-learning` |
+| **Synthetic data** | Artificially generated data that mimics the statistical properties of real data, used to train or test models when real data is scarce, sensitive, or imbalanced. `/discover/what-is-synthetic-data` |
+
+---
+
+## 3. Generative AI & large language models
+
+| Concept | One-line definition |
+|---|---|
+| **Generative AI** | AI that creates new content (text, images, music, audio, video) by learning patterns in human-created data and using them to generate novel output. Powered by foundation models. `/use-cases/generative-ai` |
+| **Large language models (LLMs)** | Statistical language models trained on massive text corpora, typically built on the Transformer architecture, that generate and translate text and perform NLP tasks like summarisation and Q&A. `/ai/llms` |
+| **Foundation models** | Large models pre-trained on vast data (often via self-supervised learning) that adapt to many downstream tasks. Scale produces "emergent" capabilities. All LLMs are foundation models; not all foundation models are LLMs. `/discover/what-are-foundation-models` |
+| **GPT (generative pre-trained transformer)** | A type of LLM using the Transformer architecture and deep learning to produce human-like text. "Pre-trained" by learning to predict the next token; self-attention layers process input in parallel. `/discover/what-is-gpt` |
+| **Transformer architecture** | The neural-network design Google invented and open-sourced in 2017 that underpins modern LLMs; self-attention lets it weigh relationships between all words in a sequence simultaneously. (No standalone Discover page; covered inside the GPT and LLM pages.) |
+| **Multimodal AI** | Models that process and generate across multiple data types (text, images, audio, video) in one system. Google's Gemini was built multimodal from the ground up. `/use-cases/multimodal-ai` |
+| **Generative adversarial networks (GANs)** | A framework (Goodfellow, 2014) of two competing networks: a generator that fabricates realistic data and a discriminator that tries to tell real from fake. The contest drives both to improve. `/discover/what-are-generative-adversarial-networks` |
+| **AI hallucinations** | Confident but incorrect or fabricated outputs from a generative model, caused by gaps or biases in training data. Mitigated by grounding techniques such as RAG and knowledge graphs. `/discover/what-are-ai-hallucinations` |
+
+> **Embeddings / diffusion** are referenced inline but have no dedicated Discover page. Embeddings convert text/image data into numerical vectors that capture semantic meaning (used for search, clustering, RAG); the nearest hub page is **Semantic search** (Section 7). Diffusion is the technique behind much AI image generation.
+
+---
+
+## 4. AI agents
+
+| Concept | One-line definition |
+|---|---|
+| **AI agents** | Software systems that use AI to pursue goals and complete tasks for users, showing reasoning, planning, and memory with a degree of autonomy. Built on the ReAct pattern (Reasoning, Acting, Observing, Planning, Collaborating, Self-refining); each agent has a persona, memory, and tools. `/discover/what-are-ai-agents` |
+| **Multi-agent system** | Multiple AI agents that coordinate, delegate, and collaborate to solve problems too complex for a single agent, each handling part of a larger workflow. `/discover/what-is-a-multi-agent-system` |
+| **Agentic AI** | An advanced form of AI focused on autonomous decision-making and action: it sets goals, plans, and executes with minimal human input via a loop of Perception, Reasoning, Planning, Action, Reflection. A subset of generative AI that orchestrates agents using an LLM as the "brain". `/discover/what-is-agentic-ai` |
+| **Agentic coding** | Using autonomous AI agents to plan, write, test, and refine software with limited human intervention, going beyond single-prompt code completion. `/discover/what-is-agentic-coding` |
+| **Human in the loop** | A design pattern that keeps people in AI workflows to review, correct, or approve outputs, improving safety, accuracy, and accountability. `/discover/human-in-the-loop` |
+| **Model Context Protocol (MCP)** | An open protocol that standardises how AI applications connect to external tools, data sources, and systems, so agents can access context in a consistent way. `/discover/what-is-model-context-protocol` |
+| **Vibe coding** | An emerging, conversational style of software development where you describe intent in natural language and an AI generates and iterates the code. `/discover/what-is-vibe-coding` |
+
+---
+
+## 5. Building with AI (techniques)
+
+| Concept | One-line definition |
+|---|---|
+| **Prompt engineering** | The craft of designing and optimising prompts to steer LLMs toward the desired output by supplying context, instructions, and examples. Techniques: zero-shot, one/few/multi-shot, chain-of-thought (CoT), zero-shot CoT. `/discover/what-is-prompt-engineering` |
+| **Context engineering** | Systematically assembling the right information, tools, and memory into a model's context window so it can respond accurately, going beyond single-prompt wording. `/discover/ai-context-engineering` |
+| **Retrieval-augmented generation (RAG)** | A framework that combines information retrieval (search/databases) with an LLM so answers are grounded in your data: retrieve and pre-process, then generate with that context. Improves freshness and factual accuracy, reducing hallucinations. `/use-cases/retrieval-augmented-generation` |
+| **Fine-tuning** | Further training a pre-trained model on a task-specific dataset (transfer learning) to specialise it. Alters model parameters (vs RAG, which augments prompts). Methods include supervised fine-tuning and LoRA. `/use-cases/fine-tuning-ai-models` |
+| **Generative UI (GenUI)** | Interfaces an LLM builds in real time rather than from static templates, adapting layout and components to user intent. Spectrum: static (fixed library), declarative (structured schema), open-ended (raw HTML/CSS). `/discover/generative-ui` |
+| **AI inference** | The "doing" stage: a trained model takes new data and produces output (prediction, image, decision). Life cycle: training, fine-tuning, inference, serving. Where AI delivers business value. `/discover/what-is-ai-inference` |
+| **Batch inference** | Running model predictions over a large, fixed set of data all at once (offline), as opposed to real-time per-request inference. `/discover/what-is-batch-inference` |
+| **Inference optimization** | Techniques (quantisation, batching, caching, hardware acceleration) to make model serving faster, cheaper, and more efficient at scale. `/discover/inference-optimization` |
+
+---
+
+## 6. Applied AI: language, vision, speech
+
+| Concept | One-line definition |
+|---|---|
+| **Natural language processing (NLP)** | A branch of AI that uses ML to reveal the structure and meaning of text and to act on it. Covers recognition, generation, and understanding (NLU). Used for sentiment, classification, document analysis. `/learn/what-is-natural-language-processing` |
+| **Entity extraction** | An NLP technique that identifies and classifies named entities (people, places, organisations, dates, amounts) within unstructured text. `/discover/what-is-entity-extraction` |
+| **Computer vision** | A field of AI that interprets and analyses visual data (images, video) to derive meaning: object detection, classification, OCR, face/landmark detection. (Product page; related concept page is CNNs.) `/vision` |
+| **Speech recognition (Speech-to-Text)** | Converts spoken language into written text using AI/ML; supports 125+ languages with synchronous, asynchronous, and streaming modes, powered by the Chirp foundation model. (Product page.) `/speech-to-text` |
+| **Recommendation systems** | The ML technology behind content discovery and "you may also like" suggestions, surfacing relevant items at the right time. Approaches: Recommendations AI, BigQuery ML matrix factorisation, Vertex AI matching (ScaNN). (Use-case page.) `/use-cases/recommendations` |
+
+---
+
+## 7. Search & data for AI
+
+| Concept | One-line definition |
+|---|---|
+| **Vector database** | A database that stores, indexes, and queries vector embeddings (numeric representations of unstructured data) for meaning-based retrieval via nearest-neighbour search (KNN/ANN). Critical for generative AI and RAG. `/discover/what-is-a-vector-database` |
+| **pgvector** | An open-source PostgreSQL extension that adds vector storage and similarity search to Postgres, enabling embeddings-based queries inside a familiar database. `/discover/what-is-pgvector` |
+| **Semantic search** | Search that matches on meaning and intent (using embeddings) rather than exact keywords, returning conceptually relevant results. `/discover/what-is-semantic-search` |
+| **Full-text search** | Search that scans the complete text of documents to match query terms, typically with indexing for speed across large text collections. `/discover/what-is-full-text-search` |
+| **Fuzzy search** | Matching that tolerates typos, misspellings, and approximate strings, returning near-matches rather than only exact ones. `/discover/what-is-fuzzy-search` |
+| **Stemming** | Reducing words to their root form (e.g. "running" to "run") so search and NLP treat variants as the same term. `/discover/what-is-stemming` |
+| **Graph database** | A database that stores data as nodes and relationships (edges), optimised for traversing connections; useful for knowledge graphs that give AI business context. `/discover/what-is-a-graph-database` |
+
+---
+
+## 8. ML operations & infrastructure
+
+| Concept | One-line definition |
+|---|---|
+| **MLOps** | Practices for managing the ML life cycle from development to deployment and monitoring, bridging data science and operations. Core tasks: experiment tracking, deployment, monitoring, retraining. `/discover/what-is-mlops` |
+| **LLMOps** | MLOps specialised for large language models: prompt management, evaluation, fine-tuning, deployment, and monitoring of LLM-based applications. `/discover/what-is-llmops` |
+| **AIOps** | Applying ML and NLP to automate and improve IT operations, ingesting logs/metrics/events to detect anomalies, find root cause, and predict issues. Process: Observe, Engage, Act. `/discover/what-is-aiops` |
+| **Kubeflow** | An open-source platform for running ML workflows (pipelines, training, serving) portably on Kubernetes. `/discover/what-is-kubeflow` |
+| **GPU for AI** | The massively parallel processor that is the hardware workhorse of AI, accelerating both training and inference far beyond sequential CPUs. `/discover/gpu-for-ai` |
+| **TPU (Tensor Processing Unit)** | Google's custom ASIC purpose-built to accelerate ML workloads at scale; powers Gemini and Google products via matrix-multiply units. (Product page.) `/tpu` |
+| **High performance computing (HPC)** | Aggregating compute (clusters, accelerators, fast interconnects) to run massive parallel workloads, including large-scale AI training. `/discover/what-is-high-performance-computing` |
+| **AI workload** | The compute, data, and model tasks involved in training, tuning, and serving AI, and the infrastructure needed to run them. `/discover/what-is-an-ai-workload` |
+| **Data labeling** | Annotating raw data with meaningful labels (the training data for supervised ML). Done manually, automatically, or hybrid; quality labels improve accuracy and reduce bias. `/use-cases/data-labeling` |
+
+---
+
+## 9. Enterprise & process automation
+
+| Concept | One-line definition |
+|---|---|
+| **Enterprise AI** | Adopting and integrating AI across an organisation at scale, with the governance, data, and infrastructure to deliver business value reliably. `/discover/what-is-enterprise-ai` |
+| **AI applications** | The practical uses of AI across functions and industries (the "what AI is used for" overview). `/discover/ai-applications` |
+| **Robotic process automation (RPA)** | Software "bots" that automate repetitive, rule-based digital tasks; when combined with AI it becomes intelligent automation. `/discover/what-is-robotic-process-automation` |
+| **Process mining** | Analysing event-log data from business systems to discover, monitor, and improve how processes actually run. `/discover/what-is-process-mining` |
+| **AI in banking / Finance AI** | Industry views of AI applied to financial services: fraud detection, risk, personalisation, and operations. `/discover/ai-in-banking`, `/discover/finance-ai` |
+| **Responsible AI** | Building AI ethically and accountably: anchored in Google's AI Principles, with evaluations, review bodies, and transparency tools (Explainable AI, Model Cards). (Principles page.) `/responsible-ai` |
+
+---
+
+## Coverage notes
+
+- **On the Discover hub but defined elsewhere:** Generative AI and Multimodal AI (`/use-cases/`), LLMs (`/ai/llms`), RAG and Fine-tuning (`/use-cases/`), NLP (`/learn/`), Data labeling (`/use-cases/`).
+- **Concepts with no dedicated explainer page** (referenced inline only): Transformer architecture, embeddings/vector embeddings, diffusion models, computer vision, speech recognition, recommendation systems, TPU, knowledge graph, responsible AI (covered as product/principles pages, real URLs given above).
+- The hub also carries many non-AI cloud topics (databases, Kubernetes, DevOps/SRE, security); those are intentionally excluded from this AI/ML cheat sheet.

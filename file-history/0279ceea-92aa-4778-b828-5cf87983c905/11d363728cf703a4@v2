@@ -1,0 +1,71 @@
+# LIMSOC AI Enhancements - Staff-Level Design Examples
+
+How to use this doc: you wanted to think through how you would design your proposed LIMSOC enhancements as a staff-level AI engineer, so you can use them as concrete examples in the interview. This doc gives you (1) why LIMSOC is a strong interview vehicle, (2) a reusable staff-level AI design narrative you can apply to any enhancement, (3) a fully worked example so you can see the shape, and (4) the specific brief I need from you to turn this into your actual proposals rather than my guesses.
+
+I have scaffolded this with a plausible enhancement so it is useful immediately. Swap in your real proposals once you give me the brief at the bottom.
+
+---
+
+## 1. Why LIMSOC is your best system-design example for this interview
+- It is real, yours, and operational: a mission-critical incident-management platform for real-time coastal emergency operations, "right information, right people, right time". That is a safety-critical, real-time, high-consequence domain, which is exactly the mental model that transfers to airline operations (disruption management, operations control, crew/turnaround, the "desirable" domain experience in the PD).
+- It is multi-stakeholder and federated: seven jurisdictions, frontline through executive. Designing an AI feature that has to work across that is a staff-level problem, not just a feature build.
+- It lets you show the full arc the PD wants: not just "I would use RAG", but data paths, guardrails, evals, rollout, observability, and stakeholder alignment, in a context where being wrong has real consequences. Same story as banking, different domain.
+- It is not airline, which is fine. You are using it to demonstrate how you reason about a safety-critical AI system, then explicitly bridging: "the same discipline applies to operations control at an airline".
+
+## 2. The staff-level distinction (frame your answer this way)
+Senior solves the feature well. Staff scopes beyond the feature: the platform, the organisation, the risk, and the second-order effects. When you present a LIMSOC enhancement, deliberately zoom out at least once:
+- Build vs buy vs foundation-model-plus-orchestration.
+- Where this sits relative to the existing platform and other teams.
+- Rollout across seven jurisdictions with different readiness, not a single deploy.
+- Failure modes in a safety-critical setting and how you bound them.
+- What you would deliberately not do, and why (scope discipline).
+- The human factor: operators under stress, trust, and the cost of a wrong AI suggestion in an emergency.
+
+## 3. The reusable design narrative (apply to any AI enhancement)
+Run any enhancement through these eight beats. This doubles as your answer structure for any "how would you build X" system-design question in the interview, LIMSOC or otherwise.
+
+1. **Problem and users.** What real pain, for whom, and what does success look like operationally. Resist starting with the tech.
+2. **Why AI, honestly.** What specifically needs a model versus deterministic software. Staff-level engineers are quick to say "this part does not need AI". 
+3. **Data paths.** Sources, ingestion, where knowledge lives, retrieval vs live tools, data quality, and crucially PII and sensitivity (incident data is sensitive, just like member banking data).
+4. **The AI design.** RAG, tools/agents, model choice, prompt and context strategy. Justify each. Name when you would not use RAG (volatile or exact data, use live tools).
+5. **Guardrails and safety.** Failure modes, human-in-the-loop, what the system is never allowed to decide alone. In an emergency context this is the heart of it: AI assists, humans decide.
+6. **Evals.** How you measure it is good, the dataset, component vs end-to-end, online signals, and the must-pass safety cases.
+7. **Rollout and ops.** Canary, shadow, feature flags, observability, and the federated rollout reality across jurisdictions.
+8. **Trade-offs and what is out of scope.** Where you compromised and why, what you deliberately left out, and the risks you are accepting.
+
+## 4. Worked example (placeholder - replace with your real proposal)
+
+> This is my plausible reconstruction so you can see the shape. It is probably adjacent to what you actually proposed. Tell me your real enhancements and I will redo this as yours.
+
+### Enhancement: incident decision-support assistant
+**Problem and users.** During an incident, a communications operator or coordinator has to pull together the right information (SOPs, the relevant escalation pathway, who is on call, similar past incidents) and reach the right people fast, under time pressure. Latency and missed context cost outcomes. Users are operators and coordinators in the moment, not analysts after the fact.
+
+**Why AI.** The retrieval and synthesis is where a model helps: turning a messy, fast-evolving situation into "here is the relevant SOP, here is the escalation path, here are the people to notify, here is what a similar incident did". The decision and the action stay human. Dispatch logic and notifications themselves are deterministic software, not AI.
+
+**Data paths.** RAG over SOPs, escalation matrices, and policy (slow-changing, perfect for retrieval, with citations so an operator can trust and verify). Live tools for volatile data: who is currently on call, current resourcing, current conditions, these you call live, you do not embed them. Incident data is sensitive, so access is scoped and audited, same PII discipline as banking.
+
+**AI design.** Hybrid: RAG for the knowledge, tool-calling for live state. A constrained assistant, not a free-running agent, because this is safety-critical, the flow should be controllable and inspectable (a graph of steps, not an open loop). Model choice balances latency (operators need it now) against capability, and runs where the data governance allows.
+
+**Guardrails and safety.** The non-negotiable: the system suggests, humans decide and act. Every suggestion is grounded and cited so it can be checked. It declines or flags uncertainty rather than guessing. It can never trigger a notification or dispatch on its own, those stay human-confirmed and idempotent. Off-domain or low-confidence cases fail safe to "escalate to a human".
+
+**Evals.** A versioned set of real (de-identified) incident scenarios with expert-validated "right information / right people" answers. Component evals on retrieval (did it surface the correct SOP and pathway, recall@k) and on tool calls (right on-call lookup). End-to-end eval on whether the synthesised support matches what an experienced coordinator would want. Must-pass safety cases that never regress. Online: operator feedback and post-incident review feeding new cases back in.
+
+**Rollout and ops.** Shadow first, run it alongside live operations without operators acting on it, and compare its suggestions to what experienced coordinators actually did, before it is ever in the loop. Then canary to one jurisdiction or one operator cohort, feature-flagged, with full tracing of retrievals and tool calls. Federated rollout respects that jurisdictions differ in readiness, so it is staged, not switched on nationally at once.
+
+**Trade-offs and out of scope.** Out of scope at launch: any autonomous action, that is deliberately off the table in a safety-critical first version. Trade-off: more guardrail and human-confirmation means more friction and latency, accepted because the cost of a wrong autonomous action in an emergency is unacceptable. Risk accepted: it depends on SOP data quality, so data curation is part of the work, not an afterthought.
+
+**The staff-level zoom-out (deliver this as the closer).** This is not just a feature, it is a pattern the platform can reuse: grounded, cited, human-in-the-loop decision support over operational knowledge plus live state. Once the retrieval and eval scaffolding exists, other operational surfaces can use it. And it has to land across seven jurisdictions with different maturity, so the rollout and the trust-building are as much of the job as the model. Then bridge: the same shape, grounded assistant plus live tools plus hard human-in-the-loop guardrails plus real evals, is exactly how I would approach an operations-control or disruption-management assistant at Virgin.
+
+---
+
+## 5. What I need from you to make these yours (the brief)
+Give me whatever you have on the actual LIMSOC enhancements you proposed, even rough notes, and I will rewrite section 4 as one or two of your real proposals, fully designed at staff level, ready to use as interview examples:
+
+1. **What are the specific enhancements you proposed?** Name them, even loosely (e.g. "smart triage", "comms summarisation", "predictive resourcing", "automated situation reports"). One to three is plenty.
+2. **For each, the core problem and who it helps.** The operational pain in one or two lines.
+3. **Is any of them AI/LLM-shaped, or more classical software/data?** Either is fine, it changes how I design it.
+4. **What data exists or would be needed?** SOPs, incident logs, comms/radio/pager data, rostering/on-call, conditions feeds, anything.
+5. **Any constraints you already know?** Data sensitivity, governance, the federated-rollout reality, latency, existing platform/tech.
+6. **How far did your real proposal go?** Concept only, or did you spec architecture, so I pitch the worked design at the right level.
+
+Once I have that, I will produce the real worked examples and a tight "how I would design this" verbal walk-through for each, in the same eight-beat structure, so you can use them as your system-design answers in the room.

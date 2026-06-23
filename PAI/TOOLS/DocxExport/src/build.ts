@@ -9,6 +9,7 @@ export interface RunSpec {
   text: string;
   preserveSpace?: boolean; // emit xml:space="preserve"
   breakBefore?: boolean; // emit <w:br/> before the text (within same run grouping)
+  tabBefore?: boolean; // emit <w:tab/> before the text (tab-aligns content)
   hyperlinkRid?: string; // wrap run in <w:hyperlink r:id="...">
 }
 
@@ -17,8 +18,9 @@ export function makeRun(spec: RunSpec): string {
   const space =
     spec.preserveSpace || /^\s|\s$/.test(spec.text) ? ' xml:space="preserve"' : "";
   const br = spec.breakBefore ? "<w:br/>" : "";
-  const t = spec.text === "" && !spec.breakBefore ? "" : `<w:t${space}>${xmlEscape(spec.text)}</w:t>`;
-  const inner = `${rpr}${br}${t}`;
+  const tab = spec.tabBefore ? "<w:tab/>" : "";
+  const t = spec.text === "" && !spec.breakBefore && !spec.tabBefore ? "" : `<w:t${space}>${xmlEscape(spec.text)}</w:t>`;
+  const inner = `${rpr}${br}${tab}${t}`;
   const run = `<w:r>${inner}</w:r>`;
   if (spec.hyperlinkRid) {
     return `<w:hyperlink r:id="${spec.hyperlinkRid}" w:history="1">${run}</w:hyperlink>`;
