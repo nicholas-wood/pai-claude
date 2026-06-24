@@ -1,0 +1,22 @@
+# AccessBuddy
+
+Multi-tenant club access & credential management SaaS. Live at accessbuddy.com.au.
+
+- **Type:** Code product (live)
+- **Stack:** Next.js, Bun, Hono, Postgres, GCP (Cloud Run, Cloud SQL), Stripe Connect, Firebase Auth, GitHub Actions
+- **Code source:** `/Users/nicholaswood/dev/accessbuddy` (git repo) — to be consolidated into `code/`
+- **Status:** v1.10.2 in production, post cost-optimisation
+
+## How this folder works
+- `CLAUDE.md` — operator brief, auto-loaded when working here
+- `context/` — shared memory + live state, read by all agents
+- `agents/<name>/` — each agent has its own `claude.md` + `memory.md` (see AGENT_STANDARD.md)
+- `code/` — the app repo (migration target)
+
+## Agents
+| Agent | Scope |
+|---|---|
+| `architect` | System/technical architecture, data-model & integration design (base: Architect) |
+| `feature-dev` | Member/admin UI, credentials, notifications, workflow, payments features |
+| `infra-ops` | Terraform, GCP, Cloud Run, cost control, CI/CD, env vars |
+| `qa-verify` | Browser verification, deploy checks, regression testing before "done" |

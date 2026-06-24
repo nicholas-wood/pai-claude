@@ -20,7 +20,7 @@
 ## Personal
 
 - **[Personal](personal.md)** - Gym / strength training, Hazel dog co-ownership, spare room rental, EV decision, home automation. (The former `life` project was retired 2026-06-02: its threads live here; its orchestration cadence is now a DA rhythm - see `Routines/weekly-review.md`.)
-- **[OC EV / Energy Tender](~/Documents/workspace/projects/oc-ev-energy/README.md)** - Owners Corporation decision project for 40-44 Pakington St, St Kilda (OC 728653T). Two proposals: Origin EV backbone ($125k, OC-owned, no lock-in) vs SUPA embedded-network energy deal ($0 upfront, 10yr+ supply lock-in, 3 chargers as sweetener). They are NOT like-for-like. Working-group email sent; SUPA terms and Origin firm quote still open. Foundation collated at `projects/oc-ev-energy/FOUNDATION.md`.
+- **[OC EV / Energy Tender](~/Documents/workspace/projects/oc-ev-energy/README.md)** - Owners Corporation decision project for 40-44 Pakington St, St Kilda (OC 728653T). Two proposals: Origin EV backbone ($125k, OC-owned, no lock-in) vs SUPA embedded-network energy deal ($0 upfront, 10yr+ supply lock-in, 3 chargers as sweetener). They are NOT like-for-like. Committee reply-all sent 2026-06-24 (positions the two as non-equivalent, requests written terms from both providers, floats a SUPA intercom add-on, proposes a meeting once both reply). Awaiting SUPA term-sheet + Origin firm quote/ownership confirmation. Foundation collated at `projects/oc-ev-energy/FOUNDATION.md`.
 
 ## Systems / Tooling
 

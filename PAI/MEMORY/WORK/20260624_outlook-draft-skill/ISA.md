@@ -1,0 +1,112 @@
+---
+task: Build a bespoke _OUTLOOK skill to draft formatting-correct emails in Outlook for Mac
+slug: 20260624_outlook-draft-skill
+effort: E3
+phase: complete
+progress: 24/24
+mode: algorithm
+started: 2026-06-24
+updated: 2026-06-24
+---
+
+## Problem
+
+Nick has no bespoke skill for drafting Outlook emails on his Mac. Confirmed by searching `~/.claude/skills` (42 skills, none email), the agent roster, and the PAI tree — the only mail tooling is Pulse's iMessage AppleScript and a Gmail MCP connector. Drafting Outlook emails is therefore ad-hoc each time, with no guarantee that paragraphs and lists come out formatted correctly.
+
+## Vision
+
+Nick says "draft an email to X about Y," and a correctly-formatted Outlook compose window opens in his voice — paragraphs as paragraphs, bullet and numbered lists as real lists — ready to read and send with one click. The formatting just works; he never has to fix spacing or re-bullet a list.
+
+## Out of Scope
+
+- Sending mail. The skill drafts only; transmission stays a human action.
+- Gmail, web mail, or any non-Outlook-desktop client.
+- Bulk / broadcast / mail-merge sends (that is `_BROADCAST`'s lane).
+- Linux execution. The skill is Mac-only by nature (`osascript`/`open`).
+- Account/identity selection inside the draft (deferred; Nick picks From in the window).
+
+## Constraints
+
+- bun + TypeScript only (no npm, no Python).
+- Draft-only: no send path may exist in the tool (PAI autonomy — `send_external_message` must ask).
+- Private skill (`_ALLCAPS`): references Nick's contacts and voice, never ships public.
+- Rich formatting requires HTML via classic-Outlook AppleScript; New Outlook is not scriptable, so a plain-text mailto fallback is mandatory.
+- No hardcoded user paths beyond `~/` / `${HOME}` conventions.
+
+## Goal
+
+Ship a private `_OUTLOOK` PAI skill whose `DraftOutlook.ts` tool converts a Markdown body to Outlook-safe HTML and opens an editable, correctly-formatted draft in classic Outlook for Mac (falling back to a plain-text mailto draft on New Outlook), never sending, with the conversion empirically verified for paragraphs and both list types.
+
+## Criteria
+
+- [x] ISC-1: `~/.claude/skills/_OUTLOOK/SKILL.md` exists
+- [x] ISC-2: `~/.claude/skills/_OUTLOOK/Workflows/DraftEmail.md` exists
+- [x] ISC-3: `~/.claude/skills/_OUTLOOK/Tools/DraftOutlook.ts` exists
+- [x] ISC-4: Skill dir name is `_ALLCAPS` (private boundary)
+- [x] ISC-5: SKILL.md frontmatter has single-line `description` with `USE WHEN`
+- [x] ISC-6: Description has a `NOT FOR` clause
+- [x] ISC-7: `## Workflow Routing` table present, names match files
+- [x] ISC-8: `## Gotchas` section present and non-trivial
+- [x] ISC-9: `## Examples` section with ≥2 examples
+- [x] ISC-10: `## Voice Notification` section present
+- [x] ISC-11: Tool parses + transpiles under bun (`bun build` clean)
+- [x] ISC-12: Body paragraphs → `<p>…</p>` (verified in dry-run)
+- [x] ISC-13: Bullet list (`- `/`* `) → `<ul><li>…</li></ul>` (verified)
+- [x] ISC-14: Numbered list (`1. `) → `<ol><li>…</li></ol>` (verified)
+- [x] ISC-15: `**bold**` → `<strong>` (verified)
+- [x] ISC-16: `*italic*` → `<em>` (verified)
+- [x] ISC-17: `[text](url)` → `<a href>` (verified)
+- [x] ISC-18: Single in-paragraph newline → `<br>` (verified: "Speak soon,<br>Nick")
+- [x] ISC-19: AppleScript string literals escape `"` and `\` (verified: `\"` in output)
+- [x] ISC-20: `to`/`cc`/`bcc` each emit correct recipient kinds (verified: `recipient` vs `cc recipient`)
+- [x] ISC-21: mailto fallback degrades Markdown to readable plain text (verified)
+- [x] ISC-22: Workflow has an Intent-to-Flag mapping table
+- [x] ISC-23: Anti: tool contains NO send path (no `send theMsg`, no auto-transmit)
+- [x] ISC-24: Anti: skill does not claim rich formatting on the plain-text fallback path
+- [DEFERRED-VERIFY] ISC-25: On a Mac with classic Outlook, the tool opens an HTML draft with rendered paragraphs + lists — requires Mac with `osascript`; follow-up: Nick runs Step 3 on his Mac.
+
+## Test Strategy
+
+| isc | type | check | threshold | tool |
+|-----|------|-------|-----------|------|
+| ISC-1..3 | file | files exist | present | ls/Write-confirm |
+| ISC-4..10 | structure | grep frontmatter + sections | present | Read/Grep |
+| ISC-11 | build | bun build transpiles | exit 0 | Bash |
+| ISC-12..21 | behavioural | `--dry-run` output contains expected HTML/AppleScript | substring match | Bash dry-run |
+| ISC-23..24 | anti | grep tool/skill for send + false-formatting claims | absent | Grep |
+| ISC-25 | live | draft opens with formatting on Mac | visual | Mac osascript (deferred) |
+
+## Features
+
+| name | satisfies | depends_on | parallelizable |
+|------|-----------|------------|----------------|
+| DraftOutlook.ts converter + AppleScript/mailto engine | ISC-11..21,23 | — | no |
+| SKILL.md (routing, gotchas, examples) | ISC-1,5-10,24 | tool | no |
+| DraftEmail workflow (intent→flag, voice resolution) | ISC-2,22 | tool | no |
+| ISA + verification | ISC-12..21,25 | tool | no |
+
+## Decisions
+
+- 2026-06-24: Private `_OUTLOOK` over public `Outlook` — pulls Nick's contacts + voice; per CreateSkill decision rule, identity-bound ⇒ `_ALLCAPS`.
+- 2026-06-24: HTML-via-AppleScript as primary path because it is the only mechanism that renders paragraphs/lists in an Outlook draft; mailto is plain-text-only and so is fallback, not primary. (FirstPrinciples: the irreducible requirement "formatted draft" forces HTML content, which forces classic-Outlook scripting.)
+- 2026-06-24: Draft-only, no send path in code — honours PAI autonomy boundary; also makes the skill safe to invoke speculatively.
+- 2026-06-24: Capability approach — invoked CreateSkill (mandated scaffolding) and BitterPillEngineering (lean audit) as delegation/thinking; FirstPrinciples + IterativeDepth + ReReadCheck applied as inline analysis to respect the background-job budget. Thinking surfaced the classic-vs-new Outlook fork and the HTML-is-mandatory insight. Single-author tool build; no further delegation added (show-your-math: parallel agents would only have duplicated one small TS file).
+- 2026-06-24: Live Outlook probe deferred — session runs on Linux (no osascript); converter logic fully verified via `--dry-run`, only the GUI open is unverifiable here.
+
+## Changelog
+
+- conjectured: a single mailto-based tool could satisfy "draft a formatted email". refuted_by: mailto bodies are plain text only — no `<p>`/`<ul>`/`<strong>`. learned: rich formatting in an Outlook draft is only reachable by setting the message `content` as HTML through classic-Outlook AppleScript. criterion_now: ISC-12..18 verify HTML structure; mailto demoted to fallback (ISC-21).
+
+## Verification
+
+ISC-11: `bun build DraftOutlook.ts --target=node` → "OK (parses + transpiles)".
+ISC-12: dry-run HTML contained `<p>Hi Sarah,</p>` and `<p>Thanks for the quick turnaround…</p>`.
+ISC-13: dry-run contained `<ul><li>The pricing tier needs a third option</li>…</ul>`.
+ISC-14: dry-run contained `<ol><li>Confirm scope with the board</li>…</ol>`.
+ISC-15/16/17: `<strong>draft proposal</strong>`, `<em>Phase 2</em>`, `<a href="https://example.com/appendix">appendix</a>`.
+ISC-18: `<p>Speak soon,<br>Nick</p>`.
+ISC-19: AppleScript showed `content:"<div style=\"font-family…\">…"` — quotes escaped.
+ISC-20: two `make new recipient` + one `make new cc recipient` lines emitted.
+ISC-21: mailto body showed `-%20The%20pricing%20tier…` (bullets as `- `, bold markers stripped).
+ISC-23/24: confirmed by Grep below.
+ISC-25: DEFERRED — Nick runs `Tools/DraftOutlook.ts` Step 3 on his Mac.

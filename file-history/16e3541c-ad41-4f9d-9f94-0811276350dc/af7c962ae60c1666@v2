@@ -1,0 +1,7 @@
+set bodyText to (read POSIX file "/tmp/oc-email-body.txt" as «class utf8»)
+tell application "Microsoft Outlook"
+	set newMsg to make new outgoing message with properties {subject:"RE: 728653T - 40-44 Pakington Street St Kilda - Feasibility study on the installation of EV Chargers", content:bodyText}
+	open newMsg
+	activate
+end tell
+return "draft-created"

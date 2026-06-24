@@ -1,0 +1,102 @@
+# ChatGPT Apps and the Virgin Flight-Search Build
+
+How to use this doc: this is your differentiator. Virgin's flagship public AI product is a flight-search app inside ChatGPT, and the PD lists FastMCP, which is the exact technology that product is built on. If you can talk credibly about how that app works and how you would build and operate one, you are demonstrating you understand their actual product and the role's core stack at the same time. This is the single highest-leverage thing in the pack. Know it cold.
+
+The connective insight, say it early in any answer here: a ChatGPT App is an MCP server. The PD's "FastMCP" and Virgin's "flight search in ChatGPT" are the same thing viewed from two angles. Most candidates will not have connected those dots.
+
+---
+
+## 1. What a ChatGPT App actually is
+
+In October 2025 OpenAI launched the Apps SDK and Apps in ChatGPT, a way for third parties to build applications that run inside the ChatGPT conversation. Users browse an app directory (the "add-in" library Nick mentioned), connect an app, and then invoke it inside chat by typing "+" or just by asking something the app handles. Virgin Australia partnered with OpenAI and shipped flight search this way (announced November 2025, CEO Dave Emerson called it "a significant milestone").
+
+The crucial technical fact: **ChatGPT Apps are built on the Model Context Protocol (MCP)**. A developer builds and hosts an MCP server that exposes tools (and optionally resources and prompts), ChatGPT acts as the MCP client, and OpenAI's Apps SDK adds a UI layer on top so the app can render rich interactive components inline in the chat, not just text.
+
+So an app has three parts:
+1. **An MCP server** you build and host, exposing tools the model can call (for Virgin: search flights, find reward seats, get fares).
+2. **A UI layer** via the Apps SDK, optional, that lets the app return custom rendered components (a flight-results card, a date-price grid) inside the conversation rather than plain text.
+3. **A connection/auth layer**, OAuth, so the app can act on behalf of a logged-in user and reach their account data (Velocity points balance, bookings).
+
+### Mental model to say out loud
+"ChatGPT becomes the agent and the conversational front-end. My app is a backend that exposes a set of tools through MCP. When a user asks something my app handles, the model calls my tool with structured arguments, my backend does the real work against Virgin's systems, and returns structured results that ChatGPT renders. I own the tools, the data, the auth, and the correctness. OpenAI owns the model, the conversation, and the distribution."
+
+---
+
+## 2. How Virgin's flight search works (end to end)
+
+Walk this through as a request trace, it shows you think in systems:
+
+1. **Discovery and connect:** the user finds Virgin in the ChatGPT app directory and connects it. OAuth links it to their Virgin/Velocity identity so points and personalised data are available.
+2. **Intent:** user says something like "find me the cheapest flights from Melbourne to the Gold Coast in the first week of March, and show me if I can use points".
+3. **Tool selection:** ChatGPT, seeing Virgin's tool definitions, decides to call a tool, say `search_flights`, and extracts the arguments from natural language: origin MEL, destination OOL, date range, and a flag for reward-seat/points pricing. This is function calling: natural language in, structured tool call out.
+4. **Execution:** Virgin's MCP server receives the call and queries the real systems behind it: the fares/availability service for cash fares, and the Velocity engine for Points + Pay and Reward Seat availability. This is live data, not a document store.
+5. **Return:** the server returns structured results (flights, times, cash price, points price, lowest-fare-by-date). With the Apps SDK it can return a rich UI component, a results card or a price-by-date grid, rendered inline.
+6. **Presentation and follow-up:** ChatGPT presents the results conversationally and the user can refine ("only mornings", "what about the week after"), which is just more tool calls with adjusted arguments.
+
+Published capabilities today: search by budget or departure city, compare cash fares and Points + Pay, lowest fares across dates, locate Reward Seat availability. Roadmap: partner-airline and international routes (US, UK, Europe, Asia, Middle East), day-of-travel details, seat-map insights. Booking itself is the obvious next frontier and the hardest, because it is a state-changing, money-moving action (see guardrails below).
+
+### The key architectural distinction (this signals real depth)
+Flight search is **not a RAG problem, it is a tool-calling problem against live APIs**. Fares and availability change constantly, so you never embed them into a vector store and retrieve, you call the live fares/availability system at query time. Being able to say "for flight data you would not use RAG, you would expose live tools, because the data is volatile and must be exactly right" shows you understand when retrieval is and is not the right pattern. RAG would be the right pattern for Virgin's policies, baggage rules, or FAQ content, the slow-changing knowledge, not for fares.
+
+---
+
+## 3. What it takes to build a ChatGPT App (the components)
+
+If they ask "how would you build something like this", structure it as:
+
+**The MCP server (the core).** Built in Python with FastMCP, which is the Pythonic, decorator-based framework for MCP servers (deliberately FastAPI-like). You define each capability as a tool: a typed function with a clear name and description, because the model selects and calls tools based on those descriptions. You host it as a remote MCP server over streamable HTTP, behind auth.
+
+```python
+from fastmcp import FastMCP
+
+mcp = FastMCP("Virgin Australia")
+
+@mcp.tool()
+def search_flights(origin: str, destination: str, depart_date: str,
+                   flexible_days: int = 0, include_points: bool = True) -> dict:
+    """Search Virgin Australia flights. Returns cash fares and, if include_points,
+    Points + Pay and Reward Seat availability. Dates are ISO yyyy-mm-dd."""
+    # validate inputs, then call the real fares + Velocity services
+    return fares_service.search(origin, destination, depart_date,
+                                flexible_days, include_points)
+```
+
+That is the whole shape: a typed, documented tool that fronts the real backend. The model never touches Virgin's systems directly, it goes through your tool, which is where you put validation, auth scoping, and guardrails.
+
+**The data/integration layer.** Behind the tool you integrate with Virgin's actual fares, availability, and Velocity loyalty systems. This is normal backend engineering, API integration, caching (fares can be cached briefly for latency but must not go stale enough to quote wrong prices), data quality, and resilience.
+
+**The UI layer (Apps SDK).** Optional but it is what makes it feel like an app, not a chatbot. You build components (React) that the app returns and ChatGPT renders inline, a flight card, a price grid. This is exactly why the PD wants React + TypeScript on an AI engineer: the app's inline UI is React.
+
+**Auth and identity.** OAuth so the app acts for a logged-in Velocity member. This gates personalised data and is the foundation for any future booking flow.
+
+**Distribution and review.** You submit the app to OpenAI's directory; there is a review/approval process (this is the "add-in library"). Listing and discoverability are part of shipping it.
+
+**The operational layer.** Evals, observability, safe rollout, the production realities the PD hammers on. Covered next.
+
+---
+
+## 4. How you would operate it in production (the senior layer)
+
+This is where you separate yourself, because this is the part the PD says Virgin cares about most and most candidates skip.
+
+- **Evals:** how do you know the app is good? Two failure surfaces. First, does the model call the tool correctly, right tool, right extracted arguments, from varied phrasings? You build an eval set of natural-language requests mapped to the expected tool call. Second, does the tool return correct, available, current results? That is a backend correctness eval against known fares. You run both in CI before any prompt or tool-description change ships, because changing a tool description changes how the model calls it.
+- **Guardrails:** never quote a fare that is wrong or stale, validate and bound tool inputs, scope data access to the authenticated user only (a member must never see another member's points or bookings, this is PII and tenant isolation, which you have done), and for any future booking step require explicit confirmation and idempotency because that is a money-moving, state-changing action the model must not take unilaterally. Handle off-domain requests (someone asking the airline app for unrelated help) with a graceful decline.
+- **Latency:** it is a live conversational product, so the tool call plus backend round trip has to be fast. Caching, timeouts, and graceful degradation matter. You design for the fares service being slow or down.
+- **Observability:** trace every tool call, arguments in, results out, latency, errors, and the downstream system calls, with OpenTelemetry-style tracing you already run. You watch tool-call success rates, latency, and error rates as first-class signals.
+- **Safe rollout:** feature-flag new tools and capabilities, canary to a slice, A/B test changes, and keep prompts and tool definitions versioned so you can roll back. This is the PD's "canary/A-B experiments, feature flags and controlled exposure to external end-users" word for word, and these are external end-users, so the bar is high.
+- **Security/privacy:** OAuth scoping, secrets management, PII handling on anything tied to a member, and auditability of who-asked-what, again straight from the PD and straight from your regulated-banking experience.
+
+---
+
+## 5. "If they ask..."
+
+- **"Have you seen our ChatGPT app?"** Yes, flight search and Velocity reward-seat search inside ChatGPT, connected through the app directory. What struck me technically is it is an MCP server under the hood, which is why FastMCP is in this PD. ChatGPT is the agent and front-end, your MCP server exposes the flight-search tools, and the interesting engineering is making the tool layer fast, correct, and safe against live fares, plus the eval and guardrail work to keep it trustworthy for external users.
+- **"How would you build flight search in ChatGPT?"** I would expose it as a FastMCP server with a small set of well-described tools, search flights, get reward seats, get fares-by-date, each a typed function fronting the live fares and Velocity systems. The model does the language understanding and calls my tools with structured arguments; my backend owns correctness, auth, and guardrails. I would not use RAG for fares because that data is volatile and must be exact, RAG is for the slow-changing knowledge like policies. Then the real work is production: evals on both tool-selection and result-correctness, tracing, feature-flagged rollout to external users, and tight PII scoping per member.
+- **"What is the hard part?"** Two things. Correctness under live, fast-changing data with low latency, you cannot quote a fare that is stale or wrong. And the eval problem, because the system is non-deterministic you need automated evals on whether the model calls the right tool with the right arguments across the messy ways people phrase travel requests, and on whether the backend returns valid available options. Booking, when it comes, is harder again because it is a money-moving action that needs confirmation and idempotency.
+- **"Why MCP rather than a plugin or custom integration?"** MCP is an open standard, so the same server can be exposed through ChatGPT today and other MCP-compatible clients later, you build the tool layer once. It cleanly separates the model/client from your tools and data, which is the right boundary for security and for reuse.
+- **"What would you add next?"** Publicly they have flagged partner airlines, international routes, day-of-travel details, and seat maps. The one I would scope carefully is booking, because it moves from read-only search to a state-changing transaction, which changes the guardrail and confirmation design completely.
+
+---
+
+## 6. Why this whole topic is your best card
+Look at what one fluent answer here demonstrates against the PD at once: FastMCP, agentic systems and tool/function calling, advanced RAG judgement (knowing when not to use it), React for the inline UI, evals, guardrails, observability, safe rollout to external users, and PII/security. That is most of the essential skills list, evidenced through their own flagship product. Prepare this until you can talk through it without notes, then in the room you are not reciting features, you are reasoning about how their product is built and operated, which is exactly what a Senior AI Engineer on that team does all day.

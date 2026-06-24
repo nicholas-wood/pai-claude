@@ -1,0 +1,104 @@
+# LIMSOC AI Initiatives - Staff-Level Design Examples
+
+How to use this doc: these are seven AI initiatives you have designed for LIMSOC, the real-time incident-management system for surf lifesaving. They are your evidence that you can apply AI to real operational problems, scope it sensibly, and reason about the production realities. Each has a high-level design you can talk through in two to three minutes. Read them so you can present any one fluently, and so you can deliver the cross-cutting "this is a platform, not seven features" point, which is what reads as staff-level rather than senior.
+
+One framing note before you walk in: be clear these are initiatives you designed and scoped as product owner and engineer for LIMSOC, not necessarily all shipped. That is a strength, not a weakness. "I identified seven places AI creates leverage in a safety-critical operation, designed each, and sequenced them by value and risk" is exactly the applied-AI judgement this role wants. Do not imply they are all in production.
+
+---
+
+## 1. Why LIMSOC is your best applied-AI story for this interview
+- Real, yours, operational, safety-critical: real-time coastal emergency operations, "right information, right people, right time". That safety-critical, real-time, high-consequence mental model transfers directly to airline operations (operations control, disruption management), which is the desirable domain experience in the PD.
+- It spans the full range of AI patterns the PD cares about: summarisation, entity extraction/NLP, classification, RAG and decision support, agentic checking, predictive ML, and retrospective analysis. You are not a one-trick "I did RAG" candidate.
+- It lets you show the senior judgement they explicitly want: when to use an LLM and when not to (ETA prediction is not an LLM problem), how to guardrail AI in a high-consequence setting, and how to sequence by value and risk.
+- It is federated (seven jurisdictions) and high-stakes, so the rollout and trust questions are real, which is staff-level territory.
+
+## 2. The staff-level distinction (deliver this at least once)
+Senior designs the feature well. Staff sees the system: these seven are not seven features, they sit on a shared substrate, and the guardrail philosophy is consistent across all of them. When you present, zoom out to:
+- The shared platform (section 4): structured incident state, an extraction/grounding layer, a RAG layer over SOPs and past incidents, and a common eval-and-guardrail framework. Build that once and the use cases compose.
+- One consistent safety philosophy: AI assists, humans decide; everything grounded and cited; sensitive domains (clinical data, performance review) are suggestion-only with full audit trails.
+- Sequencing by value and risk, not by what is technically coolest.
+- The human factor: operators under stress, trust, and the cost of a wrong AI output in an emergency.
+
+## 3. The eight-beat design narrative (your structure for any "how would you build X")
+Problem and users -> why AI honestly -> data paths -> the AI design -> guardrails and safety -> evals -> rollout and ops -> trade-offs and out of scope. Each design below is compressed to the high-level version; expand any beat live if they push.
+
+---
+
+## 4. The shared platform (lead with this, then the seven sit on top)
+Most of these initiatives draw on the same building blocks, and saying so up front is the staff-level move:
+- **Structured incident state.** A live, structured representation of the incident (situation, assets, casualties, actions, status), not just a free-text log. Initiatives 1, 2 and 5 read and write this.
+- **Extraction and grounding layer.** Turn free-text log entries into structured facts linked to known entities, with provenance back to the source entry. Feeds 1, 2, 5.
+- **Knowledge retrieval layer.** RAG over SOPs and historical incidents, with citations. Feeds 4 and 7.
+- **Eval and guardrail framework.** Versioned eval sets of real de-identified incidents, must-pass safety cases, and the consistent "assist not decide, ground everything, audit everything" controls. Shared by all seven.
+- **A data pipeline.** Especially for 6 and 7, which depend on quality historical telemetry.
+
+Build that substrate once and the seven initiatives are compositions of it. That is the difference between seven projects and one platform.
+
+---
+
+## 5. The seven initiatives (high-level designs)
+
+### 1. Auto-updating incident brief (AI summarisation)
+**Problem.** The incident brief is set at the start, but information flows into the log continuously and the brief has to be updated by hand, which lags reality and steals operator attention.
+**AI pattern.** Incremental, structured summarisation over a live stream.
+**Design.** Treat the brief as a structured object with fixed sections (situation, assets deployed, casualties, actions taken, current risks, status), not free prose. As log entries arrive (debounced into small batches), the model updates the affected fields from current-brief-plus-new-entries, rather than regenerating from scratch. Every brief statement carries provenance back to the log entries that support it.
+**Guardrails.** Grounded only in the log, never invents facts. Provenance on every line. Operator can edit and override, and AI updates are clearly marked as AI-generated. Stable output, the structured-field approach stops the summary thrashing on each update.
+**Why it is interesting.** Stability and provenance in a real-time safety-critical brief. The senior insight is structuring the brief as a schema so you update fields, not regenerate text, which controls cost, latency, and hallucination at once.
+
+### 2. Entity extraction and auto-attachment (NLP)
+**Problem.** When the log mentions a new unit or an ETA, an operator has to read the log and manually attach that to the right unit. Information gets lost or delayed.
+**AI pattern.** Named-entity recognition plus relation extraction plus entity resolution.
+**Design.** Extract entities from each log entry (units/assets, ETAs, locations, casualties, times) and the relationships between them, then resolve references to canonical records in LIMSOC (link "the jet ski", "RWC", "rescue water craft" to the registered asset). Write the extracted attributes onto the unit record and surface them in the brief (this is what feeds initiative 1).
+**Guardrails.** Confidence scoring: high-confidence facts auto-attach with provenance, low-confidence ones are flagged for one-tap operator confirmation rather than applied silently. Never overwrite an operator-entered fact without flagging.
+**Why it is interesting.** Entity resolution against messy real-world radio shorthand and abbreviations, and the cost of attaching the wrong fact to the wrong unit mid-incident. This is the classic extract-then-resolve-then-write pipeline done under real-time pressure.
+
+### 3. Frontline data-entry suggestions and corrections
+**Problem.** Frontline lifesavers fill out forms (for example a first aid form) and the structured selections do not match the free text, a jellyfish sting described in words but injury logged as "other" instead of envenomation. Data quality suffers and patterns get missed.
+**AI pattern.** Consistency checking and classification against a domain taxonomy.
+**Design.** As the form is completed or on submission, the model reads the free-text description and the structured selections, detects mismatches and likely omissions against the injury/mechanism taxonomy, and surfaces a suggested correction ("description mentions a jellyfish sting, did you mean envenomation?"). Suggest, never silently change.
+**Guardrails.** This is clinical and medico-legal data, so it is suggestion-only with a full audit trail, the human always confirms, and the original entry is preserved. Tuned for precision so it does not nag.
+**Why it is interesting.** The medico-legal sensitivity is the whole design constraint: AI improves data quality without ever altering a medical record unilaterally. Good example of designing AI around a hard non-technical constraint.
+
+### 4. Operator coaching and recommendations at incident kickoff
+**Problem.** When an incident starts, the right SOP steps and the lessons from similar past incidents are not at the operator's fingertips, and they are working under time pressure.
+**AI pattern.** RAG over SOPs plus similarity retrieval over historical incidents, presented as decision support.
+**Design.** On incident type and context, retrieve the relevant SOP steps (cited) and the most similar past incidents (vector plus metadata filtering on type, conditions, location), and present a concise recommended-actions checklist with citations. Decision support, not decision automation.
+**Guardrails.** Everything cited so operators can trust and verify. Constrained and grounded, not a free-running agent. Brevity and relevance matter, an operator under stress cannot read an essay, so the design optimises for the few most relevant prompts.
+**Why it is interesting.** This is "right information, right people, right time" as an AI system. The hard part is grounding and relevance under stress, not the retrieval itself. Direct bridge to an operations-control assistant at an airline.
+
+### 5. Incident-record completeness and accuracy assurance
+**Problem.** Information on an incident needs to be complete, accurate, and current, and gaps or contradictions creep in during a fast-moving event.
+**AI pattern.** Hybrid: deterministic rules plus AI consistency checking.
+**Design.** Deterministic rules cover the hard requirements (mandatory fields, the mandatory SOP steps for the incident type from initiative 4's SOP layer). The model handles the soft checks: does the structured data match the narrative log, are there contradictions, has the status gone stale. Surface as gentle nudges to operators, not blocking gates.
+**Guardrails.** Nudges not blocks, tuned hard for precision because false "you are missing X" prompts cause alarm fatigue and erode trust. Sits on the same structured state as 1 and 2.
+**Why it is interesting.** The design tension is completeness versus alarm fatigue. The senior move is splitting hard requirements (rules, deterministic) from soft consistency (AI), so you do not use a probabilistic model where a rule is correct and cheaper.
+
+### 6. ETA prediction
+**Problem.** Predicting when an asset will reach an incident is genuinely hard because conditions (sea state, wind, tide, surf) change transit times drastically. LIMSOC has the inputs (asset position, conditions, crew) but they are not distilled into a reliable ETA.
+**AI pattern.** This is not an LLM problem. It is a predictive modelling problem. Saying that explicitly is the strongest signal in this whole set.
+**Design.** Inputs: asset current GPS position and type, route and distance, current conditions, crew. Start with a physics/kinematic baseline (distance over effective speed, adjusted for conditions), which is explainable and shippable immediately. Then earn an ML regression trained on historical transit-time-versus-conditions telemetry to learn the condition adjustments the physics model misses, ideally a hybrid of physics baseline plus an ML correction. Always express ETA as a range with uncertainty, never false precision.
+**Guardrails.** Surface uncertainty honestly given the unpredictability. The real prerequisite is data: do we have quality historical transit times paired with conditions to train on? If not, the data pipeline is the first piece of work, and the physics baseline carries you until the data earns the model.
+**Why it is interesting.** Two staff-level signals at once: knowing when not to reach for an LLM, and knowing that the model is downstream of the data pipeline, so you build the simple explainable baseline first and earn the ML model with data. Honest about uncertainty in a high-consequence prediction.
+
+### 7. Post-incident review
+**Problem.** Post-incident reviews assess operator performance, the overall response, and whether SOPs need updating, and doing them thoroughly is slow and inconsistent.
+**AI pattern.** Retrospective analysis: timeline reconstruction, actual-versus-expected comparison, and cross-incident pattern mining.
+**Design.** Offline and batch, so you can afford a thorough, more expensive pass. Reconstruct the incident timeline from the log, compare what happened against the relevant SOP (using the knowledge layer from initiative 4) to surface deviations, and assemble an evidence-based draft review for a human reviewer. Then the high-leverage part: aggregate across many incidents to detect systemic patterns and SOP gaps, which feeds national policy improvement.
+**Guardrails.** Performance assessment of people is sensitive, so the AI surfaces evidence and drafts, humans judge. Evidence-based and auditable, never an autonomous verdict on a person.
+**Why it is interesting.** Lower real-time risk because it is offline, and the cross-incident aggregation is where AI creates leverage a human reviewer cannot, spotting systemic SOP gaps across the whole federation. This ties to your real SLSA national-policy and water-safety work.
+
+---
+
+## 6. Sequencing (the build order, and why)
+If they ask "where would you start", this answer shows product and engineering judgement together:
+- **First: initiatives 1 and 2.** They share the extraction-plus-structured-state substrate, deliver immediate operator relief (the brief maintains itself, facts attach themselves), and are relatively contained. Highest value-to-risk.
+- **Then: initiative 4** (and 5 alongside it), once the SOP knowledge layer exists, because it unlocks both coaching and the completeness checks.
+- **Initiative 3** any time, it is fairly self-contained, but it carries clinical sensitivity so it needs careful guardrail and audit design.
+- **Initiative 6** is gated on data: build the physics baseline early, but the ML model waits on a transit-time data pipeline.
+- **Initiative 7** is offline and lower-risk, a good candidate to pilot early for learning without touching live operations, and it compounds in value as incident data accumulates.
+
+## 7. How to present these in the room
+- Lead with the platform framing (section 4), then pick one or two initiatives to go deep on. Do not recite all seven, that is a list, not a story.
+- Best one to go deep on for this role: **initiative 4** (it is RAG plus decision support, the PD's core), or **initiative 6** (it shows you know when not to use an LLM, which is rarer and more senior).
+- Always close a deep dive with the guardrail philosophy (assist not decide, ground and cite, audit the sensitive ones) and the bridge: "the same discipline, grounded assistance plus hard human-in-the-loop guardrails plus real evals, is how I would approach an operations-control or disruption assistant at Virgin."
+- Be honest on shipped-versus-designed. "Designed and sequenced, building in priority order" is a credible, senior answer.

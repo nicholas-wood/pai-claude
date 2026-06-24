@@ -1,0 +1,122 @@
+# Building an Agentic Solution End to End - Answer Framework
+
+How to use this doc: this is your scaffold for the big synthesis question, "how would you build an agentic solution end to end" or any "how would you design X" system question. It gives you an order to think in, the considerations at each layer, which prep concept feeds that layer, and the senior trade-off to voice. Do not recite all of it. Frame the problem, walk the layers at the altitude they push you to, and always land the production layers (safety, evals, ops) because that is what the PD says Virgin cares about most. The goal is to sound like someone who has shipped one, not read about one.
+
+The single most important habit: **lead with framing, not architecture.** The junior move is to jump straight to "I'd use a vector database and LangGraph". The senior move is to ask what problem we are solving, whether it even needs an agent, and what good looks like, then walk the build. Start every answer there.
+
+---
+
+## The shape of a strong answer (say this structure out loud first)
+"I'd think about it in three parts. First, frame the problem and decide whether it actually needs an agent. Then the architecture, layer by layer: the interface, the orchestration, the tools, the knowledge and memory, and the data underneath. Then the production layer, which is where most of the real engineering is: safety, evaluation, and operations. Let me walk through it." Then walk it. That sentence alone signals you think in systems.
+
+---
+
+## Layer 0: Frame the problem (before any technology)
+**Considerations.** What is the user and business need? What does success look like in concrete terms? What is the cost of being wrong? And the gate: **does this even need an agent?** An agent is an LLM in a loop that chooses actions. You only want that when the path genuinely varies per request and the model needs to decide the steps. If the flow is fixed, a deterministic pipeline or a single retrieval-and-answer call is cheaper, faster, and more reliable.
+**Prep source.** AI fundamentals section 3 (agents), LIMSOC doc "why AI, honestly".
+**Senior trade-off to voice.** "The first decision is the level of autonomy. I default to the most constrained design that solves the problem and add agency only where the task needs it, because every bit of autonomy adds latency, cost, and failure modes."
+**Virgin tie-in.** A travel-planning assistant genuinely needs an agent (it searches, refines, compares, calls multiple tools). A baggage-rules FAQ does not, that is RAG with one retrieval.
+
+## Layer 1: The interface and entry point
+**Considerations.** How does the user interact? A chat UI you build (React and TypeScript), an existing surface like ChatGPT via an MCP app, or a programmatic API. Responsiveness matters, so you stream output (the user sees tokens as they generate rather than waiting). The entry layer is also where you authenticate the user.
+**Prep source.** React doc (the UI), FastAPI doc (streaming/SSE, async), ChatGPT Apps doc (MCP as the entry surface).
+**Senior trade-off to voice.** "Streaming is not a nicety for agents, multi-step agent runs are slow, so showing the user progress and intermediate output is what makes it usable. FastAPI's async model and SSE are how you do that."
+**Virgin tie-in.** Their flight search lives inside ChatGPT, so the entry surface is an MCP app, not a bespoke UI. If it were in-house, it would be a React app over a streaming FastAPI backend.
+
+## Layer 2: The orchestration core (the agent itself)
+**Considerations.** This is the agent loop: reason, act, observe, repeat (the ReAct pattern). The decisions here are the meat:
+- **Control flow:** a free-running loop versus a controllable graph of steps (a state machine, which is what LangGraph gives you). For anything production or high-stakes, you want the graph, it is inspectable, debuggable, and bounded, not an open loop you hope terminates.
+- **Planning:** does the model plan implicitly each turn, or do you use an explicit plan-then-execute structure for multi-step tasks.
+- **Model selection:** capability versus latency versus cost. You might use a strong model for planning and a cheaper one for routine steps.
+- **System prompt and context design:** the instructions, the tool descriptions, how you manage the context window.
+- **Single agent versus multi-agent:** only split into multiple agents when the task genuinely decomposes, multi-agent adds coordination cost and failure surface.
+**Prep source.** AI fundamentals section 3 (the loop, planning, single vs multi-agent), the desirable "LangGraph" in the PD.
+**Senior trade-off to voice.** "I'd reach for a controllable graph over a free-running loop wherever the stakes are real, because I can bound it, inspect each step, and reason about failure. Open-ended agents are powerful and the hardest thing to operate."
+**Virgin tie-in.** A disruption-management or travel agent is a bounded graph: understand intent, search, evaluate options, confirm, not an unconstrained loop that could spiral.
+
+## Layer 3: The tools layer
+**Considerations.** Tools are how the agent does anything real, function/tool calling. Design decisions:
+- **Tool design:** each tool is a typed function with a clear name and description, because the model selects tools from those descriptions. Bad descriptions cause bad tool selection.
+- **Exposure:** how the tools are served. For an agent that lives in ChatGPT, that is an MCP server (FastMCP). For an in-house agent, tools can be internal functions or services.
+- **Read tools versus action tools:** searching is read-only and safe. Anything state-changing (book, pay, cancel) is a different risk class and needs the action guardrails (Layer 6).
+- **The key principle:** the tool layer is the deterministic, authoritative layer under the probabilistic model. The model orchestrates language, the tools return real, validated data. You never want the model inventing a fare, you want it calling a real tool.
+**Prep source.** FastAPI/FastMCP doc (MCP, tool design, the deterministic-tool-under-probabilistic-model framing), AI fundamentals section 3 (tool/function calling).
+**Senior trade-off to voice.** "I design tools the way I design any API, typed inputs, validated, structured outputs, and clear contracts. The difference is the consumer is a model, so the description and schema are part of the interface, the model reasons over them."
+**Virgin tie-in.** search_flights and get_reward_seats as typed MCP tools fronting the live fares and Velocity systems.
+
+## Layer 4: Knowledge and memory (retrieval)
+**Considerations.**
+- **What knowledge does the agent need, and is it RAG or a live tool?** Slow-changing knowledge (policies, SOPs, FAQs) is RAG: embed, store, retrieve, cite. Volatile or must-be-exact data (fares, availability, on-call status) is a live tool call, not RAG, because you cannot embed something that changes by the minute and must be exact.
+- **If RAG:** embeddings and a vector store (pgvector keeps vectors next to relational data), chunking strategy, hybrid search (dense plus keyword) and re-ranking for quality, metadata filtering, context packing into the window.
+- **Memory:** short-term memory is the conversation context. Long-term memory (this customer's history, preferences) is stored outside the window and retrieved when relevant, which is itself a retrieval problem.
+**Prep source.** AI fundamentals sections 1, 2 (RAG, embeddings, advanced RAG, memory), ChatGPT Apps doc (the RAG-vs-live-tool distinction).
+**Senior trade-off to voice.** "The decision I'd flag is RAG versus live tools. For an airline, fares are a live tool because they are volatile and must be exact, while baggage policy is RAG because it is slow-changing and benefits from citation. Knowing which is which is most of the design."
+**Virgin tie-in.** Policy and FAQ knowledge via RAG with citations, fares and reward seats via live MCP tools, member history as long-term memory.
+
+## Layer 5: The data layer underneath
+**Considerations.** The data paths that feed everything: ingestion pipelines for the knowledge base, the embedding store, caching (fares can be cached briefly for latency but not so long they go stale), data quality, and crucially data sensitivity and PII, what the system is allowed to process and store.
+**Prep source.** AI fundamentals (data paths), safety doc (PII), LIMSOC doc (data paths and sensitivity).
+**Senior trade-off to voice.** "Most of the unglamorous risk is here. Retrieval is only as good as the data and the chunking, and the privacy posture is set by what data you let into the system in the first place."
+**Virgin tie-in.** Member data is PII, scoped per authenticated user, with caching tuned so a cached fare can never be quoted stale.
+
+## Layer 6: Safety and guardrails (cross-cuts everything)
+**Considerations.** Three surfaces:
+- **Input:** prompt-injection and jailbreak filtering, PII handling, off-domain rejection. Indirect prompt injection matters here because an agent ingests tool results and retrieved content, which is an attack vector.
+- **Output:** groundedness checks, policy and toxicity checks, data-leak checks.
+- **Action:** the big one for agents. Any state-changing tool needs human-in-the-loop confirmation, idempotency, scoping to the authenticated user, and hard limits on loops and spend. The principle: **the agent assists, humans decide, and anything touching money or data is safe by construction.**
+**Prep source.** AI safety systems doc (whole doc), AI fundamentals section 4.
+**Senior trade-off to voice.** "Agents make safety harder because they take actions and ingest untrusted content, so I design so a wrong or hijacked decision is bounded. The model is never the last line of defence on anything that touches money or data."
+**Virgin tie-in.** Booking is the line: read-only search is low-risk, but the moment the agent can book, it needs explicit confirmation and idempotency, because that is a money-moving transaction.
+
+## Layer 7: Evaluation (how you know it works)
+**Considerations.** Agentic systems are non-deterministic, so you measure, you do not eyeball. Agent-specific evals:
+- **Did it choose the right tool with the right arguments**, across the messy ways users phrase things?
+- **Did it complete the task** end to end (task success rate)?
+- **Component evals** on retrieval and on each tool, plus **end-to-end** evals on the whole run.
+- **LLM-as-judge** for quality at scale, validated against human labels.
+- **Must-pass safety cases** that can never regress, and a versioned eval set that grows, every production failure becomes a new case.
+- Evals run in **CI**, so a prompt, model, or tool-description change cannot ship if it regresses.
+**Prep source.** AI fundamentals section 5 (evals), safety doc section 7 (safety evals).
+**Senior trade-off to voice.** "This is where I'd spend disproportionate effort, because it is what most teams are immature on. Changing a tool description changes how the model calls it, so without evals in CI you are shipping blind. Evals are TDD for AI, which is the discipline I already run."
+**Virgin tie-in.** Eval the agent on whether it calls search_flights correctly from varied phrasings, and whether the backend returns valid available options.
+
+## Layer 8: Operations and LLMOps
+**Considerations.** Running it reliably:
+- **Observability:** trace the full run, every reasoning step, tool call, retrieved chunk, token count, latency, and cost. Agent runs are multi-step, so tracing is how you debug them.
+- **Cost and latency:** agents fan out into many model calls, so both can blow out, you watch them as first-class signals.
+- **Prompt and config versioning:** prompts and tool definitions are versioned like code so you can roll back.
+- **Safe rollout:** feature flags, canary, shadow (run the new agent against real traffic without exposing users, compare), A/B.
+- **Incident response:** post-incident reviews for AI failures, with corrective actions fed back into the eval set.
+**Prep source.** AI fundamentals section 6 (LLMOps/observability), your OpenTelemetry experience.
+**Senior trade-off to voice.** "Observability for agents is the same tracing instinct I run with OpenTelemetry, extended to the AI pipeline. The new bit is treating tokens and cost as first-class metrics, because an agent that loops is a cost and latency risk, not just a quality one."
+**Virgin tie-in.** Trace every tool call, watch cost per conversation, roll out new capabilities behind flags to a canary slice of external users.
+
+## Layer 9: Infrastructure and platform
+**Considerations.** Where it runs and how it scales: the cloud (AWS for Virgin), async workers for I/O-bound concurrency (the agent spends most of its time waiting on model and tool calls), security (IAM, secrets, network isolation, OAuth for user-scoped access), and CI/CD.
+**Prep source.** FastAPI doc (async, worker model), safety doc (IAM, isolation), your AWS and cloud experience.
+**Senior trade-off to voice.** "An agent backend is heavily I/O-bound, it waits on models and tools, so the async model earns its keep, a few workers hold a lot of concurrent runs. I scale processes for parallelism and rely on async for concurrency within each."
+**Virgin tie-in.** AWS-hosted, async FastAPI/FastMCP services, OAuth-scoped to the Velocity member, standard CI/CD.
+
+---
+
+## The judgement principles to thread throughout (these signal seniority)
+Say at least two of these somewhere in the answer:
+1. **Constrain to the simplest design that works.** Add autonomy only where the task needs it. Open agents are the last resort, not the default.
+2. **Deterministic tools under a probabilistic model.** The model orchestrates language, the tools are the authoritative, validated layer. Never let the model invent facts it could look up.
+3. **Assist, do not act.** Humans decide anything that touches money, data, or safety. The action layer is safe by construction.
+4. **Measure everything.** Non-determinism means evals and observability are not optional, they are how you ship and operate at all.
+5. **The demo is the easy 20 percent.** The engineering is retrieval quality, evals, guardrails, and operations. This is the line the PD keeps making, so make it back to them.
+
+## Anti-patterns to name (shows you have seen it go wrong)
+- Reaching for a fully autonomous agent when a pipeline would do.
+- An unconstrained loop with no iteration cap or cost cap.
+- Tools with vague descriptions, so the model picks the wrong one.
+- Using RAG for volatile data that should be a live tool, or stuffing everything into a giant context window instead of retrieving.
+- Shipping without evals, so every prompt change is a blind roll of the dice.
+- Letting the model take real actions without confirmation, idempotency, or scoping.
+
+## A 30-second worked example (to make it concrete if they ask)
+"Take a Virgin travel-planning agent. Layer zero, it genuinely needs an agent because the path varies, search, compare, refine. The interface is the ChatGPT app, so MCP, with streaming. The core is a bounded graph: understand intent, search, evaluate, confirm. The tools are typed MCP tools, search_flights and get_reward_seats, fronting live systems, that is the deterministic layer. Knowledge is split: fares are live tools because they are volatile, policies are RAG with citations. Safety: read-only search is low-risk, but booking needs confirmation, idempotency, and per-member scoping. I'd eval whether it picks the right tool with the right arguments and completes the task, run that in CI, trace every run with cost and latency as first-class metrics, and roll out behind flags to a canary slice. The model does the language, my tools and guardrails make it trustworthy."
+
+## The closing line
+"So end to end it is framing first, then a constrained orchestration core calling typed tools over a split of RAG and live data, wrapped in guardrails, evals, and observability. The model is the smallest part. The engineering is making it correct, safe, and operable, which is the same production discipline I have run in regulated environments, applied to the agent layer."
