@@ -1,0 +1,116 @@
+# BYD Shark 6 Performance — Build & Payload
+
+Buy-and-build decision project for a BYD Shark 6 Performance (PHEV dual-cab ute). Covers the
+purchase configuration, the accessory/fitout build, and the payload/GVM maths that governs how the
+truck can actually be loaded and towed.
+
+## What this is
+
+Nick is configuring a BYD Shark 6 Performance with a touring-oriented accessory build (RAID bull
+bar, glass canopy, roof racks, drawers, fridge). The live question was whether the build leaves
+enough legal payload, and whether to take a GVM upgrade now or later.
+
+**Resolved (2026-06-25):** Run it as-is now. The factory payload comfortably covers Nick's real use
+(1–2 occupants). The GVM upgrade is deferrable — with two caveats (below). Run the built rig over a
+public weighbridge once kitted, and only pull the GVM-upgrade trigger if the rear axle is near its
+limit or towing plans change.
+
+## Decision
+
+- **Buy and build as configured.** ~460 kg payload remaining after fitout is ample for 1–2 people.
+- **Defer the GVM upgrade.** The full-car scenario (4 adults) was the only one that broke the
+  budget, and Nick has ruled that out as unrealistic.
+- **Two caveats on "later":**
+  1. **Axle limits, not just GVM.** Heavy kit sits at the ends — bull bar on the front axle, canopy
+     + drawers + fridge behind the rear axle. The rear axle limit (GAWR) can bind *before* GVM.
+     Weighbridge the built rig axle-by-axle (~$30) to get the truth.
+  2. **A later GVM upgrade costs more.** Pre-registration upgrades are plated as second-stage
+     manufacture (cleaner, cheaper). Post-rego means individual engineering certification — pricier
+     and more fiddly, and state-dependent in VIC.
+
+## The build (as configured)
+
+| Item | Price (AUD) | On vehicle? |
+|------|-------------|-------------|
+| BYD Shark 6 Performance | 62,900 | — |
+| Deep Sea Blue paint | 700 | n/a |
+| 18" alloy wheels | included | yes |
+| Black interior | included | yes |
+| Roof Racks (RAID) | 1,913 | yes |
+| Floor Mats Moulded (deep dish) | 252 | yes |
+| Seat Covers (Premium) | 730 | yes |
+| Canopy (Glass) | 6,374 | yes |
+| Sport Rim (set of 4) | 1,406 | swap for factory 18s |
+| Bull Bar (RAID) inc light bar | 4,962 | yes |
+| BYD AC Charger (7kW) — install not incl. | 699 | no (wall-mounted) |
+| Ceramic Window Tint (2 front, 3 clear) | 725 | yes |
+| Roadview Alpha Dash Camera (large battery) | 1,888 | yes |
+| **Subtotal (vehicle + options)** | **~82,549** | — |
+
+Excludes on-road costs, AC charger installation, and the drawers + fridge fitout (not in the
+dealer options list above but part of the payload build).
+
+## Payload analysis
+
+| Spec | Value | Source |
+|------|-------|--------|
+| GVM | 3,500 kg | factory |
+| Kerb weight | 2,775 kg | Nick (corrected from web's 2,710) |
+| **Factory payload** (GVM − kerb) | **725 kg** | derived |
+
+Payload = everything added on top of the bare vehicle: **accessories + fitout + people + cargo +
+towball download**.
+
+### Accessory / fitout weight on the vehicle
+
+| Item | Weight (kg) | Source |
+|------|-------------|--------|
+| Bull Bar (RAID) inc light bar | 65 | Nick / Ironman-confirmed (63 bar) |
+| Canopy (Glass) | 65 | Nick / Ironman-confirmed |
+| Drawers | 70 | Nick |
+| Roof Racks (RAID) | 25 | Nick |
+| Fridge | 30 (empty; +10–15 loaded) | Nick |
+| Floor mats / seat covers / tint / dash cam | ~10 | estimate |
+| Sport rims (swap for factory 18s) | ~0 net | estimate |
+| BYD AC charger (wall-mounted) | 0 | not on vehicle |
+| **Total** | **~265 kg** | — |
+
+### Result
+
+```
+Factory payload:           725 kg
+Less accessories+fitout:  −265 kg
+Payload remaining:        ~460 kg
+```
+
+**~460 kg remaining** for occupants, remaining gear, and towball download.
+
+| Realistic load | Payload used | Remaining |
+|----------------|-------------|-----------|
+| Just Nick (~90 kg) | 90 | ~370 kg |
+| Nick + 1 + dog (~190 kg) | 190 | ~270 kg |
+| Nick + 1, loaded trip (water, recovery, full fridge) | ~300 | ~160 kg |
+
+Tight only at 4 adults or heavy towing. Towing near the 2,500 kg braked limit adds ~250 kg towball
+download — that would put the truck near/over GVM with a full cabin.
+
+**GVM upgrade lever:** Ironman 4x4 upgrade lifts GVM to 3,850 kg → factory payload becomes 1,075 kg
+→ **~810 kg remaining** after this exact build.
+
+## Open items / next steps
+
+1. Confirm the order / dealer config and on-road total (price subtotal above is ex on-roads).
+2. Arrange AC charger installation (quoted item excludes install).
+3. Once built, run the rig over a public weighbridge — **axle-by-axle**, not just GVM.
+4. Decide GVM upgrade only if (a) rear axle near GAWR, or (b) towing plans firm up.
+5. Account for loaded-fridge weight (+10–15 kg over the 30 kg empty figure) in real loadouts.
+
+## Sources
+
+- [Oz Canopies — Shark 6 payload & GVM guide](https://www.ozcanopies.com.au/byd-shark-6-payload-gvm-guide/)
+- [All Terrain EV — Shark 6 specs](https://ev.allterrain.com.au/byd-shark-6-specs/)
+- [Ironman 4x4 — Raid bull bar (BYD Shark)](https://www.ironman4x4.com.au/pages/byd-shark-bull-bars)
+- [Ironman 4x4 — Raid canopy (BYD Shark 6)](https://www.ironman4x4.com.au/collections/canopies-ute-roller-shutters-tub-racks-for-byd-shark-6)
+- [CarExpert — Shark 6 payload/towing upgrades](https://www.carexpert.com.au/car-news/byd-shark-6-payload-towing-upgrades-on-the-way-if-owners-want-them)
+
+<!-- created 2026-06-25 from payload-calc session -->
