@@ -1,0 +1,237 @@
+/**
+ * Pulse tests (ISC-40..44).
+ *
+ * Three layers:
+ *   1. Pure projection math (tiles A/B/C, as-of stamps) over fixtures.
+ *   2. StorePulseSource deriving raw state through the Store interface.
+ *   3. End-to-end runPulseJob writing the widget JSON to a known path.
+ */
+
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { rm } from "node:fs/promises";
+import { SqliteStore } from "../src/store/sqlite.ts";
+import type { Tx, Envelope } from "../src/platform/store.ts";
+import { computeWidget } from "../src/pulse/projection.ts";
+import { StorePulseSource, currentPeriod, periodEndDate } from "../src/pulse/source.ts";
+import { writeWidget, readWidget } from "../src/pulse/widget.ts";
+import { toPulseResponse } from "../src/pulse/types.ts";
+import type { PulseRawState } from "../src/pulse/types.ts";
+
+const AS_OF = 1_750_000_000_000;
+
+function rawFixture(): PulseRawState {
+  return {
+    period: "2026-06",
+    envelopes: [
+      { envelopeId: "groceries", name: "Groceries", parentId: null, allocationCents: 50000, spentCents: 60000 },
+      { envelopeId: "fun", name: "Fun", parentId: null, allocationCents: 10000, spentCents: 15000 },
+      { envelopeId: "transport", name: "Transport", parentId: null, allocationCents: 20000, spentCents: 26000 },
+      { envelopeId: "rent", name: "Rent", parentId: null, allocationCents: 200000, spentCents: 200000 },
+    ],
+    totalIncomeCents: 400000,
+    totalAllocatedCents: 280000,
+    holdingCents: -45000,
+    nabStatementCents: -50000,
+  };
+}
+
+describe("pulse projection (ISC-41..44)", () => {
+  test("tile A: unallocated = income - allocated", () => {
+    const w = computeWidget(rawFixture(), AS_OF);
+    expect(w.unallocated.valueCents).toBe(120000); // 400000 - 280000
+    expect(w.unallocated.label).toBe("Unallocated");
+  });
+
+  test("tile B: top three overspends ranked by percent", () => {
+    const w = computeWidget(rawFixture(), AS_OF);
+    // fun 50% > transport 30% > groceries 20%; rent at 0% is not overspent.
+    expect(w.topOverspends.map((t) => t.envelopeId)).toEqual(["fun", "transport", "groceries"]);
+    expect(w.topOverspends[0]?.overspendPct).toBe(50);
+    expect(w.topOverspends[1]?.overspendPct).toBe(30);
+    expect(w.topOverspends[2]?.overspendPct).toBe(20);
+  });
+
+  test("tile B: caps at three even with more overspenders", () => {
+    const state = rawFixture();
+    const many: PulseRawState = {
+      ...state,
+      envelopes: [
+        ...state.envelopes,
+        { envelopeId: "x", name: "X", parentId: null, allocationCents: 1000, spentCents: 5000 },
+      ],
+    };
+    expect(computeWidget(many, AS_OF).topOverspends.length).toBe(3);
+  });
+
+  test("tile B: an envelope with no allocation cannot overspend", () => {
+    const state: PulseRawState = {
+      ...rawFixture(),
+      envelopes: [{ envelopeId: "noalloc", name: "NoAlloc", parentId: null, allocationCents: 0, spentCents: 9999 }],
+    };
+    expect(computeWidget(state, AS_OF).topOverspends).toEqual([]);
+  });
+
+  test("tile C: holding vs NAB drift = holding - nab", () => {
+    const w = computeWidget(rawFixture(), AS_OF);
+    expect(w.holdingDrift.holdingCents).toBe(-45000);
+    expect(w.holdingDrift.nabStatementCents).toBe(-50000);
+    expect(w.holdingDrift.driftCents).toBe(5000);
+    expect(w.holdingDrift.valueCents).toBe(5000);
+  });
+
+  test("ISC-44: every tile carries the same as-of timestamp", () => {
+    const w = computeWidget(rawFixture(), AS_OF);
+    expect(w.asOf).toBe(AS_OF);
+    expect(w.unallocated.asOf).toBe(AS_OF);
+    expect(w.holdingDrift.asOf).toBe(AS_OF);
+    for (const t of w.topOverspends) expect(t.asOf).toBe(AS_OF);
+  });
+
+  test("toPulseResponse narrows to the wire contract", () => {
+    const res = toPulseResponse(computeWidget(rawFixture(), AS_OF));
+    expect(res.holdingDrift.valueCents).toBe(5000);
+    expect(res.topOverspends[0]).toEqual({ envelopeId: "fun", name: "Fun", overspendPct: 50, asOf: AS_OF });
+  });
+});
+
+describe("period helpers", () => {
+  test("periodEndDate handles month lengths", () => {
+    expect(periodEndDate("2026-06")).toBe("2026-06-30");
+    expect(periodEndDate("2026-02")).toBe("2026-02-28");
+    expect(periodEndDate("2026-12")).toBe("2026-12-31");
+  });
+  test("currentPeriod is YYYY-MM", () => {
+    expect(currentPeriod(new Date(Date.UTC(2026, 5, 26)))).toBe("2026-06");
+  });
+});
+
+function env(id: string, name: string, target: number, group = ""): Envelope {
+  return { id, name, parentId: null, group, rolloverRule: "roll_all", targetType: "monthly", targetAmountCents: target };
+}
+function tx(id: string, envelopeId: string | null, amount: number, account = "acc-anz", date = "2026-06-15"): Tx {
+  return {
+    id, date, amountCents: amount, accountId: account, categoryId: null, envelopeId,
+    payee: "x", isTransfer: false, isPending: false, rawJson: "{}",
+  };
+}
+
+describe("StorePulseSource over the Store interface", () => {
+  let store: SqliteStore;
+  const U = "u1";
+
+  beforeAll(async () => {
+    store = new SqliteStore(":memory:");
+    await store.migrate();
+    await store.ensureUser(U, "u1@penny.test");
+    for (const e of [
+      env("groceries", "Groceries", 50000),
+      env("fun", "Fun", 10000),
+      env("holding", "Credit Card Holding", 0, "Holding"),
+    ]) {
+      await store.upsertEnvelope(U, e);
+    }
+    await store.upsertTransactions(U, [
+      tx("g1", "groceries", -30000),
+      tx("g2", "groceries", -30000),
+      tx("f1", "fun", -15000),
+      tx("salary", null, 400000),
+      tx("nab1", "holding", -45000, "acc-nab"),
+      // a pending txn must not count, and a transfer must not count:
+      { ...tx("pend", "fun", -99999), isPending: true },
+      { ...tx("xfer", "groceries", -99999), isTransfer: true },
+    ]);
+  });
+
+  afterAll(async () => {
+    await store.close();
+  });
+
+  test("derives spent, income, holding and NAB from the Store", async () => {
+    const state = await new StorePulseSource(store, { nabAccountId: "acc-nab" }).gather(U, "2026-06");
+    const byId = Object.fromEntries(state.envelopes.map((e) => [e.envelopeId, e]));
+    expect(byId.groceries?.spentCents).toBe(60000); // pending/transfer excluded
+    expect(byId.fun?.spentCents).toBe(15000);
+    expect(byId.holding).toBeUndefined(); // Holding excluded from spending envelopes
+    expect(state.totalIncomeCents).toBe(400000);
+    expect(state.totalAllocatedCents).toBe(60000); // 50000 + 10000
+    expect(state.holdingCents).toBe(-45000);
+    expect(state.nabStatementCents).toBe(-45000);
+  });
+
+  test("projection over the derived state yields the overspends", async () => {
+    const state = await new StorePulseSource(store, { nabAccountId: "acc-nab" }).gather(U, "2026-06");
+    const w = computeWidget(state, AS_OF);
+    // fun 50% (15000 vs 10000) > groceries 20% (60000 vs 50000)
+    expect(w.topOverspends.map((t) => t.envelopeId)).toEqual(["fun", "groceries"]);
+    expect(w.unallocated.valueCents).toBe(340000); // 400000 - 60000
+    expect(w.holdingDrift.driftCents).toBe(0); // -45000 - (-45000)
+  });
+});
+
+describe("widget I/O (ISC-40)", () => {
+  const path = join(tmpdir(), `penny-widget-${process.pid}.json`);
+
+  afterAll(async () => {
+    await rm(path, { force: true });
+  });
+
+  test("writeWidget then readWidget round-trips", async () => {
+    const w = computeWidget(rawFixture(), AS_OF);
+    const written = await writeWidget(w, path);
+    expect(written).toBe(path);
+    const back = await readWidget(path);
+    expect(back?.unallocated.valueCents).toBe(120000);
+    expect(back?.asOf).toBe(AS_OF);
+  });
+
+  test("readWidget returns null when the file is absent", async () => {
+    const back = await readWidget(join(tmpdir(), "penny-does-not-exist.json"));
+    expect(back).toBeNull();
+  });
+});
+
+describe("runPulseJob end-to-end (ISC-40)", () => {
+  const dbPath = join(tmpdir(), `penny-pulse-${process.pid}.db`);
+  const outPath = join(tmpdir(), `penny-pulse-out-${process.pid}.json`);
+
+  beforeAll(async () => {
+    const seed = new SqliteStore(dbPath);
+    await seed.migrate();
+    await seed.ensureUser("local", "nick@penny.local");
+    await seed.upsertEnvelope("local", env("groceries", "Groceries", 50000));
+    await seed.upsertTransactions("local", [tx("g1", "groceries", -60000), tx("pay", null, 100000)]);
+    await seed.close();
+  });
+
+  afterAll(async () => {
+    await rm(dbPath, { force: true });
+    await rm(`${dbPath}-wal`, { force: true });
+    await rm(`${dbPath}-shm`, { force: true });
+    await rm(outPath, { force: true });
+  });
+
+  test("writes a valid widget to the known path", async () => {
+    const prevDb = process.env.PENNY_SQLITE_PATH;
+    const prevOut = process.env.PENNY_PULSE_PATH;
+    const prevPeriod = process.env.PENNY_PERIOD;
+    process.env.PENNY_SQLITE_PATH = dbPath;
+    process.env.PENNY_PULSE_PATH = outPath;
+    process.env.PENNY_PERIOD = "2026-06";
+    try {
+      const { runPulseJob } = await import("../scripts/pulse.ts");
+      const written = await runPulseJob();
+      expect(written).toBe(outPath);
+      const widget = await readWidget(outPath);
+      expect(widget).not.toBeNull();
+      expect(widget?.period).toBe("2026-06");
+      expect(widget?.topOverspends[0]?.envelopeId).toBe("groceries"); // 60000 vs 50000
+      expect(typeof widget?.asOf).toBe("number");
+    } finally {
+      if (prevDb === undefined) delete process.env.PENNY_SQLITE_PATH; else process.env.PENNY_SQLITE_PATH = prevDb;
+      if (prevOut === undefined) delete process.env.PENNY_PULSE_PATH; else process.env.PENNY_PULSE_PATH = prevOut;
+      if (prevPeriod === undefined) delete process.env.PENNY_PERIOD; else process.env.PENNY_PERIOD = prevPeriod;
+    }
+  });
+});

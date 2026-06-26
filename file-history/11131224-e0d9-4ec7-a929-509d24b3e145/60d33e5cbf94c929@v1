@@ -1,0 +1,15 @@
+// Default entrypoint: the Discord fleet (one bot per agent). (Slack frontend: npm run start:slack)
+import "dotenv/config";
+import { startDiscordFleet } from "./discordApp";
+
+if (!process.env.DISCORD_GUILD_ID) {
+  console.error(
+    "Missing env var: DISCORD_GUILD_ID.\n" +
+      "All agent bots share one guild. Copy .env.example to .env and set it (see README — Discord setup)."
+  );
+  process.exit(1);
+}
+
+const started = startDiscordFleet();
+if (started === 0) process.exit(1);
+console.log("LifeOS Discord fleet starting… (bots logging in)");

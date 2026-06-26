@@ -1,0 +1,20 @@
+# Penny (envelope-os)
+
+Zero-based envelope budgeting layer on top of PocketSmith, feeding PAI Pulse. AUD, single user, local-first, personal-finance-grade security.
+
+- **Surface name:** Penny
+- **Codebase folder:** envelope-os
+- **System of record:** [`ISA.md`](./ISA.md) — twelve-section project ISA at E3 tier
+- **Source thinking:** [`docs/REQUIREMENTS_CLARIFICATION.md`](./docs/REQUIREMENTS_CLARIFICATION.md), [`docs/ARCHITECT_REVIEW.md`](./docs/ARCHITECT_REVIEW.md)
+
+## What it is
+
+PocketSmith stays as the bank-feed and categorisation layer across ANZ, NAB, and Macquarie. Penny owns the envelope semantics that PocketSmith handles weakly. Allocation, spend-date cash basis, monthly and annualised budgets, rollover rules, time-travel views, and a read-only Pulse widget.
+
+## Stack
+
+bun plus TypeScript. SQLite via `bun:sqlite`. Hono API serving a Vite plus React plus shadcn SPA on one port. PocketSmith client codegenned from the pinned OpenAPI 3 spec. Tailscale-only access. No Python, no npm, no cloud storage of financial data.
+
+## Status
+
+ISA persisted, all design decisions locked (two architect-flagged contradictions resolved, see `ISA.md` Changelog). Build not started. Weekend 1 is the ingest spine. PocketSmith codegen client, SQLite schema, daily sync, two-year backfill.

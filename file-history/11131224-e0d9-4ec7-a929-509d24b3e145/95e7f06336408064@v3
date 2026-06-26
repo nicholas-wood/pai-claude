@@ -1,0 +1,474 @@
+import {
+  Client,
+  GatewayIntentBits,
+  Partials,
+  Events,
+  ChannelType,
+  ButtonBuilder,
+  ActionRowBuilder,
+  ButtonStyle,
+  SlashCommandBuilder,
+  MessageFlags,
+} from "discord.js";
+import type { Interaction } from "discord.js";
+import {
+  getRoster,
+  getBots,
+  agentForBotInProject,
+  type Agent,
+  type Bot,
+} from "./roster";
+import { trunc } from "./util";
+import { runAgentTask, type TaskEvent } from "./executor";
+import { makeCanUseTool, type Approver } from "./approval";
+import { createTask, appendEvent, setStatus, finishTask, failTask, listRecent } from "./tasks";
+import { isAutopilot, isAlwaysAllowed, isDangerous, toggleAutopilot, alwaysAllow } from "./autopilot";
+import { tokenForAgent, hasToken } from "./discordTokens";
+import { getSession, setSession, channelKey } from "./sessions";
+import { MEMORY_TOOL_NAME } from "./memoryTool";
+import type { OnDelegate } from "./delegateTool";
+
+const GUILD_ID = process.env.DISCORD_GUILD_ID ?? "";
+const DISCORD_MAX = 1900; // stay under Discord's 2000-char message limit
+const GENERAL_CHANNEL = "general";
+
+// One Discord bot per role/name. Shared fleet state below.
+const bots = new Map<string, AgentBot>(); // keyed by bot name
+const pendingApprovals = new Map<
+  string,
+  { resolve: (ok: boolean) => void; tool: string; botName: string }
+>();
+// A pending ask_user question for a conversation (thread/channel id) and the bot that asked it.
+const pendingQuestions = new Map<string, { botName: string; resolve: (answer: string) => void }>();
+let taskSeq = 0;
+
+/** Minimal "can post here" view of a channel — sidesteps discord.js channel-union friction. */
+type Sendable = { send: (options: any) => Promise<any> };
+function asSendable(ch: unknown): Sendable | null {
+  return ch && typeof (ch as any).send === "function" ? (ch as Sendable) : null;
+}
+
+function slug(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 90) || "x";
+}
+
+function chunkText(s: string, n: number): string[] {
+  if (!s) return ["(empty)"];
+  const out: string[] = [];
+  for (let i = 0; i < s.length; i += n) out.push(s.slice(i, i + n));
+  return out;
+}
+
+function stripMentions(s: string): string {
+  return (s ?? "").replace(/<@!?\d+>/g, "").trim();
+}
+
+const STATUS_EMOJI: Record<string, string> = {
+  running: "🟡",
+  "awaiting-approval": "⏸️",
+  done: "✅",
+  error: "❌",
+};
+
+// --- project ↔ channel resolution -------------------------------------------
+
+/** Distinct project names in the roster. */
+function projectNames(): string[] {
+  return getRoster().map((p) => p.name);
+}
+
+/** slug(project) -> project name. */
+function projectSlugMap(): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const p of projectNames()) m.set(slug(p), p);
+  return m;
+}
+
+/** The project a channel (or its parent, if a thread) belongs to. `general`/unknown → undefined. */
+function projectForChannel(channel: any): string | undefined {
+  let ch = channel;
+  if (ch?.isThread?.()) ch = ch.parent;
+  const name: string | undefined = ch?.name;
+  if (!name || name === GENERAL_CHANNEL) return undefined;
+  return projectSlugMap().get(name);
+}
+
+/** True for the channels Jarvis watches: #general and the per-project channels. */
+function isWatchedChannel(channel: any): boolean {
+  const name: string | undefined = channel?.name;
+  if (!name) return false;
+  return name === GENERAL_CHANNEL || projectSlugMap().has(name);
+}
+
+function approvalRow(id: string): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(`approve:${id}`).setLabel("Approve").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`always:${id}`).setLabel("Always (this tool)").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`deny:${id}`).setLabel("Deny").setStyle(ButtonStyle.Danger)
+  );
+}
+
+/** A single role-bot: its own Discord client, serving one or more project overlays. */
+class AgentBot {
+  readonly bot: Bot;
+  readonly client: Client;
+
+  constructor(bot: Bot) {
+    this.bot = bot;
+    // Only the orchestrator (Jarvis) reads un-mentioned messages, so only it needs the
+    // privileged Message Content Intent. Workers act on @mentions / DMs / delegation —
+    // Discord delivers content for those without the intent — so they connect without
+    // the portal toggle being enabled.
+    const intents = [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.DirectMessages,
+    ];
+    if (bot.isOrchestrator) intents.push(GatewayIntentBits.MessageContent);
+    this.client = new Client({ intents, partials: [Partials.Channel] }); // partials: receive DMs
+    this.wire();
+  }
+
+  private get selfId(): string | undefined {
+    return this.client.user?.id;
+  }
+
+  private wire(): void {
+    this.client.once(Events.ClientReady, async (c) => {
+      try {
+        if (this.bot.isOrchestrator) await this.ensureChannels();
+        await this.registerCommands();
+        console.log(`⚡️ ${this.bot.name} online as ${c.user.tag}`);
+      } catch (e: any) {
+        console.error(`[${this.bot.name}] startup error:`, e?.message ?? e);
+      }
+    });
+    this.client.on(Events.MessageCreate, (msg) => {
+      this.onMessage(msg).catch((e) => console.error(`[${this.bot.name}] message error:`, e));
+    });
+    this.client.on(Events.InteractionCreate, (i) => {
+      this.onInteraction(i).catch((e) => console.error(`[${this.bot.name}] interaction error:`, e));
+    });
+  }
+
+  /** Jarvis only: create #general + one channel per project. */
+  private async ensureChannels(): Promise<void> {
+    if (!GUILD_ID) return;
+    const guild = await this.client.guilds.fetch(GUILD_ID).catch(() => null);
+    if (!guild) return;
+    const existing = await guild.channels.fetch();
+    const want = [GENERAL_CHANNEL, ...projectNames().map(slug)];
+    for (const name of want) {
+      const found = existing.find((c) => c?.type === ChannelType.GuildText && c.name === name);
+      if (found) continue;
+      await guild.channels
+        .create({
+          name,
+          type: ChannelType.GuildText,
+          topic:
+            name === GENERAL_CHANNEL
+              ? "Ad-hoc — post anything; Jarvis routes it."
+              : "Post a task; Jarvis triages it into a thread and delegates to the team.",
+        })
+        .catch(() => {});
+    }
+  }
+
+  private async registerCommands(): Promise<void> {
+    if (!GUILD_ID) return;
+    const guild = await this.client.guilds.fetch(GUILD_ID).catch(() => null);
+    if (!guild) return;
+    await guild.commands
+      .set([
+        new SlashCommandBuilder()
+          .setName("autopilot")
+          .setDescription("Toggle my autonomous mode (still confirms destructive actions + memory writes)")
+          .toJSON(),
+        new SlashCommandBuilder().setName("tasks").setDescription("Recent tasks").toJSON(),
+      ])
+      .catch(() => {});
+  }
+
+  private async onMessage(msg: any): Promise<void> {
+    if (msg.author?.bot) return;
+    const convoId: string = msg.channelId;
+
+    // A pending ask_user question consumes the next reply in that conversation;
+    // only the bot that asked it resolves, and no other bot acts on the message.
+    const pq = pendingQuestions.get(convoId);
+    if (pq) {
+      if (pq.botName === this.bot.name) {
+        pendingQuestions.delete(convoId);
+        pq.resolve(stripMentions(msg.content));
+      }
+      return;
+    }
+
+    const isDM = msg.channel?.type === ChannelType.DM;
+    if (isDM) {
+      await this.runDirect(msg, undefined);
+      return;
+    }
+
+    const text = (msg.content ?? "").trim();
+    if (!text) return;
+
+    const mentionedMe = Boolean(this.selfId && msg.mentions?.users?.has?.(this.selfId));
+    if (mentionedMe) {
+      await this.runDirect(msg, projectForChannel(msg.channel));
+      return;
+    }
+
+    // Only the orchestrator (Jarvis) reacts to un-mentioned posts.
+    if (!this.bot.isOrchestrator) return;
+
+    const inThread = Boolean(msg.channel?.isThread?.());
+    if (inThread) {
+      if (!isWatchedChannel(msg.channel?.parent)) return;
+      const sendable = asSendable(msg.channel);
+      if (sendable) {
+        await this.runAgentIn(
+          sendable,
+          this.bot.agents[0],
+          stripMentions(text),
+          convoId,
+          projectForChannel(msg.channel),
+          true
+        );
+      }
+      return;
+    }
+
+    if (isWatchedChannel(msg.channel)) await this.orchestrateTopLevel(msg);
+  }
+
+  /** Jarvis: open a thread on a top-level task post and orchestrate inside it. */
+  private async orchestrateTopLevel(msg: any): Promise<void> {
+    const text = (msg.content ?? "").trim();
+    const project = projectForChannel(msg.channel);
+    const thread = await msg
+      .startThread({ name: trunc(text || "task", 60) })
+      .catch(() => null);
+    const target = asSendable(thread) ?? asSendable(msg.channel);
+    if (!target) return;
+    const convoId: string = (thread?.id as string) ?? msg.channelId;
+    await this.runAgentIn(target, this.bot.agents[0], text, convoId, project, true);
+  }
+
+  /** Respond directly (a DM or an @-mention): pick the overlay for this channel's project. */
+  private async runDirect(msg: any, project: string | undefined): Promise<void> {
+    const sendable = asSendable(msg.channel);
+    if (!sendable) return;
+    const agent = agentForBotInProject(this.bot, project ?? "") ?? this.bot.agents[0];
+    const text = stripMentions(msg.content);
+    if (!text) return;
+    await this.runAgentIn(sendable, agent, text, msg.channelId, project, this.bot.isOrchestrator);
+  }
+
+  /** Run a delegated task in an existing thread (called by Jarvis's delegate tool). */
+  async runInThread(threadId: string, project: string | undefined, prompt: string): Promise<string> {
+    const ch = await this.client.channels.fetch(threadId).catch(() => null);
+    const sendable = asSendable(ch);
+    if (!sendable) return `${this.bot.name} could not reach the thread.`;
+    const agent = agentForBotInProject(this.bot, project ?? "") ?? this.bot.agents[0];
+    return this.runAgentIn(sendable, agent, prompt, threadId, project, false);
+  }
+
+  /** Core task runner: run `agent` in `sendable`, streaming activity and posting the result. */
+  private async runAgentIn(
+    sendable: Sendable,
+    agent: Agent,
+    prompt: string,
+    convoId: string,
+    project: string | undefined,
+    canDelegate: boolean
+  ): Promise<string> {
+    const botName = this.bot.name;
+    const sessionKey = channelKey(agent.id, convoId);
+    const taskId = `task_${Date.now()}_${taskSeq++}`;
+    createTask({ id: taskId, agentId: agent.id, agentTitle: agent.title, user: "discord", prompt });
+
+    const activity = await sendable.send({ content: `🟡 **${agent.title}** is working…` }).catch(() => null);
+    const lines: string[] = [];
+    let lastEdit = 0;
+    const render = async (done: boolean, force = false): Promise<void> => {
+      if (!activity) return;
+      const now = Date.now();
+      if (!force && !done && now - lastEdit < 1500) return;
+      lastEdit = now;
+      const head = done ? `✅ **${agent.title}** — done` : `🟡 **${agent.title}** is working…`;
+      await activity
+        .edit({ content: trunc(`${head}\n${lines.join("\n") || "_starting…_"}`, DISCORD_MAX) })
+        .catch(() => {});
+    };
+
+    const onEvent = async (e: TaskEvent): Promise<void> => {
+      if (e.kind === "tool") {
+        lines.push(`${e.delegated ? "↳ " : "🔧 "}${e.summary}`);
+        appendEvent(taskId, "tool", e.summary);
+        await render(false);
+      } else if (e.kind === "text") {
+        appendEvent(taskId, "text", e.text);
+      } else if (e.kind === "result") {
+        appendEvent(taskId, "result", `${e.turns} turns · $${e.costUsd.toFixed(4)}`);
+      } else if (e.kind === "error") {
+        lines.push(`⚠️ ${e.message}`);
+        appendEvent(taskId, "error", e.message);
+        await render(false, true);
+      }
+    };
+
+    const approver: Approver = async (req) => {
+      const alwaysConfirm = req.tool === MEMORY_TOOL_NAME; // memory writes always reviewed
+      if (
+        !alwaysConfirm &&
+        (isAutopilot(botName) || isAlwaysAllowed(botName, req.tool)) &&
+        !isDangerous(req.tool, req.summary)
+      ) {
+        lines.push(`✅ auto-approved ${req.tool}`);
+        appendEvent(taskId, "tool", `auto-approved ${req.tool}`);
+        await render(false);
+        return true;
+      }
+      return new Promise<boolean>((resolve) => {
+        setStatus(taskId, "awaiting-approval");
+        sendable
+          .send({
+            content: `⏸️ **${agent.title}** wants to run **${req.tool}**\n\`${trunc(req.summary, 300)}\``,
+            components: [approvalRow(req.id)],
+          })
+          .then(() => pendingApprovals.set(req.id, { resolve, tool: req.tool, botName }))
+          .catch(() => resolve(false));
+      }).then((ok) => {
+        setStatus(taskId, "running");
+        return ok;
+      });
+    };
+
+    const onAskUser = async (question: string): Promise<string> => {
+      await sendable
+        .send({ content: `❓ **${agent.title}** asks:\n${trunc(question, DISCORD_MAX - 40)}` })
+        .catch(() => {});
+      return new Promise<string>((resolve) => {
+        pendingQuestions.set(convoId, { botName, resolve });
+      });
+    };
+
+    // Orchestrator: delegate a phase of agents that run in THIS thread, in parallel.
+    const onDelegate: OnDelegate | undefined =
+      agent.isOrchestrator && canDelegate
+        ? async (tasks) =>
+            Promise.all(
+              tasks.map(async (t) => {
+                const target = bots.get(t.agent) ?? botByFuzzyName(t.agent);
+                if (!target) return { agent: t.agent, result: `No bot named "${t.agent}".` };
+                const result = await target.runInThread(
+                  convoId,
+                  project,
+                  `[Delegated by ${agent.title}]\n${t.task}`
+                );
+                return { agent: t.agent, result };
+              })
+            )
+        : undefined;
+
+    try {
+      const { result, costUsd, sessionId } = await runAgentTask({
+        agent,
+        prompt,
+        onEvent,
+        canUseTool: makeCanUseTool(approver),
+        onDelegate,
+        onAskUser,
+        resume: getSession(sessionKey),
+      });
+      setSession(sessionKey, sessionId); // ISC-7
+      finishTask(taskId, result, costUsd);
+      await render(true, true);
+      for (const part of chunkText(result || "(no result)", DISCORD_MAX)) {
+        await sendable.send({ content: part }).catch(() => {});
+      }
+      return result || "";
+    } catch (e: any) {
+      failTask(taskId, e?.message ?? String(e));
+      await sendable.send({ content: `❌ Task failed: ${e?.message ?? String(e)}` }).catch(() => {});
+      return `Task failed: ${e?.message ?? String(e)}`;
+    }
+  }
+
+  private async onInteraction(interaction: Interaction): Promise<void> {
+    if (interaction.isButton()) {
+      const [action, id] = interaction.customId.split(":");
+      const pending = pendingApprovals.get(id);
+      if (!pending) {
+        await interaction.deferUpdate().catch(() => {});
+        return;
+      }
+      pendingApprovals.delete(id);
+      if (action === "always") alwaysAllow(pending.botName, pending.tool);
+      pending.resolve(action !== "deny");
+      const label =
+        action === "deny"
+          ? "🚫 Denied"
+          : action === "always"
+            ? `✅ Approved — won't ask again for ${pending.tool}`
+            : "✅ Approved";
+      await interaction.update({ content: label, components: [] }).catch(() => {});
+      return;
+    }
+    if (!interaction.isChatInputCommand()) return;
+
+    if (interaction.commandName === "autopilot") {
+      const on = toggleAutopilot(this.bot.name);
+      await interaction.reply({
+        content: on
+          ? `🛫 Autopilot **ON** for **${this.bot.name}** — acts without asking, except destructive/outbound actions and memory writes.`
+          : `🛑 Autopilot **OFF** for **${this.bot.name}** — asks before each gated action.`,
+        flags: MessageFlags.Ephemeral,
+      });
+    } else if (interaction.commandName === "tasks") {
+      const recent = listRecent(10);
+      const body = recent.length
+        ? recent
+            .map((t) => `${STATUS_EMOJI[t.status] ?? "•"} ${t.agentTitle} — ${t.status}: ${trunc(t.prompt, 60)}`)
+            .join("\n")
+        : "_No tasks yet._";
+      await interaction.reply({ content: trunc(body, DISCORD_MAX), flags: MessageFlags.Ephemeral });
+    }
+  }
+
+  async login(): Promise<void> {
+    await this.client.login(tokenForAgent(this.bot.name));
+  }
+}
+
+function botByFuzzyName(q: string): AgentBot | undefined {
+  const ql = q.toLowerCase();
+  for (const [name, bot] of bots) {
+    if (name.toLowerCase() === ql) return bot;
+  }
+  for (const [name, bot] of bots) {
+    if (name.toLowerCase().includes(ql) || ql.includes(name.toLowerCase())) return bot;
+  }
+  return undefined;
+}
+
+/** Start one Discord bot per role that has a token configured. Returns the count started. */
+export function startDiscordFleet(): number {
+  const fleet = getBots().filter((b) => hasToken(b.name));
+  if (!fleet.length) {
+    console.error(
+      "No bot has a Discord token configured.\n" +
+        "Set DISCORD_TOKEN_<NAME> env vars, or populate code/.data/discord-tokens.json " +
+        '({ "architect": "token", … } keyed by bot name). See README — Discord setup.'
+    );
+    return 0;
+  }
+  for (const bot of fleet) {
+    const ab = new AgentBot(bot);
+    bots.set(bot.name, ab);
+    ab.login().catch((e) => console.error(`[${bot.name}] login failed:`, e?.message ?? e));
+  }
+  console.log(`Starting LifeOS Discord fleet — ${fleet.length} bot(s) logging in…`);
+  return fleet.length;
+}

@@ -1,0 +1,41 @@
+/**
+ * Deployment configuration. The ONLY module permitted to read DEPLOY_MODE
+ * is the composition root (src/composition.ts). Business modules depend on
+ * resolved interfaces, never on this value. Enforces ISC-50, ISC-51.
+ */
+
+export type DeployMode = "local" | "cloud";
+
+export interface AppConfig {
+  readonly deployMode: DeployMode;
+  /** SQLite file path (local) — ignored by the Postgres adapter. */
+  readonly sqlitePath: string;
+  /** Postgres connection string (cloud) — undefined in local mode. */
+  readonly postgresUrl?: string;
+  /** Port the Hono server binds. Bound to 127.0.0.1 in local mode; fronted by tailscale serve. */
+  readonly port: number;
+  /** Public base path the SPA is mounted at. "/" local, "/budget" cloud. */
+  readonly basePath: string;
+}
+
+/**
+ * Resolve config from the environment. Called once, at the composition root.
+ * Throws loudly on an unknown DEPLOY_MODE rather than defaulting silently.
+ */
+export function loadConfig(env: Record<string, string | undefined> = process.env): AppConfig {
+  const raw = (env.DEPLOY_MODE ?? "local").trim().toLowerCase();
+  if (raw !== "local" && raw !== "cloud") {
+    throw new Error(`DEPLOY_MODE must be "local" or "cloud", got "${raw}"`);
+  }
+  const deployMode: DeployMode = raw;
+  const postgresUrl = env.PENNY_POSTGRES_URL;
+  // exactOptionalPropertyTypes: omit the optional key entirely when unset rather
+  // than assigning undefined to postgresUrl?: string.
+  return {
+    deployMode,
+    sqlitePath: env.PENNY_SQLITE_PATH ?? `${env.HOME ?? "."}/.penny/penny.db`,
+    ...(postgresUrl !== undefined ? { postgresUrl } : {}),
+    port: Number(env.PENNY_PORT ?? "8787"),
+    basePath: deployMode === "cloud" ? "/budget" : "/",
+  };
+}

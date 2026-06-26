@@ -1,0 +1,65 @@
+/**
+ * Daily sync CLI (ISC-5, ISC-7, ISC-8).
+ *
+ *   bun run sync
+ *
+ * This is the entry PAI cron fires once a day at a fixed local time. It is
+ * idempotent and time-agnostic: the schedule lives in cron config, the script
+ * just pulls everything changed since the last successful run (ISC-5).
+ *
+ * Recommended PAI cron entry (fixed local time, 05:30 Australia/Melbourne):
+ *
+ *   # m h dom mon dow   command
+ *   30 5 * * *   cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && /home/nicholas-wood/.bun/bin/bun run sync >> "$HOME/.penny/sync.log" 2>&1
+ *
+ * Two consecutive failed runs raise a Pulse/Telegram alert (ISC-8); the process
+ * exits non-zero on failure so the cron host's own failure mail also fires.
+ *
+ * Wires through the composition root so DEPLOY_MODE is read in exactly one place
+ * (ISC-50/51).
+ */
+
+import { buildContainer } from "../src/composition.ts";
+import { PocketSmithClient } from "../src/ingest/client.ts";
+import { syncWithFailureTracking } from "../src/ingest/sync.ts";
+import { FileFailureTracker, PulseTelegramAlerter } from "../src/ingest/alert.ts";
+
+const userId = process.env.PENNY_USER_ID ?? "local";
+
+const container = await buildContainer();
+
+const seedable = container.store as unknown as {
+  ensureUser?: (id: string, email?: string) => Promise<void>;
+};
+if (seedable.ensureUser) {
+  await seedable.ensureUser(userId, process.env.PENNY_USER_EMAIL);
+}
+
+const client = await PocketSmithClient.forUser(container.secrets, userId);
+
+console.log(`[sync] user=${userId} starting incremental sync`);
+const outcome = await syncWithFailureTracking(
+  { store: container.store, client, userId },
+  { failures: new FileFailureTracker(), alerter: new PulseTelegramAlerter() },
+);
+
+await container.store.close();
+
+if (outcome.ok && outcome.result) {
+  const r = outcome.result;
+  console.log(
+    `[sync] done: ${r.transactions} transactions across ${r.pages} pages, ` +
+      `updated_since=${r.updatedSince ?? "(first run)"}, completed ${r.completedAt}`,
+  );
+  process.exit(0);
+}
+
+console.error(
+  `[sync] FAILED (${outcome.consecutiveFailures} in a row` +
+    `${outcome.alerted ? ", alert raised" : ""}): ${describe(outcome.error)}`,
+);
+process.exit(1);
+
+function describe(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

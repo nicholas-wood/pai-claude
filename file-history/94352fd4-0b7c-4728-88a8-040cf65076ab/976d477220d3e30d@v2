@@ -1,0 +1,48 @@
+/**
+ * Composition root. THE ONLY module that reads DEPLOY_MODE and decides which
+ * concrete adapters back the AuthProvider, SecretStore, and Store interfaces.
+ * Everything downstream receives resolved interfaces and is blind to the mode.
+ * This is the single seam that turns "local-first" into "cloud" — by config,
+ * not by code. Proves ISC-50, ISC-51.
+ *
+ * NOTE: concrete adapters (local/* and cloud/*) are built by the ingest-spine
+ * and platform-seams work. Imports are wired here so the contract is visible;
+ * the build fills in the implementations behind these interfaces.
+ */
+
+import { loadConfig, type AppConfig } from "./platform/config.ts";
+import type { AuthProvider } from "./platform/auth.ts";
+import type { SecretStore } from "./platform/secrets.ts";
+import type { Store } from "./platform/store.ts";
+
+export interface Container {
+  readonly config: AppConfig;
+  readonly store: Store;
+  readonly secrets: SecretStore;
+  readonly auth: AuthProvider;
+}
+
+export async function buildContainer(): Promise<Container> {
+  const config = loadConfig();
+
+  // --- Store adapter ---
+  const store: Store =
+    config.deployMode === "cloud"
+      ? new (await import("./store/postgres.ts")).PostgresStore(config.postgresUrl!)
+      : new (await import("./store/sqlite.ts")).SqliteStore(config.sqlitePath);
+  await store.migrate();
+
+  // --- SecretStore adapter ---
+  const secrets: SecretStore =
+    config.deployMode === "cloud"
+      ? new (await import("./platform/secrets/cloud.ts")).KmsSecretStore(store)
+      : new (await import("./platform/secrets/local.ts")).LocalSecretStore();
+
+  // --- AuthProvider adapter ---
+  const auth: AuthProvider =
+    config.deployMode === "cloud"
+      ? new (await import("./platform/auth/cloud.ts")).MagicLinkAuth(store, secrets)
+      : new (await import("./platform/auth/local.ts")).TailscalePinAuth(secrets);
+
+  return { config, store, secrets, auth };
+}

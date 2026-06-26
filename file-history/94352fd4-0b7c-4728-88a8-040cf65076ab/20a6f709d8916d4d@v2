@@ -1,0 +1,46 @@
+/**
+ * Authentication seam. Route handlers and business modules depend ONLY on the
+ * resolved authenticated `userId` returned here — never on which implementation
+ * is active. Enforces ISC-52 (local), ISC-53 (cloud magic-link).
+ *
+ *   Local  : Tailscale device trust + a PIN held in the SecretStore. 30-min idle session.
+ *   Cloud  : passwordless email magic-link. Request link -> verify token -> mint session.
+ *
+ * The two implementations live in src/platform/auth/local.ts and auth/cloud.ts.
+ */
+
+export type UserId = string;
+
+export interface Session {
+  readonly userId: UserId;
+  readonly issuedAt: number;
+  readonly idleExpiresAt: number;
+}
+
+export interface AuthProvider {
+  /**
+   * Begin sign-in. Local: validate the PIN. Cloud: email a magic link.
+   * Returns a session on immediate success (local PIN) or null when a
+   * second step is required (cloud, link sent).
+   */
+  beginSignIn(input: BeginSignInInput): Promise<Session | null>;
+
+  /**
+   * Complete sign-in from a magic-link token (cloud) or refresh a PIN session.
+   * Returns the session or throws on an invalid/expired token.
+   */
+  completeSignIn(token: string): Promise<Session>;
+
+  /** Resolve and validate the session on an incoming request; null if unauthenticated or expired. */
+  resolveSession(request: Request): Promise<Session | null>;
+
+  /** Invalidate the active session. */
+  signOut(session: Session): Promise<void>;
+}
+
+export type BeginSignInInput =
+  | { readonly kind: "pin"; readonly pin: string }
+  | { readonly kind: "email"; readonly email: string };
+
+/** Thrown when a magic-link or PIN attempt fails. Never leaks which user exists. */
+export class AuthError extends Error {}

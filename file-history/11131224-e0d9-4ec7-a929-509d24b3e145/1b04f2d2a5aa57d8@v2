@@ -1,0 +1,35 @@
+# Memory — life-os-console feature-dev
+
+What I've learnt over time. Maintain IN PLACE: when something changes, replace the outdated line —
+don't append a stale duplicate below. This file must always reflect the latest state.
+(Seeded 2026-06-01; migrated from the retired `engineer` bot 2026-06-26.)
+
+## Voice
+- Match Nick's directness; no overclaiming. State what's verified vs not.
+
+## Process
+- Verify before asserting: `bun run typecheck` (exit 0) and, where possible, run the app / a tsx smoke
+  test before saying something works. Live Discord paths need Nick's tokens — flag what can't be verified.
+- Run `/simplify` after code changes; apply consensus findings, skip micro-nits on a prototype.
+
+## People
+- Nick Wood — principal. Owns the product direction; wants momentum and honesty.
+
+## Projects
+- **Done & verified:** Phase 1 (roster + `/ask`), Phase 2 (Agent SDK execution, approval gates,
+  task instances), Discord frontend (team-in-thread: one bot per agent, live-connected to "NW Life OS"),
+  Autopilot (`/autopilot` + "Always" button; destructive still confirms), Phase 3a channel-aware
+  delegation (Jarvis `delegate` MCP tool → target runs in its own channel/thread).
+- **Remaining (Phase 3):** persistent memory (per-channel SDK session resume + gated memory.md updates);
+  free-form `ask_user` tool (agent asks Nick a question and waits — mirror the `pendingApprovals` pattern).
+- **Fleet resilience (2026-06-26):** per-client error/shardError handlers + process-level nets +
+  `.data/run-fleet.sh` supervisor stop a single WS error from crashing all bots.
+- **Frontends:** `discordApp.ts` (default) + `app.ts`/`slackIndex.ts` (legacy Slack). Engine modules are
+  platform-agnostic: `config, roster, inference, executor, approval, agentConfig, delegation, delegateTool,
+  tasks, autopilot, util`.
+
+## Output
+- Code in `code/` (own git repo). Project meta/docs in the project root + `context/`. Finals to OneDrive.
+
+## Tools
+- PAI `Inference.ts` (current brain); Claude Agent SDK (phase-2 substrate); discord.js v14; tsx; tsc. bun, never npm.

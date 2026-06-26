@@ -1,0 +1,57 @@
+/**
+ * Pulse job (ISC-40..44).
+ *
+ * Runs on the daily cycle (from PAI cron, alongside the sync job). It reads
+ * envelope state through the Store, projects the three Pulse tiles, and writes
+ * the widget JSON to the known path. It performs NO network I/O; the no-egress
+ * guard (ISC-45) is installed regardless, so even an accidental outbound call
+ * from a dependency is a hard stop in local mode.
+ *
+ *   bun run scripts/pulse.ts
+ *
+ * Env:
+ *   PENNY_LOCAL_USER_ID   tenant to render (default "nick")
+ *   PENNY_PERIOD          YYYY-MM to render (default current month)
+ *   PENNY_NAB_ACCOUNT_ID  NAB account id for the Holding-vs-NAB tile
+ *   PENNY_HOLDING_MATCH   name fragment for the Holding envelope (default "holding")
+ *   PENNY_PULSE_PATH      override the widget output path
+ *
+ * This module does NOT read the deployment-mode env var; the composition root
+ * resolves it and exposes the resolved mode on container.config.deployMode.
+ */
+
+import { buildContainer } from "../src/composition.ts";
+import { installEgressGuard } from "../src/security/egress.ts";
+import { StorePulseSource, currentPeriod } from "../src/pulse/source.ts";
+import { computeWidget } from "../src/pulse/projection.ts";
+import { writeWidget } from "../src/pulse/widget.ts";
+
+export async function runPulseJob(): Promise<string> {
+  const container = await buildContainer();
+  // Local-mode no-egress guarantee: nothing financial leaves the machine.
+  installEgressGuard(container.config.deployMode);
+
+  const userId = process.env.PENNY_LOCAL_USER_ID ?? "local";
+  const period = process.env.PENNY_PERIOD?.trim() || currentPeriod();
+
+  const sourceOpts: { nabAccountId?: string; holdingMatch?: string } = {};
+  if (process.env.PENNY_NAB_ACCOUNT_ID) sourceOpts.nabAccountId = process.env.PENNY_NAB_ACCOUNT_ID;
+  if (process.env.PENNY_HOLDING_MATCH) sourceOpts.holdingMatch = process.env.PENNY_HOLDING_MATCH;
+
+  const source = new StorePulseSource(container.store, sourceOpts);
+  const state = await source.gather(userId, period);
+  const widget = computeWidget(state, Date.now());
+  const path = await writeWidget(widget);
+
+  await container.store.close();
+
+  console.log(
+    `[pulse] ${period} -> ${path} | unallocated=${widget.unallocated.valueCents}c ` +
+      `overspends=${widget.topOverspends.length} drift=${widget.holdingDrift.driftCents}c`,
+  );
+  return path;
+}
+
+if (import.meta.main) {
+  await runPulseJob();
+}

@@ -1,0 +1,55 @@
+# Penny (envelope-os)
+
+Zero-based envelope budgeting layer on top of PocketSmith, feeding PAI Pulse. AUD, personal-finance-grade security. **Local-first now, cloud-ready by construction.**
+
+- **Surface name:** Penny
+- **Codebase folder:** envelope-os
+- **System of record:** [`ISA.md`](./ISA.md) — twelve-section project ISA, 64 ISCs
+- **Source thinking:** [`docs/REQUIREMENTS_CLARIFICATION.md`](./docs/REQUIREMENTS_CLARIFICATION.md), [`docs/ARCHITECT_REVIEW.md`](./docs/ARCHITECT_REVIEW.md)
+
+## What it is
+
+PocketSmith stays as the bank-feed and categorisation layer across ANZ, NAB, and Macquarie. Penny owns the envelope semantics PocketSmith handles weakly: allocation, spend-date cash basis, monthly and annualised budgets, rollover rules, time-travel views, and a read-only Pulse widget.
+
+## Deployment duality (the design spine)
+
+One codebase, two targets, one switch (`DEPLOY_MODE`):
+
+| | **Local** (now, default) | **Cloud** (built-ready, deferred) |
+|---|---|---|
+| Access | Tailscale-only, `*.ts.net` HTTPS | Public at `nicholaswood.com.au/budget` |
+| Auth | Tailscale trust + PIN | Passwordless email magic-link |
+| Secrets | OS keychain / encrypted file | GCP KMS envelope encryption |
+| Store | SQLite (`bun:sqlite`) | Managed Postgres |
+| Tenancy | One seeded user, single-tenant runtime | Multi-tenant; onboard with email + their PocketSmith dev key |
+
+The data model is **multi-tenant from migration one** (`users` table, `user_id` on every tenant table). The difference between local and cloud is configuration plus three swapped adapters behind interfaces — `AuthProvider`, `SecretStore`, `Store` — never the ledger, the envelope engine, or the UI. Going cloud is a wiring change, not a rewrite.
+
+## Stack
+
+bun + TypeScript. SQLite via `bun:sqlite` (local) / Postgres (cloud). Hono API serving a Vite + React + shadcn PWA on one port. PocketSmith client codegenned from the pinned OpenAPI 3 spec (`github.com/pocketsmith/api` @ `8e964ca`). PWA: manifest + service worker, installable, served over HTTPS via `tailscale serve`. No npm. No Python.
+
+## Layout
+
+```
+src/platform/   config.ts (DEPLOY_MODE), auth.ts, secrets.ts, store.ts   # the cloud-ready seams (contracts)
+src/composition.ts                                                         # the ONLY reader of DEPLOY_MODE
+src/store/      sqlite.ts (local), postgres.ts (cloud)                     # store adapters — same test suite
+src/platform/auth/   local.ts (PIN), cloud.ts (magic-link)
+src/platform/secrets/ local.ts (keychain), cloud.ts (KMS)
+src/ingest/     PocketSmith client + backfill + daily sync
+src/envelope/   envelope engine, rollover, holding model
+src/server/     Hono API + static PWA host
+web/            Vite + React + shadcn SPA + manifest + service worker
+scripts/        migrate, backfill, sync, codegen-pocketsmith
+test/           store.suite.ts (run against both adapters), unit tests
+```
+
+## Status (2026-06-26)
+
+- **Spec:** rewritten to local-first/cloud-ready. 64 ISCs. ✅
+- **Seams:** project skeleton + the four seam contracts (`config`, `auth`, `secrets`, `store`) + composition root authored. ✅
+- **Build:** Weekend 1 (platform-seam implementations, PocketSmith ingest spine, multi-tenant SQLite schema) — **not yet built.** The `composition.ts` imports name the adapter files the build will create.
+- **Runtime dependency:** live PocketSmith sync needs Nick's `X-Developer-Key` (resolved per-user via the SecretStore; never committed).
+
+Weekend plan: W1 seams + ingest + schema · W2 envelope engine · W3 PWA UI · W4 allocation wizard + Pulse widget.

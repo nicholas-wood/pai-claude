@@ -1,0 +1,36 @@
+/**
+ * Per-user secret material seam. Keyed by userId so each tenant owns their own
+ * PocketSmith developer key. This is what makes "give someone access with just
+ * their email and their dev key" true. Enforces ISC-54 (local), ISC-55 (cloud KMS),
+ * ISC-56 (never plaintext at rest / in logs).
+ *
+ *   Local : PAI secrets store / OS keychain / an encrypted local file.
+ *   Cloud : envelope encryption via GCP KMS; ciphertext stored in the DB.
+ *
+ * Implementations live in src/platform/secrets/local.ts and secrets/cloud.ts.
+ * A SecretStore implementation MUST NOT log secret values and MUST NOT return
+ * them in error messages.
+ */
+
+import type { UserId } from "./auth.ts";
+
+/** Named secrets a tenant can hold. Extend as needed; PocketSmith dev key is the first. */
+export type SecretName = "pocketsmith_developer_key" | "auth_pin";
+
+export interface SecretStore {
+  /** Fetch a secret for a tenant. Returns null if unset. Never logs the value. */
+  get(userId: UserId, name: SecretName): Promise<string | null>;
+
+  /** Store/replace a secret for a tenant. Local: keychain/encrypted file. Cloud: KMS-encrypt then persist ciphertext. */
+  set(userId: UserId, name: SecretName, value: string): Promise<void>;
+
+  /** Remove a secret for a tenant (offboarding). */
+  delete(userId: UserId, name: SecretName): Promise<void>;
+}
+
+/** Convenience: resolve the PocketSmith X-Developer-Key for a tenant, or throw if missing. */
+export async function requirePocketSmithKey(store: SecretStore, userId: UserId): Promise<string> {
+  const key = await store.get(userId, "pocketsmith_developer_key");
+  if (!key) throw new Error(`No PocketSmith developer key configured for user ${userId}`);
+  return key;
+}

@@ -1,0 +1,17 @@
+[Unit]
+Description=Penny (envelope-os) — local-first budget service
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/nicholas-wood/Documents/workspace/projects/envelope-os
+Environment=HOME=/home/nicholas-wood
+Environment=PATH=/home/nicholas-wood/.bun/bin:/usr/local/bin:/usr/bin:/bin
+Environment=DEPLOY_MODE=local
+Environment=PENNY_PORT=8787
+ExecStart=/home/nicholas-wood/.bun/bin/bun run src/server/index.ts
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

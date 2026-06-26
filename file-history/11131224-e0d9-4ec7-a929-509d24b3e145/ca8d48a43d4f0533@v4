@@ -1,0 +1,261 @@
+import fs from "node:fs";
+import path from "node:path";
+import { WORKSPACE_ROOT } from "./config";
+import { trunc } from "./util";
+
+export interface Agent {
+  id: string; // `${project}/${name}`
+  project: string; // basename of the dir that contains agents/
+  projectDir: string; // absolute path to that project dir (where context/ lives)
+  name: string;
+  dir: string; // absolute path to the agent directory
+  base?: string; // shared base role from `base:` frontmatter (e.g. "architect")
+  title: string; // from `# Title` in claude.md
+  persona: string; // first persona line
+  isOrchestrator: boolean; // manager/delegator role — gets the Agent tool + delegation subagents
+  avatarUrl: string; // from `avatar:` frontmatter (http(s) only), else a deterministic identicon
+}
+
+export interface Project {
+  name: string;
+  agents: Agent[];
+}
+
+export interface Bot {
+  name: string; // bot key = agent name; one Discord bot per role/name
+  isOrchestrator: boolean;
+  agents: Agent[]; // every project-agent this bot serves (shared roles serve >1)
+}
+
+/** Read a file, returning `fallback` if it can't be read. */
+export function readFileSafe(p: string, fallback = ""): string {
+  try {
+    return fs.readFileSync(p, "utf8");
+  } catch {
+    return fallback;
+  }
+}
+
+/** List directory or file names under `p` (empty array if `p` is unreadable). */
+function listNames(p: string, kind: "dir" | "file"): string[] {
+  try {
+    return fs
+      .readdirSync(p, { withFileTypes: true })
+      .filter((d) => (kind === "dir" ? d.isDirectory() : d.isFile()))
+      .map((d) => d.name);
+  } catch {
+    return [];
+  }
+}
+
+// Dirs we never descend into when hunting for represented agents.
+const IGNORE_DIRS = new Set(["node_modules", "code", "dist", "build", "_bases"]);
+
+/**
+ * Recursively find every `agents/` directory in the workspace. The tree is now
+ * nested (projects/<p>/agents, lifesaving/<region>/<club>/agents,
+ * personal/projects/<p>/agents, …), so we walk rather than assume one level.
+ * Dotdirs (incl. `.claude/agents`, which are PAI subagent pointers, not
+ * represented agents) and dependency dirs are skipped.
+ */
+function findAgentsDirs(root: string, depth = 0): string[] {
+  if (depth > 8) return [];
+  const out: string[] = [];
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    if (e.name.startsWith(".") || IGNORE_DIRS.has(e.name)) continue;
+    const full = path.join(root, e.name);
+    if (e.name === "agents") {
+      out.push(full); // an agents/ dir's children are agents, not more agents/ dirs
+      continue;
+    }
+    out.push(...findAgentsDirs(full, depth + 1));
+  }
+  return out;
+}
+
+function parseTitle(claudeMd: string, fallback: string): string {
+  const m = claudeMd.match(/^#\s+(.+)$/m);
+  return m ? m[1].trim() : fallback;
+}
+
+function parsePersona(claudeMd: string): string {
+  const m = claudeMd.match(/##\s+Persona\s*\n+([^\n]+(?:\n[^\n#]+)?)/i);
+  if (m) return m[1].replace(/\s+/g, " ").trim();
+  const firstProse = claudeMd.split("\n").find((l) => l.trim() && !l.startsWith("#"));
+  return firstProse?.trim() ?? "";
+}
+
+function parseOrchestrator(claudeMd: string, agentName: string): boolean {
+  // `orchestrator: true` frontmatter marks the delegator (Nick's DA, Jarvis).
+  // Falls back to the legacy chief-of-staff name for back-compat.
+  const m = claudeMd.match(/^\s*orchestrator:\s*(true|false)\s*$/im);
+  if (m) return m[1].toLowerCase() === "true";
+  return agentName === "chief-of-staff";
+}
+
+function parseBase(claudeMd: string): string | undefined {
+  // `base: <role>` frontmatter → inherit the shared definition at _bases/<role>/base.md.
+  const m = claudeMd.match(/^\s*base:\s*([A-Za-z0-9._-]+)\s*$/im);
+  return m ? m[1] : undefined;
+}
+
+function parseAvatar(claudeMd: string, id: string): string {
+  // Optional `avatar: <url>` line near the top of claude.md (http(s) only).
+  const m = claudeMd.match(/^\s*avatar:\s*(https?:\/\/\S+)\s*$/im);
+  if (m) return m[1];
+  // Deterministic, no-dependency default: identicon seeded by the agent id.
+  return `https://api.dicebear.com/9.x/identicon/png?seed=${encodeURIComponent(id)}`;
+}
+
+/** Scan the workspace for represented agents anywhere in the nested tree (uncached). */
+export function scanWorkspace(): Project[] {
+  const byProject = new Map<string, Project>();
+  for (const agentsDir of findAgentsDirs(WORKSPACE_ROOT)) {
+    const projectDir = path.dirname(agentsDir);
+    const project = path.basename(projectDir);
+    for (const agentName of listNames(agentsDir, "dir")) {
+      const dir = path.join(agentsDir, agentName);
+      const claudePath = path.join(dir, "claude.md");
+      if (!fs.existsSync(claudePath)) continue;
+      const claudeMd = readFileSafe(claudePath);
+      const id = `${project}/${agentName}`;
+      const agent: Agent = {
+        id,
+        project,
+        projectDir,
+        name: agentName,
+        dir,
+        base: parseBase(claudeMd),
+        title: parseTitle(claudeMd, agentName),
+        persona: parsePersona(claudeMd),
+        isOrchestrator: parseOrchestrator(claudeMd, agentName),
+        avatarUrl: parseAvatar(claudeMd, id),
+      };
+      const bucket = byProject.get(project) ?? { name: project, agents: [] };
+      bucket.agents.push(agent);
+      byProject.set(project, bucket);
+    }
+  }
+  return [...byProject.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Short-lived cache so repeated handler calls don't each re-walk the filesystem.
+const ROSTER_TTL_MS = 15_000;
+let cache: { ts: number; data: Project[] } | null = null;
+
+/** The roster, cached for a few seconds to absorb bursts of events. */
+export function getRoster(): Project[] {
+  if (cache && Date.now() - cache.ts < ROSTER_TTL_MS) return cache.data;
+  cache = { ts: Date.now(), data: scanWorkspace() };
+  return cache.data;
+}
+
+export function findAgent(id: string): Agent | undefined {
+  return getRoster()
+    .flatMap((p) => p.agents)
+    .find((a) => a.id === id);
+}
+
+export function findAgentByName(q: string): Agent | undefined {
+  const ql = q.toLowerCase();
+  const all = getRoster().flatMap((p) => p.agents);
+  return (
+    all.find((a) => a.id.toLowerCase() === ql) ??
+    all.find((a) => a.name.toLowerCase() === ql) ??
+    all.find((a) => a.name.toLowerCase().includes(ql) || a.title.toLowerCase().includes(ql))
+  );
+}
+
+/**
+ * The fleet: one bot per distinct agent name. A shared role (architect,
+ * feature-dev, …) is a single bot that serves every project-agent with that
+ * name; project context is resolved per channel at runtime. Bot key = name.
+ */
+export function getBots(): Bot[] {
+  const byName = new Map<string, Bot>();
+  for (const a of getRoster().flatMap((p) => p.agents)) {
+    const bot = byName.get(a.name) ?? { name: a.name, isOrchestrator: false, agents: [] };
+    bot.agents.push(a);
+    if (a.isOrchestrator) bot.isOrchestrator = true;
+    byName.set(a.name, bot);
+  }
+  return [...byName.values()].sort((x, y) => x.name.localeCompare(y.name));
+}
+
+/** Which project-agent (overlay) a bot should act as in a given project channel. */
+export function agentForBotInProject(bot: Bot, project: string): Agent | undefined {
+  return bot.agents.find((a) => a.project === project) ?? bot.agents[0];
+}
+
+const MAX_CONTEXT_CHARS = 9000;
+const BASES_DIRNAME = "_bases";
+
+/** Concatenate the .md files in a directory, each prefixed by a `--- label/file ---` header. */
+function readMdDir(dir: string, label: string): string {
+  let out = "";
+  for (const f of listNames(dir, "file")) {
+    if (!f.endsWith(".md")) continue;
+    out += `\n--- ${label}/${f} ---\n${readFileSafe(path.join(dir, f))}`;
+  }
+  return out;
+}
+
+/**
+ * Assemble an agent's system prompt: shared base (one canonical definition per
+ * role, trained once) + project overlay (this agent's claude.md) + memory +
+ * project context. Agents with no `base:` just use their own definition.
+ */
+export function buildSystemPrompt(agent: Agent): string {
+  const overlay = readFileSafe(path.join(agent.dir, "claude.md"), "(missing)");
+  const memoryMd = readFileSafe(path.join(agent.dir, "memory.md"), "(empty)");
+
+  let baseSection = "";
+  if (agent.base) {
+    const baseDir = path.join(WORKSPACE_ROOT, BASES_DIRNAME, agent.base);
+    const baseMd = readFileSafe(path.join(baseDir, "base.md"), "");
+    const baseCtx = readMdDir(path.join(baseDir, "context"), "base-context");
+    if (baseMd.trim()) {
+      baseSection =
+        `==== SHARED BASE: ${agent.base} (common across projects — your core role) ====\n${baseMd.trim()}` +
+        (baseCtx.trim() ? `\n\n==== SHARED BASE CONTEXT ====\n${baseCtx.trim()}` : "");
+    }
+  }
+
+  const projectContext = trunc(
+    readMdDir(path.join(agent.projectDir, "context"), "context"),
+    MAX_CONTEXT_CHARS,
+    "\n…[truncated]"
+  );
+
+  const parts: string[] = [
+    `You are "${agent.title}", a member of Nick's company of agents (project: ${agent.project}).`,
+    `Act like a colleague at a company: you hold one clear role, you take work handed to you and hand off cleanly to the right teammate, you give your own independent view rather than rubber-stamping or grading your own work, and you flag blockers and decisions above your remit instead of guessing. Jarvis is chief of staff and coordinates the team in threads.`,
+    `You are speaking with Nick directly through Discord (your DMs and your own channel). Stay in character per your definition below.`,
+    `Be concise and useful for a chat interface. You can do real work via your tools: reads run freely; edits, shell, and delegation are gated by Nick's approval.`,
+    `Use the ask_user tool when you need information or a decision only Nick can give. Use the update_memory tool (Nick approves it) to save durable facts to your own memory.md.`,
+    "",
+  ];
+  if (baseSection) {
+    parts.push(baseSection, "");
+    parts.push(`==== PROJECT OVERLAY: ${agent.project} (refines the base above) ====`);
+  } else {
+    parts.push(`==== YOUR DEFINITION (claude.md) ====`);
+  }
+  parts.push(
+    overlay.trim(),
+    "",
+    `==== YOUR MEMORY (memory.md) ====`,
+    memoryMd.trim(),
+    "",
+    `==== PROJECT FOUNDATION (context/) ====`,
+    projectContext.trim() || "(none)"
+  );
+  return parts.join("\n");
+}
