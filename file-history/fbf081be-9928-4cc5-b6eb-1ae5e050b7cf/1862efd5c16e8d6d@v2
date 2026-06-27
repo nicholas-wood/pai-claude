@@ -1,0 +1,130 @@
+# PocketSmith Rollover Baseline
+
+> Snapshot of every rollover-enabled category in Nick's PocketSmith (user 418333), with the date each category's rollover period began and its current rollover balance.
+> Captured 2026-06-26 from the PocketSmith web UI via Interceptor (real-browser session). The PocketSmith API/MCP does **not** expose rollover start dates or rollover balances, so these were read from the budget trends and rollover-options pages directly.
+
+## Why this exists
+
+envelope-os layers zero-based envelope budgeting over PocketSmith. The ISA's rollover / deficit-booking decisions need the real starting point: which categories already roll over, since when, and what surplus or deficit each carries today. This is that baseline.
+
+## How to read it
+
+- **Rollover type `both`** = PocketSmith rolls forward *both* unspent surpluses and overspent deficits to the next period. Every rollover-enabled category here is type `both`.
+- **Rollover start** = the date the rollover sequence began ("Rollover both starting on ..."). This is the true rollover inception, which differs from the category's creation date.
+- **Balance** = current rollover balance. A negative value is a carried **deficit** (shown as `(x)` in PocketSmith); positive is a carried **surplus**.
+- **_no current budget_** = rollover is enabled on the category but it has no active repeating budget this period, so PocketSmith shows no rollover balance.
+
+## Summary
+
+- **71** categories have rollover enabled (all type `both`).
+- **55** carry a live rollover balance; **16** have rollover on but no current budget.
+- Aggregate rollover surplus: **$50,679.86**
+- Aggregate rollover deficit: **-$28,638.83**
+- **Net rollover position: $22,041.03**
+
+> **Caveat on the net figure:** this sums rollovers from income categories (Salary, Rental Income, Surplus Income) and expense categories together, so it is a raw PocketSmith total, not a clean "money owed to envelopes" number. On income categories a negative balance means under-received vs forecast, which is a different thing from an overspent expense envelope. Treat the **per-category rows** as the reliable unit; use the net only as a rough aggregate.
+
+## Categories
+
+Grouped by top-level PocketSmith category, in PocketSmith order.
+
+| Category | Parent | Rollover start | Continues | Rollover balance |
+|---|---|---|---|---|
+| Rental Income | Income | Jul 1, 2025 | indefinitely | -$302.00 |
+| Surplus Income | Income | Jul 1, 2025 | indefinitely | -$13,930.10 |
+| Salary | Income | Jan 13, 2025 | indefinitely | -$9,608.64 |
+| Travel | Savings | Jan 1, 2026 | indefinitely | $3,784.86 |
+| Emergency Fund | Savings | Jan 1, 2024 | indefinitely | $20,000.00 |
+| Rental Bond | Savings | Feb 1, 2025 | indefinitely | $1,170.00 |
+| Expenses | — | Feb 28, 2026 | indefinitely | $7,278.44 |
+| Bills | Expenses | Aug 1, 2024 | indefinitely | -$101.80 |
+| Water | Bills | Aug 1, 2024 | indefinitely | -$101.80 |
+| Gas | Bills | Aug 1, 2024 | indefinitely | $6.42 |
+| Internet | Bills | Aug 1, 2024 | indefinitely | $169.33 |
+| Electricity | Bills | Aug 1, 2024 | indefinitely | $569.34 |
+| Car Service | Car | Jul 1, 2023 | indefinitely | -$193.92 |
+| Car Registration | Car | Jul 1, 2024 | indefinitely | $74.40 |
+| Car Insurance | Car | May 1, 2024 | indefinitely | $2,928.09 |
+| Fuel | Car | Jul 1, 2025 | indefinitely | $565.91 |
+| Dogs | Expenses | Feb 28, 2026 | indefinitely | $2,269.62 |
+| Dog Food | Dogs | Aug 1, 2024 | indefinitely | $766.20 |
+| Doggy Day Care | Dogs | Aug 1, 2024 | indefinitely | $1,503.42 |
+| OC Fees | Apartment | Nov 1, 2024 | indefinitely | -$571.93 |
+| Mortgage | Apartment | Dec 1, 2024 | indefinitely | $0.00 |
+| Mortgage Fee | Apartment | Dec 1, 2024 | indefinitely | -$33.32 |
+| Council Rates | Apartment | Jul 1, 2025 | indefinitely | $0.00 |
+| Tolls | Expenses | Aug 1, 2024 | indefinitely | $301.53 |
+| Gym | Expenses | Nov 20, 2024 | indefinitely | $1,234.98 |
+| Health Insurance | Expenses | Jan 1, 2023 | indefinitely | -$21.87 |
+| Phone | Expenses | Apr 1, 2023 | indefinitely | $174.06 |
+| Memberships | Expenses | Oct 1, 2024 | indefinitely | -$130.93 |
+| USLSC | Memberships | May 1, 2023 | indefinitely | $138.33 |
+| MCC | Memberships | Oct 1, 2022 | indefinitely | -$130.93 |
+| SMLSC | Memberships | May 1, 2024 | indefinitely | $46.04 |
+| Subscriptions | Expenses | May 1, 2023 | indefinitely | $303.81 |
+| Microsoft Onedrive | Subscriptions | May 1, 2023 | indefinitely | $40.03 |
+| Apple | Subscriptions | Feb 28, 2026 | indefinitely | $12.76 |
+| Microsoft 365 | Subscriptions | May 1, 2023 | indefinitely | $184.72 |
+| Spotify | Subscriptions | Sep 1, 2023 | indefinitely | $31.63 |
+| Pocketsmith | Subscriptions | Apr 1, 2023 | indefinitely | -$4.15 |
+| Prime | Subscriptions | Jul 1, 2025 | indefinitely | $8.44 |
+| Netflix | Subscriptions | Feb 1, 2025 | indefinitely | $4.45 |
+| Fairfax | Subscriptions | Jul 1, 2024 | indefinitely | $21.78 |
+| Work Car Parking | Expenses | Feb 1, 2025 | indefinitely | $999.22 |
+| Public Transport | Budget Envelopes | Jul 1, 2025 | indefinitely | $46.67 |
+| Car Wash | Budget Envelopes | Jul 1, 2025 | indefinitely | $17.43 |
+| Shopping | Budget Envelopes | Jul 1, 2025 | indefinitely | -$1,580.91 |
+| Haircut | Budget Envelopes | Jul 1, 2025 | indefinitely | $112.10 |
+| Home Improvement | Budget Envelopes | Jul 1, 2025 | indefinitely | -$434.25 |
+| Healthcare | Budget Envelopes | Jul 1, 2025 | indefinitely | $459.46 |
+| Recreation | Budget Envelopes | Jul 1, 2025 | indefinitely | $2,660.00 |
+| Takeaway Dinners | Recreation | Jul 1, 2025 | indefinitely | _no current budget_ |
+| Social | Recreation | Jul 1, 2025 | indefinitely | _no current budget_ |
+| Dating | Recreation | Jul 1, 2025 | indefinitely | _no current budget_ |
+| Coffee | Recreation | Jul 1, 2025 | indefinitely | _no current budget_ |
+| Takeaway Lunches | Recreation | Jul 1, 2025 | indefinitely | _no current budget_ |
+| Rideshare | Recreation | Jul 1, 2025 | indefinitely | _no current budget_ |
+| Adhoc Parking | Recreation | Jul 1, 2025 | indefinitely | _no current budget_ |
+| Takeaway Snacks | Recreation | Jul 1, 2025 | indefinitely | _no current budget_ |
+| Takeaway Breakfast | Recreation | Jul 1, 2025 | indefinitely | _no current budget_ |
+| Lottery | Recreation | Jul 1, 2025 | indefinitely | _no current budget_ |
+| Fines | Recreation | Jul 1, 2025 | indefinitely | _no current budget_ |
+| Dry Cleaning | Recreation | Jul 1, 2025 | indefinitely | _no current budget_ |
+| Bottleshop | Recreation | Jul 1, 2025 | indefinitely | _no current budget_ |
+| Golf | Recreation | Jul 1, 2025 | indefinitely | _no current budget_ |
+| Life Saving | Recreation | Jul 1, 2025 | indefinitely | _no current budget_ |
+| Fitness Extras | Recreation | Jul 1, 2025 | indefinitely | _no current budget_ |
+| Presents | Budget Envelopes | Feb 1, 2025 | indefinitely | -$738.65 |
+| Groceries | Budget Envelopes | Jul 1, 2025 | indefinitely | -$272.00 |
+| Supplements | Groceries | Apr 1, 2026 | indefinitely | -$272.00 |
+| Card Chasing | Budget Envelopes | Feb 1, 2026 | indefinitely | $540.00 |
+| Pet Insurance | Old | Aug 1, 2023 | indefinitely | -$209.63 |
+| Dog Grooming | Old | Aug 1, 2024 | indefinitely | $1,487.14 |
+| Vet | Old | Aug 1, 2024 | indefinitely | $769.25 |
+
+## Categories with rollover ON but no current budget
+
+These have a rollover sequence configured but no active repeating budget, so no balance accrues/displays. Mostly the granular Recreation envelopes:
+
+- Takeaway Dinners (under Recreation) — rollover start Jul 1, 2025
+- Social (under Recreation) — rollover start Jul 1, 2025
+- Dating (under Recreation) — rollover start Jul 1, 2025
+- Coffee (under Recreation) — rollover start Jul 1, 2025
+- Takeaway Lunches (under Recreation) — rollover start Jul 1, 2025
+- Rideshare (under Recreation) — rollover start Jul 1, 2025
+- Adhoc Parking (under Recreation) — rollover start Jul 1, 2025
+- Takeaway Snacks (under Recreation) — rollover start Jul 1, 2025
+- Takeaway Breakfast (under Recreation) — rollover start Jul 1, 2025
+- Lottery (under Recreation) — rollover start Jul 1, 2025
+- Fines (under Recreation) — rollover start Jul 1, 2025
+- Dry Cleaning (under Recreation) — rollover start Jul 1, 2025
+- Bottleshop (under Recreation) — rollover start Jul 1, 2025
+- Golf (under Recreation) — rollover start Jul 1, 2025
+- Life Saving (under Recreation) — rollover start Jul 1, 2025
+- Fitness Extras (under Recreation) — rollover start Jul 1, 2025
+
+## Method note
+
+- Start dates: `GET /categories/{id}/rollover_options` (server-rendered HTML), parsed for "Rollover both starting on {date}".
+- Balances: `/trends/{id}` budget analysis panel, "Rollover balance" line, read from the rendered DOM.
+- Both required an authenticated real-browser session (Interceptor) because PocketSmith's v2 API exposes only `rollover_type` (on/off), never the start date or balance.
