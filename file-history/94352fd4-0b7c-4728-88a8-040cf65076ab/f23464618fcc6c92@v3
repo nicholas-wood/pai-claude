@@ -1,0 +1,201 @@
+/**
+ * PocketSmith API client (ISC-2, ISC-3, ISC-4, ISC-5, ISC-56).
+ *
+ * Thin typed wrapper over the generated OpenAPI surface (schema.d.ts). It does
+ * exactly three things the ingest spine needs: resolve the authenticated user,
+ * and page through that user's transactions with optional date / updated_since
+ * filters. Everything else the generated types describe is intentionally not
+ * surfaced — the envelope engine never talks to PocketSmith.
+ *
+ * Auth (ISC-2): every request carries the X-Developer-Key header. The key is a
+ * per-user secret resolved through the SecretStore at construction time
+ * (ISC-3) via requirePocketSmithKey. It is NEVER logged, never placed in an
+ * error message, and never returned (ISC-56).
+ *
+ * Pagination (ISC-4): PocketSmith paginates list endpoints with an RFC 5988
+ * Link header. paginate() follows rel="next" until the header stops offering
+ * one, so a caller that drains the generator has consumed every page.
+ *
+ * Pull-only (ISC-9): this client only issues GET requests. There is no webhook,
+ * listener, callback, or push path anywhere in it.
+ *
+ * The injected `fetchFn` defaults to global fetch; tests pass a stub to assert
+ * the header, the updated_since param, and pagination without a live network.
+ */
+
+import type { components } from "./pocketsmith/schema.d.ts";
+import { POCKETSMITH_BASE_URL } from "./pocketsmith/spec-meta.ts";
+import { requirePocketSmithKey } from "../platform/secrets.ts";
+import type { SecretStore } from "../platform/secrets.ts";
+import type { UserId } from "../platform/auth.ts";
+
+/** The PocketSmith transaction shape, straight off the pinned generated schema. */
+export type PocketSmithTransaction = components["schemas"]["Transaction"];
+/** The PocketSmith user shape, straight off the pinned generated schema. */
+export type PocketSmithUser = components["schemas"]["User"];
+/** The PocketSmith transaction-account shape (carries the live current_balance). */
+export type PocketSmithTransactionAccount = components["schemas"]["TransactionAccount"];
+
+/** A `fetch`-compatible function. Injected so tests can stub the transport. */
+export type FetchFn = (input: string, init?: RequestInit) => Promise<Response>;
+
+/** Filters accepted by the transactions listing (mirrors the generated query type). */
+export interface TransactionQuery {
+  /** ISO date (YYYY-MM-DD). Limit to transactions on or after this date. */
+  readonly startDate?: string;
+  /** ISO date (YYYY-MM-DD). Limit to transactions on or before this date. */
+  readonly endDate?: string;
+  /** ISO 8601 timestamp. Limit to transactions updated since this instant (ISC-5). */
+  readonly updatedSince?: string;
+}
+
+/** The X-Developer-Key header name. Single source of truth for ISC-2. */
+export const DEVELOPER_KEY_HEADER = "X-Developer-Key";
+
+/** PocketSmith caps page size at 100; we always ask for the max to minimise round-trips. */
+const PER_PAGE = 100;
+
+export interface PocketSmithClientOptions {
+  readonly baseUrl?: string;
+  readonly fetchFn?: FetchFn;
+  /** Page size override (tests use small pages). Clamped to PocketSmith's 1..100. */
+  readonly perPage?: number;
+}
+
+export class PocketSmithClient {
+  private readonly baseUrl: string;
+  private readonly fetchFn: FetchFn;
+  private readonly perPage: number;
+  /** Held private; never logged, never exposed. ISC-56. */
+  readonly #developerKey: string;
+
+  private constructor(developerKey: string, opts: PocketSmithClientOptions) {
+    this.#developerKey = developerKey;
+    this.baseUrl = (opts.baseUrl ?? POCKETSMITH_BASE_URL).replace(/\/+$/, "");
+    this.fetchFn = opts.fetchFn ?? ((input, init) => fetch(input, init));
+    const requested = opts.perPage ?? PER_PAGE;
+    this.perPage = Math.max(1, Math.min(100, requested));
+  }
+
+  /**
+   * Build a client for a tenant. The developer key is resolved through the
+   * SecretStore for this userId (ISC-3) and throws if the tenant has none.
+   */
+  static async forUser(
+    secrets: SecretStore,
+    userId: UserId,
+    opts: PocketSmithClientOptions = {},
+  ): Promise<PocketSmithClient> {
+    const key = await requirePocketSmithKey(secrets, userId);
+    return new PocketSmithClient(key, opts);
+  }
+
+  /**
+   * Build a client directly from a key. Used by tests; production code goes
+   * through forUser so the key always originates in the SecretStore.
+   */
+  static withKey(developerKey: string, opts: PocketSmithClientOptions = {}): PocketSmithClient {
+    return new PocketSmithClient(developerKey, opts);
+  }
+
+  /** Resolve the authenticated user (GET /me). Used to discover the PocketSmith user id. */
+  async getAuthenticatedUser(): Promise<PocketSmithUser> {
+    const res = await this.get(`${this.baseUrl}/me`);
+    return (await res.json()) as PocketSmithUser;
+  }
+
+  /**
+   * List a user's transaction accounts with their live current_balance (GET-only,
+   * ISC-9). Used by the on-screen reconciliation surface to compare Penny's
+   * computed per-account figure against PocketSmith's reported balance. Not
+   * paginated by PocketSmith (the account set is small).
+   */
+  async listTransactionAccounts(
+    pocketsmithUserId: number,
+  ): Promise<PocketSmithTransactionAccount[]> {
+    const res = await this.get(`${this.baseUrl}/users/${pocketsmithUserId}/transaction_accounts`);
+    return (await res.json()) as PocketSmithTransactionAccount[];
+  }
+
+  /**
+   * Page through a user's transactions to completion (ISC-4). Yields one page
+   * (array of transactions) at a time; follows the Link rel="next" header until
+   * PocketSmith stops offering one. A caller that drains this generator has seen
+   * every matching transaction.
+   */
+  async *paginate(
+    pocketsmithUserId: number,
+    query: TransactionQuery = {},
+  ): AsyncGenerator<PocketSmithTransaction[], void, unknown> {
+    const first = new URL(`${this.baseUrl}/users/${pocketsmithUserId}/transactions`);
+    first.searchParams.set("per_page", String(this.perPage));
+    if (query.startDate !== undefined) {
+      first.searchParams.set("start_date", query.startDate);
+      // PocketSmith rejects start_date without end_date ("Invalid start and end
+      // dates provided"). The pair is mandatory; default the upper bound to today
+      // when the caller gives only a start.
+      first.searchParams.set("end_date", query.endDate ?? new Date().toISOString().slice(0, 10));
+    } else if (query.endDate !== undefined) {
+      first.searchParams.set("end_date", query.endDate);
+    }
+    // ISC-5: incremental sync passes updated_since equal to the last successful run ts.
+    if (query.updatedSince !== undefined) {
+      first.searchParams.set("updated_since", query.updatedSince);
+    }
+
+    let next: string | null = first.toString();
+    while (next !== null) {
+      const res = await this.get(next);
+      const page = (await res.json()) as PocketSmithTransaction[];
+      yield page;
+      next = parseNextLink(res.headers.get("Link"));
+    }
+  }
+
+  /** Collect every page into a single array. Convenience over paginate(). */
+  async listAllTransactions(
+    pocketsmithUserId: number,
+    query: TransactionQuery = {},
+  ): Promise<PocketSmithTransaction[]> {
+    const all: PocketSmithTransaction[] = [];
+    for await (const page of this.paginate(pocketsmithUserId, query)) {
+      all.push(...page);
+    }
+    return all;
+  }
+
+  /** GET with the developer-key header attached (ISC-2). Throws on non-2xx, never leaking the key. */
+  private async get(url: string): Promise<Response> {
+    const res = await this.fetchFn(url, {
+      method: "GET",
+      headers: {
+        [DEVELOPER_KEY_HEADER]: this.#developerKey,
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) {
+      // Note: the URL may carry query params but never the key (it is a header only).
+      throw new Error(`PocketSmith GET ${redactUrl(url)} failed: HTTP ${res.status}`);
+    }
+    return res;
+  }
+}
+
+/**
+ * Parse the `next` URL out of an RFC 5988 Link header, or null if absent.
+ * Header form: `<https://.../transactions?page=2>; rel="next", <...>; rel="last"`.
+ */
+export function parseNextLink(linkHeader: string | null): string | null {
+  if (!linkHeader) return null;
+  for (const part of linkHeader.split(",")) {
+    const match = part.match(/<([^>]+)>\s*;\s*rel="?next"?/i);
+    if (match && match[1]) return match[1].trim();
+  }
+  return null;
+}
+
+/** Strip query string from a URL for safe logging. The key is a header, but be conservative. */
+function redactUrl(url: string): string {
+  const q = url.indexOf("?");
+  return q === -1 ? url : url.slice(0, q);
+}

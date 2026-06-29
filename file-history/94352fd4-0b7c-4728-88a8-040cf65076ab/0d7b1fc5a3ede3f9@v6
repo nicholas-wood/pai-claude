@@ -1,0 +1,97 @@
+/**
+ * Persistence seam. NO business module imports bun:sqlite directly — they depend
+ * on this interface. Enforces ISC-49 (every tenant query scoped by userId),
+ * ISC-57 (no direct bun:sqlite import outside the adapter), ISC-58 (Postgres
+ * adapter passes the same suite), ISC-59 (no SQLite-only SQL in business code).
+ *
+ *   Local : SqliteStore over bun:sqlite (src/store/sqlite.ts)
+ *   Cloud : PostgresStore (src/store/postgres.ts)
+ *
+ * Both adapters MUST pass test/store.suite.ts identically. Every method takes
+ * the authenticated userId as its first argument; there is no unscoped tenant read.
+ */
+
+import type { UserId } from "./auth.ts";
+import type { EnvelopeType } from "../domain/types.ts";
+
+export interface Tx {
+  readonly id: string;
+  readonly date: string; // ISO date
+  readonly amountCents: number; // signed; negative = outflow
+  readonly accountId: string;
+  readonly categoryId: string | null;
+  readonly envelopeId: string | null;
+  readonly payee: string;
+  readonly isTransfer: boolean;
+  readonly isPending: boolean;
+  readonly rawJson: string;
+}
+
+export interface Envelope {
+  readonly id: string;
+  readonly name: string;
+  /** Self-referential tree. null = top-level. A parent is itself spendable; totals roll up children + direct. ISC-73, ISC-74. */
+  readonly parentId: string | null;
+  readonly group: string;
+  readonly rolloverRule: "roll_positive_zero_negative" | "roll_all" | "drain_to_zero" | "annual_reset_jan";
+  readonly targetType: "monthly" | "annual" | "sinking" | "no_target";
+  readonly targetAmountCents: number;
+  /** Envelope type (ISC-91). Additive; the store column backfills to 'expense'. */
+  readonly type?: EnvelopeType;
+  /** Active flag (ISC-100). Inactive envelopes drop out of the budget total. Defaults true. */
+  readonly active?: boolean;
+  /**
+   * Archived flag. Additive; the store column backfills to 0/false. An archived
+   * envelope is excluded ENTIRELY from the grid (not shown, not in any total, not
+   * in the zero-base); its transactions still resolve via the surviving mappings.
+   */
+  readonly archived?: boolean;
+}
+
+export interface LedgerEvent {
+  readonly id: string;
+  readonly ts: number;
+  readonly actor: "sync" | "ui" | "agent";
+  readonly correlationId: string;
+  readonly kind: string;
+  readonly payloadJson: string;
+}
+
+/**
+ * The store contract. Tenant scoping is mandatory: every method that touches
+ * tenant data takes userId first. Cross-tenant isolation is asserted in tests.
+ */
+export interface Store {
+  migrate(): Promise<void>;
+
+  upsertTransactions(userId: UserId, txs: readonly Tx[]): Promise<void>;
+  /**
+   * List tenant transactions. Filters compose (AND). `since`/`from` are inclusive
+   * lower date bounds; `to` is an inclusive upper bound (ISC-81). `newestFirst`
+   * flips the default ascending order so the transactions screen can render
+   * newest-first (ISC-78). Default order stays ascending for existing callers.
+   */
+  listTransactions(
+    userId: UserId,
+    opts?: {
+      envelopeId?: string;
+      accountId?: string;
+      since?: string;
+      from?: string;
+      to?: string;
+      newestFirst?: boolean;
+    },
+  ): Promise<Tx[]>;
+
+  upsertEnvelope(userId: UserId, e: Envelope): Promise<void>;
+  listEnvelopes(userId: UserId): Promise<Envelope[]>;
+
+  appendEvent(userId: UserId, e: LedgerEvent): Promise<void>;
+  writeDailySnapshot(userId: UserId, date: string): Promise<void>;
+
+  /** Last successful sync timestamp for incremental updated_since. */
+  getLastSyncAt(userId: UserId): Promise<string | null>;
+  setLastSyncAt(userId: UserId, iso: string): Promise<void>;
+
+  close(): Promise<void>;
+}

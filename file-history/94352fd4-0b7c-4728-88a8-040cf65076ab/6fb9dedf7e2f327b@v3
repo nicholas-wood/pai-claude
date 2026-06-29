@@ -1,0 +1,104 @@
+/**
+ * Transactions list route (ISC-78..82). Tenant-scoped, newest-first, filtered by
+ * date period (from/to), account, and envelope at the store, then by direction
+ * (type), amount magnitude, and payee keyword in memory. The envelope is resolved
+ * at read time through the effective-dated mappings (the same resolution the grid
+ * uses), since the raw transaction rows carry no stored envelope_id.
+ */
+
+import { Hono } from "hono";
+import type { Container } from "../../composition.ts";
+import type { Services } from "../services.ts";
+import type { TransactionsResponse, TransactionListItem } from "../contract.ts";
+import { resolveSession, UNAUTHENTICATED } from "../http.ts";
+import { resolveEnvelopeId } from "../../envelope/spend.ts";
+
+/** The in-memory filter set applied after the store's date/account narrowing. */
+export interface TransactionFilter {
+  readonly envelopeId?: string;
+  readonly type?: "income" | "expense" | "all";
+  readonly amountMin?: number;
+  readonly amountMax?: number;
+  readonly keyword?: string;
+}
+
+/**
+ * Apply the rich-search filters over the resolved list (ISC-79, ISC-80). All
+ * filters AND-combine: envelope (resolved id), direction by amount sign, amount
+ * magnitude bounds (absolute cents), and a case-insensitive payee substring.
+ */
+export function applyTransactionFilters(
+  items: readonly TransactionListItem[],
+  f: TransactionFilter,
+): TransactionListItem[] {
+  let out = [...items];
+  if (f.envelopeId) out = out.filter((i) => i.envelopeId === f.envelopeId);
+  if (f.type === "income") out = out.filter((i) => i.amountCents > 0);
+  else if (f.type === "expense") out = out.filter((i) => i.amountCents < 0);
+  if (f.amountMin !== undefined) out = out.filter((i) => Math.abs(i.amountCents) >= f.amountMin!);
+  if (f.amountMax !== undefined) out = out.filter((i) => Math.abs(i.amountCents) <= f.amountMax!);
+  const k = f.keyword?.trim().toLowerCase();
+  if (k) out = out.filter((i) => i.payee.toLowerCase().includes(k));
+  return out;
+}
+
+/** Parse a query string into an integer-cents bound, or undefined when absent/NaN. */
+function intCents(raw: string | undefined): number | undefined {
+  if (raw === undefined || raw === "") return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.trunc(n) : undefined;
+}
+
+export function registerTransactions(api: Hono, container: Container, services: Services): void {
+  api.get("/transactions", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+
+    const from = c.req.query("from");
+    const to = c.req.query("to");
+    const accountId = c.req.query("accountId");
+    const envelopeId = c.req.query("envelopeId");
+    const typeQ = c.req.query("type");
+    const keyword = c.req.query("keyword");
+
+    const opts: { from?: string; to?: string; accountId?: string; newestFirst: boolean } = { newestFirst: true };
+    if (from) opts.from = from;
+    if (to) opts.to = to;
+    if (accountId) opts.accountId = accountId;
+
+    const [txs, mappings, envelopes] = await Promise.all([
+      container.store.listTransactions(session.userId, opts),
+      container.store.listMappings(session.userId),
+      container.store.listEnvelopes(session.userId),
+    ]);
+    const nameById = new Map(envelopes.map((e) => [e.id, e.name]));
+
+    const all: TransactionListItem[] = txs.map((t) => {
+      const envId = resolveEnvelopeId(t, mappings, services.engineConfig);
+      return {
+        id: t.id,
+        date: t.date,
+        payee: t.payee,
+        amountCents: t.amountCents,
+        accountId: t.accountId,
+        categoryId: t.categoryId,
+        envelopeId: envId,
+        envelopeName: nameById.get(envId) ?? null,
+        isPending: t.isPending,
+        isTransfer: t.isTransfer,
+      };
+    });
+
+    const amountMin = intCents(c.req.query("amountMin"));
+    const amountMax = intCents(c.req.query("amountMax"));
+    const filter: TransactionFilter = {
+      ...(envelopeId ? { envelopeId } : {}),
+      ...(typeQ === "income" || typeQ === "expense" || typeQ === "all" ? { type: typeQ } : {}),
+      ...(amountMin !== undefined ? { amountMin } : {}),
+      ...(amountMax !== undefined ? { amountMax } : {}),
+      ...(keyword ? { keyword } : {}),
+    };
+    const res: TransactionsResponse = { items: applyTransactionFilters(all, filter) };
+    return c.json(res);
+  });
+}

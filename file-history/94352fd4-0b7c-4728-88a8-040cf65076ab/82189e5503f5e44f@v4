@@ -1,0 +1,198 @@
+/**
+ * Seed Penny from Nick's real budget spreadsheet (docs/budget-source.json,
+ * extracted from OneDrive/00_Inbox/Expenses.xlsx). This REPLACES the messy
+ * PocketSmith category import (ISC-96): three envelope types, income capital,
+ * the zero-base, and category→envelope mappings by name. The PocketSmith "Old"
+ * group is excluded (its transactions fall to Inbox).
+ *
+ * Idempotent: wipes and rebuilds the local tenant's envelopes/income/mappings/
+ * budget_template/allocations. Transactions, users and secrets are untouched.
+ *
+ *   bun run scripts/seed-from-spreadsheet.ts
+ */
+
+import { Database } from "bun:sqlite";
+import { LocalSecretStore } from "../src/platform/secrets/local.ts";
+
+const USER = "local";
+const PS_USER = "418333";
+const DB_PATH = `${process.env.HOME}/.penny/penny.db`;
+const now = new Date();
+const PERIOD = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+interface Source {
+  fixedExpenses: { name: string; category: string | null; active: boolean; monthlyCents: number | null; period?: string }[];
+  income: { name: string; targetCents: number }[];
+  discretionaryExpenses: { name: string; monthlyCents: number; period?: string }[];
+}
+const src = JSON.parse(await Bun.file(`${import.meta.dir}/../docs/budget-source.json`).text()) as Source;
+
+const key = await new LocalSecretStore().get(USER, "pocketsmith_developer_key");
+if (!key) throw new Error("No PocketSmith developer key for local");
+
+// PocketSmith category tree -> flat list with top-level group, for name mapping.
+const cats = (await (await fetch(`https://api.pocketsmith.com/v2/users/${PS_USER}/categories`, {
+  headers: { "X-Developer-Key": key, Accept: "application/json" },
+})).json()) as Array<{ id: number; title: string; children?: unknown[] }>;
+const flatCats: { id: string; title: string; top: string }[] = [];
+const walk = (arr: any[], top: string | null) => {
+  for (const c of arr) {
+    const t = top ?? c.title;
+    flatCats.push({ id: String(c.id), title: c.title, top: t });
+    if (Array.isArray(c.children)) walk(c.children, t);
+  }
+};
+walk(cats as any[], null);
+
+const db = new Database(DB_PATH);
+db.run("PRAGMA foreign_keys=OFF");
+const wipe = db.transaction(() => {
+  for (const t of ["allocations", "budget_template", "mappings", "income_envelopes", "envelopes"]) {
+    db.run(`DELETE FROM ${t} WHERE user_id=?`, [USER]);
+  }
+});
+wipe();
+
+const insEnv = db.prepare(
+  `INSERT INTO envelopes (user_id,id,parent_id,name,grp,rollover_rule,target_type,target_amount_cents,carryover_cents,rollover_start,type,active)
+   VALUES (?,?,?,?,?, 'roll_carry','no_target',0,0,NULL,?,?)`,
+);
+const insInc = db.prepare(
+  `INSERT INTO income_envelopes (user_id,id,name,source,budgeted_cents,actual_cents,carryover_cents,rollover_start,target_cents,capital_to_expense_cents)
+   VALUES (?,?,?,?,?,0,0,NULL,?,?)`,
+);
+const insTmpl = db.prepare(`INSERT INTO budget_template (user_id,id,envelope_id,amount_cents,period) VALUES (?,?,?,?,?)`);
+const insAlloc = db.prepare(`INSERT INTO allocations (user_id,id,envelope_id,period,amount_cents,scope) VALUES (?,?,?,?,?, 'ongoing')`);
+const insMap = db.prepare(`INSERT INTO mappings (user_id,id,category_id,envelope_id,effective_from,effective_to) VALUES (?,?,?,?, '1970-01-01', NULL)`);
+
+const nameToEnv = new Map<string, string>(); // lower envelope name -> id
+function makeEnv(id: string, name: string, parentId: string | null, group: string, type: "expense" | "saving" | "envelope", active: boolean, monthlyCents: number | null, period: string = "monthly") {
+  insEnv.run(USER, id, parentId, name, group, type, active ? 1 : 0);
+  nameToEnv.set(name.toLowerCase(), id);
+  if (monthlyCents && monthlyCents > 0) {
+    insTmpl.run(USER, `bt-${id}`, id, monthlyCents, period);
+    if (active) insAlloc.run(USER, `al-${id}`, id, PERIOD, monthlyCents);
+  }
+}
+
+const build = db.transaction(() => {
+  // Inbox + category parents.
+  insEnv.run(USER, "inbox", null, "Inbox", "", "expense", 1);
+  const parents = [...new Set(src.fixedExpenses.map((e) => e.category).filter(Boolean) as string[])];
+  for (const p of parents) makeEnv(`cat-${slug(p)}`, p, null, "", "expense", true, null);
+  // Fixed expenses under their category parent, each in its natural budget period.
+  for (const e of src.fixedExpenses) {
+    const pid = e.category ? `cat-${slug(e.category)}` : null;
+    makeEnv(`env-${slug(e.name)}`, e.name, pid, e.category ?? "", "expense", e.active, e.monthlyCents, e.period ?? "monthly");
+  }
+  // Discretionary "envelope" type — except Travel, which is a saving.
+  for (const e of src.discretionaryExpenses) {
+    const isTravel = e.name.toLowerCase() === "travel";
+    makeEnv(`env-${slug(e.name)}`, e.name, null, "", isTravel ? "saving" : "envelope", true, e.monthlyCents, e.period ?? "monthly");
+  }
+  // Saving envelopes not in the spreadsheet: they hold a balance (carryover from the
+  // rollover baseline) with no required monthly contribution yet.
+  makeEnv("env-emergency-fund", "Emergency Fund", null, "", "saving", true, null);
+  makeEnv("env-rental-bond", "Rental Bond", null, "", "saving", true, null);
+  // Income envelopes.
+  for (const i of src.income) insInc.run(USER, `inc-${slug(i.name)}`, i.name, i.name, i.targetCents, i.targetCents, i.targetCents);
+});
+build();
+
+// Opening carryover from the rollover baseline doc (matched by name), so the
+// fold starts at the current month rather than folding three years of history.
+const updCarry = db.prepare("UPDATE envelopes SET carryover_cents=?, rollover_start=? WHERE user_id=? AND lower(name)=lower(?)");
+const rdoc = await Bun.file(`${import.meta.dir}/../docs/pocketsmith-rollover-baseline.md`).text();
+const monthMap: Record<string, string> = { Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06", Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12" };
+let carrySet = 0;
+const applyCarry = db.transaction(() => {
+  for (const line of rdoc.split("\n")) {
+    const m = line.match(/^\|\s*([^|]+?)\s*\|\s*[^|]*\|\s*([^|]*?)\s*\|\s*[^|]*\|\s*([^|]+?)\s*\|/);
+    if (!m) continue;
+    const name = m[1]!.trim();
+    if (name === "Category" || /no current budget/i.test(m[3]!)) continue;
+    const bal = parseFloat(m[3]!.replace(/[$,]/g, ""));
+    if (Number.isNaN(bal)) continue;
+    const dm = m[2]!.match(/([A-Z][a-z]{2})\s+(\d+),\s+(\d{4})/);
+    const iso = dm ? `${dm[3]}-${monthMap[dm[1]!]}-${String(dm[2]).padStart(2, "0")}` : null;
+    if (updCarry.run(Math.round(bal * 100), iso, USER, name).changes > 0) carrySet++;
+  }
+});
+applyCarry();
+console.log(`[seed] carryover applied from baseline: ${carrySet} envelopes`);
+
+// Alias map: PocketSmith category names that differ from the spreadsheet envelope
+// names, including Recreation's granular children which roll up to Recreation.
+const ALIAS: Record<string, string> = {
+  "health insurance": "Teacher Health", "car registration": "Car Rego",
+  "mcc": "MCC Membership", "smlsc": "SMLSC Membership", "uslsc": "USLSC Membership",
+  "social": "Recreation", "coffee": "Recreation", "takeaway lunches": "Recreation",
+  "takeaway dinners": "Recreation", "takeaway snacks": "Recreation", "takeaway breakfast": "Recreation",
+  "rideshare": "Recreation", "adhoc parking": "Recreation", "lottery": "Recreation",
+  "life saving": "Recreation", "dating": "Recreation", "dry cleaning": "Recreation",
+  "bottleshop": "Recreation", "golf": "Recreation", "fitness extras": "Recreation", "fines": "Recreation",
+  // Stragglers carrying real spend that previously fell to the Inbox. Mapped to
+  // their nearest right envelope so the grid stops leaking these to uncategorised.
+  // Excluded by design (not mapped): Transfers, Interest, Reimbursement, Spend
+  // Lend, and the inter-account savings moves (Savings, Emergency Fund, Rental Bond).
+  "work car parking": "Public Transport", // commuting cost, sits with transport
+  "tech expenses": "Shopping",             // gadget/tech purchases
+  "dogs": "Recreation",                    // pet spend, discretionary
+};
+// Income category -> income envelope (for actual income tracking).
+const INCOME_ALIAS: Record<string, string> = { "salary": "Income", "surplus income": "Income", "rental income": "Rental" };
+
+let mapped = 0, skippedOld = 0, unmatched = 0;
+const incomeCatByEnv = new Map<string, string[]>();
+const mapTx = db.transaction(() => {
+  for (const c of flatCats) {
+    if (c.top === "Old") { skippedOld++; continue; }
+    const lc = c.title.toLowerCase();
+    const incName = INCOME_ALIAS[lc];
+    if (incName) {
+      const incId = `inc-${slug(incName)}`;
+      (incomeCatByEnv.get(incId) ?? incomeCatByEnv.set(incId, []).get(incId)!).push(c.id);
+      // Persist the income-category -> income-envelope mapping into the same
+      // effective-dated mappings table the expense grid resolves through, so the
+      // grid service computes each income envelope's actual live, per displayed
+      // period, instead of reading a frozen seed snapshot (ISC-99 trust fix).
+      insMap.run(USER, `map-${c.id}`, c.id, incId);
+      mapped++;
+      continue;
+    }
+    const envId = nameToEnv.get(lc) ?? (ALIAS[lc] ? nameToEnv.get(ALIAS[lc].toLowerCase()) : undefined);
+    if (envId) { insMap.run(USER, `map-${c.id}`, c.id, envId); mapped++; }
+    else unmatched++;
+  }
+});
+mapTx();
+
+// Income actuals: current-month sum of each income envelope's mapped categories.
+const updIncActual = db.prepare("UPDATE income_envelopes SET actual_cents=? WHERE user_id=? AND id=?");
+let incActualSet = 0;
+for (const [incId, catIds] of incomeCatByEnv) {
+  const ph = catIds.map(() => "?").join(",");
+  const row = db.query(
+    `SELECT COALESCE(SUM(amount_cents),0) s FROM transactions WHERE user_id=? AND txn_date LIKE ? AND category_id IN (${ph})`,
+  ).get(USER, `${PERIOD}%`, ...catIds) as { s: number };
+  updIncActual.run(row.s, USER, incId);
+  incActualSet++;
+}
+console.log(`[seed] income actuals set (current month ${PERIOD}): ${incActualSet} envelopes`);
+
+// Resolve how many loaded transactions now hit a real envelope.
+const mappedCatIds = new Set(db.query("SELECT category_id FROM mappings WHERE user_id=?").all(USER).map((r: any) => r.category_id));
+const txTotal = (db.query("SELECT COUNT(*) n FROM transactions WHERE user_id=?").get(USER) as any).n;
+const txResolved = db.query("SELECT COUNT(*) n FROM transactions WHERE user_id=? AND category_id IN (SELECT category_id FROM mappings WHERE user_id=?)").get(USER, USER) as any;
+
+const incTarget = src.income.reduce((s, i) => s + i.targetCents, 0);
+const expMonthly = src.fixedExpenses.filter((e) => e.active).reduce((s, e) => s + (e.monthlyCents ?? 0), 0) + src.discretionaryExpenses.reduce((s, e) => s + e.monthlyCents, 0);
+
+console.log(`[seed] envelopes: ${parentsCount()} parents + ${src.fixedExpenses.length} fixed + ${src.discretionaryExpenses.length} discretionary + Inbox`);
+console.log(`[seed] income: ${src.income.length} | mappings: ${mapped} (skipped Old categories: ${skippedOld}, unmatched: ${unmatched})`);
+console.log(`[seed] transactions resolving to an envelope: ${txResolved.n}/${txTotal}`);
+console.log(`[seed] ZERO-BASE: capital $${(incTarget / 100).toFixed(2)} vs budgeted out $${(expMonthly / 100).toFixed(2)} -> residual $${((incTarget - expMonthly) / 100).toFixed(2)}`);
+function parentsCount() { return new Set(src.fixedExpenses.map((e) => e.category).filter(Boolean)).size; }
+db.close();

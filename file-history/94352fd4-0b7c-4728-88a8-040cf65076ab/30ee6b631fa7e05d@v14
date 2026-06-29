@@ -1,0 +1,458 @@
+---
+task: "Zero-based envelope budgeting with direct Australian bank feeds via Basiq (CDR), local-first, cloud-ready"
+project: envelope-os
+slug: 20260618-050156_penny-envelope-os
+effort: deep
+effort_source: context-override
+phase: build
+progress: 0/128
+mode: interactive
+started: 2026-06-18T05:01:56Z
+updated: 2026-06-29T00:00:00Z
+---
+
+# BudgetBuddy (envelope-os) — Project ISA
+
+> Surface name **BudgetBuddy**. Codebase folder `envelope-os`. Zero-based envelope budgeting layer on direct Australian bank feeds (Basiq / CDR, migrating off PocketSmith), feeding PAI Pulse. AUD, personal-finance-grade security. **Local-first now, cloud-ready by construction.** One codebase ships to two deployment targets — Local (Tailscale, single principal at runtime) and Cloud (public at `nicholaswood.com.au/budget`, multi-tenant) — and the only difference between them is configuration plus two swapped adapters, never the data model or the business logic.
+
+## Problem
+
+PocketSmith owns Nick's bank feeds and categorisation across ANZ (primary), NAB (credit card), and Macquarie, but its envelope handling is weak and it does not implement zero-based envelope budgeting. Dave Ramsey's EveryDollar and similar apps do implement the methodology but cannot connect to Australian banks. The result is that Nick runs envelope budgeting in his head on top of PocketSmith, which does not scale, does not survive a credit-card statement cycle cleanly, and gives no trustworthy single number for "where am I against budget right now". There is no time-travel view of envelope balances at a past date, no enforced every-dollar-allocated discipline, and no surface that feeds the state into Pulse. Secondly, the original build was scoped local-only and single-user; if it works, Nick wants the option to let another person use it by handing over only their email and their own PocketSmith developer key, which a local-only, single-tenant design cannot do without a painful retrofit.
+
+## Vision
+
+Nick opens Pulse and sees one honest line. Unallocated dollars, the worst three overspends, and whether the credit-card holding balance still matches NAB. He opens BudgetBuddy on his phone — installed as a PWA, reached over Tailscale. He never plans a month; the budget is the recurring template and it simply rolls into each new month on its own. When something changes he adjusts one envelope or moves money, the change is remembered going forward, and it lands in a budget history he can scroll back through. When a late transaction lands weeks later, the envelope it belongs to moves on the day it was spent, not when the statement closes, so the budget never lies about the past. The euphoric surprise is twofold: the holding-versus-NAB tripwire — a single number that, when it drifts, tells Nick something is wrong before he would otherwise have noticed — and the realisation that the day he decides to let someone else use BudgetBuddy, it is already a per-user multi-tenant app; he adds them with an email and their dev key, flips one config value, deploys to GCP, and nothing in the ledger, the envelope engine, or the UI had to change.
+
+## Out of Scope
+
+The MVP does not split one category across multiple envelopes. Mapping stays many categories to one envelope. A dedicated sinking-fund target type is not built. Annual envelopes are treated as monthly target divided by twelve for the MVP. There is no mobile quick-add of purchases and no offline transaction capture — the PWA is read-and-allocate over Tailscale, not an offline write queue. There is no auto-allocation engine and no agent-proposed allocations. There is no reporting suite beyond what the grid and detail pages show, no PDF or CSV export, and no what-if replay queries against the event log. There is no multi-currency support. There is no joint-finance surface; the data model is multi-tenant per-user, not joint-account shared-ledger. **Cloud hosting is built-ready, not deployed.** The cloud adapters (email magic-link auth, KMS-encrypted per-user secrets, Postgres data layer) are written and unit-tested behind their interfaces so the switch is config-only, but standing up the public GCP service, registering the `/budget` route on `nicholaswood.com.au`, and onboarding a second human are deliberate later steps, not MVP deliverables. Direct bank-CSV reconciliation against PocketSmith feeds is a later trust layer, not MVP.
+
+## Principles
+
+- The envelope is the user-facing primitive. PocketSmith categories are inputs. Envelopes are how Nick thinks and decides.
+- Cash-basis fidelity to the envelope metaphor. A swipe decrements the envelope on the day it happens, regardless of which card moved.
+- Every dollar is conserved. A forgiven overspend is not free money. The deficit is always booked somewhere, never silently leaked.
+- Local-first. Personal financial data does not leave the owner's machine without a deliberate, per-action choice. In local mode there is no cloud egress of transactions at all.
+- **Cloud-ready by construction, not by rewrite.** The data model is multi-tenant from the first migration; every piece of identity-bearing state carries a `user_id`. Deployment differences (who authenticates, where secrets live, which database backs the store) sit behind interfaces. Business logic never knows or branches on which deployment target it is running in.
+- **One tenant per principal.** Each user owns their own PocketSmith developer key, their own transactions, their own envelopes and budget. There is no shared data between tenants. Onboarding a person is: their email plus their PocketSmith dev key.
+- The event log is the source of truth and the audit log. Future-Nick can always ask why an envelope went negative on a given day and get an answer.
+- The thing is the source of truth, not the task. This ISA at the project root is iterated continuously, not recreated per task.
+
+## Constraints
+
+- bun plus TypeScript only. No Python. No npm or npx. Australian English. AUD only. No em dashes in prose.
+- **Single codebase, two deployment targets, one switch.** A `DEPLOY_MODE` value of `local` or `cloud` is the only thing that selects deployment behaviour. No business module reads `DEPLOY_MODE`; only the composition root (dependency wiring) does.
+- **Multi-tenant schema from the first migration.** A `users` table exists. Every tenant-scoped table carries a non-null `user_id` foreign key to `users.id`. Local mode seeds exactly one user (Nick) and runs single-tenant at runtime over a multi-tenant schema. There is no separate single-tenant schema that later needs migrating.
+- **Auth sits behind an `AuthProvider` interface.** Local implementation: Tailscale device trust plus a PIN held in the secret store, thirty-minute idle session. Cloud implementation: passwordless email magic-link sign-in (request link, verify token, mint httpOnly+Secure+SameSite session cookie). No route handler or business module depends on which implementation is active; they depend only on the resolved authenticated `user_id`.
+- **Secrets sit behind a `SecretStore` interface, keyed per user.** Each user's PocketSmith `X-Developer-Key` is fetched through the store for the authenticated `user_id` at request time. Local implementation: the PAI secrets store / OS keychain / an encrypted local file. Cloud implementation: envelope encryption via GCP KMS with ciphertext stored in the database. A developer key never appears in env files, git, logs, or as plaintext at rest.
+- **Data access sits behind a thin store layer; SQL stays Postgres-portable.** Local persistence is SQLite via `bun:sqlite`, single file, single writer owned by one Bun process. No business module imports `bun:sqlite` directly — they depend on the store interface. Business queries avoid SQLite-only syntax so the Postgres adapter (cloud) is a drop-in. The cloud Postgres adapter is written and unit-tested but not the local default.
+- The PocketSmith client is generated from the published OpenAPI 3 spec `openapi.json` at `github.com/pocketsmith/api`, pinned to commit SHA `8e964ca0107444e4d797b75fbc30fb969d488d9d` in-repo. The client is regenerated manually on a spec bump, never auto-tracked. Base URL `https://api.pocketsmith.com/v2`. Auth is the `X-Developer-Key` header (not OAuth) in local and cloud alike — the key is the per-user secret.
+- Sync is daily pull only. PocketSmith publishes no webhooks, so no push or listener code path may exist. Incremental sync uses `updated_since`.
+- **The UI is a PWA, optimised for web app and installed app alike.** It ships a web manifest and a service worker, is installable on iOS and Android home screens, and serves an offline app shell. It is served over HTTPS in both modes: locally via `tailscale serve` on a `*.ts.net` hostname (a real cert, so service workers register and install works); in cloud via the platform certificate at `nicholaswood.com.au/budget`. Remote access in local mode is Tailscale-only; no public internet exposure in local mode.
+- No cloud SaaS storage of financial data and no cloud AI inference over transactions in local mode. In cloud mode, financial data is stored in the user's own tenant rows and protected per the security ISCs; cloud AI inference over transactions stays off by default and opt-in per query.
+
+## Goal
+
+Ship a local-first BudgetBuddy that replaces Nick's PocketSmith-plus-mental-model setup with a real zero-based envelope view, built on a multi-tenant, adapter-seamed architecture that becomes a public per-user cloud app by changing configuration rather than code. Done means: a daily PocketSmith pull lands transactions into a SQLite event-sourced ledger scoped to the authenticated user; envelopes decrement on spend-date with a visible Credit Card Holding envelope for NAB; the recurring budget template auto-rolls into each new month with no manual ritual, a continuous zero-based check alerts when the budget is unbalanced rather than blocking, and actual-versus-budget income variance is carried as surplus/deficit on per-source income envelopes; the grid and a time-travel view render envelope balances; the app runs as an installable PWA reachable over Tailscale HTTPS; a read-only Pulse widget surfaces unallocated dollars, top overspends, and the holding-versus-NAB tripwire; and the cloud-ready seams (multi-tenant schema, `AuthProvider`, `SecretStore`, portable store layer, `DEPLOY_MODE` switch) are in place and unit-tested such that the cloud adapters compile and pass their tests without any business-logic change.
+
+## Criteria
+
+### Ingest and sync (Weekend 1)
+
+- [ ] ISC-1: PocketSmith TypeScript client generated from the pinned OpenAPI 3 commit SHA (superseded 2026-06-29 by the Basiq pivot; see Changelog and ISC-105/107)
+- [ ] ISC-2: Client authenticates using the X-Developer-Key header (superseded 2026-06-29 by the Basiq pivot; see Changelog and ISC-108)
+- [ ] ISC-3: Developer key resolved through the SecretStore for the authenticated user at runtime (superseded 2026-06-29 by the Basiq pivot; secret is now app-level, see Changelog and ISC-109/128)
+- [ ] ISC-4: Backfill pages through the transactions endpoint to completion
+- [ ] ISC-5: Incremental sync passes updated_since equal to last successful run timestamp
+- [ ] ISC-6: Backfill script pulls two years from a parameterised start date
+- [ ] ISC-7: Daily sync runs from PAI cron at a fixed local time
+- [ ] ISC-8: Two consecutive failed syncs raise a Pulse or Telegram alert
+- [ ] ISC-9: Anti: No webhook listener or push-sync code path exists anywhere in the repo
+
+### Data model and store (Weekend 1 to 2)
+
+- [ ] ISC-10: SQLite database opens via bun:sqlite as a single file at a known path
+- [ ] ISC-11: Schema declares events, snapshots, transactions, categories, mappings, envelopes tables
+- [ ] ISC-12: Each transaction row stores the raw PocketSmith JSON for diffing
+- [ ] ISC-13: transaction_overrides table is keyed on pocketsmith id and field
+- [ ] ISC-14: An owner column exists on ledger entities, defaulted to the single principal
+- [ ] ISC-15: Every state change appends an event with timestamp, actor, and correlation id
+- [ ] ISC-16: End-of-day job writes one snapshot balance row per envelope per day
+- [ ] ISC-17: Anti: Re-sync never mutates a transaction beyond base-field refresh plus overlay
+
+### Envelope semantics (Weekend 2)
+
+- [ ] ISC-18: Envelope CRUD persists name, parent_id, group, rollover_rule, target_type, target_amount
+- [ ] ISC-73: Envelopes form a tree via a self-referential parent_id; a parent envelope is itself spendable and allocatable, not just a header
+- [ ] ISC-74: A parent envelope's carryover, allocation, total, and left roll up as the sum of its children plus any allocation or activity directly on the parent
+- [ ] ISC-19: Category-to-envelope mapping is many-to-one and effective-dated
+- [ ] ISC-20: Unmapped category transactions resolve to the Inbox envelope at import
+- [ ] ISC-21: NAB card spend decrements the Credit Card Holding envelope on transaction date
+- [ ] ISC-22: Transactions flagged is_transfer are excluded from envelope decrement
+- [ ] ISC-23: Pending transactions appear in lists but do not decrement balances
+- [ ] ISC-24: Posted transactions decrement the mapped envelope on transaction date
+- [ ] ISC-25: Default rollover carries both surplus and deficit to the next month as the envelope's explicit starting carryover
+- [ ] ISC-26: Per-envelope overrides to the default carry: drain_to_zero drops surplus at period end (use-it-or-lose-it); annual_reset carries within the year and resets in January
+- [ ] ISC-71: Any envelope in surplus or deficit can be balanced via the move-money flow in either direction, or left to carry over
+- [ ] ISC-27: Annual envelopes display as monthly target divided by twelve for the MVP
+- [ ] ISC-28: Anti: A forgiven overspend never leaves the ledger unbalanced
+
+### Allocation and every-dollar rule (Weekend 4)
+
+- [ ] ISC-29: The recurring budget template auto-rolls into each new month; allocations carry forward with no manual plan-the-month ritual
+- [ ] ISC-76: Anti: A new month never requires a manual allocation step to have a budget; the template applies automatically
+- [ ] ISC-77: Every change to the budget template is recorded with timestamp and before/after values and is viewable as a budget history
+- [ ] ISC-30: Zero-based check compares total spending allocations to total budgeted income; an imbalance raises an alert, never a hard block on save or view
+- [ ] ISC-31: Actual income above or below budgeted appears as surplus/deficit on the relevant income envelope
+- [ ] ISC-32: Anti: Neither viewing nor saving an allocation is ever blocked by an unbalanced or non-zero-based budget
+- [ ] ISC-65: Income envelopes are a first-class envelope type, one per income source, each carrying a budgeted amount and an actual balance whose variance is the surplus/deficit
+- [ ] ISC-66: A reallocation names an explicit source and destination; the amount leaving the source equals the amount entering the destination
+- [ ] ISC-67: Every allocation change carries a scope of this-month-only or ongoing
+- [ ] ISC-68: An ongoing change updates the recurring budget template that apply-last-month reads; a this-month change applies only to the current period and leaves the template unchanged
+- [ ] ISC-69: Increasing an allocation prompts for a source (another envelope, an income surplus, or a raised income expectation) so the plan stays balanced; proceeding without one is allowed but raises the zero-based alert
+- [ ] ISC-72: The recurring budget template is edited through a dedicated Edit Budget wizard, not inline
+
+### UI (Weekend 3)
+
+- [ ] ISC-33: Vite plus React plus shadcn SPA is served by Hono on a single port
+- [ ] ISC-34: Envelope grid renders current-period balances in a Dave Ramsey layout
+- [ ] ISC-70: Each envelope row shows four figures: starting carryover, this-period allocation, total available (carryover plus allocation), and left (total minus spent)
+- [ ] ISC-75: The grid renders the envelope hierarchy with parents expandable and collapsible, rolled-up figures shown on the parent row
+- [ ] ISC-35: Per-envelope detail page lists that envelope's transactions
+- [ ] ISC-36: Time-travel date picker renders envelope balances as at end-of-day T
+- [ ] ISC-37: Statement-period reconcile click confirms Holding matches NAB balance
+- [ ] ISC-38: In local mode the app is reachable only over Tailscale, not the public internet
+- [ ] ISC-39: Session idle timeout is thirty minutes, unlocked by the active AuthProvider
+
+### Pulse (Weekend 4)
+
+- [ ] ISC-40: Pulse job writes widget JSON to a known path on the daily cycle
+- [ ] ISC-41: Pulse tile A shows unallocated dollars for the current period
+- [ ] ISC-42: Pulse tile B shows the top three envelopes by overspend percent
+- [ ] ISC-43: Pulse tile C shows Holding balance against NAB statement balance
+- [ ] ISC-44: Every Pulse tile carries an as-of timestamp
+
+### Security and data lifecycle (cross-cutting)
+
+- [ ] ISC-45: Anti: No financial data is sent to cloud SaaS or cloud AI in local mode by default
+- [ ] ISC-46: A daily encrypted backup of the SQLite file runs via rclone crypt remote
+
+### Cloud-ready architecture (cross-cutting, MVP build)
+
+- [ ] ISC-47: A `users` table exists with id, email, created_at, and status
+- [ ] ISC-48: Every tenant-scoped table (transactions, categories, mappings, envelopes, allocations, events, snapshots, overrides) carries a non-null user_id foreign key to users.id
+- [ ] ISC-49: Every store query that reads or writes tenant data is scoped by the authenticated user_id
+- [ ] ISC-50: A `DEPLOY_MODE` config value of local or cloud selects deployment behaviour at the composition root only
+- [ ] ISC-51: Anti: No business module (envelope engine, allocation, sync, store queries) reads DEPLOY_MODE
+- [ ] ISC-52: An `AuthProvider` interface exists with a working local implementation (Tailscale-trust plus PIN)
+- [ ] ISC-53: A cloud `AuthProvider` implementation does passwordless email magic-link request-and-verify and compiles and passes unit tests
+- [ ] ISC-54: A `SecretStore` interface exists, keyed by user_id, with a working local implementation for the PocketSmith dev key
+- [ ] ISC-55: A cloud `SecretStore` implementation envelope-encrypts the dev key via KMS and stores ciphertext, compiles, and passes unit tests
+- [ ] ISC-56: Anti: A PocketSmith developer key never appears as plaintext at rest, in env files, git, or logs in either mode
+- [ ] ISC-57: A store interface abstracts persistence; no business module imports bun:sqlite directly
+- [ ] ISC-58: A Postgres store adapter exists for cloud, compiles, and passes the same store unit-test suite as the SQLite adapter
+- [ ] ISC-59: Anti: Business SQL uses no SQLite-only syntax that the Postgres adapter cannot run
+
+### PWA (Weekend 3)
+
+- [ ] ISC-60: The app ships a valid web app manifest with name, icons, theme, and standalone display
+- [ ] ISC-61: A service worker registers and caches an offline app shell
+- [ ] ISC-62: The app is installable to an iOS or Android home screen (passes an installability audit)
+- [ ] ISC-63: The app is served over HTTPS locally via tailscale serve on a *.ts.net hostname so the service worker registers
+- [ ] ISC-64: Anti: The PWA does not implement offline transaction capture or a mobile write queue in the MVP
+
+### Transactions and period views
+
+- [ ] ISC-78: A Transactions list screen shows all of the tenant's transactions newest-first with date, payee, amount, account, and mapped envelope
+- [ ] ISC-79: The transactions list filters by date period (from/to) and by envelope and account
+- [ ] ISC-80: GET /api/transactions returns tenant-scoped transactions filtered by from/to/envelope/account
+- [ ] ISC-81: The store transaction query supports a date range (from, to) scoped by user_id
+- [ ] ISC-82: The budget view can be set to a given date period and lists the transactions that fall within it
+
+### Real-data setup and placeholder removal
+
+- [ ] ISC-83: Anti: No screen renders placeholder or demo data; absent data shows an explicit empty state, never invented numbers
+- [ ] ISC-84: A setup importer seeds envelopes from the PocketSmith category tree, preserving parent/child, classifying each as income or expense (note: envelope seeding is now spreadsheet-driven per ISC-96; category sourcing superseded 2026-06-29, see ISC-120/127)
+- [ ] ISC-85: The importer sets each envelope's budgeted amount from the PocketSmith budget forecast and its starting carryover from the rollover baseline (docs/pocketsmith-rollover-baseline.md)
+- [ ] ISC-86: The loaded transactions map to envelopes by PocketSmith category so each decrements the right envelope (superseded 2026-06-29: category source is now the Categoriser, see ISC-120/123/127)
+- [ ] ISC-87: The budget page can add a new envelope and specify its type (income or expense) and its parent
+- [ ] ISC-88: The status distinguishes "no budget set up yet" from "balanced", computed from real budgeted income
+- [ ] ISC-89: Money can be moved freely between any two envelopes in either direction (free rebalancing, e.g. +200 and +300 to 250/250); the amount leaving equals the amount entering
+- [ ] ISC-90: Every money movement is recorded as a traceable ledger entry (from envelope, to envelope, amount, timestamp, actor, correlation id) and is viewable in history
+
+### Three envelope types and income capital
+
+- [ ] ISC-91: Every envelope has a type — income, expense, or saving; a saving envelope behaves identically to an expense envelope (label/grouping only)
+- [ ] ISC-92: Each income envelope carries a budget (the expected income); that budget IS the amount used to balance against expense/saving/envelope budgets — there is no separate capital-allocation step
+- [ ] ISC-93: The zero-base compares total income budget to total expense-plus-saving-plus-envelope budget; the residual is the surplus/deficit (under-budget = surplus, over-budget = deficit)
+- [ ] ISC-94: Expense and saving envelope budgets carry a period of weekly, monthly, or annual, normalised to a monthly equivalent for the capital and zero-based maths
+- [ ] ISC-95: Child spend rolls up against the nearest budgeted ancestor envelope, so a parent budget is consumed by spend booked to its children (fixes the PocketSmith parent-budget/child-spend leak)
+
+### Spreadsheet replacement (the real budget model)
+
+- [ ] ISC-96: The budget structure is seeded from Nick's Expenses spreadsheet (the curated real budget), not the raw PocketSmith tree; the PocketSmith "Old" group is excluded entirely
+- [ ] ISC-97: An expense/saving budget entered in any one period normalises to all four: weekly = MAX(weekly, fortnightly/2, monthly*12/52, annual/52), fortnightly = weekly*2, monthly = weekly*52/12, annual = monthly*12
+- [ ] ISC-98: A budget-balancing tool implements the zero-base (the spreadsheet Full Budget E2): total income capital minus total expense-plus-saving budgeted equals zero when balanced; the residual is shown when it is not
+- [ ] ISC-99: The income envelope row shows actual income minus target; the budget-balancing tool shows capital provided minus amount budgeted out (both surplus/deficit views exist)
+- [ ] ISC-100: Each expense/saving envelope carries an Active flag; inactive envelopes are excluded from the budget total
+
+### Income parity, drill-down, and period selection
+
+- [ ] ISC-101: Income rows show the same four figures as expense rows — carryover, budget (the target), received (actual income, in place of spent), and left — with the received figure clickable to open the same transaction popover/drill-down
+- [ ] ISC-102: The transaction drill-down opens from any envelope's spent/received figure, income and expense alike
+- [ ] ISC-103: The budget page has a period selector defaulting to This Month, offering Last Month, This Financial Year (Jul–Jun AU), Last Financial Year, and a custom start/end date range
+- [ ] ISC-104: Selecting a period recomputes the whole grid (carryover, budget, spent/received, left, and the zero-base) for that period, including multi-month ranges
+
+### Direct bank feeds via Basiq (provider migration, 2026-06-29)
+
+- [ ] ISC-105: An `IngestProvider` interface exists; `runSync` and `runBackfill` depend on it, not on `PocketSmithClient`
+- [ ] ISC-106: Anti: No ingest module (sync, backfill) imports a provider-concrete client type directly
+- [ ] ISC-107: A `BasiqProvider` implements `IngestProvider`, compiles, and passes the provider test suite
+- [ ] ISC-108: The Basiq server token is obtained via POST /token with the app API key, cached to expiry, and refreshed on 401
+- [ ] ISC-109: Anti: The Basiq app API key never appears as plaintext at rest, in env files, git, or logs
+- [ ] ISC-110: A Basiq user is created per tenant and the Basiq userId persisted in the tenant-scoped Store
+- [ ] ISC-111: A bank connection is established via the Basiq Consent UI; Anti: no bank credential ever reaches BudgetBuddy
+- [ ] ISC-112: Connection state (connectionId, institution, consent expiresAt) is persisted per tenant
+- [ ] ISC-113: A connection refresh issues a job and polls GET /jobs/{id} to terminal success before any data read
+- [ ] ISC-114: Anti: An expired CDR consent surfaces a re-consent prompt and is never reported as a successful empty sync
+- [ ] ISC-115: Backfill pages the Basiq transactions endpoint to completion via links.next
+- [ ] ISC-116: Incremental sync filters Basiq transactions by postDate greater than the last successful run bookmark
+- [ ] ISC-117: A Basiq transaction maps to the store Tx shape (signed amount to cents, postDate to date, status to isPending, class transfer to isTransfer, merchant to payee, verbatim JSON to rawJson)
+- [ ] ISC-118: Anti: The mapper preserves negative=outflow; a debit never lands as a positive amount
+- [ ] ISC-119: Anti: No webhook or push listener for Basiq events exists; sync stays pull-poll only (preserves ISC-9 for the new provider)
+- [ ] ISC-120: A Categoriser assigns every ingested transaction a stable internal categoryId from BudgetBuddy's own category set, independent of any provider taxonomy
+- [ ] ISC-121: The Categoriser derives a default category from Basiq enrich, then lets a matching user rule override it
+- [ ] ISC-122: A user-editable category rule maps a payee/merchant pattern to an internal categoryId; rules are tenant-scoped and effective-dated
+- [ ] ISC-123: An uncategorised transaction resolves to the Inbox envelope via the existing effective-dated category-to-envelope mapping (preserves ISC-19, ISC-20)
+- [ ] ISC-124: Anti: The envelope engine and the category-to-envelope mapping are unchanged by the swap; Tx.categoryId stays the only coupling point
+- [ ] ISC-125: Anti: Re-running the Categoriser never overwrites a user's explicit category override or rules (mirrors ISC-17)
+- [ ] ISC-126: PocketSmith ingest (client, /me, X-Developer-Key) is removed from the runtime path once Basiq backfill verifies data parity on Nick's own data
+- [ ] ISC-127: A one-time migration maps existing PocketSmith-categorised transactions onto the internal category set so historical envelope balances are preserved
+- [ ] ISC-128: Anti: No per-user PocketSmith developer key is required to onboard a tenant; onboarding is email plus in-app bank consent only
+
+## Test Strategy
+
+| isc | type | check | threshold | tool |
+|-----|------|-------|-----------|------|
+| ISC-1 | build | generated client file exists, OpenAPI SHA pinned in config | file present, SHA matches | Read, Grep |
+| ISC-2 | api | request carries X-Developer-Key header | header present | curl -i against a live endpoint |
+| ISC-3 | security | key read from SecretStore by user_id, absent from source | resolved at runtime, zero matches in repo | Grep, unit test |
+| ISC-4 | api | backfill consumes all pages | page cursor exhausted | Bash run, count rows |
+| ISC-5 | api | sync request includes updated_since param | param equals last run ts | Grep request log |
+| ISC-6 | functional | backfill arg controls start date | two-year window pulled | Bash run with arg |
+| ISC-7 | operational | cron entry fires the sync at fixed time | job registered | Read cron config |
+| ISC-8 | operational | two failed runs trigger alert | alert emitted | Bash inject failure, observe |
+| ISC-9 | anti | no webhook or listener code present | zero matches | Grep webhook, listen, push |
+| ISC-10 | data | db file opens via bun:sqlite | connection succeeds | Bash open and query |
+| ISC-11 | data | all six core tables present | schema matches | SELECT from sqlite_master |
+| ISC-12 | data | raw_json column populated | non-null on imported rows | SELECT raw_json |
+| ISC-13 | data | overrides keyed on id and field | composite key enforced | SELECT, attempt dup |
+| ISC-14 | data | owner/user_id column present, defaulted | default applied | SELECT user_id |
+| ISC-15 | data | event rows carry ts, actor, correlation | columns non-null | SELECT from events |
+| ISC-16 | data | snapshot rows per envelope per day | one row per pair | SELECT count grouped |
+| ISC-17 | anti | re-sync leaves base row plus overlay only | no destructive update | Bash re-sync, diff rows |
+| ISC-18 | functional | envelope CRUD persists all fields incl parent_id | round-trip equal | SELECT after write |
+| ISC-73 | data | envelope tree via parent_id; parent allocatable | tree + direct alloc | SELECT parent_id, allocation |
+| ISC-74 | logic | parent totals roll up children plus direct | rollup correct | SELECT parent vs sum children |
+| ISC-19 | data | mapping is many-to-one effective-dated | constraint holds | SELECT, attempt second |
+| ISC-20 | functional | unmapped lands in Inbox | envelope_id is Inbox | SELECT on unmapped |
+| ISC-21 | logic | NAB spend decrements Holding on tx date | balance moved on date | SELECT balance delta |
+| ISC-22 | logic | is_transfer excluded from decrement | no envelope change | SELECT on transfer row |
+| ISC-23 | logic | pending shown not counted | listed, balance unchanged | SELECT, compare |
+| ISC-24 | logic | posted decrements on tx date | balance moved | SELECT balance delta |
+| ISC-25 | logic | surplus and deficit both carry as starting carryover | both directions carried | SELECT next-month carryover |
+| ISC-26 | logic | drain_to_zero drops surplus; annual_reset resets Jan | override behaviour holds | SELECT envelope by rule |
+| ISC-71 | logic | imbalanced envelope can be balanced either way or carried | move or carry both work | Interceptor move-money + SELECT |
+| ISC-27 | logic | annual shows target over twelve | monthly figure correct | SELECT computed target |
+| ISC-28 | anti | sum of envelopes plus available equals income | invariant holds | SELECT conservation check |
+| ISC-29 | logic | template auto-rolls into new month | allocations carried, no ritual | SELECT new-month allocations |
+| ISC-76 | anti | new month has budget without manual step | auto-populated | SELECT new month, no user action |
+| ISC-77 | data | budget changes recorded with before/after | history rows present | SELECT budget_history |
+| ISC-78 | ui | transactions list renders all txns newest-first | list visible | Interceptor screenshot |
+| ISC-79 | ui | list filters by date/envelope/account | filtered results | Interceptor + SELECT |
+| ISC-80 | api | GET /api/transactions returns filtered scoped txns | correct shape | curl -i |
+| ISC-81 | data | store query honours from/to range per user | range rows only | SELECT with range |
+| ISC-82 | ui | budget for a chosen period lists its transactions | period txns shown | Interceptor screenshot |
+| ISC-30 | logic | imbalance raises alert, save still succeeds | alert shown, not blocked | Interceptor attempt save unbalanced |
+| ISC-31 | logic | actual≠budgeted shows as income-envelope surplus/deficit | variance on income envelope | SELECT income envelope balance |
+| ISC-32 | anti | view and save never blocked by imbalance | both succeed unbalanced | Interceptor load + save |
+| ISC-65 | data | income envelope type persists budgeted + actual | variance computed | SELECT income envelope |
+| ISC-66 | logic | move debits source, credits destination equally | amounts conserved | SELECT both balances |
+| ISC-67 | functional | change records scope flag | this-month or ongoing stored | SELECT allocation change |
+| ISC-68 | logic | ongoing edits template, this-month does not | template changes only when ongoing | SELECT template vs period override |
+| ISC-69 | logic | allocation increase prompts source; unbalanced allowed with alert | source offered, alert on skip | Interceptor move-money flow |
+| ISC-72 | functional | template edited via Edit Budget wizard | wizard updates template | Interceptor wizard |
+| ISC-33 | build | SPA served by Hono on one port | 200 at root | curl -i root |
+| ISC-34 | ui | grid renders current balances | grid visible | Interceptor screenshot |
+| ISC-70 | ui | row shows carryover, allocation, total, left | four figures present | Interceptor screenshot |
+| ISC-75 | ui | hierarchy expandable, rolled-up parent row | tree renders | Interceptor screenshot |
+| ISC-35 | ui | detail lists envelope transactions | list visible | Interceptor screenshot |
+| ISC-36 | logic | as-of date renders past balances | snapshot matches | Interceptor plus SELECT |
+| ISC-37 | functional | reconcile click confirms holding vs NAB | confirmation recorded | Interceptor click |
+| ISC-38 | security | not reachable off Tailscale in local mode | refused publicly | curl from non-tailnet |
+| ISC-39 | security | idle session locks at thirty minutes | re-auth required | Bash time-advance test |
+| ISC-40 | integration | widget JSON at known path | file present and valid | Read, jq |
+| ISC-41 | ui | tile A unallocated dollars | value matches db | Interceptor plus SELECT |
+| ISC-42 | ui | tile B top three overspends | order correct | Interceptor plus SELECT |
+| ISC-43 | ui | tile C holding vs NAB | both values shown | Interceptor screenshot |
+| ISC-44 | ui | as-of timestamp on every tile | timestamp present | Interceptor screenshot |
+| ISC-45 | anti | no cloud egress of financial data in local mode | zero external posts | Grep, egress inspector |
+| ISC-46 | operational | daily encrypted backup runs | backup file appears | Bash run, ls crypt remote |
+| ISC-47 | data | users table present with required columns | columns exist | SELECT from sqlite_master |
+| ISC-48 | data | user_id FK on every tenant table | FK present and non-null | PRAGMA foreign_key_list per table |
+| ISC-49 | security | tenant queries scoped by user_id | no unscoped tenant read in store | Grep store, unit test cross-tenant isolation |
+| ISC-50 | build | DEPLOY_MODE switches wiring at composition root | local and cloud both wire | Read composition root, unit test both modes |
+| ISC-51 | anti | no business module reads DEPLOY_MODE | zero matches outside composition root | Grep DEPLOY_MODE |
+| ISC-52 | auth | local AuthProvider authenticates via PIN | session minted | unit test, Bash run |
+| ISC-53 | auth | cloud AuthProvider magic-link request+verify | token verifies, compiles, tests pass | bun test cloud-auth |
+| ISC-54 | security | SecretStore returns per-user dev key locally | correct key per user_id | unit test |
+| ISC-55 | security | cloud SecretStore encrypts via KMS, stores ciphertext | ciphertext only, compiles, tests pass | bun test cloud-secret |
+| ISC-56 | anti | dev key never plaintext at rest or in logs | zero plaintext matches | Grep key value across repo, db, logs |
+| ISC-57 | build | no business module imports bun:sqlite | imports only in store adapter | Grep import bun:sqlite |
+| ISC-58 | build | Postgres adapter passes the store test suite | same suite green | bun test store --adapter pg |
+| ISC-59 | anti | business SQL has no SQLite-only syntax | portable SQL only | Grep for sqlite-only constructs, pg adapter test |
+| ISC-60 | pwa | manifest valid with required fields | manifest parses, fields present | Read manifest, Interceptor audit |
+| ISC-61 | pwa | service worker registers, caches shell | SW active, shell cached | Interceptor application-tab check |
+| ISC-62 | pwa | app passes installability audit | installable=true | Interceptor Lighthouse-style audit |
+| ISC-63 | pwa | served HTTPS via tailscale serve on ts.net | https reachable, SW registers | curl -i https ts.net host |
+| ISC-64 | anti | no offline capture or mobile write queue | no such code path | Grep for offline-write, queue, sync-on-reconnect |
+| ISC-105 | build | sync/backfill typed to IngestProvider | no concrete client import | Grep, Read |
+| ISC-106 | anti | no provider-concrete import in ingest modules | zero matches | Grep |
+| ISC-107 | build | BasiqProvider passes provider suite | suite green | bun test |
+| ISC-108 | api | token fetched, cached, refreshed on 401 | refresh fires on 401 | unit test stubbed 401 |
+| ISC-109 | security | app key never plaintext | zero matches | Grep across repo, db, logs |
+| ISC-110 | data | Basiq userId persisted per tenant | row present | SELECT |
+| ISC-111 | security | consent links bank, no credential to BudgetBuddy | no credential field | Grep + flow review |
+| ISC-112 | data | connection state persisted | columns non-null | SELECT |
+| ISC-113 | api | job polled to success before read | read gated on job done | unit test job poll |
+| ISC-114 | anti | expired consent prompts re-consent, not silent success | prompt raised | unit test expiry |
+| ISC-115 | api | backfill drains links.next | cursor exhausted | Bash run, count rows |
+| ISC-116 | api | incremental filters postDate > bookmark | filter equals bookmark | Grep request, unit test |
+| ISC-117 | logic | Basiq tx maps to Tx fields | round-trip correct | unit test mapper |
+| ISC-118 | anti | debit stays negative cents | sign preserved | unit test debit row |
+| ISC-119 | anti | no webhook/listener for Basiq | zero matches | Grep webhook, listen, push |
+| ISC-120 | logic | categoryId assigned from own set | non-null internal id | unit test categoriser |
+| ISC-121 | logic | enrich default, user rule overrides | rule wins | unit test override |
+| ISC-122 | data | rule pattern to category, effective-dated, scoped | rule applies by date | SELECT, unit test |
+| ISC-123 | logic | uncategorised resolves to Inbox | envelope_id is Inbox | SELECT on uncategorised |
+| ISC-124 | anti | engine + mapping unchanged | only categoryId coupling | Grep diff, unit test |
+| ISC-125 | anti | re-run keeps overrides/rules | overlay untouched | unit test re-run |
+| ISC-126 | build | PocketSmith gone from runtime after parity | no PS in runtime path | Grep, parity report |
+| ISC-127 | data | historical PS categories mapped to internal set | balances preserved | SELECT pre/post balances |
+| ISC-128 | anti | onboarding needs no PS dev key | no dev-key prompt | flow review, Grep |
+
+## Features
+
+| name | description | satisfies | depends_on | parallelizable |
+|------|-------------|-----------|------------|----------------|
+| platform-seams | DEPLOY_MODE composition root, AuthProvider + SecretStore + Store interfaces, local impls, cloud impl stubs+tests | ISC-47..59 | none | no |
+| ingest-spine | OpenAPI-codegen client, X-Developer-Key auth via SecretStore, backfill, daily sync, alert | ISC-1..9 | platform-seams | no |
+| store-schema | SQLite schema, multi-tenant user_id, event log, overrides, snapshot job | ISC-10..17, 47, 48 | platform-seams | partly |
+| envelope-engine | CRUD, parent/child hierarchy + rollup, mapping, Inbox, holding model, carryover, transfers, pending | ISC-18..28, 71, 73, 74 | store-schema | no |
+| budget-engine | auto-rolling recurring template, continuous zero-based alert, move-money, Edit Budget wizard, budget history | ISC-29..32, 65..69, 72, 76, 77 | envelope-engine | no |
+| ui-pwa | Vite React shadcn SPA, grid, detail, time-travel, reconcile, manifest+SW, Tailscale HTTPS, auth | ISC-33..39, 60..64 | envelope-engine | partly |
+| pulse-widget | daily widget JSON plus three tiles with as-of timestamp | ISC-40..44 | envelope-engine, ui-pwa | yes |
+| security-baseline | no-cloud-egress guarantee (local), encrypted backup, key-never-plaintext | ISC-45, 46, 56 | store-schema | yes |
+| ingest-provider-port | IngestProvider interface; sync/backfill provider-typed; PocketSmith client retired from runtime | ISC-105, 106, 126 | ingest-spine | no |
+| basiq-provider | Basiq token/user/consent/job-poll/fetch/mapper | ISC-107..119 | ingest-provider-port, platform-seams | no |
+| categorisation | Categoriser, enrich default, user rules, internal category set, Inbox fallback, non-destructive re-run | ISC-120..125 | basiq-provider, store-schema | partly |
+| feed-migration | one-time historical category map, parity verify, decommission PocketSmith, app-level Basiq key in SecretStore | ISC-109, 127, 128 | categorisation | no |
+
+Weekend mapping. Weekend 1 ships platform-seams plus ingest-spine plus the schema half of store-schema. Weekend 2 ships envelope-engine plus the snapshot job. Weekend 3 ships ui-pwa. Weekend 4 ships allocation-wizard plus pulse-widget. security-baseline is woven across all four. The cloud adapters (magic-link auth, KMS secret store, Postgres store) are written and unit-tested as part of platform-seams but are not the local runtime default.
+
+## Decisions
+
+- 2026-06-18 05:07: Persisted the project to `~/Documents/workspace/projects/envelope-os/`, alongside accessbuddy, life-os-console, lifesaveroncall, and inkwell. Nick corrected the home to `workspace/projects/`.
+- 2026-06-18 05:07: Authored this ISA directly rather than via the ISA Scaffold workflow. A full architect review and requirements clarification already existed in `docs/`, so direct authoring is more faithful than a generic scaffold.
+- 2026-06-18 05:07: LOAD-1 locked. Period is the calendar month. Every-dollar-allocated is a hard rule, enforced at wizard completion against expected income (see Changelog FLAG-2), not on every intermediate save.
+- 2026-06-18 05:07: LOAD-2 locked. Credit-card model A, spend-date decrement, with a visible Credit Card Holding envelope. The holding-versus-NAB drift is the system's most valuable invariant and the named euphoric surprise.
+- 2026-06-18 05:07: LOAD-3 locked with a contradiction fixed (Changelog FLAG-1). Default rollover rolls positive and zeroes negative by booking the deficit into the next period's available-to-allocate. Standing per-envelope debt applies only under the roll_all override.
+- 2026-06-18 05:07: LOAD-4 locked. Mapping is many categories to one envelope. Splits are out of MVP, in for v1.0.
+- 2026-06-18 05:07: LOAD-5 locked. Unmapped categories land in an Inbox envelope at import.
+- 2026-06-18 05:07: LOAD-6 locked. Primary UI is the envelope grid (Dave Ramsey). Allocation ritual is a beginning-of-month wizard with apply-last-month as the default.
+- 2026-06-18 05:07: LOAD-7 locked. Three Pulse tiles. Unallocated dollars, top three overspends by percent, and Holding-versus-NAB drift.
+- 2026-06-18 05:07: S1 locked. Storage is SQLite via bun:sqlite, not Postgres, for local. JSON1 and window functions cover the time-travel queries.
+- 2026-06-26 00:00: refined: DEPLOYMENT DUALITY decided per Nick's direction (2026-06-26). Nick chose local-first now but required the build be "ready to put on the cloud if I decide". Resolution: one codebase, two targets, `DEPLOY_MODE` switch at the composition root only. This supersedes the original "single user, local-only" framing in the requirements doc assumptions 1 and 7 without contradicting local-first — local remains the default and the only mode that runs financial data through cloud infrastructure is the deliberately-deferred cloud mode.
+- 2026-06-26 00:00: refined: MULTI-TENANCY promoted from the dormant `owner` column (NEW-3 insurance) to a first-class `users` table with `user_id` on every tenant table from migration one. Cost is near-zero now; the alternative (retrofitting multi-principal into an event-sourced single-principal ledger) was explicitly called painful in the architect review. Local seeds one user and runs single-tenant over the multi-tenant schema.
+- 2026-06-26 00:00: refined: PER-USER POCKETSMITH KEY. ISC-3 changed from "key in the PAI secrets store" to "key resolved through the SecretStore for the authenticated user". This is what makes "give someone access with just their email and their dev key" true. The key becomes per-tenant secret material, not a single global env value.
+- 2026-06-26 00:00: refined: AUTH ABSTRACTION. Local is Tailscale-trust plus PIN (architect §9.4). Cloud is passwordless email magic-link per Nick's explicit "log in should be by email link only". Both sit behind `AuthProvider`; the magic-link impl is built and unit-tested now so the cloud switch needs no new auth work later. Firebase Auth email-link was considered for the cloud impl (GCP-native, free) and remains the likely concrete backend, but the interface keeps that choice swappable.
+- 2026-06-26 00:00: refined: PWA PROMOTED INTO SCOPE. The original Out of Scope said "no PWA". Nick now requires "optimised for both web app and PWA". PWA (manifest, service worker, installable, offline shell) is in MVP. What stays out is offline transaction *capture* / a mobile write queue (ISC-64 anti). Local HTTPS for service-worker registration is solved by `tailscale serve` on a `*.ts.net` hostname rather than self-signed certs.
+- 2026-06-26 00:00: refined: PORTABLE STORE LAYER. SQLite stays the local default, but business modules depend on a `Store` interface, not `bun:sqlite`. A Postgres adapter is written and passes the same unit-test suite, so cloud is a wiring change. Business SQL avoids SQLite-only syntax (ISC-59 anti).
+- 2026-06-26 00:00: CLOUD HOSTING NOT DEPLOYED IN MVP. The cloud adapters are built and tested but the public GCP service, the `nicholaswood.com.au/budget` route, and second-user onboarding are deferred. Nick framed sharing as conditional ("if I wanted to"); building the seams now is cheap insurance, deploying the public service now is premium tax on an unconfirmed need. Recommended cloud target when it is built: Cloud Run (scales to zero) + Firebase Auth email-link + a cheap managed Postgres + GCP KMS for keys, routed at `/budget` from the existing site.
+- 2026-06-26 00:00: Tier escalated to E4 (deep) via conversation-context override. The classifier returned NATIVE then ALGORITHM/E3 across the thread, but the work is a cross-cutting re-architecture (multi-tenancy, auth/secret/store abstraction, deployment duality, PWA) layered on a greenfield build — E4 by the v6.3.0 tier-intent table.
+- 2026-06-26 00:00: PROVISIONAL FLAGS carried, not yet independently re-confirmed by Nick. The two architect calls below (FLAG-1 rollover deficit-booking, FLAG-2 every-dollar at wizard completion) are encoded as the working default. Nick's "build it with the updated spec" is read as confirming the working defaults; they remain cheaply reversible and are surfaced for explicit confirm.
+- 2026-06-26 00:00: show-your-math (delegation floor): the ingest-spine implementation is delegated to one engineering agent against this ISA; the platform-seams skeleton and schema are authored by the primary because they are the architecturally load-bearing surface where the cloud-ready contract must be exact. Council/RedTeam delegation was not selected; the design space here is already resolved by the existing architect review, so adversarial idea-generation would add noise rather than signal.
+- 2026-06-29: PROVIDER PIVOT to direct Australian bank feeds via Basiq (CDR), off PocketSmith. Nick's drivers: drop the dependency, kill the PocketSmith cost, and stop building on a bridge if BudgetBuddy may serve other people later. Decisive fact: BudgetBuddy is already multi-tenant (Store scoped by userId, ISC-47/48; cloud magic-link onboarding), so PocketSmith was the only per-user external blocker to a product. Resolution: abstract the provider behind an `IngestProvider` port, implement `BasiqProvider`, and have BudgetBuddy own categorisation (Basiq enrich + user rules) since a product cannot inherit each user's pre-categorised tree. Build single-user now (Nick only), product-shaped; defer multi-user CDR-representative onboarding. Full design in docs/BASIQ_MIGRATION_SPEC.md. Supersedes ISC-1, ISC-2, ISC-3, ISC-84 (category source), ISC-86; adds ISC-105..ISC-128.
+- 2026-06-29: SECRET MODEL INVERTED. PocketSmith required a per-user developer key in the SecretStore; Basiq uses one app-level API key plus per-user in-app CDR consent. ISC-3 superseded; ISC-54/55 re-pointed at the app-level Basiq key; ISC-56 carries over to it. Per-user material (Basiq userId, connectionId, consent expiry) lives in the Store, not the SecretStore. This removes user onboarding friction entirely (ISC-128) and is why Basiq enables the product where PocketSmith could not.
+- 2026-06-29: SCOPE. This task delivered the ISA extension plus the design spec only (Nick approved "scaffold the ISA + spec the provider"). No production code written; BUILD of the provider and Categoriser is the next gated step. Basiq API field names and sign conventions are marked confirm-in-sandbox in the spec and MUST be verified against the live Basiq sandbox before the matching ISCs (ISC-108, 111, 113, 115, 116, 117, 118) pass.
+
+## Changelog
+
+- conjectured: LOAD-3 as originally written said default rollover rolls positive, zeroes negative, and carries the negative as visible debt with no auto-true-up.
+  refuted_by: Those are two different rules. Zeroing a negative and carrying it as debt cannot both hold. Under zero-based budgeting a forgiven overspend is not free, so the deficit must be booked somewhere or the ledger leaks and the holding tripwire loses meaning.
+  learned: The YNAB resolution is correct here. Default zeroes the envelope by booking the deficit into next period available-to-allocate, surfaced as a visible line in the wizard. Standing per-envelope debt is the roll_all override only.
+  criterion_now: ISC-25, ISC-26, ISC-28.
+
+- conjectured: LOAD-1 every-dollar rule should hard-block save whenever income does not equal the sum of allocations.
+  refuted_by: With expected-versus-actual income (NEW-2) a hard per-save block fights reality. Mid-month edits, late actuals, and partial wizard sessions would all be blocked, and viewing must never be blocked.
+  learned: Enforce the every-dollar rule at wizard completion against expected income, not on every intermediate save. Divergence of actual from expected is shown as a dashboard delta and prompts re-allocation, never blocks viewing.
+  criterion_now: ISC-30, ISC-31, ISC-32.
+
+- conjectured: The project was scoped single-user and local-only, with a dormant unused `owner` column as the sole concession to a possible future multi-principal need.
+  refuted_by: Nick now wants the option to onboard another person with only their email and their PocketSmith dev key. A dormant column does not deliver that; tenant scoping has to be threaded through every read and write, auth has to resolve a user, and each user's dev key has to be isolated secret material. Retrofitting that into an event-sourced single-principal ledger after the fact is the exact painful migration the architect review warned against.
+  learned: Build multi-tenant from migration one and run single-tenant locally. Promote `owner` to a real `users` table with `user_id` on every tenant table, scope every store query by the authenticated user, put auth and secrets behind interfaces, and make deployment a one-switch config. Local-first is preserved as the default; cloud becomes additive. This is the cheapest path to "ready to put on the cloud if I decide".
+  criterion_now: ISC-47, ISC-48, ISC-49, ISC-50, ISC-51, ISC-52, ISC-53, ISC-54, ISC-55, ISC-56, ISC-57, ISC-58, ISC-59.
+
+- conjectured: The MVP UI explicitly excluded a PWA; mobile was Tailscale-reachable desktop web only.
+  refuted_by: Nick requires the surface be optimised for both web app and installed PWA, on his phone. A PWA needs HTTPS for service-worker registration, which a localhost or self-signed local deploy does not cleanly provide.
+  learned: Promote the PWA into MVP scope (manifest, service worker, installable, offline shell). Solve local HTTPS with tailscale serve on a *.ts.net hostname, which issues a real cert. Keep offline transaction capture and any mobile write queue out of scope so the PWA stays read-and-allocate, not a sync-conflict surface.
+  criterion_now: ISC-60, ISC-61, ISC-62, ISC-63, ISC-64.
+
+- conjectured: The every-dollar rule should be enforced at wizard completion (block save until allocations balance expected income), and actual-vs-expected income variance should show as a dashboard delta line.
+  refuted_by: Nick (2026-06-26): zero-based applies to the budget (the plan), not to actual cash flow. A non-zero-based budget should raise an alert, never block. And income variance should not live on a dashboard line; income is itself an envelope per source, and actual differing from budgeted is a surplus/deficit on that income envelope.
+  learned: Two separable rules. (1) The zero-based check compares total spending allocations to total budgeted income and raises an alert on imbalance; saving and viewing are never blocked. (2) Income envelopes are first-class, one per source, each holding a budgeted amount and an actual balance; the variance is the surplus/deficit. This keeps the envelope metaphor whole on the income side and removes the only hard wall the design still had.
+  criterion_now: ISC-30, ISC-31, ISC-32, ISC-65.
+
+- conjectured: Mid-month allocation editing is just editing an envelope's budgeted number in place.
+  refuted_by: Nick (2026-06-26): a reallocation must say where the money comes from and whether the change is one-off or ongoing. Extra income parked in Savings could be a one-time move of this month's surplus, or a permanent decision to expect more income and save more every month. Editing a single number cannot express either the source or the recurrence.
+  learned: A reallocation is a move with three parts: destination, named source, and scope (this-month-only vs ongoing). The named source keeps the plan zero-based by construction. There is a recurring budget template behind the months; an ongoing change edits the template (so apply-last-month carries it forward), a this-month change is a period override that leaves the template untouched. Skipping the source is allowed but raises the zero-based alert, consistent with alert-not-block.
+  criterion_now: ISC-66, ISC-67, ISC-68, ISC-69.
+
+- conjectured: FLAG-1 default rollover zeroes an overspent envelope and books the deficit into the next period's available-to-allocate pool; carrying a per-envelope negative is the roll_all exception.
+  refuted_by: Nick (2026-06-26): any envelope in surplus or deficit should either be balanced by a move (either direction) or carry over, and the carryover must be shown explicitly per envelope. Silently zeroing an envelope and docking a pooled number hides the deficit; Nick wants it visible on the envelope it belongs to.
+  learned: Carryover in both directions is the default, shown as an explicit starting-carryover figure on every envelope row. Surplus and deficit both roll unless the user moves money to balance them. drain_to_zero (use-it-or-lose-it) and annual_reset remain per-envelope overrides. Each envelope row shows four figures: starting carryover, this-period allocation, total available (carryover + allocation), and left (total - spent). The deficit is still conserved (it is the negative carryover, not a leak), so ISC-28 holds. The Edit Budget wizard, not an inline baseline edit, is where the recurring template is changed.
+  criterion_now: ISC-25, ISC-26, ISC-70, ISC-71, ISC-72.
+
+- conjectured: Envelopes are a flat list organised under text "group" labels (Bills, Lifestyle, Annual).
+  refuted_by: Nick (2026-06-26): envelopes should be able to be parents of others, the totals should roll up, and a parent should also be summable with any allocation made directly to it. A text group label is just a header; it cannot hold money or roll up.
+  learned: Envelopes form a tree via a self-referential parent_id. A parent is a first-class spendable, allocatable envelope. All four figures (carryover, allocation, total, left) roll up as sum-of-children plus any direct parent allocation/activity. The grid renders an expandable/collapsible hierarchy with rolled-up parent rows. The flat group string is subsumed by the tree (top-level envelopes act as groups).
+  criterion_now: ISC-18, ISC-73, ISC-74, ISC-75.
+
+- conjectured: LOAD-6 set the allocation ritual as a beginning-of-month wizard with apply-last-month as the default action.
+  refuted_by: Nick (2026-06-26): the budget should just roll over to the next month; that is the entire purpose of a budget. No plan-a-month function is wanted. And budget changes should be viewable as a history.
+  learned: The recurring budget template auto-applies to each new month with no manual step (ISC-29 refined from apply-last-month wizard to auto-roll; ISC-76 anti guards it). The zero-based check runs continuously and alerts rather than gating a wizard. Budget changes happen only through the Edit Budget wizard or move-money (ongoing scope), and every change — including the automatic monthly rolls — is recorded in a viewable budget history (ISC-77). This supersedes the LOAD-6 allocation-ritual decision.
+  criterion_now: ISC-29, ISC-76, ISC-77.
+
+- conjectured: The parallel build's UI placeholder seams (income shown as demo data, Reconcile fully placeholder) were an acceptable interim, and the engine-level ISC verification (71/77) meant the app was substantially done.
+  refuted_by: Nick (2026-06-26), using it live: the budget read "balanced" with three income categories and no envelopes, because the income section was hardcoded placeholder never wired to the API while the real backend had zero envelopes. Engine unit tests passed but the user-facing surfaces were not real. The placeholders were actively misleading.
+  learned: Remove all placeholder/demo data; a screen with no data shows an explicit empty state, never invented numbers. Seed the real budget from PocketSmith: the category tree (105 categories) becomes the envelope tree with parent/child preserved; income vs expense is read from the budget endpoint's income/expense block; budgeted amounts come from the budget forecast; starting carryover comes from the rollover baseline doc (balances + start dates Nick captured); the 6038 loaded transactions map to envelopes by category. Add a real create-envelope flow with an income/expense type toggle. The empty/zero-based status must distinguish "not set up" from "balanced". Verification must drive the real browser, not just engine tests.
+  criterion_now: ISC-83, ISC-84, ISC-85, ISC-86, ISC-87, ISC-88, ISC-31, ISC-65.
+
+- conjectured: There are two envelope kinds (income, expense), income variance is actual-minus-budgeted, and budgets are monthly; importing PocketSmith forecasts as monthly allocations is sufficient.
+  refuted_by: Nick (2026-06-27) plus the reconciliation session fbf081be. (a) There are THREE types: income, expense, and saving (saving is an expense envelope with a different label) — this is why Emergency Fund imported as an absurd $20k/month budget; it is a saving envelope holding a balance, not a monthly allocation. (b) Income works as capital: each income envelope has a target and a specified portion that flows to a shared expense-capital pool; expense and saving envelopes draw from that pool, and the income surplus/deficit is capital-provided minus total allocations (over/under BUDGETING, not actual-vs-target). (c) Expense budgets are weekly, monthly, or annual, not all monthly. (d) The reconciliation proved PocketSmith does not roll child spend up to a parent budget (Recreation shows +$2,660 left while ~$7,350 over across its unbudgeted children) — envelope-os must roll child spend up to the nearest budgeted ancestor. PocketSmith's post-2026-02-28 reorg also makes its displayed rollover balances approximate, so imported carryover is a baseline, not a ledger truth.
+  learned: Model envelopes with an explicit type (income/expense/saving). Income = target + capital-to-expense; expense/saving draw from pooled capital; surplus/deficit = capital minus allocations. Budgets carry a period (weekly/monthly/annual) normalised to monthly. Roll child spend up to the budgeted ancestor. Re-import savings-group categories as saving envelopes (balance, not monthly budget), and treat annual/weekly PocketSmith budgets by their real period.
+  criterion_now: ISC-91, ISC-92, ISC-93, ISC-94, ISC-95.
+
+- conjectured: Income works as a two-step capital model — each income envelope has a target and a specified portion routed into a shared expense-capital pool, and expense/saving/envelope budgets draw from that pool.
+  refuted_by: Nick (2026-06-27): the capital-allocation step is unnecessary complexity. His spreadsheet's Full Budget sheet simply balances total income against total expenses; there is no sub-pool. Scrap capitalToExpense.
+  learned: The income budget itself is the balancing figure. Zero-base = sum(income budgets) minus sum(expense + saving + envelope budgets); residual is the surplus/deficit. Remove the capitalToExpenseCents field from the model, API, seeder, and UI. The income "received minus budget" variance view is retained.
+  criterion_now: ISC-92, ISC-93.
+
+- conjectured: BudgetBuddy's bank feeds and categorisation come from PocketSmith; each tenant supplies their own PocketSmith developer key (ISC-3), the client is generated from the pinned PocketSmith OpenAPI spec (ISC-1, ISC-2), and categories source from the PocketSmith category tree (ISC-84, ISC-86).
+  refuted_by: Nick (2026-06-29): PocketSmith is a paid dependency and, critically, a per-user external account. A product cannot require every user to hold their own PocketSmith subscription and key. BudgetBuddy is already multi-tenant (Store scoped by userId, ISC-47/48), so PocketSmith was the sole structural blocker to serving other people; it is "essentially just a bridge".
+  learned: Replace PocketSmith with direct Australian bank feeds via Basiq (CDR) behind a new `IngestProvider` port, so the provider is swappable and the envelope/budget/store/UI layers stay untouched (Tx.categoryId is the only coupling point). The app holds one Basiq API key; users link banks via the in-app CDR Consent UI with no key to obtain and no credential reaching BudgetBuddy. BudgetBuddy now owns categorisation (Basiq enrich plus user-editable effective-dated rules) because inherited per-user categorisation is unavailable; the existing category-to-envelope mapping and Inbox fallback are preserved by synthesising a stable internal categoryId. Build single-user now, product-shaped; defer multi-user CDR-representative onboarding.
+  criterion_now: ISC-105, ISC-106, ISC-107, ISC-108, ISC-109, ISC-110, ISC-111, ISC-112, ISC-113, ISC-114, ISC-115, ISC-116, ISC-117, ISC-118, ISC-119, ISC-120, ISC-121, ISC-122, ISC-123, ISC-124, ISC-125, ISC-126, ISC-127, ISC-128.
+
+## Verification
+
+_Pending EXECUTE. Evidence per ISC captured here as each criterion transitions to [x]._

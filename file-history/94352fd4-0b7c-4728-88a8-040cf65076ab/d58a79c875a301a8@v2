@@ -1,0 +1,91 @@
+export const meta = {
+  name: 'penny-make-real',
+  description: 'Remove placeholders, import Nick real PocketSmith data (envelopes/income/budgets/carryover), wire income + add-budget + transactions list, verify live',
+  phases: [
+    { title: 'Import + backend', detail: 'PocketSmith importer: category tree -> envelope tree, income/expense, budgets, rollover carryover, mappings; income + transactions + create-envelope API' },
+    { title: 'Make UI real', detail: 'remove all placeholders, wire income + reconcile, add-budget flow with income/expense toggle, transactions list + period filter, empty-state' },
+    { title: 'Verify live', detail: 'typecheck, tests, run importer, restart service, verify real data via API + DB' },
+  ],
+}
+
+const REPO = '/home/nicholas-wood/Documents/workspace/projects/envelope-os'
+const ISA = REPO + '/ISA.md'
+const RULES = `\nGLOBAL: bun + TypeScript only (no npm/npx/Python). Australian English, no em dashes. Money is integer cents. No business module imports bun:sqlite (only src/store/sqlite.ts) or reads DEPLOY_MODE (only composition root). PocketSmith key is resolved per-user via the SecretStore for Penny user "local"; never hardcode or log it. Read ${ISA} for ISC text. Service runs as systemd user unit "penny" against ~/.penny/penny.db; the local tenant user_id is "local".`
+
+const DATA = `POCKETSMITH DATA CONTRACT (verified live):
+- PocketSmith user id 418333. Key: requirePocketSmithKey(secrets,"local").
+- GET /v2/users/418333/categories returns a tree (each node: id, title, parent_id, children[], rollover_type). 105 categories incl children. Top-level: Income, Savings, Expenses, Budget Envelopes, Unbudgeted, Working, Old, Work Expenses.
+- GET /v2/users/418333/budget returns one row per category with an "income" and/or "expense" block. Each block has periods[]; the current period (current:true) has forecast_amount (the budgeted amount) and actual_amount, in dollars. A row carrying an "income" block (or any category under the top-level "Income") is an INCOME envelope; otherwise EXPENSE. Budgeted = current-period forecast_amount * 100 (cents).
+- docs/pocketsmith-rollover-baseline.md has a table: Category | Parent | Rollover start | Continues | Rollover balance. Balance like "$20,000.00", "-$1,580.91", or "_no current budget_". This is each category's CURRENT carried rollover balance (negative = deficit). Match each row to a PocketSmith category by title (disambiguate with the Parent column where titles repeat, e.g. Water under Bills). The balance becomes that envelope's STARTING CARRYOVER (cents) for the current period; record the rollover start date too. "_no current budget_" -> carryover 0.
+- 6038 transactions are already loaded under user "local" (txn_date 2023-07-01..today); each has a category_id.`
+
+// ---------------- Phase 1: Import + backend ----------------
+phase('Import + backend')
+const P1 = `You are the data + backend engineer making Penny real. Work in ${REPO}.
+${DATA}
+
+Build a real PocketSmith setup importer and wire the missing backend:
+1. src/ingest/import-setup.ts + scripts/import-setup.ts (idempotent, re-runnable):
+   a. Pull the category tree; create one Penny envelope per category, preserving parent/child via parent_id (a parent envelope is a real spendable envelope). Stable ids (e.g. derive from the PocketSmith category id).
+   b. Classify income vs expense per the DATA contract; income categories become income envelopes (first-class, with budgeted + actual), expense categories become spending envelopes.
+   c. Pull /budget; set each envelope's budgeted amount (current-period forecast_amount, cents) into the budget template; income envelopes get budgeted income + actual.
+   d. Parse docs/pocketsmith-rollover-baseline.md; match by title (+parent); set each envelope's starting carryover (cents) and store the rollover start date. Spot targets to self-check: Emergency Fund +2000000c, Shopping -158091c, Surplus Income -1393010c.
+   e. Create a category->envelope mapping per category id so the loaded transactions resolve and decrement the right envelope (ISC-86).
+   f. Print a summary: envelopes created, income vs expense counts, budgets set, carryover matched/unmatched (list any doc rows not matched to a category), mappings created.
+2. Extend src/server/contract.ts and the handlers:
+   - The envelopes/grid response includes the real income envelopes (budgeted/actual/variance) AND an "isSetUp" boolean (false when the tenant has zero envelopes) so the UI can show an empty state vs a real balance (ISC-88).
+   - zeroBasedCheck/grid uses real budgeted income (sum of income envelopes' budgeted) so balanced/alert is real (ISC-30, ISC-88).
+   - GET /api/transactions: tenant-scoped, filters from/to (date range), envelopeId, accountId, newest-first (ISC-78..81). Add Store.listTransactions date-range support (sqlite + postgres, portable SQL).
+   - POST /api/envelopes: create an envelope with name, type (income|expense), parentId (nullable), rolloverRule, budgetedCents (ISC-87). Add the matching store + service methods.
+   - POST /api/move: move money between ANY two envelopes in either direction (free rebalancing, e.g. +200 and +300 to 250/250 — ISC-89). Body {fromEnvelopeId,toEnvelopeId,amountCents,scope:"this_month"|"ongoing"}. Debit source, credit destination, conserved. Record a TRACEABLE movement (a money_movements table, or events+budget_history) capturing fromEnvelopeId, toEnvelopeId, amountCents, ts, actor, correlationId (ISC-90). Expose it in GET /api/history (or GET /api/movements) so every move is auditable.
+3. Remove the orphan users row "local-principal" (leftover from a failed run) if present; keep "local".
+4. Run scripts/import-setup.ts against the live data, then bun run typecheck. Report the importer summary and typecheck result.
+${RULES}`
+const p1 = await agent(P1, { label: 'import-backend', phase: 'Import + backend', agentType: 'Engineer', effort: 'high' })
+
+// ---------------- Phase 2: Make UI real ----------------
+phase('Make UI real')
+const P2 = `You make the Penny UI real. Work ONLY in web/*. The backend now exposes real income in the grid response, an isSetUp flag, GET /api/transactions (from/to/envelope/account), and POST /api/envelopes (name, type income|expense, parentId, rolloverRule, budgetedCents). Read src/server/contract.ts for exact shapes. Prior backend summary:
+${p1}
+
+Do all of:
+1. REMOVE ALL PLACEHOLDER DATA (ISC-83). Delete web/src/lib/placeholder.ts and every import of it. No screen may render invented numbers. When data is absent, show an explicit empty state ("No budget set up yet", "No transactions", etc). The budget status must read "No budget set up yet" when isSetUp is false, and a real balanced/alert (from real budgeted income) otherwise (ISC-88) — never a misleading "balanced" on an empty budget.
+2. Wire IncomeSection to the REAL income envelopes from the grid response (not a stub). Show budgeted/actual/variance per income source.
+3. Wire the Reconcile page and any other still-placeholder screen to their real endpoints.
+4. On the Budget page add an "Add budget" control that creates an envelope: name, a TYPE toggle (Income vs Expense), parent select, rollover rule, budgeted amount -> POST /api/envelopes, then refresh (ISC-87). This directly answers "how do I add a budget and specify income or expense".
+5. Build a Transactions list page: all transactions newest-first (date, payee, amount, account, mapped envelope), with a date-period (from/to) filter plus envelope and account filters, calling GET /api/transactions (ISC-78, 79, 82). Add it to the nav + router. Also let the budget period selector drive viewing a chosen period's transactions.
+6. Wire the Move Money modal to POST /api/move: pick ANY source and ANY destination envelope, an amount, and scope (this month | every month). Free rebalancing in either direction (ISC-89). After a move, refresh the grid and show the movement in the history view so every move is traceable (ISC-90).
+7. vite build to web/dist so the running server serves it.
+Report: files changed, confirmation placeholder.ts is gone, and which ISCs (78,79,82,83,87,88,89,90, income 31/65) are now real in the UI.
+${RULES}\nStay within web/*. Do not edit src/* or package.json.`
+const p2 = await agent(P2, { label: 'ui-make-real', phase: 'Make UI real', agentType: 'Engineer', effort: 'high' })
+
+// ---------------- Phase 3: Verify live ----------------
+phase('Verify live')
+const VERIFY_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    typecheck: { type: 'string', enum: ['pass', 'fail'] },
+    tests: { type: 'string' },
+    importerSummary: { type: 'string' },
+    dbCheck: { type: 'string' },
+    placeholderGrep: { type: 'string' },
+    serviceRestart: { type: 'string' },
+    apiProbes: { type: 'string' },
+    realNow: { type: 'array', items: { type: 'string' } },
+    gaps: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['typecheck', 'tests', 'importerSummary', 'dbCheck', 'placeholderGrep', 'serviceRestart', 'apiProbes', 'realNow', 'gaps'],
+}
+const P3 = `You verify Penny is real now. Work in ${REPO}.
+1. bun run typecheck (fix any wiring errors until clean) and bun test (fix breaks).
+2. Run scripts/import-setup.ts against the live ~/.penny/penny.db; capture its summary.
+3. DB check (bun + bun:sqlite, readonly): for user "local" count envelopes, income_envelopes (or income-typed envelopes), mappings, budget rows; verify spot carryover values match the rollover doc (Emergency Fund +2000000c, Shopping -158091c, Surplus Income -1393010c); confirm a sample of the 6038 transactions now resolve to a non-null envelope.
+4. Grep web/src for any remaining placeholder import/usage — must be zero (ISC-83).
+5. Restart the service: systemctl --user restart penny; wait; curl -s http://127.0.0.1:8787/api/health.
+6. API probes (sign in to get a cookie, PIN 640588): POST /api/auth/signin {pin:"640588"} then with the cookie GET /api/envelopes (confirm real envelope names like Groceries/Fuel/Emergency Fund with non-zero carryover and real income envelopes Salary/Surplus Income, and isSetUp true), GET /api/transactions?from=2024-01-01&to=2024-12-31 (returns scoped rows), POST /api/envelopes a test income envelope then delete/ignore; POST /api/move between two real envelopes and confirm both balances change by the amount and a traceable history/movement entry appears (ISC-89, ISC-90). Capture status codes + a couple of real values.
+Return the structured report. Be honest; do not claim a probe you did not run.
+${RULES}`
+const report = await agent(P3, { label: 'verify-live', phase: 'Verify live', agentType: 'Engineer', effort: 'high', schema: VERIFY_SCHEMA })
+
+return { backend: p1 ? 'done' : 'failed', ui: p2 ? 'done' : 'failed', report }

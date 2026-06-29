@@ -1,0 +1,100 @@
+/**
+ * Transfer correctness (ISC-22, ISC-37/43, ISC-99 trust pass).
+ *
+ * is_transfer transactions must never decrement an envelope, never move the
+ * Credit Card Holding tripwire, and never inflate live income. This guards the
+ * mortgage transfer (a $3,185/month line PocketSmith flags as a transfer) and the
+ * NAB card-payment transfer that feeds the Holding envelope: neither may leave a
+ * phantom surplus nor false-trigger the holding-vs-NAB tripwire.
+ */
+
+import { describe, test, expect } from "bun:test";
+import { computeActivity } from "../src/envelope/spend.ts";
+import { EnvelopeService } from "../src/envelope/service.ts";
+import { MemoryStore } from "./penny-memory-store.ts";
+import { CONFIG, USER, tx } from "./penny-fixtures.ts";
+import type { CategoryMapping } from "../src/domain/types.ts";
+
+const JUN = { year: 2026, month: 6 };
+const JUL = { year: 2026, month: 7 };
+
+function map(categoryId: string, envelopeId: string): CategoryMapping {
+  return { id: `m-${categoryId}`, userId: USER, categoryId, envelopeId, effectiveFrom: "1970-01-01", effectiveTo: null };
+}
+
+describe("transfers never decrement an envelope (ISC-22)", () => {
+  test("a mortgage transfer leaves the mortgage envelope untouched", () => {
+    const mappings = [map("cat-mortgage", "mortgage"), map("cat-groceries", "groceries")];
+    const txs = [
+      // The mortgage line: PocketSmith flags the payment as a transfer.
+      tx({ id: "mort", date: "2026-06-01", amountCents: -318500, categoryId: "cat-mortgage", isTransfer: true }),
+      // A real grocery spend for contrast.
+      tx({ id: "groc", date: "2026-06-03", amountCents: -5000, categoryId: "cat-groceries" }),
+    ];
+    const activity = computeActivity(txs, mappings, CONFIG, { period: JUN });
+    // The transfer never reaches the mortgage envelope: no decrement, no phantom row.
+    expect(activity.byEnvelope.get("mortgage")).toBeUndefined();
+    expect(activity.byEnvelope.get("groceries")).toBe(-5000);
+  });
+});
+
+describe("the holding tripwire ignores card-payment transfers (ISC-37, ISC-43)", () => {
+  test("a NAB card-payment transfer does not zero or move the holding figure", () => {
+    const mappings: CategoryMapping[] = [];
+    const txs = [
+      // Real card spend on the NAB card account decrements holding.
+      tx({ id: "spend", date: "2026-06-04", amountCents: -7000, accountId: "nab-card" }),
+      // Paying the card off is a transfer; it must be excluded so the tripwire
+      // reflects only real spend and does not benignly drift back toward zero.
+      tx({ id: "pay", date: "2026-06-20", amountCents: 7000, accountId: "nab-card", isTransfer: true }),
+    ];
+    const activity = computeActivity(txs, mappings, CONFIG, { period: JUN });
+    expect(activity.holdingCents).toBe(-7000);
+  });
+});
+
+describe("live income excludes transfers and updates per period (ISC-99)", () => {
+  async function seedIncome() {
+    const store = new MemoryStore();
+    // A stale seed snapshot the live path must override.
+    await store.upsertIncomeEnvelope(USER, {
+      id: "inc-income",
+      userId: USER,
+      name: "Income",
+      source: "Income",
+      budgetedCents: 0,
+      actualCents: 999999,
+      targetCents: 500000,
+    });
+    // The income-category -> income-envelope mapping the seeder persists.
+    await store.upsertMapping(USER, map("cat-salary", "inc-income"));
+    const svc = new EnvelopeService(store, CONFIG);
+    return { store, svc };
+  }
+
+  test("a transfer in an income category never inflates the income actual", async () => {
+    const { store, svc } = await seedIncome();
+    await store.upsertTransactions(USER, [
+      tx({ id: "salary", date: "2026-06-05", amountCents: 300000, categoryId: "cat-salary", accountId: "bank" }),
+      // An internal transfer tagged to the salary category must NOT count as income.
+      tx({ id: "xfer", date: "2026-06-10", amountCents: 200000, categoryId: "cat-salary", accountId: "bank", isTransfer: true }),
+    ]);
+    const grid = await svc.getGrid(USER, JUN);
+    const income = grid.income.find((i) => i.id === "inc-income")!;
+    // Live actual is the real salary only, overriding the 999999 seed snapshot.
+    expect(income.actualCents).toBe(300000);
+    expect(income.varianceCents).toBe(300000 - 500000);
+  });
+
+  test("income actual is per displayed period, zero in a month with no income", async () => {
+    const { store, svc } = await seedIncome();
+    await store.upsertTransactions(USER, [
+      tx({ id: "salary", date: "2026-06-05", amountCents: 300000, categoryId: "cat-salary", accountId: "bank" }),
+    ]);
+    const jul = await svc.getGrid(USER, JUL);
+    const income = jul.income.find((i) => i.id === "inc-income")!;
+    // No salary landed in July: the actual is 0, not the June figure and not the seed.
+    expect(income.actualCents).toBe(0);
+    expect(income.varianceCents).toBe(-500000);
+  });
+});

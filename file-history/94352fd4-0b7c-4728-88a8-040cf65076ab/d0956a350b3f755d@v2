@@ -1,0 +1,81 @@
+/**
+ * Penny service worker (ISC-61).
+ *
+ * Caches a minimal offline app shell so the installed PWA opens without the
+ * network. Read-only shell caching only: there is deliberately NO offline
+ * transaction capture and NO write/sync queue (ISC-64 anti). API calls are
+ * always network-only and never queued.
+ *
+ * Navigation (the HTML shell) is NETWORK-FIRST so a new deploy is picked up on
+ * the next load instead of being frozen on a stale cached index.html. Only the
+ * immutable hashed assets and icons are cache-first.
+ */
+
+const SHELL_CACHE = "penny-shell-v2";
+const SHELL_ASSETS = [
+  "/",
+  "/index.html",
+  "/manifest.webmanifest",
+  "/icons/icon.svg",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_ASSETS)).then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== SHELL_CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+
+  // Never cache or queue API traffic. Network-only; no offline write queue.
+  if (url.pathname.startsWith("/api/")) return;
+
+  const isShell = request.mode === "navigate" || url.pathname === "/" || url.pathname === "/index.html";
+
+  if (isShell) {
+    // Network-first: always try to load the latest shell; fall back to cache offline.
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok && url.origin === self.location.origin) {
+            const copy = response.clone();
+            caches.open(SHELL_CACHE).then((cache) => cache.put("/index.html", copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match("/index.html").then((c) => c || caches.match("/")))
+    );
+    return;
+  }
+
+  // Hashed assets + icons: cache-first (content-hashed, so immutable).
+  event.respondWith(
+    caches.match(request).then((cached) => {
+      if (cached) return cached;
+      return fetch(request)
+        .then((response) => {
+          if (response.ok && url.origin === self.location.origin) {
+            const copy = response.clone();
+            caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => new Response("", { status: 504, statusText: "Offline" }));
+    })
+  );
+});

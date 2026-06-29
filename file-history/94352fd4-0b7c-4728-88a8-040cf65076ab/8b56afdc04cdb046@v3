@@ -1,0 +1,222 @@
+/**
+ * Shared domain types for Penny. These are the conceptual primitives the
+ * business modules reason about. They are deliberately separate from the
+ * persistence row shapes in src/platform/store.ts: the store layer is how
+ * these are written and read, not what they mean.
+ *
+ * INVARIANT: all money is integer cents. There are no floats anywhere in the
+ * domain. A positive amount is money available/in; a negative amount is a
+ * deficit/outflow. Enforces the ISA principle "every dollar is conserved".
+ */
+
+import type { UserId } from "../platform/auth.ts";
+
+/** Integer cents. Branded for clarity at call sites; structurally a number. */
+export type Cents = number;
+
+/** A calendar month period, e.g. { year: 2026, month: 6 }. The unit of budgeting. */
+export interface Period {
+  readonly year: number;
+  /** 1-12. */
+  readonly month: number;
+}
+
+/**
+ * Rollover behaviour at period end. The domain vocabulary:
+ *   roll_carry     - default. Surplus and deficit both carry to next period as
+ *                    the envelope's explicit starting carryover (ISC-25).
+ *   drain_to_zero  - use-it-or-lose-it. Surplus dropped at period end (ISC-26).
+ *   annual_reset   - carries within the year, resets in January (ISC-26).
+ */
+export type RolloverRule = "roll_carry" | "drain_to_zero" | "annual_reset";
+
+/** What an envelope is aiming at. Annual is shown as target/12 for the MVP (ISC-27). */
+export type TargetType = "monthly" | "annual" | "sinking" | "no_target";
+
+/**
+ * The three envelope types (ISC-91). A saving envelope behaves identically to an
+ * expense envelope (it draws from the pooled expense capital); the distinction is
+ * a label/grouping only. Income envelopes are first-class and provide capital.
+ */
+export type EnvelopeType = "income" | "expense" | "saving" | "envelope";
+
+/**
+ * The period a budget line is entered in (ISC-94). Every line normalises to a
+ * monthly equivalent for the capital and zero-based maths (see src/budget/normalise.ts).
+ */
+export type BudgetPeriod = "weekly" | "fortnightly" | "monthly" | "annual";
+
+/**
+ * The user-facing primitive. Envelopes form a tree via parentId; a parent is
+ * itself spendable and allocatable, and its figures roll up children plus any
+ * direct parent activity (ISC-73, ISC-74).
+ */
+export interface Envelope {
+  readonly id: string;
+  readonly userId: UserId;
+  readonly parentId: string | null;
+  readonly name: string;
+  /** Legacy flat grouping label; subsumed by the tree (top-level envelopes act as groups). */
+  readonly group: string;
+  readonly rolloverRule: RolloverRule;
+  readonly targetType: TargetType;
+  readonly targetAmountCents: Cents;
+  /**
+   * The envelope type (ISC-91). Additive: a store row defaults to "expense" and
+   * an existing DB column backfills to 'expense', so legacy callers that omit it
+   * read back as an expense envelope.
+   */
+  readonly type?: EnvelopeType;
+  /** Active flag (ISC-100). Inactive envelopes are excluded from the budget total. Defaults true. */
+  readonly active?: boolean;
+}
+
+/**
+ * A first-class income envelope, one per income source (ISC-65). Budgeted is the
+ * expected income and IS the figure used to balance the zero-base (ISC-92): the
+ * zero-base compares total income budget to total expense/saving/envelope budget.
+ * Actual is what landed; the variance (received - target) is the surplus/deficit
+ * carried on the envelope (ISC-31).
+ *
+ * The earlier two-step capital-allocation model (capitalToExpense) was refuted
+ * (ISA Changelog 2026-06-27): the income budget itself is the balancing figure,
+ * so there is no separate capital sub-pool. The DB column survives but is unused.
+ */
+export interface IncomeEnvelope {
+  readonly id: string;
+  readonly userId: UserId;
+  readonly name: string;
+  readonly source: string;
+  readonly budgetedCents: Cents;
+  readonly actualCents: Cents;
+  /** Income target (ISC-92). Additive; defaults 0. */
+  readonly targetCents?: Cents;
+}
+
+/** The four rolled-up figures rendered on every envelope grid row (ISC-70). */
+export interface EnvelopeRollup {
+  readonly envelopeId: string;
+  /** Starting carryover from the prior period (may be negative). */
+  readonly carryoverCents: Cents;
+  /** This period's allocation. */
+  readonly allocationCents: Cents;
+  /** carryover + allocation. */
+  readonly totalCents: Cents;
+  /** total - spent. */
+  readonly leftCents: Cents;
+}
+
+/**
+ * A transaction sourced from PocketSmith. The raw payload is retained verbatim
+ * for diffing on re-sync (ISC-12). amountCents is signed: negative = outflow.
+ */
+export interface Transaction {
+  readonly id: string;
+  readonly userId: UserId;
+  /** ISO date (YYYY-MM-DD) the swipe happened; envelopes decrement on this date (ISC-24). */
+  readonly date: string;
+  readonly amountCents: Cents;
+  readonly accountId: string;
+  readonly categoryId: string | null;
+  readonly envelopeId: string | null;
+  readonly payee: string;
+  readonly isTransfer: boolean;
+  readonly isPending: boolean;
+  /** Verbatim PocketSmith JSON for diffing (ISC-12). */
+  readonly rawJson: string;
+}
+
+/**
+ * Many categories map to one envelope, effective-dated (ISC-19). A mapping is
+ * live for transactions dated on/after effectiveFrom and before effectiveTo.
+ */
+export interface CategoryMapping {
+  readonly id: string;
+  readonly userId: UserId;
+  readonly categoryId: string;
+  readonly envelopeId: string;
+  /** ISO date the mapping takes effect. */
+  readonly effectiveFrom: string;
+  /** ISO date the mapping stops applying, or null for open-ended. */
+  readonly effectiveTo: string | null;
+}
+
+/**
+ * One line of the recurring budget template (ISC-29). The template auto-rolls
+ * into each new month with no manual ritual (ISC-76).
+ */
+export interface BudgetTemplate {
+  readonly id: string;
+  readonly userId: UserId;
+  readonly envelopeId: string;
+  readonly amountCents: Cents;
+  /**
+   * The period the amount is entered in (ISC-94). The monthly equivalent for the
+   * zero-base maths is derived via src/budget/normalise.ts. Additive; defaults
+   * "monthly", which keeps amountCents its own monthly figure.
+   */
+  readonly period?: BudgetPeriod;
+}
+
+/** Whether a budget change applies only to the current period or to the template (ISC-67). */
+export type ChangeScope = "this_month" | "ongoing";
+
+/** Who made a change. Mirrors the ledger actor vocabulary. */
+export type Actor = "sync" | "ui" | "agent";
+
+/**
+ * An immutable record of a budget-template change, with before/after values,
+ * scope, and actor, viewable as a budget history (ISC-77).
+ */
+export interface BudgetChange {
+  readonly id: string;
+  readonly userId: UserId;
+  readonly ts: number;
+  readonly envelopeId: string;
+  readonly beforeCents: Cents;
+  readonly afterCents: Cents;
+  readonly scope: ChangeScope;
+  readonly actor: Actor;
+}
+
+/**
+ * The append-only audit record. The event log is the source of truth: future
+ * questions ("why did this envelope go negative on this day?") resolve here
+ * (ISC-15). Carries ts, actor, and correlationId.
+ */
+export interface LedgerEvent {
+  readonly id: string;
+  readonly userId: UserId;
+  readonly ts: number;
+  readonly actor: Actor;
+  readonly correlationId: string;
+  readonly kind: string;
+  readonly payloadJson: string;
+}
+
+/**
+ * A traceable money movement between two envelopes (ISC-89, ISC-90). Records the
+ * source, destination, conserved amount, timestamp, actor, correlation id and
+ * scope, so every free rebalance is auditable in the movements history.
+ */
+export interface MoneyMovement {
+  readonly id: string;
+  readonly userId: UserId;
+  readonly ts: number;
+  readonly fromEnvelopeId: string;
+  readonly toEnvelopeId: string;
+  /** Always positive: the conserved amount leaving source and entering destination. */
+  readonly amountCents: Cents;
+  readonly scope: ChangeScope;
+  readonly actor: Actor;
+  readonly correlationId: string;
+}
+
+/** One end-of-day balance row per envelope per day, powering time-travel (ISC-16, ISC-36). */
+export interface Snapshot {
+  readonly userId: UserId;
+  readonly envelopeId: string;
+  /** ISO date (end-of-day T). */
+  readonly date: string;
+  readonly balanceCents: Cents;
+}

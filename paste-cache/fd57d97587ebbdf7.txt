@@ -1,0 +1,490 @@
+<form action="/saved_searches" class="new_saved_search" data-remote="true" id="new_saved_search" method="post"><div style="margin:0;padding:0;display:inline"><input name="authenticity_token" type="hidden" value="ZQz73mzLu7jg5pIN6BfmVlCtIHKWc0x1sOHEzmZ4L/k="></div>
+    <input id="saved_search_by_suspected_duplicates_flag" name="saved_search[by_suspected_duplicates_flag]" role="duplicatesflag" type="hidden" value="0">
+    <input id="saved_search_by_suspected_transfers_flag" name="saved_search[by_suspected_transfers_flag]" role="transfersflag" type="hidden" value="0">
+    <input id="saved_search_by_needs_review_flag" name="saved_search[by_needs_review_flag]" role="needsreview" type="hidden" value="0">
+    <input id="saved_search_by_transaction_ids" name="saved_search[by_transaction_ids]" role="instant" type="hidden" value="">
+    <input id="saved_search_date_range" name="saved_search[date_range]" role="daterange" type="hidden" value="">
+    <input id="saved_search_custom_date_range_start_date" name="saved_search[custom_date_range_start_date]" role="daterangecustomstart" type="hidden" value="">
+    <input id="saved_search_custom_date_range_end_date" name="saved_search[custom_date_range_end_date]" role="daterangecustomend" type="hidden" value="">
+
+    <div class="initial">
+      <input class="keywords" id="saved_search_by_keywords" name="saved_search[by_keywords]" placeholder="Search transactions" size="30" type="text">
+
+      <div class="trigger no-selecta" role="trigger">
+        <span class="magnify icon">      <svg class="icon__svg">
+        <use href="/icons.svg?v1-e60214be1bb26d61ed65aaffbbd149d0#search"></use>
+      </svg>
+</span>
+        <span class="down_arrow icon">      <svg class="icon__svg">
+        <use href="/icons.svg?v1-e60214be1bb26d61ed65aaffbbd149d0#chevron_right"></use>
+      </svg>
+</span>
+      </div>
+
+      <div class="clear no-selecta" role="clear">
+        <span class=" icon">      <svg class="icon__svg">
+        <use href="/icons.svg?v1-e60214be1bb26d61ed65aaffbbd149d0#backspace"></use>
+      </svg>
+</span>
+      </div>
+
+      <div class="close no-selecta" role="close">
+        <span class=" icon">      <svg class="icon__svg">
+        <use href="/icons.svg?v1-e60214be1bb26d61ed65aaffbbd149d0#close"></use>
+      </svg>
+</span>
+      </div>
+    </div>
+
+    <!-- fixed width; overflow hidden -->
+    <div class="panel-window">
+      <!-- double width so that each options container can float horizontally -->
+      <div class="panel-container">
+        <section class="options-block clearfix">
+          <!-- fixed width, floats left, paired with .filter-criteria -->
+          <div class="search-options options">
+            <ul>
+              <li>
+                <h2 class="no-selecta"><span class=" icon">      <svg class="icon__svg">
+        <use href="/icons.svg?v1-e60214be1bb26d61ed65aaffbbd149d0#account_balance_wallet"></use>
+      </svg>
+</span> Accounts</h2>
+                <fieldset data-group="accounts" style="display: none;">
+                  <div class="field">
+                    <div class="select2-container select2-container-multi" id="s2id_saved_search_by_account_ids"><ul class="select2-choices">  <li class="select2-search-field">    <label for="s2id_autogen7" class="select2-offscreen"></label>    <input type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="select2-input select2-default" id="s2id_autogen7" style="width: 135%;" placeholder="">  </li></ul><div class="select2-drop select2-drop-multi select2-display-none">   <ul class="select2-results">   <li class="select2-no-results">No matches found</li></ul></div></div><select data-placeholder="Select accounts" id="saved_search_by_account_ids" multiple="multiple" name="saved_search[by_account_ids][]" tabindex="-1" style="display: none;"><option value="display_group_2419264">Commbank Buffer</option>
+<option value="display_group_2419267">Commbank Casual</option>
+<option value="display_group_2419270">Ultimate Awards credit card</option>
+<option value="display_group_2419273">GoalSaver</option>
+<option value="display_group_2419276">Joint Account</option>
+<option value="display_group_2419279">Gold Mastercard Low Fee Gold</option>
+<option value="display_group_2419282">Commbank Expenses</option>
+<option value="display_group_2419285">MAC - Casual</option>
+<option value="display_group_2419288">MAC - Expenses</option>
+<option value="display_group_2419291">MAC - Buffer</option>
+<option value="display_group_2431027">Cash</option>
+<option value="display_group_3427585">BOM - Expenses</option>
+<option value="display_group_3427588">BOM - Buffer</option>
+<option value="display_group_3427591">BOM - Saver</option>
+<option value="display_group_3519622">ANZ- Buffer</option>
+<option value="display_group_3600149">ANZ Frequent Flyer Black Visa</option>
+<option value="display_group_3600152">ANZ Expenses</option>
+<option value="display_group_3600155">ANZ Saver</option>
+<option value="display_group_3600158">ANZ Emergency Fund</option>
+<option value="display_group_4652368">Credit Card #7280</option></select>
+                  </div>
+                </fieldset>
+              </li>
+
+              <li>
+                <h2 class="no-selecta"><span class=" icon">      <svg class="icon__svg">
+        <use href="/icons.svg?v1-e60214be1bb26d61ed65aaffbbd149d0#folder"></use>
+      </svg>
+</span> Categories</h2>
+                <fieldset data-group="categories" style="display: none;">
+                  <div class="field by-category-ids">
+                    <div class="select2-container select2-container-multi" id="s2id_saved_search_by_category_ids"><ul class="select2-choices">  <li class="select2-search-field">    <label for="s2id_autogen8" class="select2-offscreen"></label>    <input type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="select2-input select2-default" id="s2id_autogen8" style="width: 135%;" placeholder="">  </li></ul><div class="select2-drop select2-drop-multi select2-display-none">   <ul class="select2-results">   <li class="select2-no-results">No matches found</li></ul></div></div><select data-placeholder="Select categories" id="saved_search_by_category_ids" multiple="multiple" name="saved_search[by_category_ids][]" tabindex="-1" style="display: none;"><option value="29366248">Income</option>
+<option value="20803930">Income |: Rental Income</option>
+<option value="29367488">Income |: Surplus Income</option>
+<option value="29366208">Income |: Salary</option>
+<option value="16111642">Savings</option>
+<option value="15249994">Savings |: Travel</option>
+<option value="29371733">Savings |: Emergency Fund</option>
+<option value="29371738">Savings |: Rental Bond</option>
+<option value="20805445">Expenses</option>
+<option value="20805454">Expenses |: Bills</option>
+<option value="29370383">Expenses |: Bills |: Water</option>
+<option value="29370388">Expenses |: Bills |: Gas</option>
+<option value="29370393">Expenses |: Bills |: Internet</option>
+<option value="29370398">Expenses |: Bills |: Electricity</option>
+<option value="20805448">Expenses |: Car</option>
+<option value="15249754">Expenses |: Car |: Car Service</option>
+<option value="15249382">Expenses |: Car |: Car Registration</option>
+<option value="15249661">Expenses |: Car |: Car Insurance</option>
+<option value="15249952">Expenses |: Car |: Fuel</option>
+<option value="15250306">Expenses |: Dogs</option>
+<option value="15250309">Expenses |: Dogs |: Dog Food</option>
+<option value="15250312">Expenses |: Dogs |: Doggy Day Care</option>
+<option value="20802304">Expenses |: Apartment</option>
+<option value="20805487">Expenses |: Apartment |: OC Fees</option>
+<option value="20805490">Expenses |: Apartment |: Mortgage</option>
+<option value="21256429">Expenses |: Apartment |: Mortgage Fee</option>
+<option value="25975635">Expenses |: Apartment |: Council Rates</option>
+<option value="15250372">Expenses |: Tolls</option>
+<option value="15247285">Expenses |: Gym</option>
+<option value="15249685">Expenses |: Health Insurance</option>
+<option value="15249553">Expenses |: Phone</option>
+<option value="20805451">Expenses |: Memberships</option>
+<option value="29370103">Expenses |: Memberships |: USLSC</option>
+<option value="29370108">Expenses |: Memberships |: MCC</option>
+<option value="29370113">Expenses |: Memberships |: SMLSC</option>
+<option value="15251515">Expenses |: Subscriptions</option>
+<option value="29370268">Expenses |: Subscriptions |: Microsoft Onedrive</option>
+<option value="29370273">Expenses |: Subscriptions |: Apple</option>
+<option value="29370278">Expenses |: Subscriptions |: Microsoft 365</option>
+<option value="29370283">Expenses |: Subscriptions |: Spotify</option>
+<option value="29370288">Expenses |: Subscriptions |: Pocketsmith</option>
+<option value="29370293">Expenses |: Subscriptions |: Prime</option>
+<option value="29370298">Expenses |: Subscriptions |: Netflix</option>
+<option value="29370303">Expenses |: Subscriptions |: Fairfax</option>
+<option value="22519295">Expenses |: Work Car Parking</option>
+<option value="29366498">Budget Envelopes</option>
+<option value="15250624">Budget Envelopes |: Public Transport</option>
+<option value="15278857">Budget Envelopes |: Car Wash</option>
+<option value="15257230">Budget Envelopes |: Shopping</option>
+<option value="15250684">Budget Envelopes |: Haircut</option>
+<option value="15249916">Budget Envelopes |: Home Improvement</option>
+<option value="29366503">Budget Envelopes |: Healthcare</option>
+<option value="29366508">Budget Envelopes |: Recreation</option>
+<option value="29569218">Budget Envelopes |: Recreation |: Takeaway Dinners</option>
+<option value="29569223">Budget Envelopes |: Recreation |: Social</option>
+<option value="29569228">Budget Envelopes |: Recreation |: Dating</option>
+<option value="29569233">Budget Envelopes |: Recreation |: Coffee</option>
+<option value="29569238">Budget Envelopes |: Recreation |: Takeaway Lunches</option>
+<option value="29569323">Budget Envelopes |: Recreation |: Rideshare</option>
+<option value="29569358">Budget Envelopes |: Recreation |: Adhoc Parking</option>
+<option value="29569588">Budget Envelopes |: Recreation |: Takeaway Snacks</option>
+<option value="29570148">Budget Envelopes |: Recreation |: Takeaway Breakfast</option>
+<option value="29570158">Budget Envelopes |: Recreation |: Lottery</option>
+<option value="29913550">Budget Envelopes |: Recreation |: Fines</option>
+<option value="29913674">Budget Envelopes |: Recreation |: Dry Cleaning</option>
+<option value="29914146">Budget Envelopes |: Recreation |: Bottleshop</option>
+<option value="29914186">Budget Envelopes |: Recreation |: Golf</option>
+<option value="29914210">Budget Envelopes |: Recreation |: Life Saving</option>
+<option value="29914226">Budget Envelopes |: Recreation |: Fitness Extras</option>
+<option value="29366513">Budget Envelopes |: Presents</option>
+<option value="29366518">Budget Envelopes |: Groceries</option>
+<option value="15257320">Budget Envelopes |: Groceries |: Supplements</option>
+<option value="29366523">Budget Envelopes |: Card Chasing</option>
+<option value="15251401">Unbudgeted</option>
+<option value="29366478">Working</option>
+<option value="15249901">Working |: Interest</option>
+<option value="15251086">Working |: REIMBURSEMENT</option>
+<option value="27621405">Working |: REIMBURSEMENT |: Tech Expenses</option>
+<option value="15249898">Working |: Transfers</option>
+<option value="22871288">Working |: Spend Lend</option>
+<option value="20805442">Old</option>
+<option value="17248825">Old |: Pet Insurance</option>
+<option value="15250453">Old |: Dog Grooming</option>
+<option value="15250315">Old |: Vet</option>
+<option value="29370308">Old |: LinkedIn</option>
+<option value="19261442">Old |: Car Change Over</option>
+<option value="15279778">Old |: Bike Service</option>
+<option value="15250687">Old |: Dinnerly</option>
+<option value="15251731">Old |: Couple</option>
+<option value="15278920">Old |: Ruby</option>
+<option value="15250237">Old |: Shared</option>
+<option value="15250243">Old |: Shared |: Rent</option>
+<option value="15250369">Old |: Shared |: Groceries- Shared</option>
+<option value="15250378">Old |: Shared |: House Buffer</option>
+<option value="16993474">Old |: Shared |: Shared - Unbudgeted</option>
+<option value="15249322">Old |: Lite and Easy</option>
+<option value="15249862">Old |: Present Budget</option>
+<option value="15251518">Old |: Shared Income</option>
+<option value="15331153">Old |: Shared Income |: Shared Income - Ruby</option>
+<option value="15330316">Old |: Shared Income |: Shared Income - Nick</option>
+<option value="15249700">Old |: Individual</option>
+<option value="20805514">Old |: Apartment Investment</option>
+<option value="20805508">Old |: Apartment Set Up</option>
+<option value="29370368">Old |: Ring</option>
+<option value="29758946">Work Expenses</option></select>
+                  </div>
+
+                  <div class="field by-feed-categories hidden">
+                    <div class="select2-container select2-container-multi select2-container-disabled" id="s2id_saved_search_by_feed_categories"><ul class="select2-choices">  <li class="select2-search-field">    <label for="s2id_autogen9" class="select2-offscreen"></label>    <input type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="select2-input select2-default" id="s2id_autogen9" style="width: 135%;" placeholder="" disabled="">  </li></ul><div class="select2-drop select2-drop-multi select2-display-none">   <ul class="select2-results">   <li class="select2-no-results">No matches found</li></ul></div></div><select data-placeholder="Select bank feed categories" id="saved_search_by_feed_categories" multiple="multiple" name="saved_search[by_feed_categories][]" tabindex="-1" disabled="" style="display: none;"><option value="Alcohol">Alcohol</option>
+<option value="Alcohol &amp; Bars">Alcohol &amp; Bars</option>
+<option value="Automotive">Automotive</option>
+<option value="Bank Fees">Bank Fees</option>
+<option value="Cash Withdrawal">Cash Withdrawal</option>
+<option value="Clothing">Clothing</option>
+<option value="Computing">Computing</option>
+<option value="Credit Card Payments">Credit Card Payments</option>
+<option value="Deposits">Deposits</option>
+<option value="Eating Out">Eating Out</option>
+<option value="Education">Education</option>
+<option value="Entertainment">Entertainment</option>
+<option value="Expense Reimbursement">Expense Reimbursement</option>
+<option value="Fuel">Fuel</option>
+<option value="Gambling">Gambling</option>
+<option value="Government Services">Government Services</option>
+<option value="Groceries">Groceries</option>
+<option value="Healthcare / Medical">Healthcare / Medical</option>
+<option value="Healthcare/Medical">Healthcare/Medical</option>
+<option value="Home Improvement">Home Improvement</option>
+<option value="Household">Household</option>
+<option value="Housing">Housing</option>
+<option value="Income">Income</option>
+<option value="Insurance">Insurance</option>
+<option value="Interest">Interest</option>
+<option value="Internet">Internet</option>
+<option value="Jewellery">Jewellery</option>
+<option value="Loans">Loans</option>
+<option value="Media">Media</option>
+<option value="Online Services">Online Services</option>
+<option value="Personal Care">Personal Care</option>
+<option value="Pets">Pets</option>
+<option value="Phone">Phone</option>
+<option value="Postage">Postage</option>
+<option value="Power">Power</option>
+<option value="Professional Services">Professional Services</option>
+<option value="Recreation">Recreation</option>
+<option value="Rentals">Rentals</option>
+<option value="Service Charges/Fees">Service Charges/Fees</option>
+<option value="Transfers">Transfers</option>
+<option value="Transport">Transport</option>
+<option value="Travel">Travel</option></select>
+                  </div>
+
+                  <label for="saved_search_by_uncategorised_flag" class="cursor_pointer">
+                    <input name="saved_search[by_uncategorised_flag]" type="hidden" value="0"><input id="saved_search_by_uncategorised_flag" name="saved_search[by_uncategorised_flag]" role="byuncategorised" type="checkbox" value="1">
+                    Only uncategorized transactions
+                  </label>
+
+                  <label for="saved_search_by_subcategories_flag" class="cursor_pointer">
+                    <input name="saved_search[by_subcategories_flag]" type="hidden" value="0"><input id="saved_search_by_subcategories_flag" name="saved_search[by_subcategories_flag]" type="checkbox" value="1">
+                    Include sub-categories
+                  </label>
+
+                  <label for="saved_search_by_feed_categories_flag" class="cursor_pointer">
+                    <input name="saved_search[by_feed_categories_flag]" type="hidden" value="0"><input id="saved_search_by_feed_categories_flag" name="saved_search[by_feed_categories_flag]" role="byfeedcategories" type="checkbox" value="1">
+                    Search bank feed category only
+                  </label>
+                </fieldset>
+              </li>
+
+              <li>
+                <h2 class="no-selecta"><span class=" icon">      <svg class="icon__svg">
+        <use href="/icons.svg?v1-e60214be1bb26d61ed65aaffbbd149d0#label"></use>
+      </svg>
+</span> Labels</h2>
+                <fieldset class="labels_options" data-group="labels">
+                  <p>
+                    Match <div class="select2-container select2-container-single inline select2-container-inline" id="s2id_saved_search_by_tags_condition"><a href="javascript:void(0)" class="select2-choice" tabindex="-1">   <span class="select2-chosen" id="select2-chosen-14">any</span><abbr class="select2-search-choice-close"></abbr>   <span class="select2-arrow" role="presentation"><b role="presentation"></b></span></a><label for="s2id_autogen14" class="select2-offscreen"></label><input class="select2-focusser select2-offscreen" type="text" aria-haspopup="true" role="button" aria-labelledby="select2-chosen-14" id="s2id_autogen14"><div class="select2-drop select2-drop-single select2-display-none select2-drop-inline">   <div class="select2-search select2-search-hidden select2-offscreen">       <label for="s2id_autogen14_search" class="select2-offscreen"></label>       <input type="text" size="1" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="select2-input" role="combobox" aria-expanded="true" aria-autocomplete="list" aria-owns="select2-results-14" id="s2id_autogen14_search" placeholder="">   </div>   <ul class="select2-results" role="listbox" id="select2-results-14">   </ul></div></div><select class="inline" id="saved_search_by_tags_condition" name="saved_search[by_tags_condition]" tabindex="-1" title="" style="display: none;"><option value="any" selected="selected">any</option>
+<option value="all">all</option>
+<option value="none">none</option></select> of the following:
+                  </p>
+
+                  <div class="field by-tags">
+                    <div class="select2-container select2-container-multi tag-select" id="s2id_saved_search_by_tags"><ul class="select2-choices">  <li class="select2-search-field">    <label for="s2id_autogen18" class="select2-offscreen"></label>    <input type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="select2-input select2-default" id="s2id_autogen18" style="width: 135%;" placeholder="">  </li></ul><div class="select2-drop select2-drop-multi select2-display-none">   <ul class="select2-results">   </ul></div></div><input class=" flight tag-select" data-placeholder="Select labels" id="saved_search_by_tags" name="saved_search[by_tags]" type="hidden" value="" tabindex="-1" style="display: none;">
+                  </div>
+
+                  <label for="saved_search_by_untagged_flag" class="cursor_pointer">
+                    <input name="saved_search[by_untagged_flag]" type="hidden" value="0"><input id="saved_search_by_untagged_flag" name="saved_search[by_untagged_flag]" role="byuntagged" type="checkbox" value="1">
+                    Only unlabelled transactions
+                  </label>
+                </fieldset>
+              </li>
+
+              <li>
+                <h2 class="no-selecta"><span class=" icon">      <svg class="icon__svg">
+        <use href="/icons.svg?v1-e60214be1bb26d61ed65aaffbbd149d0#today"></use>
+      </svg>
+</span> Dates</h2>
+                <fieldset data-group="dates">
+                  <div class="field clearfix" data-val="range">
+                    <div class="select2-container select2-container-single pull-left" id="s2id_saved_search_by_date_quantifier"><a href="javascript:void(0)" class="select2-choice" tabindex="-1">   <span class="select2-chosen" id="select2-chosen-10">Between</span><abbr class="select2-search-choice-close"></abbr>   <span class="select2-arrow" role="presentation"><b role="presentation"></b></span></a><label for="s2id_autogen10" class="select2-offscreen"></label><input class="select2-focusser select2-offscreen" type="text" aria-haspopup="true" role="button" aria-labelledby="select2-chosen-10" id="s2id_autogen10"><div class="select2-drop select2-drop-single select2-display-none">   <div class="select2-search select2-search-hidden select2-offscreen">       <label for="s2id_autogen10_search" class="select2-offscreen"></label>       <input type="text" size="1" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="select2-input" role="combobox" aria-expanded="true" aria-autocomplete="list" aria-owns="select2-results-10" id="s2id_autogen10_search" placeholder="">   </div>   <ul class="select2-results" role="listbox" id="select2-results-10">   </ul></div></div><select class="pull-left" id="saved_search_by_date_quantifier" name="saved_search[by_date_quantifier]" role="dateswitch" tabindex="-1" title="" style="display: none;"><option value="range" selected="selected">Between</option>
+<option value="after">Newer than</option>
+<option value="before">Older than</option>
+<option value="equals">On</option></select>
+
+                    <input class="date-equals pull-left drp-element" id="saved_search_by_date" name="saved_search[by_date]" placeholder="Choose date" role="datepicker" size="30" type="text" readonly="" style="display: none;">
+                    <input class="date-after pull-left drp-element" id="saved_search_by_date_after" name="saved_search[by_date_after]" placeholder="Choose start date" role="datepicker" size="30" type="text" readonly="" style="display: none;">
+                    <input class="date-before pull-left drp-element" id="saved_search_by_date_before" name="saved_search[by_date_before]" placeholder="Choose end date" role="datepicker" size="30" type="text" readonly="" style="display: none;">
+                    <input type="text" name="date_range" role="datepicker" placeholder="Choose date range" class="date-range pull-left drp-element" data-range="true" readonly="" style="display: inline-block;">
+
+                    <div class="search-form__date-range-label"></div>
+                  </div>
+                </fieldset>
+              </li>
+
+              <li>
+                <h2 class="no-selecta"><span class=" icon">      <svg class="icon__svg">
+        <use href="/icons.svg?v1-e60214be1bb26d61ed65aaffbbd149d0#check_circle"></use>
+      </svg>
+</span> Merchant includes</h2>
+                <fieldset data-group="merchant_includes" class="merchant_options">
+
+                  <p>
+                    Match
+                    <div class="select2-container select2-container-single inline select2-container-inline" id="s2id_saved_search_by_merchant_includes_condition"><a href="javascript:void(0)" class="select2-choice" tabindex="-1">   <span class="select2-chosen" id="select2-chosen-15">all</span><abbr class="select2-search-choice-close"></abbr>   <span class="select2-arrow" role="presentation"><b role="presentation"></b></span></a><label for="s2id_autogen15" class="select2-offscreen"></label><input class="select2-focusser select2-offscreen" type="text" aria-haspopup="true" role="button" aria-labelledby="select2-chosen-15" id="s2id_autogen15"><div class="select2-drop select2-drop-single select2-display-none select2-drop-inline">   <div class="select2-search select2-search-hidden select2-offscreen">       <label for="s2id_autogen15_search" class="select2-offscreen"></label>       <input type="text" size="1" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="select2-input" role="combobox" aria-expanded="true" aria-autocomplete="list" aria-owns="select2-results-15" id="s2id_autogen15_search" placeholder="">   </div>   <ul class="select2-results" role="listbox" id="select2-results-15">   </ul></div></div><select class="inline" id="saved_search_by_merchant_includes_condition" name="saved_search[by_merchant_includes_condition]" tabindex="-1" title="" style="display: none;"><option value="all" selected="selected">all</option>
+<option value="any">any</option>
+<option value="only">only</option></select>
+                    <span class="of">of</span>
+                    the following:
+                  </p>
+
+                  <div class="field clearfix first">
+  <input id="saved_search_by_merchant_includes" multiple="multiple" name="saved_search[by_merchant_includes][]" placeholder="Merchant includes" size="30" type="text">
+  <a href="#" role="merchantclone"><span class=" icon">      <svg class="icon__svg">
+        <use href="/icons.svg?v1-e60214be1bb26d61ed65aaffbbd149d0#add"></use>
+      </svg>
+</span></a>
+  
+</div>
+
+                </fieldset>
+              </li>
+
+              <li>
+                <h2 class="no-selecta"><span class=" icon">      <svg class="icon__svg">
+        <use href="/icons.svg?v1-e60214be1bb26d61ed65aaffbbd149d0#cancel"></use>
+      </svg>
+</span> Merchant doesn't include</h2>
+                <fieldset data-group="merchant_excludes" class="merchant_options">
+
+                  <p>
+                    Match <div class="select2-container select2-container-single inline select2-container-inline" id="s2id_saved_search_by_merchant_excludes_condition"><a href="javascript:void(0)" class="select2-choice" tabindex="-1">   <span class="select2-chosen" id="select2-chosen-16">all</span><abbr class="select2-search-choice-close"></abbr>   <span class="select2-arrow" role="presentation"><b role="presentation"></b></span></a><label for="s2id_autogen16" class="select2-offscreen"></label><input class="select2-focusser select2-offscreen" type="text" aria-haspopup="true" role="button" aria-labelledby="select2-chosen-16" id="s2id_autogen16"><div class="select2-drop select2-drop-single select2-display-none select2-drop-inline">   <div class="select2-search select2-search-hidden select2-offscreen">       <label for="s2id_autogen16_search" class="select2-offscreen"></label>       <input type="text" size="1" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="select2-input" role="combobox" aria-expanded="true" aria-autocomplete="list" aria-owns="select2-results-16" id="s2id_autogen16_search" placeholder="">   </div>   <ul class="select2-results" role="listbox" id="select2-results-16">   </ul></div></div><select class="inline" id="saved_search_by_merchant_excludes_condition" name="saved_search[by_merchant_excludes_condition]" tabindex="-1" title="" style="display: none;"><option value="all" selected="selected">all</option>
+<option value="any">any</option>
+<option value="only">only</option></select> of the following:
+                  </p>
+
+                  <div class="field clearfix first">
+  <input id="saved_search_by_merchant_excludes" multiple="multiple" name="saved_search[by_merchant_excludes][]" placeholder="Merchant doesn't include" size="30" type="text">
+  <a href="#" role="merchantclone"><span class=" icon">      <svg class="icon__svg">
+        <use href="/icons.svg?v1-e60214be1bb26d61ed65aaffbbd149d0#add"></use>
+      </svg>
+</span></a>
+  
+</div>
+
+                </fieldset>
+              </li>
+
+              <li>
+                <h2 class="no-selecta"><span class=" icon">      <svg class="icon__svg">
+        <use href="/icons.svg?v1-e60214be1bb26d61ed65aaffbbd149d0#info"></use>
+      </svg>
+</span> Transaction type</h2>
+                <fieldset data-group="transaction_type">
+                  <div class="field">
+                    <div class="select2-container select2-container-single" id="s2id_saved_search_by_transfer_status"><a href="javascript:void(0)" class="select2-choice" tabindex="-1">   <span class="select2-chosen" id="select2-chosen-11">Transfers and non-transfers</span><abbr class="select2-search-choice-close"></abbr>   <span class="select2-arrow" role="presentation"><b role="presentation"></b></span></a><label for="s2id_autogen11" class="select2-offscreen"></label><input class="select2-focusser select2-offscreen" type="text" aria-haspopup="true" role="button" aria-labelledby="select2-chosen-11" id="s2id_autogen11"><div class="select2-drop select2-drop-single select2-display-none">   <div class="select2-search select2-search-hidden select2-offscreen">       <label for="s2id_autogen11_search" class="select2-offscreen"></label>       <input type="text" size="1" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="select2-input" role="combobox" aria-expanded="true" aria-autocomplete="list" aria-owns="select2-results-11" id="s2id_autogen11_search" placeholder="">   </div>   <ul class="select2-results" role="listbox" id="select2-results-11">   </ul></div></div><select id="saved_search_by_transfer_status" name="saved_search[by_transfer_status]" tabindex="-1" title="" style="display: none;"><option value="" selected="selected">Transfers and non-transfers</option>
+<option value="transfers">Transfers only</option>
+<option value="non_transfers">Non-transfers only</option></select>
+                  </div>
+                  <br>
+                  <div class="field">
+                    <div class="select2-container select2-container-single" id="s2id_saved_search_by_transaction_type"><a href="javascript:void(0)" class="select2-choice" tabindex="-1">   <span class="select2-chosen" id="select2-chosen-12">Expenses and income</span><abbr class="select2-search-choice-close"></abbr>   <span class="select2-arrow" role="presentation"><b role="presentation"></b></span></a><label for="s2id_autogen12" class="select2-offscreen"></label><input class="select2-focusser select2-offscreen" type="text" aria-haspopup="true" role="button" aria-labelledby="select2-chosen-12" id="s2id_autogen12"><div class="select2-drop select2-drop-single select2-display-none">   <div class="select2-search select2-search-hidden select2-offscreen">       <label for="s2id_autogen12_search" class="select2-offscreen"></label>       <input type="text" size="1" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="select2-input" role="combobox" aria-expanded="true" aria-autocomplete="list" aria-owns="select2-results-12" id="s2id_autogen12_search" placeholder="">   </div>   <ul class="select2-results" role="listbox" id="select2-results-12">   </ul></div></div><select id="saved_search_by_transaction_type" name="saved_search[by_transaction_type]" tabindex="-1" title="" style="display: none;"><option value="" selected="selected">Expenses and income</option>
+<option value="debit">Expenses only</option>
+<option value="credit">Income only</option></select>
+                  </div>
+                </fieldset>
+              </li>
+
+              <li>
+                <h2 class="no-selecta"><span class=" icon">      <svg class="icon__svg">
+        <use href="/icons.svg?v1-e60214be1bb26d61ed65aaffbbd149d0#visibility"></use>
+      </svg>
+</span> Amount</h2>
+                <fieldset data-group="amount">
+                  <div class="field clearfix" data-val="between">
+                    <div class="select2-container select2-container-single pull-left" id="s2id_saved_search_by_amount_quantifier"><a href="javascript:void(0)" class="select2-choice" tabindex="-1">   <span class="select2-chosen" id="select2-chosen-13">Between</span><abbr class="select2-search-choice-close"></abbr>   <span class="select2-arrow" role="presentation"><b role="presentation"></b></span></a><label for="s2id_autogen13" class="select2-offscreen"></label><input class="select2-focusser select2-offscreen" type="text" aria-haspopup="true" role="button" aria-labelledby="select2-chosen-13" id="s2id_autogen13"><div class="select2-drop select2-drop-single select2-display-none">   <div class="select2-search select2-search-hidden select2-offscreen">       <label for="s2id_autogen13_search" class="select2-offscreen"></label>       <input type="text" size="1" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="select2-input" role="combobox" aria-expanded="true" aria-autocomplete="list" aria-owns="select2-results-13" id="s2id_autogen13_search" placeholder="">   </div>   <ul class="select2-results" role="listbox" id="select2-results-13">   </ul></div></div><select class="pull-left" id="saved_search_by_amount_quantifier" name="saved_search[by_amount_quantifier]" role="amountswitch" tabindex="-1" title="" style="display: none;"><option value="between" selected="selected">Between</option>
+<option value="greater">More Than</option>
+<option value="less">Less Than</option>
+<option value="equals">Equals</option></select>
+
+                    <input class="amount-equals pull-left" id="saved_search_by_amount" name="saved_search[by_amount]" placeholder="Enter amount" size="30" type="text" style="display: none;">
+                    <input class="amount-greater pull-left" id="saved_search_by_amount_greater" name="saved_search[by_amount_greater]" placeholder="Min. amount" size="30" type="text" style="display: inline-block;">
+                    <input class="amount-less pull-left" id="saved_search_by_amount_less" name="saved_search[by_amount_less]" placeholder="Max. amount" size="30" type="text" style="display: inline-block;">
+                  </div>
+                </fieldset>
+              </li>
+
+            </ul>
+          </div>
+
+          <div class="filter-options options">
+
+              <fieldset class="clearfix">
+                <div class="checkbox">
+                  <label for="saved_search_filter_attributes_do_rename_flag" class="cursor_pointer">
+                    <input name="saved_search[filter_attributes][do_rename_flag]" type="hidden" value="0"><input id="saved_search_filter_attributes_do_rename_flag" name="saved_search[filter_attributes][do_rename_flag]" tabindex="-1" type="checkbox" value="1">
+                    Rename merchants to
+                  </label>
+                </div>
+
+                <div class="field">
+                  <input id="saved_search_filter_attributes_do_rename" name="saved_search[filter_attributes][do_rename]" placeholder="Enter new merchant" size="30" tabindex="-1" type="text">
+                </div>
+              </fieldset>
+
+              <fieldset class="clearfix">
+                <div class="checkbox">
+                  <label for="saved_search_filter_attributes_do_assign_category_flag" class="cursor_pointer">
+                    <input name="saved_search[filter_attributes][do_assign_category_flag]" type="hidden" value="0"><input id="saved_search_filter_attributes_do_assign_category_flag" name="saved_search[filter_attributes][do_assign_category_flag]" tabindex="-1" type="checkbox" value="1"> Assign category
+                  </label>
+                </div>
+
+                <div class="field">
+                  <div class="select2-container select2-container-single category-select" id="s2id_saved_search_filter_attributes_do_assign_category"><a href="javascript:void(0)" class="select2-choice select2-default" tabindex="-1">   <span class="select2-chosen" id="select2-chosen-4">Select a category</span><abbr class="select2-search-choice-close"></abbr>   <span class="select2-arrow" role="presentation"><b role="presentation"></b></span></a><label for="s2id_autogen4" class="select2-offscreen"></label><input class="select2-focusser select2-offscreen" type="text" aria-haspopup="true" role="button" aria-labelledby="select2-chosen-4" id="s2id_autogen4" tabindex="-1"><div class="select2-drop select2-drop-single select2-display-none select2-with-searchbox">   <div class="select2-search">       <label for="s2id_autogen4_search" class="select2-offscreen"></label>       <input type="text" size="1" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="select2-input" role="combobox" aria-expanded="true" aria-autocomplete="list" aria-owns="select2-results-4" id="s2id_autogen4_search" placeholder="">   </div>   <ul class="select2-results" role="listbox" id="select2-results-4">   </ul></div></div><input class=" flight category-select" data-include-none="true" data-placeholder="Select a category" id="saved_search_filter_attributes_do_assign_category" name="saved_search[filter_attributes][do_assign_category]" tabindex="-1" type="hidden" title="" style="display: none;">
+                </div>
+              </fieldset>
+
+              <fieldset class="clearfix">
+                <div class="checkbox">
+                  <label for="saved_search_filter_attributes_do_assign_tags_flag" class="cursor_pointer">
+                    <input name="saved_search[filter_attributes][do_assign_tags_flag]" type="hidden" value="0"><input id="saved_search_filter_attributes_do_assign_tags_flag" name="saved_search[filter_attributes][do_assign_tags_flag]" tabindex="-1" type="checkbox" value="1"> Assign labels
+                  </label>
+                </div>
+
+                <div class="field">
+                  <div class="select2-container select2-container-multi tag-select" id="s2id_saved_search_filter_attributes_do_assign_tags"><ul class="select2-choices">  <li class="select2-search-field">    <label for="s2id_autogen19" class="select2-offscreen"></label>    <input type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="select2-input select2-default" id="s2id_autogen19" tabindex="-1" style="width: 230px;" placeholder="">  </li></ul><div class="select2-drop select2-drop-multi select2-display-none">   <ul class="select2-results">   </ul></div></div><input class=" flight tag-select" data-placeholder="Select labels" id="saved_search_filter_attributes_do_assign_tags" name="saved_search[filter_attributes][do_assign_tags]" role="assign" tabindex="-1" type="hidden" style="display: none;" value="">
+                </div>
+              </fieldset>
+
+              <fieldset class="clearfix">
+                <div class="checkbox">
+                  <label for="saved_search_filter_attributes_do_change_transfer_flag" class="cursor_pointer">
+                    <input name="saved_search[filter_attributes][do_change_transfer_flag]" type="hidden" value="0"><input id="saved_search_filter_attributes_do_change_transfer_flag" name="saved_search[filter_attributes][do_change_transfer_flag]" tabindex="-1" type="checkbox" value="1">
+
+                    Mark as <div class="select2-container select2-container-single inline select2-container-inline" id="s2id_saved_search_filter_attributes_do_change_transfer"><a href="javascript:void(0)" class="select2-choice" tabindex="-1">   <span class="select2-chosen" id="select2-chosen-17">transfer</span><abbr class="select2-search-choice-close"></abbr>   <span class="select2-arrow" role="presentation"><b role="presentation"></b></span></a><label for="s2id_autogen17" class="select2-offscreen"></label><input class="select2-focusser select2-offscreen" type="text" aria-haspopup="true" role="button" aria-labelledby="select2-chosen-17" id="s2id_autogen17" tabindex="-1"><div class="select2-drop select2-drop-single select2-display-none select2-drop-inline">   <div class="select2-search select2-search-hidden select2-offscreen">       <label for="s2id_autogen17_search" class="select2-offscreen"></label>       <input type="text" size="1" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="select2-input" role="combobox" aria-expanded="true" aria-autocomplete="list" aria-owns="select2-results-17" id="s2id_autogen17_search" placeholder="">   </div>   <ul class="select2-results" role="listbox" id="select2-results-17">   </ul></div></div><select class="inline" id="saved_search_filter_attributes_do_change_transfer" name="saved_search[filter_attributes][do_change_transfer]" tabindex="-1" title="" style="display: none;"><option value="transfer">transfer</option>
+<option value="not_transfer">not transfer</option></select>
+                  </label>
+                </div>
+              </fieldset>
+              <fieldset class="clearfix">
+                <div class="checkbox delete">
+                  <label for="saved_search_filter_attributes_do_delete_flag" class="cursor_pointer">
+                    <input name="saved_search[filter_attributes][do_delete_flag]" type="hidden" value="0"><input id="saved_search_filter_attributes_do_delete_flag" name="saved_search[filter_attributes][do_delete_flag]" tabindex="-1" type="checkbox" value="1"> Delete
+                  </label>
+                </div>
+              </fieldset>
+
+          </div>
+        </section>
+
+        <section class="control-block clearfix">
+          <!-- fixed width, floats left, paired with .filter-controls -->
+          <div class="search-controls controls clearfix">
+            <div class="controls left">
+              <a href="#" role="search">Search</a>
+              <a href="#" role="save">Save</a>
+              <a href="#" class="hidden" role="update">Update</a>
+              <a href="#" class="hidden" role="cancel">Cancel</a>
+            </div>
+
+            <div class="controls right">
+              <a href="#" data-page="filter" role="page">Make Filter</a>
+            </div>
+          </div>
+
+          <div class="filter-controls controls clearfix">
+              <div class="controls left">
+                <a href="#" class="disabled" role="savefilter" tabindex="-1">Save filter</a>
+                <a href="#" class="disabled hidden" role="updatefilter" tabindex="-1">Update filter</a>
+              </div>
+
+              <div class="controls right">
+                <a href="#" data-page="search" role="page" tabindex="-1">« Go back</a>
+              </div>
+
+              <div class="controls fullwidth">
+                <label for="saved_search_filter_attributes_do_immediate_flag" role="applyimmediate" class="cursor_pointer apply_filter" style="display: block;">
+                  <input name="saved_search[filter_attributes][do_immediate_flag]" type="hidden" value="0"><input id="saved_search_filter_attributes_do_immediate_flag" name="saved_search[filter_attributes][do_immediate_flag]" tabindex="-1" type="checkbox" value="1">
+                  Apply filter to <strong role="matches">7216</strong> matching transactions
+                </label>
+              </div>
+
+          </div>
+        </section>
+      </div>
+    </div>
+</form>

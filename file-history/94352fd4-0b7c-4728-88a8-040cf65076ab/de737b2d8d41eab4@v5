@@ -1,0 +1,545 @@
+/**
+ * Envelope engine service. The clean functions the server handlers call. Each
+ * composes the pure cores (spend, rollup, rules, mapping resolution) against the
+ * EnvelopeStore port and emits an audit event for every state change (ISC-15).
+ *
+ * Covers: grid with four-figure rollups (ISC-70, ISC-74, ISC-75 data), the
+ * time-travel as-of grid (ISC-36 data), envelope CRUD with the parent_id tree
+ * (ISC-18, ISC-73), category mapping (ISC-19), the Inbox (ISC-20), holding /
+ * transfer / pending handling (ISC-21..24), carryover (ISC-25..28), and the
+ * end-of-day snapshot trigger (ISC-16).
+ */
+
+import type { Envelope as StoreEnvelope, Tx } from "../platform/store.ts";
+import type { UserId } from "../platform/auth.ts";
+import type { BudgetPeriod, CategoryMapping, Period, RolloverRule, TargetType } from "../domain/types.ts";
+import type {
+  EnvelopeDetailResponse,
+  EnvelopeRow,
+  GridResponse,
+  IncomeEnvelopeView,
+  InboxItem,
+  InboxResponse,
+  MapCategoryRequest,
+  MapCategoryResponse,
+  TransactionView,
+  TrendPoint,
+  TrendResponse,
+} from "../server/contract.ts";
+import type { EngineConfig, EnvelopeStore } from "./ports.ts";
+import { foldPeriods, type PeriodInputs, type RolledFigures } from "./rollup.ts";
+import { normaliseRolloverRule } from "./rules.ts";
+import { computeActivity, resolveEnvelopeId } from "./spend.ts";
+import {
+  comparePeriods,
+  dateInPeriod,
+  dateRange,
+  type MonthRange,
+  monthBounds,
+  periodKey,
+  periodOfDate,
+  periodRange,
+  rangeFromDates,
+} from "./period.ts";
+
+/** A new/edited envelope as seen by the UI (domain rollover vocabulary). */
+export interface EnvelopeInput {
+  readonly id: string;
+  readonly parentId: string | null;
+  readonly name: string;
+  readonly group: string;
+  readonly rolloverRule: RolloverRule;
+  readonly targetType: TargetType;
+  readonly targetAmountCents: number;
+}
+
+function uuid(): string {
+  return crypto.randomUUID();
+}
+
+/**
+ * Synthesise a four-figure grid row from an income view so the detail UI renders
+ * income identically to an expense envelope (ISC-65, ISC-101):
+ *   carryover   = income carryover
+ *   allocation  = the income budget (column 2)
+ *   total       = carryover + received
+ *   left        = the income running surplus/deficit (carryover + received - budget)
+ */
+function incomeRow(i: IncomeEnvelopeView): EnvelopeRow {
+  return {
+    id: i.id,
+    parentId: null,
+    name: i.name,
+    group: i.source,
+    rolloverRule: "roll_carry",
+    targetType: "no_target",
+    targetAmountCents: 0,
+    type: "income",
+    active: true,
+    period: "monthly",
+    carryoverCents: i.carryoverCents,
+    allocationCents: i.budgetedCents,
+    totalCents: i.carryoverCents + i.receivedCents,
+    leftCents: i.leftCents,
+    depth: 0,
+  };
+}
+
+/** The store's rolloverRule field is a legacy union; the column is TEXT, so we
+ *  write the domain string and read it back through normaliseRolloverRule. */
+function toStoreEnvelope(e: EnvelopeInput): StoreEnvelope {
+  return {
+    id: e.id,
+    name: e.name,
+    parentId: e.parentId,
+    group: e.group,
+    rolloverRule: e.rolloverRule as StoreEnvelope["rolloverRule"],
+    targetType: e.targetType,
+    targetAmountCents: e.targetAmountCents,
+  };
+}
+
+/** Pre-order tree traversal, siblings sorted by name, parents before children. */
+function orderEnvelopes(envelopes: readonly StoreEnvelope[]): StoreEnvelope[] {
+  const byParent = new Map<string | null, StoreEnvelope[]>();
+  for (const e of envelopes) {
+    const arr = byParent.get(e.parentId) ?? [];
+    arr.push(e);
+    byParent.set(e.parentId, arr);
+  }
+  for (const arr of byParent.values()) arr.sort((a, b) => a.name.localeCompare(b.name));
+  const seen = new Set<string>();
+  const out: StoreEnvelope[] = [];
+  const walk = (parentId: string | null): void => {
+    for (const e of byParent.get(parentId) ?? []) {
+      if (seen.has(e.id)) continue;
+      seen.add(e.id);
+      out.push(e);
+      walk(e.id);
+    }
+  };
+  walk(null);
+  // Append any orphans whose parent is missing, preserving determinism.
+  for (const e of envelopes) if (!seen.has(e.id)) out.push(e);
+  return out;
+}
+
+export class EnvelopeService {
+  constructor(
+    private readonly store: EnvelopeStore,
+    private readonly config: EngineConfig,
+  ) {}
+
+  private async event(
+    userId: UserId,
+    kind: string,
+    payload: unknown,
+    correlationId = uuid(),
+  ): Promise<void> {
+    await this.store.appendEvent(userId, {
+      id: uuid(),
+      ts: Date.now(),
+      actor: "ui",
+      correlationId,
+      kind,
+      payloadJson: JSON.stringify(payload),
+    });
+  }
+
+  /** Create or replace an envelope, persisting the full tree row (ISC-18, ISC-73). */
+  async upsertEnvelope(userId: UserId, input: EnvelopeInput): Promise<void> {
+    await this.store.upsertEnvelope(userId, toStoreEnvelope(input));
+    await this.event(userId, "envelope.upsert", input);
+  }
+
+  /** The Dave Ramsey grid for a single month, with rolled-up four figures (ISC-70). */
+  async getGrid(userId: UserId, period: Period): Promise<GridResponse> {
+    return this.buildGrid(userId, { from: period, to: period });
+  }
+
+  /**
+   * The grid recomputed over an arbitrary month range (ISC-103, ISC-104). Budget,
+   * spent, and the zero-base are aggregated across the months; carryover is the
+   * opening carryover at the range's first month.
+   */
+  async getGridRange(userId: UserId, range: MonthRange, asOf?: string): Promise<GridResponse> {
+    return this.buildGrid(userId, range, asOf);
+  }
+
+  /** Time-travel grid: balances as at end-of-day `asOfDate` (ISC-36 data side). */
+  async getGridAsOf(userId: UserId, asOfDate: string): Promise<GridResponse> {
+    const period = periodOfDate(asOfDate);
+    return this.buildGrid(userId, { from: period, to: period }, asOfDate);
+  }
+
+  private async buildGrid(
+    userId: UserId,
+    range: MonthRange,
+    asOf?: string,
+  ): Promise<GridResponse> {
+    const target = range.to;
+    const [envelopes, txs, mappings, envelopeCarryover, template] = await Promise.all([
+      this.store.listEnvelopes(userId),
+      this.store.listTransactions(userId),
+      this.store.listMappings(userId),
+      this.store.listEnvelopeCarryover(userId),
+      this.store.listTemplate(userId),
+    ]);
+    const templatePeriods = new Map<string, BudgetPeriod>(
+      template.map((t) => [t.envelopeId, t.period ?? "monthly"] as [string, BudgetPeriod]),
+    );
+
+    // The imported rollover baseline (ISC-25..28, ISC-85): each envelope's carried
+    // starting balance as captured from PocketSmith. When present it is the opening
+    // carryover entering the range's first month, so the fold starts at range.from
+    // and rolls only forward (the baseline already encapsulates prior history).
+    const openingCarryover = new Map(
+      envelopeCarryover.filter((c) => c.carryoverCents !== 0).map((c) => [c.envelopeId, c.carryoverCents]),
+    );
+
+    // With no baseline, fold from the earliest month that has activity (legacy
+    // path, used by the engine tests). With a baseline, start at range.from.
+    let start = range.from;
+    if (openingCarryover.size === 0) {
+      for (const tx of txs) {
+        const p = periodOfDate(tx.date);
+        if (comparePeriods(p, start) < 0) start = p;
+      }
+    }
+    if (comparePeriods(start, range.from) > 0) start = range.from;
+
+    const periods = periodRange(start, target);
+    const inputs: PeriodInputs[] = [];
+    for (const p of periods) {
+      const allocs = await this.store.listAllocations(userId, periodKey(p));
+      const allocationByEnv = new Map<string, number>();
+      for (const a of allocs) {
+        allocationByEnv.set(a.envelopeId, (allocationByEnv.get(a.envelopeId) ?? 0) + a.amountCents);
+      }
+      const isFinal = comparePeriods(p, target) === 0;
+      const activity = computeActivity(txs, mappings, this.config, {
+        period: p,
+        ...(isFinal && asOf !== undefined ? { asOf } : {}),
+      });
+      inputs.push({ period: p, allocationByEnv, activityByEnv: activity.byEnvelope });
+    }
+
+    const fold = foldPeriods(envelopes, inputs, openingCarryover);
+
+    // The visible range is [range.from .. target]; everything before range.from was
+    // only folded to produce the opening carryover. Aggregate the per-period rolled
+    // snapshots across the visible months: carryover is the opening at range.from,
+    // allocation and activity are summed, and left = carryover + allocation + activity
+    // (ISC-104). For a single month this collapses to the prior single-period figures.
+    const fromIdx = periods.findIndex((p) => comparePeriods(p, range.from) === 0);
+    const startIdx = fromIdx >= 0 ? fromIdx : 0;
+    const monthCount = periods.length - startIdx;
+    const aggregated = this.aggregateRange(envelopes, fold.perPeriod, startIdx);
+    const rows = this.toRows(envelopes, aggregated, templatePeriods);
+
+    // Income envelopes and their carried baselines (ISC-65, ISC-88).
+    const [incomes, incomeCarryovers] = await Promise.all([
+      this.store.listIncomeEnvelopes(userId),
+      this.store.listIncomeCarryover(userId),
+    ]);
+    const carryoverByIncome = new Map(
+      incomeCarryovers.map((c) => [c.incomeEnvelopeId, c.carryoverCents]),
+    );
+
+    // Total budgeted income over the range: the monthly income budget times the
+    // number of months. This is the zero-base balancing figure (ISC-92): income
+    // budget IS the capital, no sub-pool. Budgeted out is the sum of every active
+    // expense/saving/envelope allocation across the visible months (ISC-98).
+    const monthlyBudgetedIncome = incomes.reduce((s, i) => s + i.budgetedCents, 0);
+    const budgetedIncome = monthlyBudgetedIncome * monthCount;
+    let allocated = 0;
+    for (let i = startIdx; i < periods.length; i++) {
+      for (const v of inputs[i]!.allocationByEnv.values()) allocated += v;
+    }
+    const unallocatedCents = budgetedIncome - allocated;
+
+    // Live income received (ISC-99 trust fix, ISC-101): when income categories are
+    // mapped to their income envelope (seeded into the same effective-dated
+    // `mappings` table that drives expense resolution), "received" is the net inflow
+    // resolving to that income envelope id across the visible months, by the same
+    // activity path as every expense row. Transfers/pending are excluded (ISC-22,
+    // ISC-23) so a transfer never inflates income. With no income mappings (legacy
+    // seeds, engine tests) the stored snapshot is used unchanged.
+    const incomeIds = new Set(incomes.map((i) => i.id));
+    const hasIncomeMappings = mappings.some((m) => incomeIds.has(m.envelopeId));
+    const receivedFor = (id: string): number => {
+      let sum = 0;
+      for (let i = startIdx; i < periods.length; i++) sum += inputs[i]!.activityByEnv.get(id) ?? 0;
+      return sum;
+    };
+    const income = incomes.map((i) => {
+      const receivedCents = hasIncomeMappings ? receivedFor(i.id) : i.actualCents;
+      // Budget and target scale with the number of months in the range (ISC-104).
+      const budgetCol = i.budgetedCents * monthCount;
+      const targetCol = (i.targetCents ?? 0) * monthCount;
+      const carryoverCents = carryoverByIncome.get(i.id) ?? 0;
+      return {
+        id: i.id,
+        name: i.name,
+        source: i.source,
+        budgetedCents: budgetCol,
+        actualCents: receivedCents,
+        receivedCents,
+        targetCents: targetCol,
+        // ISC-99: variance is received income minus target.
+        varianceCents: receivedCents - targetCol,
+        carryoverCents,
+        // ISC-101: left = carryover + received - budget (running income surplus/deficit).
+        leftCents: carryoverCents + receivedCents - budgetCol,
+      };
+    });
+
+    // Zero-base balancing (ISC-98): income capital provided vs budgeted out.
+    const capitalProvidedCents = budgetedIncome;
+    const budgetedOutCents = allocated;
+    const residualCents = capitalProvidedCents - budgetedOutCents;
+
+    return {
+      period: periodKey(target),
+      from: monthBounds(range.from).first,
+      to: monthBounds(target).last,
+      rows,
+      income,
+      isSetUp: envelopes.length > 0,
+      budgetedIncomeCents: budgetedIncome,
+      unallocatedCents,
+      zeroBasedAlert: unallocatedCents !== 0,
+      capitalProvidedCents,
+      budgetedOutCents,
+      residualCents,
+      asOf: Date.now(),
+    };
+  }
+
+  /**
+   * Aggregate the per-period rolled snapshots across the visible months starting
+   * at `startIdx` (ISC-104). carryover = the opening carryover at startIdx,
+   * allocation/activity summed across the months, total/left recomputed.
+   */
+  private aggregateRange(
+    envelopes: readonly StoreEnvelope[],
+    perPeriod: readonly ReadonlyMap<string, RolledFigures>[],
+    startIdx: number,
+  ): Map<string, RolledFigures> {
+    const out = new Map<string, RolledFigures>();
+    const opening = perPeriod[startIdx];
+    for (const e of envelopes) {
+      let alloc = 0;
+      let activity = 0;
+      for (let i = startIdx; i < perPeriod.length; i++) {
+        const r = perPeriod[i]!.get(e.id);
+        if (r === undefined) continue;
+        alloc += r.allocationCents;
+        activity += r.leftCents - r.totalCents;
+      }
+      const carry = opening?.get(e.id)?.carryoverCents ?? 0;
+      const total = carry + alloc;
+      out.set(e.id, {
+        envelopeId: e.id,
+        carryoverCents: carry,
+        allocationCents: alloc,
+        totalCents: total,
+        leftCents: total + activity,
+        depth: opening?.get(e.id)?.depth ?? 0,
+      });
+    }
+    return out;
+  }
+
+  private toRows(
+    envelopes: readonly StoreEnvelope[],
+    rolled: ReadonlyMap<string, RolledFigures>,
+    templatePeriods: ReadonlyMap<string, BudgetPeriod>,
+  ): EnvelopeRow[] {
+    return orderEnvelopes(envelopes).map((e) => {
+      const r = rolled.get(e.id);
+      return {
+        id: e.id,
+        parentId: e.parentId,
+        name: e.name,
+        group: e.group,
+        rolloverRule: normaliseRolloverRule(e.rolloverRule),
+        targetType: e.targetType,
+        targetAmountCents: e.targetAmountCents,
+        type: e.type ?? "expense",
+        active: e.active ?? true,
+        period: templatePeriods.get(e.id) ?? "monthly",
+        carryoverCents: r?.carryoverCents ?? 0,
+        allocationCents: r?.allocationCents ?? 0,
+        totalCents: r?.totalCents ?? 0,
+        leftCents: r?.leftCents ?? 0,
+        depth: r?.depth ?? 0,
+      };
+    });
+  }
+
+  /**
+   * Envelope detail: the row plus its transactions, pending included (ISC-23,
+   * ISC-35). Resolves both expense envelopes (found on the grid rows) and income
+   * envelopes (id prefix `inc-`, found among the grid's income views, ISC-65).
+   * For an income envelope the four-figure row is synthesised from the income
+   * view and the lossless income figures are returned alongside (ISC-101); its
+   * contributing transactions are those whose category maps to the income id.
+   */
+  async getDetail(
+    userId: UserId,
+    envelopeId: string,
+    period: Period,
+  ): Promise<EnvelopeDetailResponse | null> {
+    const grid = await this.buildGrid(userId, { from: period, to: period });
+    const row = grid.rows.find((r) => r.id === envelopeId);
+    const incomeView = row === undefined ? grid.income.find((i) => i.id === envelopeId) : undefined;
+    if (row === undefined && incomeView === undefined) return null;
+
+    const [txs, mappings] = await Promise.all([
+      this.store.listTransactions(userId),
+      this.store.listMappings(userId),
+    ]);
+    const transactions: TransactionView[] = txs
+      .filter(
+        (t) =>
+          resolveEnvelopeId(t, mappings, this.config) === envelopeId &&
+          dateInPeriod(t.date, period),
+      )
+      .map((t) => ({
+        id: t.id,
+        date: t.date,
+        amountCents: t.amountCents,
+        payee: t.payee,
+        isPending: t.isPending,
+        isTransfer: t.isTransfer,
+      }));
+
+    if (row !== undefined) return { envelope: row, transactions };
+    return { envelope: incomeRow(incomeView!), transactions, income: incomeView! };
+  }
+
+  /**
+   * Daily spend-over-time series for one envelope (GAP-A). Exposes the existing
+   * ISC-16 per-day snapshots plus, per day, cumulative signed activity and the
+   * flat budget line; the opening carryover is the rollover-band height. Resolves
+   * both expense and income envelope ids; returns null when the id is unknown.
+   */
+  async getTrend(
+    userId: UserId,
+    envelopeId: string,
+    from: string,
+    to: string,
+  ): Promise<TrendResponse | null> {
+    // Budget line and opening carryover come from the grid over the covering range.
+    const grid = await this.buildGrid(userId, rangeFromDates(from, to));
+    const row = grid.rows.find((r) => r.id === envelopeId);
+    const inc = row === undefined ? grid.income.find((i) => i.id === envelopeId) : undefined;
+    if (row === undefined && inc === undefined) return null;
+    const budgetCents = row ? row.allocationCents : inc!.budgetedCents;
+    const carryoverCents = row ? row.carryoverCents : inc!.carryoverCents;
+
+    const [txs, mappings, snaps] = await Promise.all([
+      this.store.listTransactions(userId),
+      this.store.listMappings(userId),
+      this.store.listSnapshots(userId, envelopeId, from, to),
+    ]);
+    const snapByDate = new Map(snaps.map((s) => [s.date, s.balanceCents]));
+
+    // Per-day net signed activity resolving to this envelope (posted only; ISC-22, ISC-23).
+    const spentByDate = new Map<string, number>();
+    for (const t of txs) {
+      if (t.isPending || t.isTransfer) continue;
+      if (t.date < from || t.date > to) continue;
+      if (resolveEnvelopeId(t, mappings, this.config) !== envelopeId) continue;
+      spentByDate.set(t.date, (spentByDate.get(t.date) ?? 0) + t.amountCents);
+    }
+
+    let cumulative = 0;
+    const points: TrendPoint[] = dateRange(from, to).map((date) => {
+      cumulative += spentByDate.get(date) ?? 0;
+      return {
+        date,
+        spentCents: spentByDate.get(date) ?? 0,
+        cumulativeSpentCents: cumulative,
+        budgetLineCents: budgetCents,
+        snapshotBalanceCents: snapByDate.get(date) ?? null,
+      };
+    });
+
+    return { envelopeId, from, to, budgetCents, carryoverCents, points };
+  }
+
+  /** Unmapped transactions sitting in the Inbox (ISC-20). */
+  async getInbox(userId: UserId): Promise<InboxResponse> {
+    const [txs, mappings, categories] = await Promise.all([
+      this.store.listTransactions(userId),
+      this.store.listMappings(userId),
+      this.store.listCategories(userId),
+    ]);
+    const catName = new Map(categories.map((c) => [c.id, c.name]));
+    const items: InboxItem[] = txs
+      .filter(
+        (t) =>
+          !t.isTransfer && resolveEnvelopeId(t, mappings, this.config) === this.config.inboxEnvelopeId,
+      )
+      .map((t) => ({
+        transactionId: t.id,
+        date: t.date,
+        amountCents: t.amountCents,
+        payee: t.payee,
+        categoryId: t.categoryId,
+        categoryName: t.categoryId === null ? null : (catName.get(t.categoryId) ?? null),
+      }));
+    return { items };
+  }
+
+  /**
+   * Create a many-to-one effective-dated mapping (ISC-19). Closes any open prior
+   * mapping for the same category so history stays effective-dated, then reports
+   * how many transactions now resolve to the new envelope.
+   */
+  async mapCategory(userId: UserId, req: MapCategoryRequest): Promise<MapCategoryResponse> {
+    const existing = await this.store.listMappings(userId);
+    for (const m of existing) {
+      if (m.categoryId === req.categoryId && m.effectiveTo === null) {
+        await this.store.upsertMapping(userId, { ...m, effectiveTo: req.effectiveFrom });
+      }
+    }
+    const mapping: CategoryMapping = {
+      id: uuid(),
+      userId,
+      categoryId: req.categoryId,
+      envelopeId: req.envelopeId,
+      effectiveFrom: req.effectiveFrom,
+      effectiveTo: null,
+    };
+    await this.store.upsertMapping(userId, mapping);
+
+    const txs = await this.store.listTransactions(userId);
+    const remappedCount = txs.filter(
+      (t) => t.categoryId === req.categoryId && t.date >= req.effectiveFrom,
+    ).length;
+
+    await this.event(userId, "mapping.create", { mapping, remappedCount });
+    return { mappingId: mapping.id, remappedCount };
+  }
+
+  /** Holding-vs-NAB drift for a period: the named euphoric invariant (ISC-21, ISC-43). */
+  async holdingBalance(userId: UserId, asOf?: string): Promise<number> {
+    const [txs, mappings] = await Promise.all([
+      this.store.listTransactions(userId),
+      this.store.listMappings(userId),
+    ]);
+    const activity = computeActivity(txs, mappings, this.config, asOf !== undefined ? { asOf } : {});
+    return activity.holdingCents;
+  }
+
+  /** Append the end-of-day snapshot row per envelope per day (ISC-16). */
+  async writeSnapshot(userId: UserId, date: string): Promise<void> {
+    await this.store.writeDailySnapshot(userId, date);
+    await this.event(userId, "snapshot.write", { date });
+  }
+}
+
+export { monthBounds };

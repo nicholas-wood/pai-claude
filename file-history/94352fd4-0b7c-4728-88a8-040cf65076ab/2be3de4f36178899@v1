@@ -1,0 +1,99 @@
+/**
+ * Persistence ports for the envelope engine.
+ *
+ * The engine never imports bun:sqlite (ISC-57) and never reads DEPLOY_MODE
+ * (ISC-51). It depends on the platform `Store` interface plus the narrow extra
+ * repositories below, which the concrete adapter (SqliteStore / PostgresStore)
+ * satisfies. The schema tables already exist (src/store/schema.ts): mappings,
+ * categories, allocations, income_envelopes. These ports are the typed seam
+ * onto them. Tests supply an in-memory implementation.
+ */
+
+import type { UserId } from "../platform/auth.ts";
+import type { Store } from "../platform/store.ts";
+import type { CategoryMapping, ChangeScope, IncomeEnvelope } from "../domain/types.ts";
+
+/** A per-period allocation applied to one envelope (schema: allocations). */
+export interface Allocation {
+  readonly id: string;
+  readonly envelopeId: string;
+  /** YYYY-MM period key. */
+  readonly period: string;
+  readonly amountCents: number;
+  /** Whether the allocation is a recurring roll or a this-month override (ISC-67). */
+  readonly scope: ChangeScope;
+}
+
+/** A PocketSmith category, used to label Inbox items. */
+export interface Category {
+  readonly id: string;
+  readonly name: string;
+}
+
+/**
+ * Engine wiring constants. Resolved by the server from settings, never read
+ * from the environment by the engine itself. inboxEnvelopeId receives unmapped
+ * transactions (ISC-20); holdingEnvelopeId is the Credit Card Holding envelope
+ * (ISC-21); nabCardAccountIds are the accounts whose spend decrements it.
+ */
+export interface EngineConfig {
+  readonly inboxEnvelopeId: string;
+  readonly holdingEnvelopeId: string | null;
+  readonly nabCardAccountIds: readonly string[];
+}
+
+/**
+ * An envelope's carried rollover baseline (ISC-25..28 starting state): the
+ * current carried balance and the date the rollover sequence began. Stored
+ * alongside the envelope, read to seed the grid fold's opening carryover.
+ */
+export interface EnvelopeCarryover {
+  readonly envelopeId: string;
+  readonly carryoverCents: number;
+  readonly rolloverStart: string | null;
+}
+
+/** The same baseline for an income envelope, keyed by income envelope id. */
+export interface IncomeCarryover {
+  readonly incomeEnvelopeId: string;
+  readonly carryoverCents: number;
+  readonly rolloverStart: string | null;
+}
+
+/** Reads/writes the envelope engine needs beyond the base Store interface. */
+export interface EnvelopeExtrasStore {
+  listMappings(userId: UserId): Promise<CategoryMapping[]>;
+  upsertMapping(userId: UserId, m: CategoryMapping): Promise<void>;
+
+  listCategories(userId: UserId): Promise<Category[]>;
+  upsertCategory(userId: UserId, c: Category): Promise<void>;
+
+  listAllocations(userId: UserId, period: string): Promise<Allocation[]>;
+  putAllocation(userId: UserId, a: Allocation): Promise<void>;
+
+  listIncomeEnvelopes(userId: UserId): Promise<IncomeEnvelope[]>;
+  upsertIncomeEnvelope(userId: UserId, e: IncomeEnvelope): Promise<void>;
+
+  /** Set an envelope's carried rollover baseline (ISC-25..28, import step d). */
+  setEnvelopeCarryover(
+    userId: UserId,
+    envelopeId: string,
+    carryoverCents: number,
+    rolloverStart: string | null,
+  ): Promise<void>;
+  /** Read every envelope's carried baseline, to seed the grid's opening carryover. */
+  listEnvelopeCarryover(userId: UserId): Promise<EnvelopeCarryover[]>;
+
+  /** Set an income envelope's carried rollover baseline. */
+  setIncomeCarryover(
+    userId: UserId,
+    incomeEnvelopeId: string,
+    carryoverCents: number,
+    rolloverStart: string | null,
+  ): Promise<void>;
+  /** Read every income envelope's carried baseline. */
+  listIncomeCarryover(userId: UserId): Promise<IncomeCarryover[]>;
+}
+
+/** The full persistence surface the envelope engine depends on. */
+export type EnvelopeStore = Store & EnvelopeExtrasStore;

@@ -1,0 +1,63 @@
+/**
+ * Penny service worker (ISC-61).
+ *
+ * Caches a minimal offline app shell so the installed PWA opens without the
+ * network. This is read-only shell caching only: there is deliberately NO
+ * offline transaction capture and NO write/sync queue (ISC-64 anti). API calls
+ * are always network-first and never queued for later replay.
+ */
+
+const SHELL_CACHE = "penny-shell-v1";
+const SHELL_ASSETS = [
+  "/",
+  "/index.html",
+  "/manifest.webmanifest",
+  "/icons/icon.svg",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_ASSETS)).then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== SHELL_CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+
+  // Never cache or queue API traffic. Network-only; no offline write queue.
+  if (url.pathname.startsWith("/api/")) return;
+
+  // App shell + static assets: cache-first, falling back to network, then the
+  // cached index.html shell for SPA navigations while offline.
+  event.respondWith(
+    caches.match(request).then((cached) => {
+      if (cached) return cached;
+      return fetch(request)
+        .then((response) => {
+          if (response.ok && url.origin === self.location.origin) {
+            const copy = response.clone();
+            caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => {
+          if (request.mode === "navigate") return caches.match("/index.html");
+          return new Response("", { status: 504, statusText: "Offline" });
+        });
+    })
+  );
+});

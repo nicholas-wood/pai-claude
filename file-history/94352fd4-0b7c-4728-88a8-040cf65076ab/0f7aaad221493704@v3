@@ -1,0 +1,135 @@
+/**
+ * Envelope route handlers: the Dave Ramsey grid with four-figure rollups, the
+ * time-travel as-of grid, per-envelope detail, and conserved move-money. Every
+ * route is scoped to the authenticated user (ISC-49) and reads/writes through
+ * the real envelope and budget engines.
+ *
+ * The grid first ensures the current month has its budget (auto-roll, ISC-29 /
+ * ISC-76) so a freshly opened month is never blank without any manual step.
+ */
+
+import { Hono } from "hono";
+import type { Container } from "../../composition.ts";
+import type { Services } from "../services.ts";
+import type { ApiError, MoveMoneyRequest, MoveMoneyResponse, CreateEnvelopeRequest, CreateEnvelopeResponse } from "../contract.ts";
+import { currentPeriod, resolveSession, UNAUTHENTICATED } from "../http.ts";
+import { monthBounds } from "../../envelope/period.ts";
+
+export function registerEnvelopes(api: Hono, container: Container, services: Services): void {
+  api.get("/envelopes", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const period = currentPeriod();
+    // ISC-29 / ISC-76: the recurring template auto-rolls into the month, no ritual.
+    await services.budget.ensureMonth(session.userId, period);
+    const grid = await services.envelopes.getGrid(session.userId, period);
+    return c.json(grid);
+  });
+
+  api.get("/envelopes/as-of", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const date = c.req.query("date");
+    if (!date) {
+      const err: ApiError = { error: "Missing date.", code: "bad_request" };
+      return c.json(err, 400);
+    }
+    const grid = await services.envelopes.getGridAsOf(session.userId, date);
+    return c.json(grid);
+  });
+
+  api.get("/envelopes/detail", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const id = c.req.query("id");
+    if (!id) {
+      const err: ApiError = { error: "Missing id.", code: "bad_request" };
+      return c.json(err, 400);
+    }
+    const detail = await services.envelopes.getDetail(session.userId, id, currentPeriod());
+    if (!detail) {
+      const err: ApiError = { error: "Envelope not found.", code: "not_found" };
+      return c.json(err, 404);
+    }
+    return c.json(detail);
+  });
+
+  // Spend-over-time series for the envelope-detail chart (GAP-A, ISC-16).
+  api.get("/envelopes/trend", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const id = c.req.query("id");
+    if (!id) {
+      const err: ApiError = { error: "Missing id.", code: "bad_request" };
+      return c.json(err, 400);
+    }
+    const bounds = monthBounds(currentPeriod());
+    const from = c.req.query("from") ?? bounds.first;
+    const to = c.req.query("to") ?? bounds.last;
+    const trend = await services.envelopes.getTrend(session.userId, id, from, to);
+    if (!trend) {
+      const err: ApiError = { error: "Envelope not found.", code: "not_found" };
+      return c.json(err, 404);
+    }
+    return c.json(trend);
+  });
+
+  api.post("/envelopes/move", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const req = (await c.req.json().catch(() => ({}))) as MoveMoneyRequest;
+    try {
+      const res: MoveMoneyResponse = await services.budget.moveMoney(session.userId, currentPeriod(), req);
+      return c.json(res);
+    } catch (e) {
+      const err: ApiError = { error: e instanceof Error ? e.message : "Move failed.", code: "bad_request" };
+      return c.json(err, 400);
+    }
+  });
+
+  // Create a new envelope from the budget page, income or expense (ISC-87).
+  api.post("/envelopes", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const req = (await c.req.json().catch(() => ({}))) as Partial<CreateEnvelopeRequest>;
+    if (typeof req.name !== "string" || req.name.trim().length === 0 || (req.type !== "income" && req.type !== "expense")) {
+      const err: ApiError = { error: "Name and type (income|expense) are required.", code: "bad_request" };
+      return c.json(err, 400);
+    }
+    const id = crypto.randomUUID();
+    if (req.type === "income") {
+      await container.store.upsertIncomeEnvelope(session.userId, {
+        id,
+        userId: session.userId,
+        name: req.name.trim(),
+        source: req.name.trim(),
+        budgetedCents: req.budgetedCents ?? 0,
+        actualCents: 0,
+      });
+    } else {
+      await container.store.upsertEnvelope(session.userId, {
+        id,
+        parentId: req.parentId ?? null,
+        name: req.name.trim(),
+        group: "",
+        // The runtime rollover vocabulary is "roll_carry" (see imported data); the
+        // platform Store.Envelope type still carries the legacy enum. Cast around
+        // that pre-existing divergence rather than fork the value here.
+        rolloverRule: (req.rolloverRule ?? "roll_carry") as never,
+        targetType: "no_target",
+        targetAmountCents: 0,
+      });
+      if (typeof req.budgetedCents === "number" && req.budgetedCents !== 0) {
+        await container.store.putTemplateLine(session.userId, {
+          id: `bt-${id}`,
+          userId: session.userId,
+          envelopeId: id,
+          amountCents: req.budgetedCents,
+        });
+        await services.budget.ensureMonth(session.userId, currentPeriod());
+      }
+    }
+    const res: CreateEnvelopeResponse = { id, type: req.type };
+    return c.json(res);
+  });
+}

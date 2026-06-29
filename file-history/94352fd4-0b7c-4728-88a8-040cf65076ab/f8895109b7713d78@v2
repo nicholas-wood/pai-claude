@@ -1,0 +1,161 @@
+import * as React from "react";
+import { createPortal } from "react-dom";
+import { X } from "lucide-react";
+import { call, isApiError } from "@/lib/api";
+import { useIsMobile } from "@/lib/useMediaQuery";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+
+/**
+ * Cursor-anchored carryover adjustment. Clicking an envelope's Carryover figure on
+ * the budget grid opens this at the pointer; saving posts to /api/envelopes/carryover,
+ * which records a traceable carryover.reset event. Responsive: a floating popover on
+ * desktop, a bottom sheet on touch. Closes on Escape and outside/backdrop click.
+ */
+export interface CarryoverAnchor {
+  readonly envelopeId: string;
+  readonly envelopeName: string;
+  readonly currentCents: number;
+  readonly x: number;
+  readonly y: number;
+}
+
+export function CarryoverPopover({
+  anchor,
+  onClose,
+  onSaved,
+}: {
+  anchor: CarryoverAnchor;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isMobile = useIsMobile();
+  const ref = React.useRef<HTMLDivElement>(null);
+  const [value, setValue] = React.useState<string>((anchor.currentCents / 100).toFixed(2));
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [pos, setPos] = React.useState<{ left: number; top: number }>({ left: anchor.x, top: anchor.y });
+
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  React.useEffect(() => {
+    if (isMobile) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [isMobile, onClose]);
+
+  React.useLayoutEffect(() => {
+    if (isMobile) return;
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const pad = 8;
+    let left = anchor.x;
+    let top = anchor.y + 14;
+    if (left + rect.width + pad > window.innerWidth) left = window.innerWidth - rect.width - pad;
+    if (left < pad) left = pad;
+    if (top + rect.height + pad > window.innerHeight) top = Math.max(pad, anchor.y - rect.height - 14);
+    setPos({ left, top });
+  }, [isMobile, anchor.x, anchor.y]);
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await call("POST /api/envelopes/carryover", {
+        envelopeId: anchor.envelopeId,
+        carryoverCents: Math.round((parseFloat(value) || 0) * 100),
+      });
+      if (isApiError(res)) {
+        setError(res.error);
+        return;
+      }
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const body = (
+    <div className="p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold">{anchor.envelopeName}</div>
+          <div className="text-[11px] text-muted-foreground">Adjust carryover (logged as a reset)</div>
+        </div>
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={onClose}
+          className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="mt-2 flex items-center gap-1.5">
+        <span className="text-sm text-muted-foreground">$</span>
+        <Input
+          type="number"
+          step="0.01"
+          className="h-9 w-32 tnum"
+          value={value}
+          autoFocus
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void save();
+          }}
+        />
+        <Button size="sm" onClick={() => void save()} disabled={busy}>
+          {busy ? "Saving…" : "Save"}
+        </Button>
+      </div>
+      {error && <div className="mt-1 text-xs text-destructive">{error}</div>}
+    </div>
+  );
+
+  if (isMobile) {
+    return createPortal(
+      <div className="fixed inset-0 z-50">
+        <div className="absolute inset-0 bg-foreground/40" onClick={onClose} aria-hidden="true" />
+        <div
+          ref={ref}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Adjust carryover for ${anchor.envelopeName}`}
+          className="absolute inset-x-0 bottom-0 rounded-t-2xl border-t bg-popover text-popover-foreground shadow-2xl"
+        >
+          <div className="flex justify-center pt-2" aria-hidden="true">
+            <span className="h-1.5 w-10 rounded-full bg-muted-foreground/30" />
+          </div>
+          {body}
+        </div>
+      </div>,
+      document.body
+    );
+  }
+
+  return createPortal(
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label={`Adjust carryover for ${anchor.envelopeName}`}
+      style={{ position: "fixed", left: pos.left, top: pos.top }}
+      className="z-50 w-[min(18rem,calc(100vw-1rem))] rounded-lg border bg-popover text-popover-foreground shadow-lg"
+    >
+      {body}
+    </div>,
+    document.body
+  );
+}

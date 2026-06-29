@@ -1,0 +1,95 @@
+/**
+ * Import PocketSmith budget forecasts into Penny (the ISC-85 half the offline
+ * importer skipped). Pulls GET /v2/users/{id}/budget, sets each expense
+ * envelope's recurring template line to the current-period forecast, sets each
+ * income envelope's budgeted amount, then materialises the current month so the
+ * grid shows real allocations and a real zero-based position.
+ *
+ * Idempotent: re-running overwrites the same template lines and income budgets.
+ *   bun run scripts/import-budgets.ts
+ */
+
+import { buildContainer } from "../src/composition.ts";
+import { buildServices } from "../src/server/services.ts";
+import { requirePocketSmithKey } from "../src/platform/secrets.ts";
+
+const USER = process.env.PENNY_USER_ID ?? "local";
+const PS_USER = process.env.PENNY_POCKETSMITH_USER_ID ?? "418333";
+
+const container = await buildContainer();
+const key = await requirePocketSmithKey(container.secrets, USER);
+
+const res = await fetch(`https://api.pocketsmith.com/v2/users/${PS_USER}/budget`, {
+  headers: { "X-Developer-Key": key, Accept: "application/json" },
+});
+if (!res.ok) throw new Error(`PocketSmith budget failed: HTTP ${res.status}`);
+type Per = { current?: boolean; forecast_amount?: number; start_date?: string; end_date?: string };
+const rows = (await res.json()) as Array<{
+  category?: { id?: number | string };
+  income?: { periods?: Per[] };
+  expense?: { periods?: Per[] };
+}>;
+
+const MONTH_DAYS = 30.4368;
+
+const incomeEnvs = await container.store.listIncomeEnvelopes(USER);
+const incomeById = new Map(incomeEnvs.map((e) => [e.id, e]));
+
+function currentForecastCents(block?: { periods?: Per[] }): number | null {
+  if (!block?.periods?.length) return null;
+  const per = block.periods.find((p) => p.current) ?? block.periods[block.periods.length - 1];
+  if (!per || per.forecast_amount === undefined) return null;
+  // PocketSmith expresses expense forecasts as negative outflows; a Penny
+  // allocation is a positive amount assigned. Take magnitude, then normalise the
+  // forecast to a MONTHLY equivalent by the period's length (an annual budget is
+  // returned over a ~365-day period; a weekly one over ~7), so the budget total
+  // is a sane monthly figure rather than mixing annual and monthly amounts.
+  let factor = 1;
+  if (per.start_date && per.end_date) {
+    const days = (Date.parse(per.end_date) - Date.parse(per.start_date)) / 86400000 + 1;
+    if (days > 0) factor = MONTH_DAYS / days;
+  }
+  return Math.round(Math.abs(per.forecast_amount) * 100 * factor);
+}
+
+let templateLines = 0;
+let incomeBudgeted = 0;
+let skippedIncome = 0;
+
+for (const row of rows) {
+  const catId = row.category?.id === undefined ? "" : String(row.category.id);
+  if (!catId) continue;
+
+  if (row.income) {
+    const cents = currentForecastCents(row.income);
+    const env = incomeById.get(catId);
+    if (cents !== null && env) {
+      await container.store.upsertIncomeEnvelope(USER, { ...env, budgetedCents: cents });
+      incomeBudgeted += 1;
+    } else {
+      skippedIncome += 1; // income parent/other income category we do not track as an envelope
+    }
+    continue;
+  }
+
+  const cents = currentForecastCents(row.expense);
+  if (cents === null || cents === 0) continue;
+  await container.store.putTemplateLine(USER, {
+    id: `bt-${catId}`,
+    userId: USER,
+    envelopeId: catId,
+    amountCents: cents,
+  });
+  templateLines += 1;
+}
+
+// Materialise the current month from the now-populated template.
+const { budget } = buildServices(container);
+const now = new Date();
+const period = { year: now.getFullYear(), month: now.getMonth() + 1 };
+const mat = await budget.ensureMonth(USER, period);
+
+console.log(
+  `[import-budgets] template lines=${templateLines} income budgeted=${incomeBudgeted} skipped income rows=${skippedIncome} materialised=${mat.rolled} for ${period.year}-${String(period.month).padStart(2, "0")}`,
+);
+await container.store.close();

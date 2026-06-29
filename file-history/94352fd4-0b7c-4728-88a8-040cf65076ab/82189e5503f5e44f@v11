@@ -1,0 +1,361 @@
+/**
+ * Seed Penny from Nick's real budget spreadsheet (docs/budget-source.json,
+ * extracted from OneDrive/00_Inbox/Expenses.xlsx). This REPLACES the messy
+ * PocketSmith category import (ISC-96): three envelope types, income capital,
+ * the zero-base, and category→envelope mappings by name. The PocketSmith "Old"
+ * group is excluded (its transactions fall to Inbox).
+ *
+ * Idempotent: wipes and rebuilds the local tenant's envelopes/income/mappings/
+ * budget_template/allocations. Transactions, users and secrets are untouched.
+ *
+ *   bun run scripts/seed-from-spreadsheet.ts
+ */
+
+import { Database } from "bun:sqlite";
+import { LocalSecretStore } from "../src/platform/secrets/local.ts";
+
+const USER = "local";
+const PS_USER = "418333";
+const DB_PATH = `${process.env.HOME}/.penny/penny.db`;
+const now = new Date();
+const PERIOD = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+interface Source {
+  fixedExpenses: { name: string; category: string | null; active: boolean; monthlyCents: number | null; period?: string }[];
+  income: { name: string; targetCents: number }[];
+  discretionaryExpenses: { name: string; monthlyCents: number; period?: string }[];
+}
+const src = JSON.parse(await Bun.file(`${import.meta.dir}/../docs/budget-source.json`).text()) as Source;
+
+const key = await new LocalSecretStore().get(USER, "pocketsmith_developer_key");
+if (!key) throw new Error("No PocketSmith developer key for local");
+
+// PocketSmith category tree -> flat list with top-level group, for name mapping.
+const cats = (await (await fetch(`https://api.pocketsmith.com/v2/users/${PS_USER}/categories`, {
+  headers: { "X-Developer-Key": key, Accept: "application/json" },
+})).json()) as Array<{ id: number; title: string; children?: unknown[] }>;
+const flatCats: { id: string; title: string; top: string; parent: string | null }[] = [];
+const walk = (arr: any[], top: string | null, parent: string | null) => {
+  for (const c of arr) {
+    const t = top ?? c.title;
+    flatCats.push({ id: String(c.id), title: c.title, top: t, parent });
+    if (Array.isArray(c.children)) walk(c.children, t, c.title);
+  }
+};
+walk(cats as any[], null, null);
+
+// PocketSmith subcategories grouped by their IMMEDIATE parent category title (ISC-95
+// restore). Recreation's 16 children, Groceries -> Supplements, etc. The "Old" group
+// is excluded so retired categories never spawn envelopes.
+const childrenByParent = new Map<string, { id: string; title: string }[]>();
+for (const c of flatCats) {
+  if (c.parent === null || c.top === "Old") continue;
+  const key = c.parent.toLowerCase();
+  const list = childrenByParent.get(key) ?? childrenByParent.set(key, []).get(key)!;
+  list.push({ id: c.id, title: c.title });
+}
+
+const db = new Database(DB_PATH);
+db.run("PRAGMA foreign_keys=OFF");
+const wipe = db.transaction(() => {
+  for (const t of ["allocations", "budget_template", "mappings", "income_envelopes", "envelopes"]) {
+    db.run(`DELETE FROM ${t} WHERE user_id=?`, [USER]);
+  }
+});
+wipe();
+
+const insEnv = db.prepare(
+  `INSERT INTO envelopes (user_id,id,parent_id,name,grp,rollover_rule,target_type,target_amount_cents,carryover_cents,rollover_start,type,active)
+   VALUES (?,?,?,?,?, 'roll_carry','no_target',0,0,NULL,?,?)`,
+);
+const insInc = db.prepare(
+  `INSERT INTO income_envelopes (user_id,id,name,source,budgeted_cents,actual_cents,carryover_cents,rollover_start,target_cents,capital_to_expense_cents)
+   VALUES (?,?,?,?,?,0,?,?,?,0)`,
+);
+
+// Income split into three real sources (ISC-65): the single spreadsheet "Income"
+// becomes Salary + Adhoc Income, keeping Rental. Budgets still total the expense
+// zero-base (745460 + 0 + 117000 = 862460c). Carryover and rollover-start come
+// from docs/pocketsmith-rollover-baseline.md (Salary, Surplus Income, Rental
+// Income rows); income_envelopes carries carryover_cents directly.
+// Income carryover is the accumulated surplus and reads POSITIVE: PocketSmith
+// stores income rollover with the opposite sign (its "-$9,609" on Salary means
+// received-over-budget, a surplus), so we negate the doc values here.
+const INCOME_DEFS: { name: string; budgetCents: number; carryoverCents: number; rolloverStart: string }[] = [
+  { name: "Salary", budgetCents: 745460, carryoverCents: 960864, rolloverStart: "2025-01-13" },
+  { name: "Adhoc Income", budgetCents: 0, carryoverCents: 1393010, rolloverStart: "2025-07-01" },
+  { name: "Rental", budgetCents: 117000, carryoverCents: 30200, rolloverStart: "2025-07-01" },
+];
+const insTmpl = db.prepare(`INSERT INTO budget_template (user_id,id,envelope_id,amount_cents,period) VALUES (?,?,?,?,?)`);
+const insAlloc = db.prepare(`INSERT INTO allocations (user_id,id,envelope_id,period,amount_cents,scope) VALUES (?,?,?,?,?, 'ongoing')`);
+const insMap = db.prepare(`INSERT INTO mappings (user_id,id,category_id,envelope_id,effective_from,effective_to) VALUES (?,?,?,?, '1970-01-01', NULL)`);
+
+const nameToEnv = new Map<string, string>(); // lower envelope name -> id
+// PocketSmith subcategory id -> its OWN child envelope id (ISC-95 restore). Built
+// while creating child envelopes; consulted first when mapping so per-subcategory
+// spend resolves to the child, not the rolled-up parent.
+const subcatToChildEnv = new Map<string, string>();
+const childEnvNames: string[] = []; // restored child envelope names, for the report
+
+// Reserve every first-class envelope id and name up front, so a restored child
+// never duplicates one regardless of seed order. This matters because a few
+// PocketSmith subcategories are ALSO first-class spreadsheet lines (Supplements is
+// both a Groceries subcategory and its own budgeted envelope). Such a subcategory
+// is left as the standalone budgeted line and resolves to it by name in mapping.
+const reservedNames = new Set<string>(["inbox"]);
+const reservedIds = new Set<string>(["inbox"]);
+for (const e of src.fixedExpenses) {
+  reservedNames.add(e.name.toLowerCase());
+  reservedIds.add(`env-${slug(e.name)}`);
+  if (e.category) { reservedNames.add(e.category.toLowerCase()); reservedIds.add(`cat-${slug(e.category)}`); }
+}
+for (const e of src.discretionaryExpenses) { reservedNames.add(e.name.toLowerCase()); reservedIds.add(`env-${slug(e.name)}`); }
+for (const n of ["Emergency Fund", "Rental Bond"]) { reservedNames.add(n.toLowerCase()); reservedIds.add(`env-${slug(n)}`); }
+function makeEnv(id: string, name: string, parentId: string | null, group: string, type: "expense" | "saving" | "envelope", active: boolean, monthlyCents: number | null, period: string = "monthly") {
+  insEnv.run(USER, id, parentId, name, group, type, active ? 1 : 0);
+  nameToEnv.set(name.toLowerCase(), id);
+  if (monthlyCents && monthlyCents > 0) {
+    insTmpl.run(USER, `bt-${id}`, id, monthlyCents, period);
+    if (active) insAlloc.run(USER, `al-${id}`, id, PERIOD, monthlyCents);
+  }
+}
+
+const build = db.transaction(() => {
+  // Inbox + category parents.
+  insEnv.run(USER, "inbox", null, "Inbox", "", "expense", 1);
+  const parents = [...new Set(src.fixedExpenses.map((e) => e.category).filter(Boolean) as string[])];
+  for (const p of parents) makeEnv(`cat-${slug(p)}`, p, null, "", "expense", true, null);
+  // Fixed expenses under their category parent, each in its natural budget period.
+  for (const e of src.fixedExpenses) {
+    const pid = e.category ? `cat-${slug(e.category)}` : null;
+    makeEnv(`env-${slug(e.name)}`, e.name, pid, e.category ?? "", "expense", e.active, e.monthlyCents, e.period ?? "monthly");
+  }
+  // Discretionary "envelope" type — except Travel, which is a saving.
+  for (const e of src.discretionaryExpenses) {
+    const isTravel = e.name.toLowerCase() === "travel";
+    const parentId = `env-${slug(e.name)}`;
+    // Nest Supplements under Groceries (the one first-class line that is also a
+    // PocketSmith child of another budgeted envelope); the rest stay top-level.
+    const discParent = e.name.toLowerCase() === "supplements" ? "env-groceries" : null;
+    makeEnv(parentId, e.name, discParent, "", isTravel ? "saving" : "envelope", true, e.monthlyCents, e.period ?? "monthly");
+    // Restore PocketSmith subcategories as real CHILD envelopes (ISC-95). The parent
+    // keeps its budget; each child carries no own budget and its spend rolls up to
+    // the budgeted parent, so per-subcategory spend (Coffee, Social, ...) reappears
+    // without double-counting. Only "envelope"-type parents get children, and a
+    // subcategory whose name already names a first-class budgeted envelope (e.g.
+    // Supplements, which the spreadsheet lists as its own line) is left as that
+    // standalone envelope rather than duplicated under a parent.
+    if (!isTravel) {
+      for (const child of childrenByParent.get(e.name.toLowerCase()) ?? []) {
+        const lc = child.title.toLowerCase();
+        const childId = `env-${slug(child.title)}`;
+        // Collision guard: if this subcategory already names (or id-collides with) a
+        // first-class budgeted envelope, or another child already created, leave it
+        // be — name resolution in mapping points the subcategory at the right
+        // envelope without a duplicate id or a destroyed standalone budget.
+        if (reservedNames.has(lc) || reservedIds.has(childId) || nameToEnv.has(lc)) continue;
+        makeEnv(childId, child.title, parentId, e.name, "envelope", true, null);
+        reservedNames.add(lc);
+        reservedIds.add(childId);
+        subcatToChildEnv.set(child.id, childId);
+        childEnvNames.push(`${child.title} (under ${e.name})`);
+      }
+    }
+  }
+  // Saving envelopes not in the spreadsheet: they hold a balance (carryover from the
+  // rollover baseline) with no required monthly contribution yet.
+  makeEnv("env-emergency-fund", "Emergency Fund", null, "", "saving", true, null);
+  makeEnv("env-rental-bond", "Rental Bond", null, "", "saving", true, null);
+  // Catch-all for large one-offs PocketSmith files under "Unbudgeted" (was leaking to Inbox).
+  makeEnv("env-unbudgeted", "Unbudgeted", null, "", "expense", true, null);
+  // Income envelopes: three sources, each with its budget, carryover, and rollover start.
+  for (const i of INCOME_DEFS) {
+    insInc.run(USER, `inc-${slug(i.name)}`, i.name, i.name, i.budgetCents, i.carryoverCents, i.rolloverStart, i.budgetCents);
+  }
+});
+build();
+
+// Opening carryover from the rollover baseline doc (matched by name), so the
+// fold starts at the current month rather than folding three years of history.
+const updCarry = db.prepare("UPDATE envelopes SET carryover_cents=?, rollover_start=? WHERE user_id=? AND lower(name)=lower(?)");
+const rdoc = await Bun.file(`${import.meta.dir}/../docs/pocketsmith-rollover-baseline.md`).text();
+const monthMap: Record<string, string> = { Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06", Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12" };
+let carrySet = 0;
+const applyCarry = db.transaction(() => {
+  for (const line of rdoc.split("\n")) {
+    const m = line.match(/^\|\s*([^|]+?)\s*\|\s*[^|]*\|\s*([^|]*?)\s*\|\s*[^|]*\|\s*([^|]+?)\s*\|/);
+    if (!m) continue;
+    const name = m[1]!.trim();
+    if (name === "Category" || /no current budget/i.test(m[3]!)) continue;
+    const bal = parseFloat(m[3]!.replace(/[$,]/g, ""));
+    if (Number.isNaN(bal)) continue;
+    const dm = m[2]!.match(/([A-Z][a-z]{2})\s+(\d+),\s+(\d{4})/);
+    const iso = dm ? `${dm[3]}-${monthMap[dm[1]!]}-${String(dm[2]).padStart(2, "0")}` : null;
+    if (updCarry.run(Math.round(bal * 100), iso, USER, name).changes > 0) carrySet++;
+  }
+});
+applyCarry();
+console.log(`[seed] carryover applied from baseline: ${carrySet} envelopes`);
+
+// Alias map: PocketSmith category names that differ from the spreadsheet envelope
+// names. Recreation's granular children are NO LONGER aliased to the parent — they
+// are restored as real child envelopes (ISC-95) and resolve to themselves via
+// subcatToChildEnv / nameToEnv, so listing them here would be dead weight.
+const ALIAS: Record<string, string> = {
+  "health insurance": "Teacher Health", "car registration": "Car Rego",
+  "mcc": "MCC Membership", "smlsc": "SMLSC Membership", "uslsc": "USLSC Membership",
+  // Stragglers carrying real spend that previously fell to the Inbox. Mapped to
+  // their nearest right envelope so the grid stops leaking these to uncategorised.
+  // Excluded by design (not mapped): Transfers, Interest, Reimbursement, Spend
+  // Lend, and the inter-account savings moves (Savings, Emergency Fund, Rental Bond).
+  "work car parking": "Public Transport", // commuting cost, sits with transport
+  "tech expenses": "Shopping",             // gadget/tech purchases
+  "dogs": "Dog",                           // PocketSmith Dogs parent rolls up with Dog Food / Doggy Day Care
+  "apartment": "House",                    // PocketSmith Apartment parent -> the House group
+  "work expenses": "Shopping",             // stray work purchase
+  "unbudgeted": "Unbudgeted",              // large one-offs, was leaking ~$8k to Inbox
+};
+// Income category -> income envelope (for actual income tracking). PocketSmith's
+// three income categories resolve one-to-one to the three income sources.
+const INCOME_ALIAS: Record<string, string> = { "salary": "Salary", "surplus income": "Adhoc Income", "rental income": "Rental" };
+
+let mapped = 0, skippedOld = 0, unmatched = 0;
+const incomeCatByEnv = new Map<string, string[]>();
+const mapTx = db.transaction(() => {
+  for (const c of flatCats) {
+    if (c.top === "Old") { skippedOld++; continue; }
+    const lc = c.title.toLowerCase();
+    const incName = INCOME_ALIAS[lc];
+    if (incName) {
+      const incId = `inc-${slug(incName)}`;
+      (incomeCatByEnv.get(incId) ?? incomeCatByEnv.set(incId, []).get(incId)!).push(c.id);
+      // Persist the income-category -> income-envelope mapping into the same
+      // effective-dated mappings table the expense grid resolves through, so the
+      // grid service computes each income envelope's actual live, per displayed
+      // period, instead of reading a frozen seed snapshot (ISC-99 trust fix).
+      insMap.run(USER, `map-${c.id}`, c.id, incId);
+      mapped++;
+      continue;
+    }
+    // Resolve to the subcategory's own child envelope first (ISC-95), then by exact
+    // name, then by alias to a parent. This keeps per-subcategory spend on the child.
+    const envId = subcatToChildEnv.get(c.id) ?? nameToEnv.get(lc) ?? (ALIAS[lc] ? nameToEnv.get(ALIAS[lc].toLowerCase()) : undefined);
+    if (envId) { insMap.run(USER, `map-${c.id}`, c.id, envId); mapped++; }
+    else unmatched++;
+  }
+});
+mapTx();
+
+// Income actuals: current-month sum of each income envelope's mapped categories.
+// PocketSmith's rollover is the END-of-month balance; BudgetBuddy carries at the
+// START of the month. Convert: start carry = pocketsmith(doc) + budget - received,
+// so left = carry - budget + received lands back on the PocketSmith figure and the
+// carryover column reads the start-of-month value (e.g. Salary ~$17k entering June).
+const incDef = new Map(INCOME_DEFS.map((d) => [`inc-${slug(d.name)}`, d]));
+const updIncActual = db.prepare("UPDATE income_envelopes SET actual_cents=?, carryover_cents=? WHERE user_id=? AND id=?");
+let incActualSet = 0;
+for (const [incId, catIds] of incomeCatByEnv) {
+  const ph = catIds.map(() => "?").join(",");
+  const row = db.query(
+    `SELECT COALESCE(SUM(amount_cents),0) s FROM transactions WHERE user_id=? AND txn_date LIKE ? AND category_id IN (${ph})`,
+  ).get(USER, `${PERIOD}%`, ...catIds) as { s: number };
+  const def = incDef.get(incId);
+  const startCarry = def ? def.carryoverCents + def.budgetCents - row.s : row.s;
+  updIncActual.run(row.s, startCarry, USER, incId);
+  incActualSet++;
+}
+console.log(`[seed] income actuals set (current month ${PERIOD}): ${incActualSet} envelopes`);
+
+// Recompute carryover for "spend-bucket parent" envelopes: an envelope/saving-type
+// parent that holds the budget while its restored PocketSmith children carry no
+// budget and just collect spend (e.g. Recreation over Coffee/Social/...). PocketSmith
+// does NOT roll the children into the parent's rollover, so its doc figure understates
+// the real position. Recompute from a $0 financial-year start (1 Jul): the carryover
+// entering this month = months_elapsed * monthly_budget - total spend across the parent
+// and its no-budget children, from FY start to the end of last month (spend is negative).
+const FY_START = "2025-07-01";
+const periodStart = `${PERIOD}-01`;
+const monthsElapsed = (now.getFullYear() - 2025) * 12 + (now.getMonth() + 1 - 7);
+const monthlyEquiv = (cents: number, period: string): number => {
+  switch (period) {
+    case "weekly": return Math.round((cents * 52) / 12);
+    case "fortnightly": return Math.round((cents * 26) / 12);
+    case "annual": return Math.round(cents / 12);
+    default: return cents;
+  }
+};
+const parentEnvs = db.query("SELECT id, name FROM envelopes WHERE user_id=? AND type IN ('envelope','saving')").all(USER) as { id: string; name: string }[];
+const updParentCarry = db.prepare("UPDATE envelopes SET carryover_cents=?, rollover_start=? WHERE user_id=? AND id=?");
+let recomputed = 0;
+const recompute = db.transaction(() => {
+  for (const p of parentEnvs) {
+    const bt = db.query("SELECT amount_cents, period FROM budget_template WHERE user_id=? AND envelope_id=?").get(USER, p.id) as { amount_cents: number; period: string } | undefined;
+    if (!bt) continue; // the budget must sit on the parent
+    const kids = db.query(
+      "SELECT e.id FROM envelopes e WHERE e.user_id=? AND e.parent_id=? AND NOT EXISTS (SELECT 1 FROM budget_template t WHERE t.user_id=e.user_id AND t.envelope_id=e.id)",
+    ).all(USER, p.id) as { id: string }[];
+    if (kids.length === 0) continue; // only parents with no-budget spend-bucket children
+    const envIds = [p.id, ...kids.map((k) => k.id)];
+    const eph = envIds.map(() => "?").join(",");
+    const cats = (db.query(`SELECT category_id FROM mappings WHERE user_id=? AND envelope_id IN (${eph})`).all(USER, ...envIds) as { category_id: string }[]).map((r) => r.category_id);
+    if (cats.length === 0) continue;
+    const cph = cats.map(() => "?").join(",");
+    const spend = (db.query(
+      `SELECT COALESCE(SUM(amount_cents),0) s FROM transactions WHERE user_id=? AND txn_date>=? AND txn_date<? AND category_id IN (${cph})`,
+    ).get(USER, FY_START, periodStart, ...cats) as { s: number }).s;
+    const budget = monthlyEquiv(bt.amount_cents, bt.period) * monthsElapsed;
+    const carry = budget + spend; // spend is negative
+    updParentCarry.run(carry, FY_START, USER, p.id);
+    recomputed++;
+    console.log(`[seed]   recomputed ${p.name}: carry $${(carry / 100).toFixed(2)} (${monthsElapsed}mo budget $${(budget / 100).toFixed(2)} - spend $${(-spend / 100).toFixed(2)})`);
+  }
+});
+recompute();
+console.log(`[seed] spend-bucket parent carryovers recomputed from FY start: ${recomputed}`);
+
+// Preserve manual carryover corrections across a reseed. The events table is NOT
+// wiped, so the latest carryover.reset per envelope is a deliberate manual override
+// that must survive the rebuild; replay it last, on top of every computed carryover.
+const resetRows = db.query("SELECT payload_json FROM events WHERE user_id=? AND kind='carryover.reset' ORDER BY ts ASC").all(USER) as { payload_json: string }[];
+const latestReset = new Map<string, number>();
+for (const r of resetRows) {
+  try {
+    const p = JSON.parse(r.payload_json);
+    if (typeof p.envelopeId === "string" && typeof p.afterCents === "number") latestReset.set(p.envelopeId, p.afterCents);
+  } catch { /* skip malformed */ }
+}
+let replayed = 0;
+const replayResets = db.transaction(() => {
+  for (const [envId, cents] of latestReset) {
+    const isInc = db.query("SELECT 1 FROM income_envelopes WHERE user_id=? AND id=?").get(USER, envId);
+    if (isInc) db.run("UPDATE income_envelopes SET carryover_cents=? WHERE user_id=? AND id=?", [cents, USER, envId]);
+    else db.run("UPDATE envelopes SET carryover_cents=? WHERE user_id=? AND id=?", [cents, USER, envId]);
+    replayed++;
+  }
+});
+replayResets();
+console.log(`[seed] manual carryover corrections replayed from events: ${replayed}`);
+
+// Resolve how many loaded transactions now hit a real envelope.
+const mappedCatIds = new Set(db.query("SELECT category_id FROM mappings WHERE user_id=?").all(USER).map((r: any) => r.category_id));
+const txTotal = (db.query("SELECT COUNT(*) n FROM transactions WHERE user_id=?").get(USER) as any).n;
+const txResolved = db.query("SELECT COUNT(*) n FROM transactions WHERE user_id=? AND category_id IN (SELECT category_id FROM mappings WHERE user_id=?)").get(USER, USER) as any;
+
+const incTarget = INCOME_DEFS.reduce((s, i) => s + i.budgetCents, 0);
+const expMonthly = src.fixedExpenses.filter((e) => e.active).reduce((s, e) => s + (e.monthlyCents ?? 0), 0) + src.discretionaryExpenses.reduce((s, e) => s + e.monthlyCents, 0);
+
+const incomeReport = db.query("SELECT id, name, budgeted_cents, carryover_cents FROM income_envelopes WHERE user_id=? ORDER BY name").all(USER) as { id: string; name: string; budgeted_cents: number; carryover_cents: number }[];
+
+const totalEnvelopes = (db.query("SELECT COUNT(*) n FROM envelopes WHERE user_id=?").get(USER) as any).n;
+console.log(`[seed] envelopes: ${parentsCount()} parents + ${src.fixedExpenses.length} fixed + ${src.discretionaryExpenses.length} discretionary + ${childEnvNames.length} restored subcategory children + Inbox = ${totalEnvelopes} total`);
+console.log(`[seed] restored subcategory children (${childEnvNames.length}): ${childEnvNames.join(", ") || "none"}`);
+console.log(`[seed] income: ${INCOME_DEFS.length} | mappings: ${mapped} (skipped Old categories: ${skippedOld}, unmatched: ${unmatched})`);
+for (const i of incomeReport) {
+  console.log(`[seed]   income ${i.id} (${i.name}): budget $${(i.budgeted_cents / 100).toFixed(2)}, carryover $${(i.carryover_cents / 100).toFixed(2)}`);
+}
+console.log(`[seed] transactions resolving to an envelope: ${txResolved.n}/${txTotal}`);
+console.log(`[seed] ZERO-BASE: capital $${(incTarget / 100).toFixed(2)} vs budgeted out $${(expMonthly / 100).toFixed(2)} -> residual $${((incTarget - expMonthly) / 100).toFixed(2)}`);
+function parentsCount() { return new Set(src.fixedExpenses.map((e) => e.category).filter(Boolean)).size; }
+db.close();

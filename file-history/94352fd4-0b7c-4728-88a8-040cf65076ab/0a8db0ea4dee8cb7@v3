@@ -1,0 +1,344 @@
+/**
+ * Budget engine service. The clean functions the server handlers call.
+ *
+ * Covers: the auto-rolling recurring template (ISC-29, ISC-76), the continuous
+ * zero-based alert (ISC-30, ISC-32), income variance (ISC-31, ISC-65), conserved
+ * move-money with scope (ISC-66..69, ISC-71), the Edit Budget wizard that edits
+ * the template (ISC-72), and the budget history that records every template
+ * change and every auto-roll with before/after (ISC-77).
+ *
+ * Allocations are materialised one row per (envelope, period). The template is
+ * the standing plan; an ongoing change edits the template and the current
+ * period, a this-month change edits only the current period (ISC-68).
+ */
+
+import type { BudgetTemplate, ChangeScope, Period } from "../domain/types.ts";
+import type { UserId } from "../platform/auth.ts";
+import type {
+  BudgetHistoryEntry,
+  BudgetHistoryResponse,
+  DistributeRequest,
+  DistributeResponse,
+  DistributeResultLeg,
+  EditBudgetRequest,
+  EditBudgetResponse,
+  MoveMoneyRequest,
+  MoveMoneyResponse,
+} from "../server/contract.ts";
+import type { Allocation } from "../envelope/ports.ts";
+import { periodKey } from "../envelope/period.ts";
+import type { EnvelopeService } from "../envelope/service.ts";
+import type { BudgetStore } from "./ports.ts";
+import { applyTemplate } from "./template.ts";
+import { makeChange } from "./history.ts";
+import { incomeVariances, zeroBasedCheck, type IncomeVariance, type ZeroBasedState } from "./zerobased.ts";
+import { isConserved, planMove, type MoveRequest } from "./move.ts";
+import { isDistributeConserved, planDistribute, type DistributeRequestInput } from "./distribute.ts";
+
+function uuid(): string {
+  return crypto.randomUUID();
+}
+
+export class BudgetService {
+  constructor(
+    private readonly store: BudgetStore,
+    private readonly envelopes: EnvelopeService,
+  ) {}
+
+  // ── allocation materialisation ────────────────────────────────────────────
+
+  /** One allocation row per envelope for the period (summed if duplicated). */
+  private async allocMap(userId: UserId, period: Period): Promise<Map<string, Allocation>> {
+    const rows = await this.store.listAllocations(userId, periodKey(period));
+    const m = new Map<string, Allocation>();
+    for (const r of rows) {
+      const cur = m.get(r.envelopeId);
+      if (cur === undefined) m.set(r.envelopeId, r);
+      else m.set(r.envelopeId, { ...cur, amountCents: cur.amountCents + r.amountCents });
+    }
+    return m;
+  }
+
+  private async setAllocation(
+    userId: UserId,
+    period: Period,
+    envelopeId: string,
+    amountCents: number,
+    scope: ChangeScope,
+    existing: ReadonlyMap<string, Allocation>,
+  ): Promise<void> {
+    const prior = existing.get(envelopeId);
+    await this.store.putAllocation(userId, {
+      id: prior?.id ?? uuid(),
+      envelopeId,
+      period: periodKey(period),
+      amountCents,
+      scope,
+    });
+  }
+
+  // ── auto-roll (ISC-29, ISC-76, ISC-77) ────────────────────────────────────
+
+  /**
+   * Ensure the period has its budget without any manual step. If the period has
+   * no allocations yet, materialise the recurring template into it and record
+   * each rolled line in the budget history (ISC-29, ISC-76, ISC-77). Idempotent:
+   * an already-populated month is left untouched so edits are never clobbered.
+   */
+  async ensureMonth(userId: UserId, period: Period): Promise<{ rolled: number }> {
+    const existing = await this.allocMap(userId, period);
+    if (existing.size > 0) return { rolled: 0 };
+
+    const template = await this.store.listTemplate(userId);
+    const wanted = applyTemplate(template);
+    let rolled = 0;
+    for (const [envelopeId, amountCents] of wanted) {
+      await this.setAllocation(userId, period, envelopeId, amountCents, "ongoing", existing);
+      await this.store.appendBudgetHistory(
+        userId,
+        makeChange({ userId, envelopeId, beforeCents: 0, afterCents: amountCents, scope: "ongoing", actor: "sync" }),
+      );
+      rolled++;
+    }
+    return { rolled };
+  }
+
+  // ── Edit Budget wizard (ISC-72, ISC-67, ISC-68, ISC-77) ───────────────────
+
+  /**
+   * Apply the Edit Budget wizard. An ongoing edit changes the template and the
+   * current period; a this-month edit changes only the current period and
+   * leaves the template alone (ISC-68). Every changed line is recorded with
+   * before/after (ISC-77). Save is never blocked; an imbalance only alerts.
+   */
+  async editBudget(
+    userId: UserId,
+    period: Period,
+    req: EditBudgetRequest,
+  ): Promise<EditBudgetResponse> {
+    const template = await this.store.listTemplate(userId);
+    const templateByEnv = new Map<string, BudgetTemplate>();
+    for (const t of template) templateByEnv.set(t.envelopeId, t);
+    const periodAllocs = await this.allocMap(userId, period);
+
+    let changed = 0;
+    for (const line of req.lines) {
+      const beforeCents =
+        req.scope === "ongoing"
+          ? (templateByEnv.get(line.envelopeId)?.amountCents ?? 0)
+          : (periodAllocs.get(line.envelopeId)?.amountCents ?? 0);
+      if (beforeCents === line.amountCents) continue;
+
+      if (req.scope === "ongoing") {
+        const prior = templateByEnv.get(line.envelopeId);
+        await this.store.putTemplateLine(userId, {
+          id: prior?.id ?? uuid(),
+          userId,
+          envelopeId: line.envelopeId,
+          amountCents: line.amountCents,
+          period: line.period ?? prior?.period ?? "monthly",
+        });
+        // Reflect the ongoing change in the current period immediately.
+        await this.setAllocation(userId, period, line.envelopeId, line.amountCents, "ongoing", periodAllocs);
+      } else {
+        await this.setAllocation(userId, period, line.envelopeId, line.amountCents, "this_month", periodAllocs);
+      }
+
+      await this.store.appendBudgetHistory(
+        userId,
+        makeChange({ userId, envelopeId: line.envelopeId, beforeCents, afterCents: line.amountCents, scope: req.scope, actor: "ui" }),
+      );
+      changed++;
+    }
+
+    const state = await this.zeroBased(userId, period);
+    return { ok: true, changed, zeroBasedAlert: state.zeroBasedAlert };
+  }
+
+  // ── Move money (ISC-66, ISC-67, ISC-68, ISC-69, ISC-71) ───────────────────
+
+  /**
+   * Apply a conserved reallocation. Debits the source and credits the
+   * destination by equal amounts (ISC-66). Ongoing edits the template plus the
+   * current period; this-month edits only the current period (ISC-68). The
+   * resulting left figures and the zero-based alert are returned (ISC-69, ISC-71).
+   */
+  async moveMoney(
+    userId: UserId,
+    period: Period,
+    req: MoveMoneyRequest,
+  ): Promise<MoveMoneyResponse> {
+    const plan = planMove(req as MoveRequest);
+    if (!isConserved(plan)) throw new Error("move plan failed conservation");
+
+    const periodAllocs = await this.allocMap(userId, period);
+    const fromBefore = periodAllocs.get(plan.fromEnvelopeId)?.amountCents ?? 0;
+    const toBefore = periodAllocs.get(plan.toEnvelopeId)?.amountCents ?? 0;
+    const fromAfter = fromBefore + plan.fromDeltaCents;
+    const toAfter = toBefore + plan.toDeltaCents;
+
+    await this.setAllocation(userId, period, plan.fromEnvelopeId, fromAfter, plan.scope === "ongoing" ? "ongoing" : "this_month", periodAllocs);
+    await this.setAllocation(userId, period, plan.toEnvelopeId, toAfter, plan.scope === "ongoing" ? "ongoing" : "this_month", periodAllocs);
+
+    if (plan.scope === "ongoing") {
+      const template = await this.store.listTemplate(userId);
+      const byEnv = new Map(template.map((t) => [t.envelopeId, t]));
+      const tplFrom = byEnv.get(plan.fromEnvelopeId);
+      const tplTo = byEnv.get(plan.toEnvelopeId);
+      await this.store.putTemplateLine(userId, {
+        id: tplFrom?.id ?? uuid(),
+        userId,
+        envelopeId: plan.fromEnvelopeId,
+        amountCents: (tplFrom?.amountCents ?? 0) + plan.fromDeltaCents,
+      });
+      await this.store.putTemplateLine(userId, {
+        id: tplTo?.id ?? uuid(),
+        userId,
+        envelopeId: plan.toEnvelopeId,
+        amountCents: (tplTo?.amountCents ?? 0) + plan.toDeltaCents,
+      });
+    }
+
+    await this.store.appendBudgetHistory(
+      userId,
+      makeChange({ userId, envelopeId: plan.fromEnvelopeId, beforeCents: fromBefore, afterCents: fromAfter, scope: plan.scope, actor: "ui" }),
+    );
+    await this.store.appendBudgetHistory(
+      userId,
+      makeChange({ userId, envelopeId: plan.toEnvelopeId, beforeCents: toBefore, afterCents: toAfter, scope: plan.scope, actor: "ui" }),
+    );
+
+    const grid = await this.envelopes.getGrid(userId, period);
+    const fromRow = grid.rows.find((r) => r.id === plan.fromEnvelopeId);
+    const toRow = grid.rows.find((r) => r.id === plan.toEnvelopeId);
+    return {
+      ok: true,
+      fromLeftCents: fromRow?.leftCents ?? fromAfter,
+      toLeftCents: toRow?.leftCents ?? toAfter,
+      zeroBasedAlert: grid.zeroBasedAlert,
+    };
+  }
+
+  // ── Distribute surplus (multi-leg conserved reallocation, ISC-66..69) ─────
+
+  /**
+   * Apply a conserved, multi-leg distribution. Each leg adjusts one envelope's
+   * period allocation by its signed delta using the SAME allocation-adjustment
+   * primitive move-money uses (setAllocation): a positive delta credits, a
+   * negative delta debits. The legs are validated to net to exactly zero before
+   * any write, so the net effect is a conserved redistribution and a rejected
+   * (non-conserved) distribution writes nothing — the apply is all-or-nothing.
+   *
+   * An ongoing scope also edits the recurring template for each leg (ISC-67);
+   * this-month edits only the current period (ISC-68). One traceable "distribute"
+   * event records the whole legs payload, and each leg is recorded in the budget
+   * history with before/after (ISC-77). The resulting per-leg left figures and the
+   * zero-based alert are returned (ISC-69).
+   */
+  async distribute(
+    userId: UserId,
+    period: Period,
+    req: DistributeRequest,
+  ): Promise<DistributeResponse> {
+    const plan = planDistribute(req as DistributeRequestInput);
+    if (!isDistributeConserved(plan)) throw new Error("distribute plan failed conservation");
+
+    const periodAllocs = await this.allocMap(userId, period);
+    const allocScope: ChangeScope = plan.scope === "ongoing" ? "ongoing" : "this_month";
+
+    // The template is only read/written for an ongoing distribution.
+    let templateByEnv: Map<string, BudgetTemplate> | null = null;
+    if (plan.scope === "ongoing") {
+      const template = await this.store.listTemplate(userId);
+      templateByEnv = new Map(template.map((t) => [t.envelopeId, t]));
+    }
+
+    // Each plan leg targets a distinct envelope (planDistribute summed duplicates),
+    // so the periodAllocs snapshot stays correct across the loop.
+    for (const leg of plan.legs) {
+      const before = periodAllocs.get(leg.envelopeId)?.amountCents ?? 0;
+      const after = before + leg.deltaCents;
+      await this.setAllocation(userId, period, leg.envelopeId, after, allocScope, periodAllocs);
+
+      if (plan.scope === "ongoing" && templateByEnv) {
+        const tpl = templateByEnv.get(leg.envelopeId);
+        await this.store.putTemplateLine(userId, {
+          id: tpl?.id ?? uuid(),
+          userId,
+          envelopeId: leg.envelopeId,
+          amountCents: (tpl?.amountCents ?? 0) + leg.deltaCents,
+        });
+      }
+
+      await this.store.appendBudgetHistory(
+        userId,
+        makeChange({ userId, envelopeId: leg.envelopeId, beforeCents: before, afterCents: after, scope: plan.scope, actor: "ui" }),
+      );
+    }
+
+    // ONE traceable event for the whole distribution, carrying the legs payload.
+    await this.store.appendEvent(userId, {
+      id: uuid(),
+      ts: Date.now(),
+      actor: "ui",
+      correlationId: uuid(),
+      kind: "distribute",
+      payloadJson: JSON.stringify({ scope: plan.scope, legs: plan.legs }),
+    });
+
+    const grid = await this.envelopes.getGrid(userId, period);
+    const leftByEnv = new Map<string, number>();
+    for (const r of grid.rows) leftByEnv.set(r.id, r.leftCents);
+    for (const inc of grid.income) leftByEnv.set(inc.id, inc.leftCents);
+
+    const legs: DistributeResultLeg[] = plan.legs.map((l) => ({
+      envelopeId: l.envelopeId,
+      deltaCents: l.deltaCents,
+      leftCents: leftByEnv.get(l.envelopeId) ?? 0,
+    }));
+    return { ok: true, legs, zeroBasedAlert: grid.zeroBasedAlert };
+  }
+
+  // ── Zero-based + income variance (ISC-30, ISC-31, ISC-32, ISC-65) ─────────
+
+  /** The continuous zero-based state for the period (an alert, never a block). */
+  async zeroBased(userId: UserId, period: Period): Promise<ZeroBasedState> {
+    const [incomes, allocs] = await Promise.all([
+      this.store.listIncomeEnvelopes(userId),
+      this.allocMap(userId, period),
+    ]);
+    const allocationsByEnv = new Map<string, number>();
+    for (const [env, a] of allocs) allocationsByEnv.set(env, a.amountCents);
+    return zeroBasedCheck(incomes, allocationsByEnv);
+  }
+
+  /** Per income-envelope surplus/deficit (ISC-31, ISC-65). */
+  async incomeVariances(userId: UserId): Promise<IncomeVariance[]> {
+    const incomes = await this.store.listIncomeEnvelopes(userId);
+    return incomeVariances(incomes);
+  }
+
+  // ── Budget history (ISC-77) ───────────────────────────────────────────────
+
+  /** The viewable budget history, newest first, with envelope names. */
+  async getHistory(userId: UserId): Promise<BudgetHistoryResponse> {
+    const [changes, envelopes] = await Promise.all([
+      this.store.listBudgetHistory(userId),
+      this.store.listEnvelopes(userId),
+    ]);
+    const nameOf = new Map(envelopes.map((e) => [e.id, e.name]));
+    const entries: BudgetHistoryEntry[] = [...changes]
+      .sort((a, b) => b.ts - a.ts)
+      .map((c) => ({
+        id: c.id,
+        ts: c.ts,
+        envelopeId: c.envelopeId,
+        envelopeName: nameOf.get(c.envelopeId) ?? c.envelopeId,
+        beforeCents: c.beforeCents,
+        afterCents: c.afterCents,
+        scope: c.scope,
+        actor: c.actor,
+      }));
+    return { entries };
+  }
+}
