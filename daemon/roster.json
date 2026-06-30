@@ -1,17 +1,17 @@
 {
   "proto": 1,
-  "supervisorPid": 3852353,
-  "updatedAt": 1782738139854,
+  "supervisorPid": 3408681,
+  "updatedAt": 1782820641450,
   "workers": {
     "60178108": {
-      "pid": 384306,
-      "procStart": "232627808",
+      "pid": 425783,
+      "procStart": "241112469",
       "sessionId": "60178108-4ea0-4ca8-bdb7-834d4b3f2343",
       "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/60178108.sock",
       "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/c1e30527.pty.sock",
-      "cliVersion": "2.1.195",
+      "cliVersion": "2.1.196",
       "startedAt": 1782701661587,
-      "attempt": 1,
+      "attempt": 2,
       "cwd": "/home/nicholas-wood/.claude",
       "dispatch": {
         "proto": 1,
@@ -108,50 +108,47 @@
       "rvAuth": "8b4f683b8afa3543e19939af99f03fed",
       "ptyAuth": "e349c8aa7da2c5cb08438e13ca60411f"
     },
-    "94352fd4": {
-      "pid": 909785,
-      "procStart": "216667804",
-      "sessionId": "94352fd4-0b7c-4728-88a8-040cf65076ab",
-      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/94352fd4.sock",
-      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/50e6e626.pty.sock",
-      "cliVersion": "2.1.195",
-      "startedAt": 1782695779451,
+    "e557fc90": {
+      "pid": 2544815,
+      "procStart": "242147075",
+      "sessionId": "e557fc90-9d6b-4a77-bee6-5b2f522ed1e5",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/e557fc90.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/e18a6cb3.pty.sock",
+      "cliVersion": "2.1.196",
+      "startedAt": 1782801963758,
       "attempt": 1,
       "cwd": "/home/nicholas-wood/.claude",
       "dispatch": {
         "proto": 1,
-        "short": "94352fd4",
-        "nonce": "965468d4",
-        "sessionId": "94352fd4-0b7c-4728-88a8-040cf65076ab",
-        "createdAt": 1782695779448,
+        "short": "e557fc90",
+        "nonce": "ec231a6c",
+        "sessionId": "e557fc90-9d6b-4a77-bee6-5b2f522ed1e5",
+        "createdAt": 1782801963753,
         "source": "fleet",
         "cwd": "/home/nicholas-wood/.claude",
         "launch": {
-          "mode": "resume",
-          "sessionId": "94352fd4-0b7c-4728-88a8-040cf65076ab",
-          "transcriptPath": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/94352fd4-0b7c-4728-88a8-040cf65076ab.jsonl",
-          "fork": false,
-          "flagArgs": [
+          "mode": "prompt",
+          "args": [
+            "--session-id",
+            "e557fc90-9d6b-4a77-bee6-5b2f522ed1e5",
             "--agent",
             "claude",
-            "--permission-mode",
-            "acceptEdits"
+            "--",
+            "Please add an application review agent with this brief Act as a cynical, exhausted Tech Recruiter looking at candidates for an [INSERT ROLE, e.g., Senior Product Manager / Lead Backend Engineer] role at [INSERT COMPANY, e.g., Canva]. \n\nI am going to provide you with a draft of my cover letter and the target job description. Your job is to brutally audit it and strip out everything that sounds like it was written by an AI.\n\nPlease review my draft using these strict guidelines:\n\n1. Flag \"AI Filler Words\": Identify and replace generic LLM-style phrasing (e.g., \"testament to,\" \"foster innovation,\" \"dynamic landscape,\" \"passionate about,\" \"deep dive\").\n2. Check for \"Inside Baseball\" Context: Did I just repeat their website homepage, or did I mention a real product challenge, architectural shift, or industry trend relevant to this specific company? Suggest how I can make my company research sound deeper and more human.\n3. Enforce \"Tech Reason over Tech Stack\": Ensure I am not just listing languages and tools. Where I mention a technical project, help me briefly explain the *why* behind the choice or the *human trade-off* I had to make (e.g., speed vs. technical debt).\n4. Quantify Impact: If I state a result, challenge me to anchor it to a concrete business metric, product adoption rate, or engineering efficiency gain.\n5. Fix the Tone: Make the voice sound like a high-performing colleague speaking directly to a peer. Shorten any sentences over 15 words. Keep paragraphs to a punchy 2-3 sentences max.\n\nFirst, give me a \"Blunt Recruiter Verdict\" score from 1-10 on how badly it triggers your AI-fatigue. Then, provide specific line-by-line rewrite suggestions."
           ]
         },
         "env": {},
         "isolation": "none",
         "respawnFlags": [
           "--agent",
-          "claude",
-          "--permission-mode",
-          "acceptEdits"
+          "claude"
         ],
         "agent": "claude",
         "seed": {
-          "intent": ""
+          "intent": "Please add an application review agent with this brief Act as a cynical, exhausted Tech Recruiter looking at candidates for an [INSERT ROLE, e.g., Senior Product Manager / Lead Backend Engineer] role at [INSERT COMPANY, e.g., Canva]. \n\nI am going to provide you with a draft of my cover letter and the target job description. Your job is to brutally audit it and strip out everything that sounds like it was written by an AI.\n\nPlease review my draft using these strict guidelines:\n\n1. Flag \"AI Filler Words\": Identify and replace generic LLM-style phrasing (e.g., \"testament to,\" \"foster innovation,\" \"dynamic landscape,\" \"passionate about,\" \"deep dive\").\n2. Check for \"Inside Baseball\" Context: Did I just repeat their website homepage, or did I mention a real product challenge, architectural shift, or industry trend relevant to this specific company? Suggest how I can make my company research sound deeper and more human.\n3. Enforce \"Tech Reason over Tech Stack\": Ensure I am not just listing languages and tools. Where I mention a technical project, help me briefly explain the *why* behind the choice or the *human trade-off* I had to make (e.g., speed vs. technical debt).\n4. Quantify Impact: If I state a result, challenge me to anchor it to a concrete business metric, product adoption rate, or engineering efficiency gain.\n5. Fix the Tone: Make the voice sound like a high-performing colleague speaking directly to a peer. Shorten any sentences over 15 words. Keep paragraphs to a punchy 2-3 sentences max.\n\nFirst, give me a \"Blunt Recruiter Verdict\" score from 1-10 on how badly it triggers your AI-fatigue. Then, provide specific line-by-line rewrite suggestions."
         },
-        "cols": 286,
-        "rows": 78
+        "cols": 105,
+        "rows": 51
       },
       "decModes": [
         1000,
@@ -162,8 +159,8 @@
         1004,
         2031
       ],
-      "rvAuth": "464d33937ee59843e83c5aa3fc706658",
-      "ptyAuth": "b49b4d28c0c70bb8eeb7a12d62c74e6e"
+      "rvAuth": "8716e13cdb58920ae1a940de1e96ea78",
+      "ptyAuth": "3c576d3e9d810d7226e9b2e76a6bed81"
     }
   }
 }

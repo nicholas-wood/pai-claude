@@ -1,0 +1,108 @@
+/**
+ * Envelope service integration: grid rollups, Inbox, mapping, the audit event
+ * log, snapshots, time-travel, and tenant isolation (ISC-15, ISC-16, ISC-19,
+ * ISC-20, ISC-36, ISC-49, ISC-70).
+ */
+
+import { describe, test, expect } from "bun:test";
+import { MemoryStore } from "./penny-memory-store.ts";
+import { EnvelopeService } from "../src/envelope/service.ts";
+import { env, tx, USER, USER2, CONFIG } from "./penny-fixtures.ts";
+
+const JUN = { year: 2026, month: 6 };
+
+async function seed() {
+  const store = new MemoryStore();
+  for (const id of ["groceries", "rent", "inbox", "holding"]) {
+    await store.upsertEnvelope(USER, env(id, { name: id }));
+  }
+  await store.putAllocation(USER, { id: "a1", envelopeId: "groceries", period: "2026-06", amountCents: 50000, scope: "ongoing" });
+  store.addCategory(USER, { id: "cat-x", name: "Mystery Shop" });
+  const svc = new EnvelopeService(store, CONFIG);
+  return { store, svc };
+}
+
+describe("grid rollups (ISC-70)", () => {
+  test("left reflects allocation minus posted spend", async () => {
+    const { store, svc } = await seed();
+    await store.upsertTransactions(USER, [
+      tx({ date: "2026-06-10", amountCents: -5000, envelopeId: "groceries", accountId: "nab-card" }),
+    ]);
+    const grid = await svc.getGrid(USER, JUN);
+    const groceries = grid.rows.find((r) => r.id === "groceries")!;
+    expect(groceries.allocationCents).toBe(50000);
+    expect(groceries.leftCents).toBe(45000);
+    expect(grid.period).toBe("2026-06");
+  });
+});
+
+describe("Inbox and mapping (ISC-19, ISC-20)", () => {
+  test("an unmapped transaction lands in the Inbox", async () => {
+    const { store, svc } = await seed();
+    await store.upsertTransactions(USER, [
+      tx({ id: "u1", date: "2026-06-15", amountCents: -2000, categoryId: "cat-x" }),
+    ]);
+    const inbox = await svc.getInbox(USER);
+    expect(inbox.items).toHaveLength(1);
+    expect(inbox.items[0]!.transactionId).toBe("u1");
+    expect(inbox.items[0]!.categoryName).toBe("Mystery Shop");
+  });
+
+  test("mapping a category remaps its transactions and reports the count", async () => {
+    const { store, svc } = await seed();
+    await store.upsertTransactions(USER, [
+      tx({ id: "u1", date: "2026-06-15", amountCents: -2000, categoryId: "cat-x" }),
+    ]);
+    const res = await svc.mapCategory(USER, { categoryId: "cat-x", envelopeId: "groceries", effectiveFrom: "2026-06-01" });
+    expect(res.remappedCount).toBe(1);
+
+    const grid = await svc.getGrid(USER, JUN);
+    expect(grid.rows.find((r) => r.id === "groceries")!.leftCents).toBe(48000); // 50000 - 2000
+    expect((await svc.getInbox(USER)).items).toHaveLength(0);
+  });
+});
+
+describe("audit log and snapshots (ISC-15, ISC-16)", () => {
+  test("a state change appends an event with ts, actor, and correlation", async () => {
+    const { store, svc } = await seed();
+    await svc.upsertEnvelope(USER, { id: "fun", parentId: null, name: "Fun", group: "", rolloverRule: "roll_carry", targetType: "no_target", targetAmountCents: 0 });
+    const events = store.events(USER);
+    const ev = events.find((e) => e.kind === "envelope.upsert")!;
+    expect(ev.actor).toBe("ui");
+    expect(ev.correlationId).toBeTruthy();
+    expect(ev.ts).toBeGreaterThan(0);
+  });
+
+  test("writeSnapshot records one balance row per envelope per day", async () => {
+    const { store, svc } = await seed();
+    await store.upsertTransactions(USER, [
+      tx({ date: "2026-06-10", amountCents: -5000, envelopeId: "groceries" }),
+    ]);
+    await svc.writeSnapshot(USER, "2026-06-10");
+    const snaps = store.snapshots(USER);
+    expect(snaps.find((s) => s.envelopeId === "groceries")!.balanceCents).toBe(-5000);
+    expect(store.events(USER).some((e) => e.kind === "snapshot.write")).toBe(true);
+  });
+});
+
+describe("time-travel (ISC-36)", () => {
+  test("an as-of date excludes later transactions", async () => {
+    const { store, svc } = await seed();
+    await store.upsertTransactions(USER, [
+      tx({ date: "2026-06-05", amountCents: -1000, envelopeId: "groceries" }),
+      tx({ date: "2026-06-20", amountCents: -3000, envelopeId: "groceries" }),
+    ]);
+    const asOf = await svc.getGridAsOf(USER, "2026-06-15");
+    expect(asOf.rows.find((r) => r.id === "groceries")!.leftCents).toBe(49000); // only the -1000 counts
+  });
+});
+
+describe("tenant isolation (ISC-49)", () => {
+  test("a second tenant never sees the first tenant's data", async () => {
+    const { store, svc } = await seed();
+    await store.upsertTransactions(USER, [tx({ date: "2026-06-10", amountCents: -5000, envelopeId: "groceries" })]);
+    const grid = await svc.getGrid(USER2, JUN);
+    expect(grid.rows).toHaveLength(0);
+    expect((await svc.getInbox(USER2)).items).toHaveLength(0);
+  });
+});

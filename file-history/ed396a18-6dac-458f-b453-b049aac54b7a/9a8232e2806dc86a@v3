@@ -1,0 +1,283 @@
+# Basiq Migration Spec — Direct Australian Bank Feeds for BudgetBuddy (envelope-os)
+
+> Status: DESIGN (pre-build). Authored 2026-06-29. Owns the design for replacing the
+> PocketSmith ingest dependency with direct Australian bank feeds via Basiq (CDR /
+> Open Banking). The ISCs live in the project ISA (`ISA.md`, ISC-105..ISC-128); this
+> document is the detailed design behind those criteria. Basiq API field names and
+> sign conventions marked **[confirm-in-sandbox]** must be verified against the live
+> Basiq sandbox during BUILD before the matching ISC can pass.
+
+## 1. Why
+
+Three drivers, in Nick's words: drop a dependency, kill the PocketSmith subscription
+cost, and stop building on a product that is essentially just a bridge if BudgetBuddy might
+serve other people later.
+
+The decisive structural fact: **BudgetBuddy is already multi-tenant.** Every `Store` method is
+scoped by `userId` (`src/platform/store.ts`), the schema is multi-tenant from migration
+one (ISC-47, ISC-48), and cloud magic-link onboarding already mints a tenant per email
+(`src/platform/auth/cloud.ts`). The data model was never the blocker to adding people.
+PocketSmith was, because it is a per-user external account: every user would need their
+own PocketSmith subscription and their own developer key. That is a referral, not a
+product.
+
+The onboarding-model inversion is the heart of this migration:
+
+| | PocketSmith (today) | Basiq (target) |
+|---|---|---|
+| Secret material | One **per-user** dev key, each user supplies their own | One **app-level** API key, held once by BudgetBuddy |
+| User onboarding | User needs a PocketSmith account + generates a key | User clicks "connect bank", consents under CDR |
+| Categorisation | Inherited from the user's PocketSmith category tree | BudgetBuddy owns it (Basiq enrich + user rules) |
+| Bank linking | PocketSmith does it, off-platform | BudgetBuddy hosts the consent flow, in-app |
+
+Moving to Basiq does not just remove a cost. It removes the only thing standing between
+"my budget app" and "a product", and it removes the per-user onboarding friction
+entirely. The price is that BudgetBuddy now owns two things PocketSmith was doing silently:
+the bank-linking/consent lifecycle, and categorisation.
+
+## 2. Architecture: blast radius
+
+The good news, confirmed by reading the code: the provider is already isolated in
+`src/ingest/`. The envelope engine, budget engine, store, server, and UI consume a
+neutral `Tx` shape (`src/platform/store.ts:17`) and never see the provider. The client
+docstring states it outright: "the envelope engine never talks to PocketSmith".
+
+**Changes (the swap surface):**
+
+| File | Change |
+|------|--------|
+| `src/ingest/client.ts` | Replaced by a provider behind a new `IngestProvider` port; `BasiqClient` is the new concrete |
+| `src/ingest/sync.ts` | Depends on `IngestProvider`, not `PocketSmithClient`; gains job-poll before read |
+| `src/ingest/backfill.ts` | Same: provider-typed, pages Basiq transactions |
+| `src/ingest/map.ts` | New mapper: Basiq transaction → `Tx` |
+| `src/platform/secrets.ts` | New `SecretName` for the app-level Basiq key; `requirePocketSmithKey` retired |
+| `src/ingest/` (new) | `provider.ts` (port), `basiq/` (client, consent, jobs, enrich), `categorise.ts` |
+| Store schema | New tenant tables: Basiq user/connection/consent state; category rules; category set |
+| `src/server/handlers/settings.ts` | New connect-bank / consent flow endpoints |
+
+**Unchanged (the contract that protects everything downstream):** the `Tx` shape, the
+`Store` interface, the envelope engine, the budget engine, the effective-dated
+category→envelope mapping (ISC-19), the Inbox fallback (ISC-20), the event log, the UI
+grid. **`Tx.categoryId` is the single coupling point** between ingest and the rest of the
+app. Preserve its meaning (a stable internal category id) and the swap is contained.
+
+## 3. The `IngestProvider` port
+
+Abstracts the provider so `sync`/`backfill` never name a concrete client (ISC-105,
+ISC-106). Sketch (TypeScript, illustrative):
+
+```ts
+// src/ingest/provider.ts
+export interface RawTxnPage {
+  readonly txns: readonly unknown[]; // provider-native rows, verbatim (ISC-12)
+  readonly nextCursor: string | null;
+}
+
+export interface IngestProvider {
+  /** Ensure the tenant is linked and data is fresh. Establishes/refreshes the
+   *  connection and BLOCKS until the provider's fetch job completes (ISC-113). */
+  ensureFresh(userId: UserId): Promise<void>;
+
+  /** Page a tenant's transactions. `since` = inclusive lower postDate bound for
+   *  incremental sync (ISC-116); omitted for full backfill from `startDate`. */
+  paginate(userId: UserId, q: { startDate?: string; since?: string }):
+    AsyncGenerator<RawTxnPage, void, unknown>;
+
+  /** Map one provider-native row to the store Tx shape. categoryId is left null
+   *  here; the Categoriser assigns it downstream (ISC-117, ISC-120). */
+  toStoreTx(raw: unknown): Tx;
+
+  /** Consent lifecycle surface (Basiq-specific behaviour, port-neutral shape). */
+  consentStatus(userId: UserId): Promise<{ ok: boolean; expiresAt: string | null }>;
+}
+```
+
+`runSync`/`runBackfill` keep their current shape and event-logging; they call
+`provider.ensureFresh(userId)` first, then drain `provider.paginate(...)`, then
+`toStoreTxs` → `Categoriser` → `store.upsertTransactions`. The PocketSmith pull-only
+constraint (ISC-9) survives: Basiq's model is poll-a-job, not a webhook listener
+(ISC-119).
+
+## 4. BasiqProvider design
+
+Base URL `https://au-api.basiq.io`. Header `basiq-version` is required on every call.
+
+### 4.1 Auth / server token (ISC-108, ISC-109)
+
+- App API key held in `SecretStore` under a new `SecretName` (`basiq_api_key`),
+  resolved at composition root. Never plaintext at rest, in env, git, or logs (ISC-109,
+  mirrors ISC-56).
+- `POST /token` with `Authorization: Basic <api-key>` and `scope=SERVER_ACCESS` returns a
+  short-lived `access_token` (~60 min) **[confirm-in-sandbox]**. Cache it; refresh on
+  expiry or on a 401.
+- A separate `CLIENT_ACCESS` token, scoped to a single Basiq user, is minted for the
+  in-browser Consent UI (§4.3). It never carries server privileges.
+
+### 4.2 Tenant ↔ Basiq user (ISC-110)
+
+- On first connect, `POST /users { email }` → Basiq `userId`. Persist it on the tenant
+  (new store column / table, tenant-scoped). This is identity-bearing but not secret, so
+  it lives in the `Store`, not the `SecretStore`.
+
+### 4.3 Bank linking via Consent UI (ISC-111)
+
+- Mint a `CLIENT_ACCESS` token for the tenant's Basiq user.
+- Redirect the user to the Basiq Consent UI (`https://consent.basiq.io/...?token=...`)
+  **[confirm-in-sandbox]**. The user selects their institution (ANZ, NAB, Macquarie) and
+  authorises under CDR. **No bank credential ever touches BudgetBuddy** (ISC-111) — that is the
+  whole point of CDR vs screen-scraping.
+- On return, a `connection` exists on the Basiq user. Persist `connectionId`,
+  institution, and consent `expiresAt` per tenant (ISC-112).
+
+### 4.4 Refresh + job poll (ISC-113)
+
+- Data is fetched asynchronously. `POST /users/{userId}/connections/{id}/refresh` (or the
+  connection create) returns a `job` with steps (`retrieve-accounts`,
+  `retrieve-transactions`). Poll `GET /jobs/{jobId}` until all steps report `success`
+  before reading data **[confirm-in-sandbox]**. `ensureFresh` owns this.
+
+### 4.5 Fetch (ISC-115, ISC-116)
+
+- Backfill: `GET /users/{userId}/transactions` paged via `links.next` to completion
+  (ISC-115), from a parameterised start date (reuse the two-year default, ISC-6).
+- Incremental: filter `transaction.postDate.gt('YYYY-MM-DD')` against the last successful
+  sync bookmark (`getLastSyncAt`, ISC-116). Bookmark advances only on a fully drained run,
+  exactly as today.
+
+### 4.6 Mapping Basiq transaction → `Tx` (ISC-117, ISC-118)
+
+Target shape is fixed by `src/platform/store.ts:17`. **[confirm-in-sandbox]** the Basiq
+field names and the amount sign convention before passing the ISC.
+
+| `Tx` field | Source | Notes |
+|------------|--------|-------|
+| `id` | `transaction.id` | string, stable, idempotent upsert key |
+| `date` | `transaction.postDate` (fallback `transactionDate`) | ISO date slice |
+| `amountCents` | `round(parseFloat(transaction.amount) * 100)` | **signed, negative = outflow** (ISC-118). Basiq amount is a signed string; assert against `direction` (`debit`/`credit`) |
+| `accountId` | `transaction.account` | Basiq account id |
+| `categoryId` | **null at map time** | assigned by the Categoriser (§5) |
+| `envelopeId` | `null` | envelope engine resolves at read time, unchanged |
+| `payee` | `enrich.merchant.businessName` ?? `description` | merchant when enriched, else raw description |
+| `isTransfer` | `class === 'transfer'` | maps to the existing transfer-exclusion rule (ISC-22) |
+| `isPending` | `status === 'pending'` | preserves ISC-23 |
+| `rawJson` | `JSON.stringify(transaction)` | verbatim Basiq row (ISC-12 preserved) |
+
+The money invariant from the current mapper holds unchanged: decimal → integer cents,
+rounded once, sign preserved.
+
+## 5. The categorisation layer (the real work)
+
+PocketSmith handed BudgetBuddy transactions already filed into the user's own category tree,
+and BudgetBuddy's entire envelope assignment keys on that category id (`map.ts` set
+`categoryId = raw.category?.id`; ISC-19 maps category→envelope; ISC-86 maps tx→envelope by
+category). **Basiq has no per-user category tree.** It provides its own enrichment
+taxonomy (merchant, `class`, ANZSIC division/subdivision), which does not match
+PocketSmith ids and is not user-owned.
+
+For a product this is non-optional anyway: you cannot require each user to arrive with
+pre-categorised data. So BudgetBuddy must own categorisation. The design keeps the blast radius
+tiny by **synthesising a stable internal `categoryId`** so the existing mapping model is
+untouched (ISC-124).
+
+### 5.1 The Categoriser (ISC-120, ISC-121)
+
+A pure function over a transaction, producing an internal `categoryId`:
+
+1. **Enrich default.** Derive a starting category from Basiq enrich (merchant + `class` +
+   ANZSIC), mapped through a BudgetBuddy-owned static lookup into BudgetBuddy's internal category set.
+2. **User rules override.** Apply the tenant's editable rules; a matching rule wins over
+   the enrich default (ISC-121).
+3. **Fallback.** No match → the "uncategorised" internal category, which the existing
+   effective-dated mapping resolves to the Inbox envelope (ISC-123, preserving ISC-19/20).
+
+### 5.2 Category rules (ISC-122)
+
+A tenant-scoped, effective-dated rule: `payee/merchant pattern → internal categoryId`.
+Effective-dating matches the existing mapping model so re-categorising history is
+deterministic. Rules are user-editable in the UI (a later UI ISC; the engine and store
+land first).
+
+### 5.3 What stays unchanged (ISC-124)
+
+The envelope engine, the effective-dated category→envelope mapping (ISC-19), the Inbox
+fallback (ISC-20), and the grid do not change. `categoryId` is the only coupling point;
+the Categoriser is responsible for filling it, replacing the line in the old mapper.
+
+### 5.4 Non-destructive re-run (ISC-125)
+
+Re-running the categoriser refreshes the enrich-derived default but never overwrites a
+user's explicit category override or their rules, mirroring the ISC-17 base-vs-overlay
+discipline already used for transactions.
+
+### 5.5 Seeding and historical migration (ISC-127)
+
+- The envelope tree is already seeded from Nick's spreadsheet, not the PocketSmith tree
+  (ISC-96), so envelope seeding is unaffected.
+- The category→envelope **mapping** needs a new category source. A one-time migration maps
+  the existing PocketSmith-categorised transactions onto BudgetBuddy's internal category set so
+  historical envelope balances are preserved across the cutover (ISC-127). The PocketSmith
+  category id on each historical `rawJson` is the bridge for that one-time map.
+
+## 6. Consent & CDR compliance posture
+
+- **Single-user now (Nick only):** lightest path. BudgetBuddy holds the Basiq app key; Nick
+  consents to ANZ/NAB/Macquarie via the Consent UI. Basiq holds the CDR accreditation;
+  BudgetBuddy consumes it.
+- **Multi-user later (the product):** serving other people's banking data under CDR is a
+  heavier posture even with Basiq accredited. BudgetBuddy would operate under Basiq's
+  representative/consent model with consent dashboards, data-minimisation, and deletion
+  obligations. This is the cost that *replaces* the per-user PocketSmith subscription cost.
+  **Deferred** until BudgetBuddy is actually opened to others; the architecture is built
+  product-shaped now so flipping it on is onboarding + compliance, not a re-architecture.
+- **CDR consent expiry (ISC-114):** consents expire (up to 12 months). Detect expiry,
+  surface a re-consent prompt before data goes stale, and never report an empty post-expiry
+  sync as success.
+
+## 7. Secrets / identity model change
+
+| Concern | Today | Target |
+|---------|-------|--------|
+| `SecretStore` holds | per-user `pocketsmith_developer_key` | app-level `basiq_api_key` (one) |
+| Per-tenant in `Store` | (nothing provider-specific) | Basiq `userId`, `connectionId`, consent `expiresAt` |
+| Onboarding input | email + user's PocketSmith dev key | email + in-app bank consent (ISC-128) |
+
+ISC-3 ("dev key resolved through the SecretStore for the authenticated user") is
+superseded: the secret is now app-level, and the per-user material is consent state in the
+`Store`, not a key. ISC-54/55 (per-user dev key, local + cloud KMS) are re-pointed at the
+app-level Basiq key. ISC-56 (never plaintext) carries over verbatim to the Basiq key.
+
+## 8. Migration & decommission sequence
+
+1. Land the `IngestProvider` port; make `sync`/`backfill` provider-typed (ISC-105, ISC-106).
+2. Build `BasiqProvider`: token, user, consent, job-poll, fetch, mapper (ISC-107..ISC-118).
+3. Build the Categoriser + rules + internal category set (ISC-120..ISC-125).
+4. Backfill Nick's own data via Basiq; verify parity against the existing PocketSmith data
+   (transaction counts, balances) before cutover.
+5. One-time historical category migration (ISC-127).
+6. Remove PocketSmith from the runtime path once parity is verified (ISC-126); keep the
+   pinned OpenAPI artefact in git history only.
+7. Confirm no per-user dev key is needed to onboard (ISC-128).
+
+## 9. Confirm-in-sandbox checklist (BUILD gate)
+
+These are design assumptions from Basiq's documented model that must be verified against
+the live sandbox before the matching ISC passes. Do not mark them `[x]` on intent:
+
+- Token endpoint scopes (`SERVER_ACCESS` / `CLIENT_ACCESS`) and TTLs.
+- Consent UI URL, token handoff, and return/callback contract.
+- Job step names and the terminal success signal.
+- Transaction field names: `postDate`/`transactionDate`, `amount` sign, `direction`,
+  `class` values, `status` enum, `enrich.merchant`/`enrich.category` shape.
+- Transactions pagination cursor (`links.next`) and the postDate filter syntax.
+- Institution coverage and CDR data scopes for ANZ, NAB, Macquarie.
+- Commercial: dev/sandbox is free; production access plan, per-connection pricing, and
+  whether a single-user (then multi-user) use case is accepted.
+
+## 10. ISC index
+
+Provider abstraction: ISC-105, ISC-106, ISC-107.
+Auth/token: ISC-108, ISC-109.
+User/connection/consent lifecycle: ISC-110, ISC-111, ISC-112, ISC-113, ISC-114.
+Fetch + mapping: ISC-115, ISC-116, ISC-117, ISC-118, ISC-119.
+Categorisation: ISC-120, ISC-121, ISC-122, ISC-123, ISC-124, ISC-125.
+Migration/decommission: ISC-126, ISC-127, ISC-128.

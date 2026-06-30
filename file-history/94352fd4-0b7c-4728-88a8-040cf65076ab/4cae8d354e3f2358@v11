@@ -1,0 +1,682 @@
+/**
+ * The typed API contract. This is the single source of truth for the wire shapes
+ * exchanged between the SPA and the Hono handlers. Locking it here lets the UI and
+ * the handler implementations be built in parallel against the same types.
+ *
+ * Conventions:
+ *   - All money is integer cents (field names end in Cents).
+ *   - Dates are ISO strings (YYYY-MM-DD); timestamps are epoch millis (asOf, ts).
+ *   - Every response that reflects tenant state is implicitly scoped to the
+ *     authenticated user_id resolved by the AuthProvider; user_id is never a
+ *     request field (the session carries it).
+ */
+
+import type { BudgetPeriod, ChangeScope, EnvelopeType, RolloverRule, TargetType } from "../domain/types.ts";
+
+/** Uniform error envelope. */
+export interface ApiError {
+  readonly error: string;
+  readonly code: string;
+}
+
+// ── Auth ────────────────────────────────────────────────────────────────────
+
+export interface SignInRequest {
+  /** PIN for local mode, email for cloud mode. */
+  readonly kind: "pin" | "email";
+  readonly pin?: string;
+  readonly email?: string;
+}
+
+export interface SignInResponse {
+  /** "authenticated" when a session was minted (local PIN); "link_sent" for cloud. */
+  readonly status: "authenticated" | "link_sent";
+  readonly userId: string | null;
+}
+
+export interface VerifyLinkRequest {
+  readonly token: string;
+}
+
+export interface SessionResponse {
+  readonly authenticated: boolean;
+  readonly userId: string | null;
+  readonly idleExpiresAt: number | null;
+}
+
+// ── Envelopes grid (with rollups) ─────────────────────────────────────────────
+
+/** One row in the Dave Ramsey grid, with the four figures and tree position. */
+export interface EnvelopeRow {
+  readonly id: string;
+  readonly parentId: string | null;
+  readonly name: string;
+  readonly group: string;
+  readonly rolloverRule: RolloverRule;
+  readonly targetType: TargetType;
+  readonly targetAmountCents: number;
+  /** Envelope type (ISC-91): income, expense, saving, envelope, or working. */
+  readonly type: EnvelopeType;
+  /** Active flag (ISC-100). Inactive envelopes are excluded from the budget total. */
+  readonly active: boolean;
+  /** Archived flag. Archived envelopes are excluded entirely from the grid. */
+  readonly archived: boolean;
+  /** The period the budget is entered in (ISC-94): weekly, fortnightly, monthly, annual. */
+  readonly period: BudgetPeriod;
+  /**
+   * The date the rollover schedule is anchored on (YYYY-MM-DD), or null when no
+   * baseline has been set. Editable per budget; drives the per-transaction running
+   * balance schedule and seeds the Edit Budget date input.
+   */
+  readonly rolloverStart: string | null;
+  /** Starting carryover (may be negative). */
+  readonly carryoverCents: number;
+  /** This-period allocation. */
+  readonly allocationCents: number;
+  /** carryover + allocation. */
+  readonly totalCents: number;
+  /** total - spent. */
+  readonly leftCents: number;
+  /** Depth in the tree, 0 = top level. */
+  readonly depth: number;
+}
+
+/**
+ * A first-class income envelope on the grid (ISC-65, ISC-88, ISC-101). It carries
+ * the same four figures as an expense row so the UI can render the two identically:
+ *
+ *   carryoverCents  starting carryover on the income envelope (signed)
+ *   budgetedCents   the budget (the expected/target income) — column 2
+ *   receivedCents   actual income that landed in the range, in place of "spent"
+ *   leftCents       carryover + received - budget (the running income surplus/deficit)
+ *
+ * `actualCents` is retained as an alias of `receivedCents`, and `varianceCents`
+ * (received - target) is retained for the legacy surplus/deficit view (ISC-99).
+ * The old `capitalToExpenseCents` field was removed: the income budget is itself
+ * the balancing figure (ISA Changelog 2026-06-27).
+ */
+export interface IncomeEnvelopeView {
+  readonly id: string;
+  readonly name: string;
+  readonly source: string;
+  /** The budget: expected/target income for the range (column 2). */
+  readonly budgetedCents: number;
+  /** Actual income received in the range; alias of receivedCents (column 3). */
+  readonly actualCents: number;
+  /** Actual income received in the range, in place of "spent" (ISC-101). */
+  readonly receivedCents: number;
+  /** Income target for the range (defaults to the budget). */
+  readonly targetCents: number;
+  /** received - target. Positive = surplus, negative = deficit (ISC-99). */
+  readonly varianceCents: number;
+  /** Starting carryover on the income envelope, signed (column 1). */
+  readonly carryoverCents: number;
+  /** carryover + received - budget: the running income surplus/deficit (column 4, ISC-101). */
+  readonly leftCents: number;
+}
+
+/** A named period selection for the grid (ISC-103). Australian FY = 1 Jul to 30 Jun. */
+export type NamedPeriod = "this-month" | "last-month" | "this-fy" | "last-fy";
+
+/**
+ * Period selection for GET /api/envelopes (ISC-103, ISC-104). Either a named
+ * period (default this-month) OR an explicit from/to custom date range. When
+ * both are present, the explicit from/to wins. Omitting everything is this-month.
+ */
+export interface EnvelopesQuery {
+  readonly period?: NamedPeriod;
+  /** Inclusive custom-range lower bound (YYYY-MM-DD). */
+  readonly from?: string;
+  /** Inclusive custom-range upper bound (YYYY-MM-DD). */
+  readonly to?: string;
+}
+
+export interface GridResponse {
+  /** ISO YYYY-MM for the rendered period (the range's final month). */
+  readonly period: string;
+  /** Inclusive ISO date bounds of the rendered range (ISC-104). */
+  readonly from: string;
+  readonly to: string;
+  readonly rows: readonly EnvelopeRow[];
+  /** First-class income envelopes with budgeted/actual/variance (ISC-65, ISC-88). */
+  readonly income: readonly IncomeEnvelopeView[];
+  /**
+   * False when the tenant has zero envelopes: the UI shows the empty "not set up
+   * yet" state instead of a misleading zeroed balance (ISC-88).
+   */
+  readonly isSetUp: boolean;
+  /** Total budgeted income across income envelopes (the zero-based denominator). */
+  readonly budgetedIncomeCents: number;
+  /** Continuous zero-based check: positive = unallocated, negative = over-allocated. */
+  readonly unallocatedCents: number;
+  /** True when the budget is not zero-based; an alert, never a block (ISC-30). */
+  readonly zeroBasedAlert: boolean;
+  /**
+   * Income capital provided = sum of income budgets over the range (ISC-92). The
+   * income budget is itself the balancing figure; there is no capital sub-pool.
+   */
+  readonly capitalProvidedCents: number;
+  /** Total budgeted out: sum of active expense+saving+envelope budgets over the range (ISC-98). */
+  readonly budgetedOutCents: number;
+  /** capitalProvided - budgetedOut. Zero when the zero-base balances (ISC-98). */
+  readonly residualCents: number;
+  /**
+   * Count of transactions in the rendered period that resolve to NO envelope
+   * (unmapped, ISC-20). These sit outside every budget; the UI surfaces them as a
+   * single "to be categorised" summary line above the budget sections.
+   */
+  readonly uncategorisedCount: number;
+  /** Signed-cents total of those same uncategorised transactions. */
+  readonly uncategorisedTotalCents: number;
+  readonly asOf: number;
+}
+
+/** The budget-balancing (zero-base) figures, ISC-98 / ISC-99. */
+export interface BudgetBalanceResponse {
+  /** Sum of income budgets over the range: the income capital provided (ISC-92). */
+  readonly capitalProvidedCents: number;
+  /** Sum of active expense+saving+envelope budgets over the range: the amount budgeted out. */
+  readonly budgetedOutCents: number;
+  /** capitalProvided - budgetedOut. Zero when balanced; the residual otherwise. */
+  readonly residualCents: number;
+}
+
+/** Time-travel view: balances as at end-of-day T (ISC-36). */
+export interface AsOfRequest {
+  readonly date: string;
+}
+
+// ── Envelope detail ───────────────────────────────────────────────────────────
+
+export interface TransactionView {
+  readonly id: string;
+  readonly date: string;
+  readonly amountCents: number;
+  readonly payee: string;
+  readonly isPending: boolean;
+  readonly isTransfer: boolean;
+}
+
+export interface EnvelopeDetailResponse {
+  readonly envelope: EnvelopeRow;
+  readonly transactions: readonly TransactionView[];
+  /**
+   * Present only when the resolved envelope is an income envelope (id prefix
+   * `inc-`). The four-figure `envelope` row above is synthesised from this view
+   * (carryover, budget→allocation, carryover+received→total, left) so the detail
+   * UI renders income identically; `income` carries the lossless income figures
+   * (budgeted/received/target/variance) for richer rendering (ISC-65, ISC-101).
+   */
+  readonly income?: IncomeEnvelopeView;
+}
+
+// ── Envelope trend: spend-over-time series (GAP-A, ISC-16) ─────────────────────
+
+/** Query for GET /api/envelopes/trend: one envelope, optional inclusive date window. */
+export interface TrendQuery {
+  readonly id: string;
+  /** Inclusive lower date bound (YYYY-MM-DD). Defaults to the current month start. */
+  readonly from?: string;
+  /** Inclusive upper date bound (YYYY-MM-DD). Defaults to the current month end. */
+  readonly to?: string;
+}
+
+/**
+ * One day of the envelope spend-over-time series. All money is signed integer
+ * cents (negative = outflow), consistent with the rest of the engine.
+ */
+export interface TrendPoint {
+  readonly date: string;
+  /** Net signed activity on this day (negative = outflow, positive = inflow). */
+  readonly spentCents: number;
+  /** Running net signed activity from `from` to this day inclusive. */
+  readonly cumulativeSpentCents: number;
+  /** The flat budget line: the envelope's allocation/budget for the window. */
+  readonly budgetLineCents: number;
+  /** The exposed ISC-16 daily snapshot balance for this day, or null if none was written. */
+  readonly snapshotBalanceCents: number | null;
+}
+
+/**
+ * Daily spend-over-time series for one envelope (GAP-A). Exposes the existing
+ * per-envelope ISC-16 daily snapshots plus, per day, cumulative spend and the
+ * flat budget line, so the UI can draw cumulative spend vs the budget line with
+ * a rollover band of height `carryoverCents`.
+ */
+export interface TrendResponse {
+  readonly envelopeId: string;
+  readonly from: string;
+  readonly to: string;
+  /** The envelope's allocation/budget over the window (the flat budget line). */
+  readonly budgetCents: number;
+  /** Opening carryover entering the window: the height of the rollover band. */
+  readonly carryoverCents: number;
+  readonly points: readonly TrendPoint[];
+}
+
+// ── Move money (reallocation) ─────────────────────────────────────────────────
+
+/** A reallocation names source, destination, amount, and scope (ISC-66, ISC-67). */
+export interface MoveMoneyRequest {
+  readonly fromEnvelopeId: string;
+  readonly toEnvelopeId: string;
+  readonly amountCents: number;
+  readonly scope: ChangeScope;
+}
+
+export interface MoveMoneyResponse {
+  readonly ok: boolean;
+  readonly fromLeftCents: number;
+  readonly toLeftCents: number;
+  /** Set when the move left the plan unbalanced (allowed, but alerted — ISC-69). */
+  readonly zeroBasedAlert: boolean;
+}
+
+// ── Distribute surplus (multi-leg conserved reallocation) ─────────────────────
+
+/** One leg of a distribution: an envelope and the signed cents to apply (ISC-66). */
+export interface DistributeLeg {
+  readonly envelopeId: string;
+  readonly deltaCents: number;
+}
+
+/**
+ * A conserved, multi-leg reallocation. Each leg adjusts one envelope's period
+ * allocation by a signed delta; a negative delta frees surplus, a positive delta
+ * spends it. The deltas must sum to exactly zero (the net-zero rule) or the
+ * server rejects the request with a 400. Zero-delta legs are ignored. Scope is
+ * this-month-only or ongoing (edits the recurring template too), exactly as
+ * move-money (ISC-67).
+ */
+export interface DistributeRequest {
+  readonly legs: readonly DistributeLeg[];
+  readonly scope: ChangeScope;
+}
+
+/** Per-envelope outcome of an applied distribution. */
+export interface DistributeResultLeg {
+  readonly envelopeId: string;
+  readonly deltaCents: number;
+  /** The envelope's resulting "left" after the distribution. */
+  readonly leftCents: number;
+}
+
+export interface DistributeResponse {
+  readonly ok: boolean;
+  /** The applied legs (non-zero only) with each envelope's resulting left. */
+  readonly legs: readonly DistributeResultLeg[];
+  /** Set when the distribution left the budget unbalanced (allowed, but alerted). */
+  readonly zeroBasedAlert: boolean;
+}
+
+// ── Reconcile (holding vs NAB) ────────────────────────────────────────────────
+
+export interface ReconcileRequest {
+  /** NAB statement closing balance in cents, entered by the user. */
+  readonly nabStatementCents: number;
+  readonly statementDate: string;
+}
+
+export interface ReconcileResponse {
+  readonly holdingCents: number;
+  readonly nabStatementCents: number;
+  /** holding - nab; zero = in sync, non-zero = the tripwire fired. */
+  readonly driftCents: number;
+  readonly matched: boolean;
+}
+
+// ── Penny vs PocketSmith balance reconciliation (P0 trust surface) ─────────────
+
+/** One reconciliation line: Penny's computed figure vs PocketSmith's reported balance. */
+export interface ReconcileBalanceLine {
+  readonly accountId: string;
+  readonly label: string;
+  /** "card" lines are the graded holding/card tripwire; "account" lines are informational. */
+  readonly kind: "card" | "account";
+  readonly pocketsmithCents: number;
+  /** Net of Penny's posted transactions on this account (signed cents). */
+  readonly pennyCents: number;
+  readonly pennyTxnCount: number;
+  /** pennyCents - pocketsmithCents. */
+  readonly driftCents: number;
+  /** ok = ties within tolerance; amber = card drift beyond tolerance; info = ungraded. */
+  readonly state: "ok" | "amber" | "info";
+}
+
+export interface ReconcileBalancesResponse {
+  /** False when PocketSmith could not be reached (no key, network/auth error). */
+  readonly ok: boolean;
+  readonly lines: readonly ReconcileBalanceLine[];
+  /** Net drift across the graded card lines (the headline tripwire figure). */
+  readonly cardDriftCents: number;
+  readonly asOf: number;
+  /** Present when ok is false: a safe, key-free reason. */
+  readonly message?: string;
+}
+
+// ── Net position (master reconciliation, cash − card owed vs total left) ───────
+
+/**
+ * The master reconciliation (the whole point of envelope budgeting): the sum of
+ * every envelope's "left" should equal the user's real liquid position — cash on
+ * hand minus what is owed on credit cards. Account balances come live from
+ * PocketSmith (the same fetch as GET /api/reconcile/balances); the left figure is
+ * the sum of every LEAF envelope's leftCents plus the income envelopes' leftCents.
+ */
+export interface NetPositionResponse {
+  /** False when PocketSmith could not be reached (no key, network/auth error). */
+  readonly ok: boolean;
+  /** Sum of non-card (bank/cash) account current balances, integer cents. */
+  readonly cashOnHandCents: number;
+  /** Magnitude of the summed credit-card balances, reported as a positive owed figure. */
+  readonly cardOwedCents: number;
+  /** Sum of leaf-envelope leftCents plus income leftCents (the budget's "left"). */
+  readonly totalLeftCents: number;
+  /**
+   * The budget's "left" broken down by section. Income is the sum of the income
+   * envelopes' leftCents; saving/expense/envelope/working are the per-type sums of
+   * the leaf rows' leftCents. The five sum to totalLeftCents. Working envelopes are
+   * outside the zero-based budget but still move real cash, so their balance is part
+   * of the net-position reconciliation (it begins at 0 today and accrues forward).
+   */
+  readonly sectionLeftCents: {
+    readonly income: number;
+    readonly saving: number;
+    readonly expense: number;
+    readonly envelope: number;
+    readonly working: number;
+  };
+  /** (cashOnHand − cardOwed) − totalLeft. Zero means the budget reconciles to reality. */
+  readonly reconciledDeltaCents: number;
+  readonly asOf: number;
+  /** Present when ok is false: a safe, key-free reason. */
+  readonly message?: string;
+}
+
+// ── Budget history and edit-budget wizard ─────────────────────────────────────
+
+export interface BudgetHistoryEntry {
+  readonly id: string;
+  readonly ts: number;
+  readonly envelopeId: string;
+  readonly envelopeName: string;
+  readonly beforeCents: number;
+  readonly afterCents: number;
+  readonly scope: ChangeScope;
+  readonly actor: "sync" | "ui" | "agent";
+}
+
+export interface BudgetHistoryResponse {
+  readonly entries: readonly BudgetHistoryEntry[];
+}
+
+/** A single line edited through the Edit Budget wizard (ISC-72). */
+export interface EditBudgetLine {
+  readonly envelopeId: string;
+  /** Monthly-equivalent amount (the UI normalises the entered period to monthly). */
+  readonly amountCents: number;
+  /** The period the user entered the amount in, kept as a label (ISC-94). */
+  readonly period?: BudgetPeriod;
+}
+
+export interface EditBudgetRequest {
+  readonly lines: readonly EditBudgetLine[];
+  readonly scope: ChangeScope;
+}
+
+export interface EditBudgetResponse {
+  readonly ok: boolean;
+  readonly changed: number;
+  readonly zeroBasedAlert: boolean;
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+export interface SettingsResponse {
+  readonly deployMode: "local" | "cloud";
+  readonly hasPocketSmithKey: boolean;
+  readonly lastSyncAt: string | null;
+}
+
+/** Set the per-user PocketSmith developer key. Never echoed back (ISC-56). */
+export interface SetPocketSmithKeyRequest {
+  readonly developerKey: string;
+}
+
+export interface SetPocketSmithKeyResponse {
+  readonly ok: boolean;
+}
+
+// ── Pulse widget ──────────────────────────────────────────────────────────────
+
+export interface PulseTile {
+  readonly label: string;
+  readonly valueCents: number;
+  /** Every tile carries an as-of timestamp (ISC-44). */
+  readonly asOf: number;
+}
+
+export interface PulseResponse {
+  /** Tile A: unallocated dollars (ISC-41). */
+  readonly unallocated: PulseTile;
+  /** Tile B: top three envelopes by overspend percent (ISC-42). */
+  readonly topOverspends: readonly { readonly envelopeId: string; readonly name: string; readonly overspendPct: number; readonly asOf: number }[];
+  /** Tile C: holding vs NAB drift (ISC-43). */
+  readonly holdingDrift: PulseTile;
+  readonly asOf: number;
+}
+
+// ── Transactions list (ISC-78..81) ────────────────────────────────────────────
+
+/** One row of the Transactions screen, newest-first (ISC-78). */
+export interface TransactionListItem {
+  readonly id: string;
+  readonly date: string;
+  readonly payee: string;
+  readonly amountCents: number;
+  readonly accountId: string;
+  readonly categoryId: string | null;
+  /**
+   * The envelope the transaction resolves to, with its name. Null when the
+   * transaction is unmapped (uncategorised); such rows sit outside every budget.
+   */
+  readonly envelopeId: string | null;
+  readonly envelopeName: string | null;
+  readonly isPending: boolean;
+  readonly isTransfer: boolean;
+  /**
+   * The envelope balance immediately AFTER this transaction (the continuous running
+   * balance). Populated only when the list is scoped to a single envelope
+   * (envelopeId query present); 0 on the unscoped list. The most-recent
+   * transaction's value equals the envelope's current Left from GET /api/envelopes.
+   */
+  readonly balanceAfterCents: number;
+}
+
+/** Filters for GET /api/transactions; all optional and AND-combined (ISC-79, ISC-80). */
+export interface TransactionsQuery {
+  /** Inclusive lower date bound (YYYY-MM-DD). */
+  readonly from?: string;
+  /** Inclusive upper date bound (YYYY-MM-DD). */
+  readonly to?: string;
+  readonly envelopeId?: string;
+  readonly accountId?: string;
+  /**
+   * Direction filter by the sign of the amount: income = amount > 0,
+   * expense = amount < 0, all (default) = no direction filter.
+   */
+  readonly type?: "income" | "expense" | "all";
+  /** Inclusive lower bound on the transaction magnitude (absolute integer cents). */
+  readonly amountMin?: number;
+  /** Inclusive upper bound on the transaction magnitude (absolute integer cents). */
+  readonly amountMax?: number;
+  /** Case-insensitive substring match on the payee. */
+  readonly keyword?: string;
+}
+
+export interface TransactionsResponse {
+  readonly items: readonly TransactionListItem[];
+}
+
+// ── Create envelope (ISC-87) ──────────────────────────────────────────────────
+
+/** Add a new envelope from the budget page (ISC-87, ISC-91, ISC-94, ISC-100). */
+export interface CreateEnvelopeRequest {
+  readonly name: string;
+  /** income | expense | saving. saving behaves as expense; income is first-class (ISC-91). */
+  readonly type: EnvelopeType;
+  /** Parent envelope id for an expense/saving envelope, or null for top level. */
+  readonly parentId?: string | null;
+  readonly rolloverRule?: RolloverRule;
+  /** Initial budgeted amount (template line for expense/saving, target for income). */
+  readonly budgetedCents?: number;
+  /** The period the budgeted amount is entered in (ISC-94). Defaults monthly. */
+  readonly period?: BudgetPeriod;
+  /**
+   * The rollover schedule anchor date (YYYY-MM-DD). The envelope resets at the
+   * chosen interval (period) from this date. Defaults to today when omitted.
+   */
+  readonly rolloverStart?: string;
+  /** Active flag (ISC-100). Defaults true. */
+  readonly active?: boolean;
+  /** Income target / budget (ISC-92), income type only. */
+  readonly targetCents?: number;
+}
+
+export interface CreateEnvelopeResponse {
+  readonly id: string;
+  readonly type: EnvelopeType;
+}
+
+/** Edit an existing envelope's type/period/active/capital fields (ISC-91, ISC-94, ISC-100). */
+export interface EditEnvelopeRequest {
+  readonly id: string;
+  readonly name?: string;
+  readonly type?: EnvelopeType;
+  readonly parentId?: string | null;
+  readonly active?: boolean;
+  /** Budgeted amount for an expense/saving template line. */
+  readonly budgetedCents?: number;
+  /** The period the budgeted amount is entered in (ISC-94). */
+  readonly period?: BudgetPeriod;
+  /** Income target / budget (ISC-92), income type only. */
+  readonly targetCents?: number;
+}
+
+export interface EditEnvelopeResponse {
+  readonly id: string;
+  readonly ok: boolean;
+}
+
+// ── Money movements history (ISC-89, ISC-90) ──────────────────────────────────
+
+export interface MovementView {
+  readonly id: string;
+  readonly ts: number;
+  readonly fromEnvelopeId: string;
+  readonly fromEnvelopeName: string | null;
+  readonly toEnvelopeId: string;
+  readonly toEnvelopeName: string | null;
+  readonly amountCents: number;
+  readonly scope: ChangeScope;
+  readonly actor: "sync" | "ui" | "agent";
+  readonly correlationId: string;
+}
+
+export interface MovementsResponse {
+  readonly movements: readonly MovementView[];
+}
+
+/** Manually reset an envelope's carried starting balance, recorded as a traceable event. */
+export interface SetCarryoverRequest {
+  readonly envelopeId: string;
+  readonly carryoverCents: number;
+}
+export interface SetCarryoverResponse {
+  readonly beforeCents: number;
+  readonly afterCents: number;
+}
+
+/** Archive or unarchive an envelope, recorded as a traceable envelope.archive event. */
+export interface ArchiveEnvelopeRequest {
+  readonly envelopeId: string;
+  readonly archived: boolean;
+}
+export interface ArchiveEnvelopeResponse {
+  readonly envelopeId: string;
+  readonly archived: boolean;
+}
+
+/**
+ * Set an envelope's rollover schedule: the anchor date and the interval (period).
+ * Changing it recomputes the schedule, and therefore the running balances and Left.
+ */
+export interface SetRolloverRequest {
+  readonly envelopeId: string;
+  /** The new rollover anchor date (YYYY-MM-DD). */
+  readonly rolloverStart: string;
+  /** The new budget period/interval. Omit to leave the period unchanged. */
+  readonly period?: BudgetPeriod;
+}
+export interface SetRolloverResponse {
+  readonly envelopeId: string;
+  readonly rolloverStart: string;
+  readonly period: BudgetPeriod;
+}
+
+/** A lightweight archived-envelope entry for the budget page's "Show archived" list. */
+export interface ArchivedEnvelopeView {
+  readonly id: string;
+  readonly name: string;
+  readonly type: EnvelopeType;
+}
+export interface ArchivedEnvelopesResponse {
+  readonly envelopes: readonly ArchivedEnvelopeView[];
+}
+
+/**
+ * The full endpoint map: method + path + request/response. Handlers and the SPA
+ * client both refer to this so a contract drift is a type error, not a runtime
+ * surprise.
+ */
+export interface ApiContract {
+  "POST /api/auth/signin": { req: SignInRequest; res: SignInResponse | ApiError };
+  "POST /api/auth/verify": { req: VerifyLinkRequest; res: SessionResponse | ApiError };
+  "GET /api/auth/session": { req: void; res: SessionResponse };
+  "POST /api/auth/signout": { req: void; res: { ok: true } };
+
+  "GET /api/envelopes": { req: EnvelopesQuery; res: GridResponse };
+  "GET /api/envelopes/as-of": { req: AsOfRequest; res: GridResponse };
+  "GET /api/envelopes/detail": { req: { id: string }; res: EnvelopeDetailResponse | ApiError };
+  "GET /api/envelopes/trend": { req: TrendQuery; res: TrendResponse | ApiError };
+  "POST /api/envelopes/move": { req: MoveMoneyRequest; res: MoveMoneyResponse | ApiError };
+  "POST /api/envelopes/distribute": { req: DistributeRequest; res: DistributeResponse | ApiError };
+  "POST /api/envelopes": { req: CreateEnvelopeRequest; res: CreateEnvelopeResponse | ApiError };
+  "POST /api/envelopes/carryover": { req: SetCarryoverRequest; res: SetCarryoverResponse | ApiError };
+  "POST /api/envelopes/archive": { req: ArchiveEnvelopeRequest; res: ArchiveEnvelopeResponse | ApiError };
+  "POST /api/envelopes/rollover": { req: SetRolloverRequest; res: SetRolloverResponse | ApiError };
+  "GET /api/envelopes/archived": { req: void; res: ArchivedEnvelopesResponse };
+  "POST /api/envelopes/edit": { req: EditEnvelopeRequest; res: EditEnvelopeResponse | ApiError };
+  "POST /api/move": { req: MoveMoneyRequest; res: MoveMoneyResponse | ApiError };
+
+  "GET /api/transactions": { req: TransactionsQuery; res: TransactionsResponse };
+
+  "GET /api/movements": { req: void; res: MovementsResponse };
+
+  "POST /api/reconcile": { req: ReconcileRequest; res: ReconcileResponse };
+  "GET /api/reconcile/balances": { req: void; res: ReconcileBalancesResponse };
+  "GET /api/net-position": { req: void; res: NetPositionResponse };
+
+  "GET /api/budget/history": { req: void; res: BudgetHistoryResponse };
+  "POST /api/budget/edit": { req: EditBudgetRequest; res: EditBudgetResponse | ApiError };
+
+  "GET /api/settings": { req: void; res: SettingsResponse };
+  "POST /api/settings/pocketsmith-key": {
+    req: SetPocketSmithKeyRequest;
+    res: SetPocketSmithKeyResponse | ApiError;
+  };
+
+  "GET /api/pulse": { req: void; res: PulseResponse };
+}
+
+export type ApiPath = keyof ApiContract;

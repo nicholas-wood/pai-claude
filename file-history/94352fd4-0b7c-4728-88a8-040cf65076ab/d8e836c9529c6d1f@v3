@@ -1,0 +1,78 @@
+/**
+ * Hono server skeleton.
+ *
+ * Builds the container at the composition root (the only place DEPLOY_MODE is
+ * read), registers every API route from the typed handlers, serves the built
+ * web/dist SPA as static assets with an index.html fallback, and mounts the whole
+ * app under config.basePath ("/" local, "/budget" cloud). The listener binds
+ * 127.0.0.1 at config.port; in local mode `tailscale serve` fronts it with HTTPS.
+ *
+ * The handlers here are stubs that return typed empty shapes. The module and
+ * integration phases fill them in without touching this wiring or the contract.
+ */
+
+import { Hono } from "hono";
+import { serveStatic } from "hono/bun";
+import { buildContainer, type Container } from "../composition.ts";
+import { installEgressGuard } from "../security/egress.ts";
+import { buildServices } from "./services.ts";
+import { registerAuth } from "./handlers/auth.ts";
+import { registerEnvelopes } from "./handlers/envelopes.ts";
+import { registerReconcile } from "./handlers/reconcile.ts";
+import { registerBudget } from "./handlers/budget.ts";
+import { registerSettings } from "./handlers/settings.ts";
+import { registerPulse } from "./handlers/pulse.ts";
+import { registerTransactions } from "./handlers/transactions.ts";
+
+const WEB_DIST = "./web/dist";
+
+export interface Server {
+  readonly app: Hono;
+  readonly container: Container;
+}
+
+/** Build the full application: container + routed API + static SPA, mounted at basePath. */
+export async function createServer(): Promise<Server> {
+  const container = await buildContainer();
+
+  // Local-mode no-egress guarantee (ISC-45): nothing financial leaves the box.
+  // PocketSmith and loopback/tailnet stay allowed; cloud mode is permissive.
+  installEgressGuard(container.config.deployMode);
+
+  const services = buildServices(container);
+
+  // All API routes live under /api on this sub-app.
+  const api = new Hono();
+  registerAuth(api, container);
+  registerEnvelopes(api, container, services);
+  registerReconcile(api, container, services);
+  registerBudget(api, container, services);
+  registerSettings(api, container);
+  registerPulse(api, container, services);
+  registerTransactions(api, container, services);
+
+  // Liveness probe, mode-agnostic.
+  api.get("/health", (c) => c.json({ ok: true, mode: container.config.deployMode } as const));
+
+  const inner = new Hono();
+  inner.route("/api", api);
+  // Static assets first, then SPA fallback to index.html for client-side routing.
+  inner.use("/*", serveStatic({ root: WEB_DIST }));
+  inner.get("*", serveStatic({ path: `${WEB_DIST}/index.html` }));
+
+  // Mount under the configured base path. "/" local, "/budget" cloud.
+  const app = new Hono();
+  app.route(container.config.basePath === "/" ? "/" : container.config.basePath, inner);
+
+  return { app, container };
+}
+
+const { app, container } = await createServer();
+
+// Bun reads this default export. Bind loopback; tailscale serve / the cloud
+// platform terminates TLS in front. Enforces local-mode non-public exposure.
+export default {
+  port: container.config.port,
+  hostname: "127.0.0.1",
+  fetch: app.fetch,
+};

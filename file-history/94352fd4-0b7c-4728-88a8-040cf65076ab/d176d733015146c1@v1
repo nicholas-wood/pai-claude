@@ -1,0 +1,33 @@
+/**
+ * Vite config for the Penny SPA + PWA.
+ *
+ * root is web/ so all app source lives under web/src and the public assets
+ * (manifest, service worker, icons) under web/public. The build output goes to
+ * web/dist, which the Hono server serves as static assets on a single port
+ * (ISC-33). server.fs.allow lets the dev server reach the shared contract types
+ * that live outside web/ at src/server/contract.ts.
+ */
+
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { fileURLToPath, URL } from "node:url";
+
+export default defineConfig({
+  root: "web",
+  base: "/",
+  plugins: [react()],
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./web/src", import.meta.url)),
+      "@contract": fileURLToPath(new URL("./src/server/contract.ts", import.meta.url)),
+      "@domain": fileURLToPath(new URL("./src/domain/types.ts", import.meta.url)),
+    },
+  },
+  server: {
+    fs: { allow: [fileURLToPath(new URL(".", import.meta.url))] },
+  },
+  build: {
+    outDir: "dist",
+    emptyOutDir: true,
+  },
+});

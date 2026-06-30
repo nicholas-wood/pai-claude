@@ -1,0 +1,70 @@
+/**
+ * Shared fixtures for the envelope and budget engine tests.
+ */
+
+import type { Envelope as StoreEnvelope, Tx } from "../src/platform/store.ts";
+import type { EnvelopeType, RolloverRule, TargetType } from "../src/domain/types.ts";
+import type { EngineConfig } from "../src/envelope/ports.ts";
+
+export const USER = "user-1";
+export const USER2 = "user-2";
+
+export const CONFIG: EngineConfig = {
+  inboxEnvelopeId: "inbox",
+  holdingEnvelopeId: "holding",
+  nabCardAccountIds: ["nab-card"],
+};
+
+export function env(
+  id: string,
+  opts: {
+    parentId?: string | null;
+    name?: string;
+    group?: string;
+    rolloverRule?: RolloverRule;
+    targetType?: TargetType;
+    targetAmountCents?: number;
+    type?: EnvelopeType;
+    archived?: boolean;
+  } = {},
+): StoreEnvelope {
+  return {
+    id,
+    name: opts.name ?? id,
+    parentId: opts.parentId ?? null,
+    group: opts.group ?? "",
+    rolloverRule: (opts.rolloverRule ?? "roll_carry") as StoreEnvelope["rolloverRule"],
+    targetType: opts.targetType ?? "no_target",
+    targetAmountCents: opts.targetAmountCents ?? 0,
+    ...(opts.type !== undefined ? { type: opts.type } : {}),
+    ...(opts.archived !== undefined ? { archived: opts.archived } : {}),
+  };
+}
+
+let txSeq = 0;
+export function tx(
+  opts: {
+    id?: string;
+    date: string;
+    amountCents: number;
+    envelopeId?: string | null;
+    categoryId?: string | null;
+    accountId?: string;
+    payee?: string;
+    isTransfer?: boolean;
+    isPending?: boolean;
+  },
+): Tx {
+  return {
+    id: opts.id ?? `tx-${++txSeq}`,
+    date: opts.date,
+    amountCents: opts.amountCents,
+    accountId: opts.accountId ?? "nab-everyday",
+    categoryId: opts.categoryId ?? null,
+    envelopeId: opts.envelopeId ?? null,
+    payee: opts.payee ?? "Payee",
+    isTransfer: opts.isTransfer ?? false,
+    isPending: opts.isPending ?? false,
+    rawJson: "{}",
+  };
+}

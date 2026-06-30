@@ -1,0 +1,353 @@
+[
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/ALGORITHM/LATEST"
+    },
+    "timestamp": "2026-06-29T03:25:17.271Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls /home/nicholas-wood/Documents/workspace/projects/envelope-os/ 2>/dev/null && echo \"---DOCS---\" && ls /home/nicholas-wood/Documents/workspace/projects/envelope-os/docs/ 2>/dev/null",
+      "description": "List envelope-os project files"
+    },
+    "timestamp": "2026-06-29T03:25:18.195Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/ALGORITHM/v6.3.0.md"
+    },
+    "timestamp": "2026-06-29T03:25:25.134Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && echo \"===ISA head===\" && head -120 docs/ISA.md 2>/dev/null; echo \"===src tree===\" && find src -type f | head -60; echo \"===pocketsmith refs===\" && rg -l -i pocketsmith src 2>/dev/null",
+      "description": "Inspect envelope-os ISA and source structure"
+    },
+    "timestamp": "2026-06-29T03:25:27.034Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Algorithm\", \"voice_id\": \"fTtv3eikoepIosk8dTZ5\", \"voice_enabled\": true}' >/dev/null 2>&1; echo done",
+      "description": "Algorithm entry voice announcement"
+    },
+    "timestamp": "2026-06-29T03:26:14.476Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/ingest/client.ts"
+    },
+    "timestamp": "2026-06-29T03:26:15.420Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/ingest/sync.ts"
+    },
+    "timestamp": "2026-06-29T03:26:15.898Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/ingest/map.ts"
+    },
+    "timestamp": "2026-06-29T03:26:16.166Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/platform/auth.ts"
+    },
+    "timestamp": "2026-06-29T03:56:36.052Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && echo \"=== store port signatures ===\" && rg -n \"^\\s+(upsertTransactions|getLastSyncAt|setLastSyncAt|appendEvent|listTransactions|[a-zA-Z]+)\\s*\\(\" src/platform/store.ts | rg -i \"userId|UserId\" | head -30; echo \"=== count of userId-scoped methods ===\" && rg -c \"userId: UserId|userId:UserId\" src/platform/store.ts; echo \"=== auth modes ===\" && rg -n \"single|multi|tenant|signup|register\" src/platform/auth.ts src/platform/auth/*.ts | head -20",
+      "description": "Confirm multi-tenant scoping in store and auth"
+    },
+    "timestamp": "2026-06-29T03:56:39.275Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md"
+    },
+    "timestamp": "2026-06-29T10:25:32.822Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/platform/store.ts"
+    },
+    "timestamp": "2026-06-29T10:26:15.505Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/platform/secrets.ts"
+    },
+    "timestamp": "2026-06-29T10:26:16.445Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/ingest/backfill.ts"
+    },
+    "timestamp": "2026-06-29T10:26:16.599Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/docs/BASIQ_MIGRATION_SPEC.md",
+      "content": "# Basiq Migration Spec — Direct Australian Bank Feeds for Penny (envelope-os)\n\n> Status: DESIGN (pre-build). Authored 2026-06-29. Owns the design for replacing the\n> PocketSmith ingest dependency with direct Australian bank feeds via Basiq (CDR /\n> Open Banking). The ISCs live in the project ISA (`ISA.md`, ISC-105..ISC-128); this\n> document is the detailed design behind those criteria. Basiq API field names and\n> sign conventions marked **[confirm-in-sandbox]** must be verified against the live\n> Basiq sandbox during BUILD before the matching ISC can pass.\n\n## 1. Why\n\nThree drivers, in Nick's words: drop a dependency, kill the PocketSmith subscription\ncost, and stop building on a product that is essentially just a bridge if Penny might\nserve other people later.\n\nThe decisive structural fact: **Penny is already multi-tenant.** Every `Store` method is\nscoped by `userId` (`src/platform/store.ts`), the schema is multi-tenant from migration\none (ISC-47, ISC-48), and cloud magic-link onboarding already mints a tenant per email\n(`src/platform/auth/cloud.ts`). The data model was never the blocker to adding people.\nPocketSmith was, because it is a per-user external account: every user would need their\nown PocketSmith subscription and their own developer key. That is a referral, not a\nproduct.\n\nThe onboarding-model inversion is the heart of this migration:\n\n| | PocketSmith (today) | Basiq (target) |\n|---|---|---|\n| Secret material | One **per-user** dev key, each user supplies their own | One **app-level** API key, held once by Penny |\n| User onboarding | User needs a PocketSmith account + generates a key | User clicks \"connect bank\", consents under CDR |\n| Categorisation | Inherited from the user's PocketSmith category tree | Penny owns it (Basiq enrich + user rules) |\n| Bank linking | PocketSmith does it, off-platform | Penny hosts the consent flow, in-app |\n\nMoving to Basiq does not just remove a cost. It removes the only thing standing between\n\"my budget app\" and \"a product\", and it removes the per-user onboarding friction\nentirely. The price is that Penny now owns two things PocketSmith was doing silently:\nthe bank-linking/consent lifecycle, and categorisation.\n\n## 2. Architecture: blast radius\n\nThe good news, confirmed by reading the code: the provider is already isolated in\n`src/ingest/`. The envelope engine, budget engine, store, server, and UI consume a\nneutral `Tx` shape (`src/platform/store.ts:17`) and never see the provider. The client\ndocstring states it outright: \"the envelope engine never talks to PocketSmith\".\n\n**Changes (the swap surface):**\n\n| File | Change |\n|------|--------|\n| `src/ingest/client.ts` | Replaced by a provider behind a new `IngestProvider` port; `BasiqClient` is the new concrete |\n| `src/ingest/sync.ts` | Depends on `IngestProvider`, not `PocketSmithClient`; gains job-poll before read |\n| `src/ingest/backfill.ts` | Same: provider-typed, pages Basiq transactions |\n| `src/ingest/map.ts` | New mapper: Basiq transaction → `Tx` |\n| `src/platform/secrets.ts` | New `SecretName` for the app-level Basiq key; `requirePocketSmithKey` retired |\n| `src/ingest/` (new) | `provider.ts` (port), `basiq/` (client, consent, jobs, enrich), `categorise.ts` |\n| Store schema | New tenant tables: Basiq user/connection/consent state; category rules; category set |\n| `src/server/handlers/settings.ts` | New connect-bank / consent flow endpoints |\n\n**Unchanged (the contract that protects everything downstream):** the `Tx` shape, the\n`Store` interface, the envelope engine, the budget engine, the effective-dated\ncategory→envelope mapping (ISC-19), the Inbox fallback (ISC-20), the event log, the UI\ngrid. **`Tx.categoryId` is the single coupling point** between ingest and the rest of the\napp. Preserve its meaning (a stable internal category id) and the swap is contained.\n\n## 3. The `IngestProvider` port\n\nAbstracts the provider so `sync`/`backfill` never name a concrete client (ISC-105,\nISC-106). Sketch (TypeScript, illustrative):\n\n```ts\n// src/ingest/provider.ts\nexport interface RawTxnPage {\n  readonly txns: readonly unknown[]; // provider-native rows, verbatim (ISC-12)\n  readonly nextCursor: string | null;\n}\n\nexport interface IngestProvider {\n  /** Ensure the tenant is linked and data is fresh. Establishes/refreshes the\n   *  connection and BLOCKS until the provider's fetch job completes (ISC-113). */\n  ensureFresh(userId: UserId): Promise<void>;\n\n  /** Page a tenant's transactions. `since` = inclusive lower postDate bound for\n   *  incremental sync (ISC-116); omitted for full backfill from `startDate`. */\n  paginate(userId: UserId, q: { startDate?: string; since?: string }):\n    AsyncGenerator<RawTxnPage, void, unknown>;\n\n  /** Map one provider-native row to the store Tx shape. categoryId is left null\n   *  here; the Categoriser assigns it downstream (ISC-117, ISC-120). */\n  toStoreTx(raw: unknown): Tx;\n\n  /** Consent lifecycle surface (Basiq-specific behaviour, port-neutral shape). */\n  consentStatus(userId: UserId): Promise<{ ok: boolean; expiresAt: string | null }>;\n}\n```\n\n`runSync`/`runBackfill` keep their current shape and event-logging; they call\n`provider.ensureFresh(userId)` first, then drain `provider.paginate(...)`, then\n`toStoreTxs` → `Categoriser` → `store.upsertTransactions`. The PocketSmith pull-only\nconstraint (ISC-9) survives: Basiq's model is poll-a-job, not a webhook listener\n(ISC-119).\n\n## 4. BasiqProvider design\n\nBase URL `https://au-api.basiq.io`. Header `basiq-version` is required on every call.\n\n### 4.1 Auth / server token (ISC-108, ISC-109)\n\n- App API key held in `SecretStore` under a new `SecretName` (`basiq_api_key`),\n  resolved at composition root. Never plaintext at rest, in env, git, or logs (ISC-109,\n  mirrors ISC-56).\n- `POST /token` with `Authorization: Basic <api-key>` and `scope=SERVER_ACCESS` returns a\n  short-lived `access_token` (~60 min) **[confirm-in-sandbox]**. Cache it; refresh on\n  expiry or on a 401.\n- A separate `CLIENT_ACCESS` token, scoped to a single Basiq user, is minted for the\n  in-browser Consent UI (§4.3). It never carries server privileges.\n\n### 4.2 Tenant ↔ Basiq user (ISC-110)\n\n- On first connect, `POST /users { email }` → Basiq `userId`. Persist it on the tenant\n  (new store column / table, tenant-scoped). This is identity-bearing but not secret, so\n  it lives in the `Store`, not the `SecretStore`.\n\n### 4.3 Bank linking via Consent UI (ISC-111)\n\n- Mint a `CLIENT_ACCESS` token for the tenant's Basiq user.\n- Redirect the user to the Basiq Consent UI (`https://consent.basiq.io/...?token=...`)\n  **[confirm-in-sandbox]**. The user selects their institution (ANZ, NAB, Macquarie) and\n  authorises under CDR. **No bank credential ever touches Penny** (ISC-111) — that is the\n  whole point of CDR vs screen-scraping.\n- On return, a `connection` exists on the Basiq user. Persist `connectionId`,\n  institution, and consent `expiresAt` per tenant (ISC-112).\n\n### 4.4 Refresh + job poll (ISC-113)\n\n- Data is fetched asynchronously. `POST /users/{userId}/connections/{id}/refresh` (or the\n  connection create) returns a `job` with steps (`retrieve-accounts`,\n  `retrieve-transactions`). Poll `GET /jobs/{jobId}` until all steps report `success`\n  before reading data **[confirm-in-sandbox]**. `ensureFresh` owns this.\n\n### 4.5 Fetch (ISC-115, ISC-116)\n\n- Backfill: `GET /users/{userId}/transactions` paged via `links.next` to completion\n  (ISC-115), from a parameterised start date (reuse the two-year default, ISC-6).\n- Incremental: filter `transaction.postDate.gt('YYYY-MM-DD')` against the last successful\n  sync bookmark (`getLastSyncAt`, ISC-116). Bookmark advances only on a fully drained run,\n  exactly as today.\n\n### 4.6 Mapping Basiq transaction → `Tx` (ISC-117, ISC-118)\n\nTarget shape is fixed by `src/platform/store.ts:17`. **[confirm-in-sandbox]** the Basiq\nfield names and the amount sign convention before passing the ISC.\n\n| `Tx` field | Source | Notes |\n|------------|--------|-------|\n| `id` | `transaction.id` | string, stable, idempotent upsert key |\n| `date` | `transaction.postDate` (fallback `transactionDate`) | ISO date slice |\n| `amountCents` | `round(parseFloat(transaction.amount) * 100)` | **signed, negative = outflow** (ISC-118). Basiq amount is a signed string; assert against `direction` (`debit`/`credit`) |\n| `accountId` | `transaction.account` | Basiq account id |\n| `categoryId` | **null at map time** | assigned by the Categoriser (§5) |\n| `envelopeId` | `null` | envelope engine resolves at read time, unchanged |\n| `payee` | `enrich.merchant.businessName` ?? `description` | merchant when enriched, else raw description |\n| `isTransfer` | `class === 'transfer'` | maps to the existing transfer-exclusion rule (ISC-22) |\n| `isPending` | `status === 'pending'` | preserves ISC-23 |\n| `rawJson` | `JSON.stringify(transaction)` | verbatim Basiq row (ISC-12 preserved) |\n\nThe money invariant from the current mapper holds unchanged: decimal → integer cents,\nrounded once, sign preserved.\n\n## 5. The categorisation layer (the real work)\n\nPocketSmith handed Penny transactions already filed into the user's own category tree,\nand Penny's entire envelope assignment keys on that category id (`map.ts` set\n`categoryId = raw.category?.id`; ISC-19 maps category→envelope; ISC-86 maps tx→envelope by\ncategory). **Basiq has no per-user category tree.** It provides its own enrichment\ntaxonomy (merchant, `class`, ANZSIC division/subdivision), which does not match\nPocketSmith ids and is not user-owned.\n\nFor a product this is non-optional anyway: you cannot require each user to arrive with\npre-categorised data. So Penny must own categorisation. The design keeps the blast radius\ntiny by **synthesising a stable internal `categoryId`** so the existing mapping model is\nuntouched (ISC-124).\n\n### 5.1 The Categoriser (ISC-120, ISC-121)\n\nA pure function over a transaction, producing an internal `categoryId`:\n\n1. **Enrich default.** Derive a starting category from Basiq enrich (merchant + `class` +\n   ANZSIC), mapped through a Penny-owned static lookup into Penny's internal category set.\n2. **User rules override.** Apply the tenant's editable rules; a matching rule wins over\n   the enrich default (ISC-121).\n3. **Fallback.** No match → the \"uncategorised\" internal category, which the existing\n   effective-dated mapping resolves to the Inbox envelope (ISC-123, preserving ISC-19/20).\n\n### 5.2 Category rules (ISC-122)\n\nA tenant-scoped, effective-dated rule: `payee/merchant pattern → internal categoryId`.\nEffective-dating matches the existing mapping model so re-categorising history is\ndeterministic. Rules are user-editable in the UI (a later UI ISC; the engine and store\nland first).\n\n### 5.3 What stays unchanged (ISC-124)\n\nThe envelope engine, the effective-dated category→envelope mapping (ISC-19), the Inbox\nfallback (ISC-20), and the grid do not change. `categoryId` is the only coupling point;\nthe Categoriser is responsible for filling it, replacing the line in the old mapper.\n\n### 5.4 Non-destructive re-run (ISC-125)\n\nRe-running the categoriser refreshes the enrich-derived default but never overwrites a\nuser's explicit category override or their rules, mirroring the ISC-17 base-vs-overlay\ndiscipline already used for transactions.\n\n### 5.5 Seeding and historical migration (ISC-127)\n\n- The envelope tree is already seeded from Nick's spreadsheet, not the PocketSmith tree\n  (ISC-96), so envelope seeding is unaffected.\n- The category→envelope **mapping** needs a new category source. A one-time migration maps\n  the existing PocketSmith-categorised transactions onto Penny's internal category set so\n  historical envelope balances are preserved across the cutover (ISC-127). The PocketSmith\n  category id on each historical `rawJson` is the bridge for that one-time map.\n\n## 6. Consent & CDR compliance posture\n\n- **Single-user now (Nick only):** lightest path. Penny holds the Basiq app key; Nick\n  consents to ANZ/NAB/Macquarie via the Consent UI. Basiq holds the CDR accreditation;\n  Penny consumes it.\n- **Multi-user later (the product):** serving other people's banking data under CDR is a\n  heavier posture even with Basiq accredited. Penny would operate under Basiq's\n  representative/consent model with consent dashboards, data-minimisation, and deletion\n  obligations. This is the cost that *replaces* the per-user PocketSmith subscription cost.\n  **Deferred** until Penny is actually opened to others; the architecture is built\n  product-shaped now so flipping it on is onboarding + compliance, not a re-architecture.\n- **CDR consent expiry (ISC-114):** consents expire (up to 12 months). Detect expiry,\n  surface a re-consent prompt before data goes stale, and never report an empty post-expiry\n  sync as success.\n\n## 7. Secrets / identity model change\n\n| Concern | Today | Target |\n|---------|-------|--------|\n| `SecretStore` holds | per-user `pocketsmith_developer_key` | app-level `basiq_api_key` (one) |\n| Per-tenant in `Store` | (nothing provider-specific) | Basiq `userId`, `connectionId`, consent `expiresAt` |\n| Onboarding input | email + user's PocketSmith dev key | email + in-app bank consent (ISC-128) |\n\nISC-3 (\"dev key resolved through the SecretStore for the authenticated user\") is\nsuperseded: the secret is now app-level, and the per-user material is consent state in the\n`Store`, not a key. ISC-54/55 (per-user dev key, local + cloud KMS) are re-pointed at the\napp-level Basiq key. ISC-56 (never plaintext) carries over verbatim to the Basiq key.\n\n## 8. Migration & decommission sequence\n\n1. Land the `IngestProvider` port; make `sync`/`backfill` provider-typed (ISC-105, ISC-106).\n2. Build `BasiqProvider`: token, user, consent, job-poll, fetch, mapper (ISC-107..ISC-118).\n3. Build the Categoriser + rules + internal category set (ISC-120..ISC-125).\n4. Backfill Nick's own data via Basiq; verify parity against the existing PocketSmith data\n   (transaction counts, balances) before cutover.\n5. One-time historical category migration (ISC-127).\n6. Remove PocketSmith from the runtime path once parity is verified (ISC-126); keep the\n   pinned OpenAPI artefact in git history only.\n7. Confirm no per-user dev key is needed to onboard (ISC-128).\n\n## 9. Confirm-in-sandbox checklist (BUILD gate)\n\nThese are design assumptions from Basiq's documented model that must be verified against\nthe live sandbox before the matching ISC passes. Do not mark them `[x]` on intent:\n\n- Token endpoint scopes (`SERVER_ACCESS` / `CLIENT_ACCESS`) and TTLs.\n- Consent UI URL, token handoff, and return/callback contract.\n- Job step names and the terminal success signal.\n- Transaction field names: `postDate`/`transactionDate`, `amount` sign, `direction`,\n  `class` values, `status` enum, `enrich.merchant`/`enrich.category` shape.\n- Transactions pagination cursor (`links.next`) and the postDate filter syntax.\n- Institution coverage and CDR data scopes for ANZ, NAB, Macquarie.\n- Commercial: dev/sandbox is free; production access plan, per-connection pricing, and\n  whether a single-user (then multi-user) use case is accepted.\n\n## 10. ISC index\n\nProvider abstraction: ISC-105, ISC-106, ISC-107.\nAuth/token: ISC-108, ISC-109.\nUser/connection/consent lifecycle: ISC-110, ISC-111, ISC-112, ISC-113, ISC-114.\nFetch + mapping: ISC-115, ISC-116, ISC-117, ISC-118, ISC-119.\nCategorisation: ISC-120, ISC-121, ISC-122, ISC-123, ISC-124, ISC-125.\nMigration/decommission: ISC-126, ISC-127, ISC-128.\n"
+    },
+    "timestamp": "2026-06-29T10:29:10.334Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "task: \"Zero-based envelope budgeting layer over PocketSmith — local-first, cloud-ready\"",
+      "new_string": "task: \"Zero-based envelope budgeting with direct Australian bank feeds via Basiq (CDR), local-first, cloud-ready\""
+    },
+    "timestamp": "2026-06-29T10:54:59.367Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "progress: 0/104",
+      "new_string": "progress: 0/128"
+    },
+    "timestamp": "2026-06-29T10:55:00.311Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "updated: 2026-06-26T00:00:00Z",
+      "new_string": "updated: 2026-06-29T00:00:00Z"
+    },
+    "timestamp": "2026-06-29T10:55:01.271Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "> Surface name **Penny**. Codebase folder `envelope-os`. Zero-based envelope budgeting layer on top of PocketSmith, feeding PAI Pulse.",
+      "new_string": "> Surface name **Penny**. Codebase folder `envelope-os`. Zero-based envelope budgeting layer on direct Australian bank feeds (Basiq / CDR, migrating off PocketSmith), feeding PAI Pulse."
+    },
+    "timestamp": "2026-06-29T10:55:03.402Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "- [ ] ISC-1: PocketSmith TypeScript client generated from the pinned OpenAPI 3 commit SHA",
+      "new_string": "- [ ] ISC-1: PocketSmith TypeScript client generated from the pinned OpenAPI 3 commit SHA (superseded 2026-06-29 by the Basiq pivot; see Changelog and ISC-105/107)"
+    },
+    "timestamp": "2026-06-29T11:07:45.036Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "- [ ] ISC-2: Client authenticates using the X-Developer-Key header",
+      "new_string": "- [ ] ISC-2: Client authenticates using the X-Developer-Key header (superseded 2026-06-29 by the Basiq pivot; see Changelog and ISC-108)"
+    },
+    "timestamp": "2026-06-29T11:07:46.276Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "- [ ] ISC-3: Developer key resolved through the SecretStore for the authenticated user at runtime",
+      "new_string": "- [ ] ISC-3: Developer key resolved through the SecretStore for the authenticated user at runtime (superseded 2026-06-29 by the Basiq pivot; secret is now app-level, see Changelog and ISC-109/128)"
+    },
+    "timestamp": "2026-06-29T11:07:48.619Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "- [ ] ISC-84: A setup importer seeds envelopes from the PocketSmith category tree, preserving parent/child, classifying each as income or expense",
+      "new_string": "- [ ] ISC-84: A setup importer seeds envelopes from the PocketSmith category tree, preserving parent/child, classifying each as income or expense (note: envelope seeding is now spreadsheet-driven per ISC-96; category sourcing superseded 2026-06-29, see ISC-120/127)"
+    },
+    "timestamp": "2026-06-29T11:07:51.380Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "- [ ] ISC-86: The loaded transactions map to envelopes by PocketSmith category so each decrements the right envelope",
+      "new_string": "- [ ] ISC-86: The loaded transactions map to envelopes by PocketSmith category so each decrements the right envelope (superseded 2026-06-29: category source is now the Categoriser, see ISC-120/123/127)"
+    },
+    "timestamp": "2026-06-29T11:07:55.490Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "- [ ] ISC-104: Selecting a period recomputes the whole grid (carryover, budget, spent/received, left, and the zero-base) for that period, including multi-month ranges\n\n## Test Strategy",
+      "new_string": "- [ ] ISC-104: Selecting a period recomputes the whole grid (carryover, budget, spent/received, left, and the zero-base) for that period, including multi-month ranges\n\n### Direct bank feeds via Basiq (provider migration, 2026-06-29)\n\n- [ ] ISC-105: An `IngestProvider` interface exists; `runSync` and `runBackfill` depend on it, not on `PocketSmithClient`\n- [ ] ISC-106: Anti: No ingest module (sync, backfill) imports a provider-concrete client type directly\n- [ ] ISC-107: A `BasiqProvider` implements `IngestProvider`, compiles, and passes the provider test suite\n- [ ] ISC-108: The Basiq server token is obtained via POST /token with the app API key, cached to expiry, and refreshed on 401\n- [ ] ISC-109: Anti: The Basiq app API key never appears as plaintext at rest, in env files, git, or logs\n- [ ] ISC-110: A Basiq user is created per tenant and the Basiq userId persisted in the tenant-scoped Store\n- [ ] ISC-111: A bank connection is established via the Basiq Consent UI; Anti: no bank credential ever reaches Penny\n- [ ] ISC-112: Connection state (connectionId, institution, consent expiresAt) is persisted per tenant\n- [ ] ISC-113: A connection refresh issues a job and polls GET /jobs/{id} to terminal success before any data read\n- [ ] ISC-114: Anti: An expired CDR consent surfaces a re-consent prompt and is never reported as a successful empty sync\n- [ ] ISC-115: Backfill pages the Basiq transactions endpoint to completion via links.next\n- [ ] ISC-116: Incremental sync filters Basiq transactions by postDate greater than the last successful run bookmark\n- [ ] ISC-117: A Basiq transaction maps to the store Tx shape (signed amount to cents, postDate to date, status to isPending, class transfer to isTransfer, merchant to payee, verbatim JSON to rawJson)\n- [ ] ISC-118: Anti: The mapper preserves negative=outflow; a debit never lands as a positive amount\n- [ ] ISC-119: Anti: No webhook or push listener for Basiq events exists; sync stays pull-poll only (preserves ISC-9 for the new provider)\n- [ ] ISC-120: A Categoriser assigns every ingested transaction a stable internal categoryId from Penny's own category set, independent of any provider taxonomy\n- [ ] ISC-121: The Categoriser derives a default category from Basiq enrich, then lets a matching user rule override it\n- [ ] ISC-122: A user-editable category rule maps a payee/merchant pattern to an internal categoryId; rules are tenant-scoped and effective-dated\n- [ ] ISC-123: An uncategorised transaction resolves to the Inbox envelope via the existing effective-dated category-to-envelope mapping (preserves ISC-19, ISC-20)\n- [ ] ISC-124: Anti: The envelope engine and the category-to-envelope mapping are unchanged by the swap; Tx.categoryId stays the only coupling point\n- [ ] ISC-125: Anti: Re-running the Categoriser never overwrites a user's explicit category override or rules (mirrors ISC-17)\n- [ ] ISC-126: PocketSmith ingest (client, /me, X-Developer-Key) is removed from the runtime path once Basiq backfill verifies data parity on Nick's own data\n- [ ] ISC-127: A one-time migration maps existing PocketSmith-categorised transactions onto the internal category set so historical envelope balances are preserved\n- [ ] ISC-128: Anti: No per-user PocketSmith developer key is required to onboard a tenant; onboarding is email plus in-app bank consent only\n\n## Test Strategy"
+    },
+    "timestamp": "2026-06-29T11:09:18.104Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "| ISC-64 | anti | no offline capture or mobile write queue | no such code path | Grep for offline-write, queue, sync-on-reconnect |\n\n## Features",
+      "new_string": "| ISC-64 | anti | no offline capture or mobile write queue | no such code path | Grep for offline-write, queue, sync-on-reconnect |\n| ISC-105 | build | sync/backfill typed to IngestProvider | no concrete client import | Grep, Read |\n| ISC-106 | anti | no provider-concrete import in ingest modules | zero matches | Grep |\n| ISC-107 | build | BasiqProvider passes provider suite | suite green | bun test |\n| ISC-108 | api | token fetched, cached, refreshed on 401 | refresh fires on 401 | unit test stubbed 401 |\n| ISC-109 | security | app key never plaintext | zero matches | Grep across repo, db, logs |\n| ISC-110 | data | Basiq userId persisted per tenant | row present | SELECT |\n| ISC-111 | security | consent links bank, no credential to Penny | no credential field | Grep + flow review |\n| ISC-112 | data | connection state persisted | columns non-null | SELECT |\n| ISC-113 | api | job polled to success before read | read gated on job done | unit test job poll |\n| ISC-114 | anti | expired consent prompts re-consent, not silent success | prompt raised | unit test expiry |\n| ISC-115 | api | backfill drains links.next | cursor exhausted | Bash run, count rows |\n| ISC-116 | api | incremental filters postDate > bookmark | filter equals bookmark | Grep request, unit test |\n| ISC-117 | logic | Basiq tx maps to Tx fields | round-trip correct | unit test mapper |\n| ISC-118 | anti | debit stays negative cents | sign preserved | unit test debit row |\n| ISC-119 | anti | no webhook/listener for Basiq | zero matches | Grep webhook, listen, push |\n| ISC-120 | logic | categoryId assigned from own set | non-null internal id | unit test categoriser |\n| ISC-121 | logic | enrich default, user rule overrides | rule wins | unit test override |\n| ISC-122 | data | rule pattern to category, effective-dated, scoped | rule applies by date | SELECT, unit test |\n| ISC-123 | logic | uncategorised resolves to Inbox | envelope_id is Inbox | SELECT on uncategorised |\n| ISC-124 | anti | engine + mapping unchanged | only categoryId coupling | Grep diff, unit test |\n| ISC-125 | anti | re-run keeps overrides/rules | overlay untouched | unit test re-run |\n| ISC-126 | build | PocketSmith gone from runtime after parity | no PS in runtime path | Grep, parity report |\n| ISC-127 | data | historical PS categories mapped to internal set | balances preserved | SELECT pre/post balances |\n| ISC-128 | anti | onboarding needs no PS dev key | no dev-key prompt | flow review, Grep |\n\n## Features"
+    },
+    "timestamp": "2026-06-29T11:09:36.324Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "| security-baseline | no-cloud-egress guarantee (local), encrypted backup, key-never-plaintext | ISC-45, 46, 56 | store-schema | yes |",
+      "new_string": "| security-baseline | no-cloud-egress guarantee (local), encrypted backup, key-never-plaintext | ISC-45, 46, 56 | store-schema | yes |\n| ingest-provider-port | IngestProvider interface; sync/backfill provider-typed; PocketSmith client retired from runtime | ISC-105, 106, 126 | ingest-spine | no |\n| basiq-provider | Basiq token/user/consent/job-poll/fetch/mapper | ISC-107..119 | ingest-provider-port, platform-seams | no |\n| categorisation | Categoriser, enrich default, user rules, internal category set, Inbox fallback, non-destructive re-run | ISC-120..125 | basiq-provider, store-schema | partly |\n| feed-migration | one-time historical category map, parity verify, decommission PocketSmith, app-level Basiq key in SecretStore | ISC-109, 127, 128 | categorisation | no |"
+    },
+    "timestamp": "2026-06-29T11:09:53.865Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "- 2026-06-26 00:00: show-your-math (delegation floor): the ingest-spine implementation is delegated to one engineering agent against this ISA; the platform-seams skeleton and schema are authored by the primary because they are the architecturally load-bearing surface where the cloud-ready contract must be exact. Council/RedTeam delegation was not selected; the design space here is already resolved by the existing architect review, so adversarial idea-generation would add noise rather than signal.",
+      "new_string": "- 2026-06-26 00:00: show-your-math (delegation floor): the ingest-spine implementation is delegated to one engineering agent against this ISA; the platform-seams skeleton and schema are authored by the primary because they are the architecturally load-bearing surface where the cloud-ready contract must be exact. Council/RedTeam delegation was not selected; the design space here is already resolved by the existing architect review, so adversarial idea-generation would add noise rather than signal.\n- 2026-06-29: PROVIDER PIVOT to direct Australian bank feeds via Basiq (CDR), off PocketSmith. Nick's drivers: drop the dependency, kill the PocketSmith cost, and stop building on a bridge if Penny may serve other people later. Decisive fact: Penny is already multi-tenant (Store scoped by userId, ISC-47/48; cloud magic-link onboarding), so PocketSmith was the only per-user external blocker to a product. Resolution: abstract the provider behind an `IngestProvider` port, implement `BasiqProvider`, and have Penny own categorisation (Basiq enrich + user rules) since a product cannot inherit each user's pre-categorised tree. Build single-user now (Nick only), product-shaped; defer multi-user CDR-representative onboarding. Full design in docs/BASIQ_MIGRATION_SPEC.md. Supersedes ISC-1, ISC-2, ISC-3, ISC-84 (category source), ISC-86; adds ISC-105..ISC-128.\n- 2026-06-29: SECRET MODEL INVERTED. PocketSmith required a per-user developer key in the SecretStore; Basiq uses one app-level API key plus per-user in-app CDR consent. ISC-3 superseded; ISC-54/55 re-pointed at the app-level Basiq key; ISC-56 carries over to it. Per-user material (Basiq userId, connectionId, consent expiry) lives in the Store, not the SecretStore. This removes user onboarding friction entirely (ISC-128) and is why Basiq enables the product where PocketSmith could not.\n- 2026-06-29: SCOPE. This task delivered the ISA extension plus the design spec only (Nick approved \"scaffold the ISA + spec the provider\"). No production code written; BUILD of the provider and Categoriser is the next gated step. Basiq API field names and sign conventions are marked confirm-in-sandbox in the spec and MUST be verified against the live Basiq sandbox before the matching ISCs (ISC-108, 111, 113, 115, 116, 117, 118) pass."
+    },
+    "timestamp": "2026-06-29T11:10:28.003Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "  criterion_now: ISC-92, ISC-93.\n\n## Verification",
+      "new_string": "  criterion_now: ISC-92, ISC-93.\n\n- conjectured: Penny's bank feeds and categorisation come from PocketSmith; each tenant supplies their own PocketSmith developer key (ISC-3), the client is generated from the pinned PocketSmith OpenAPI spec (ISC-1, ISC-2), and categories source from the PocketSmith category tree (ISC-84, ISC-86).\n  refuted_by: Nick (2026-06-29): PocketSmith is a paid dependency and, critically, a per-user external account. A product cannot require every user to hold their own PocketSmith subscription and key. Penny is already multi-tenant (Store scoped by userId, ISC-47/48), so PocketSmith was the sole structural blocker to serving other people; it is \"essentially just a bridge\".\n  learned: Replace PocketSmith with direct Australian bank feeds via Basiq (CDR) behind a new `IngestProvider` port, so the provider is swappable and the envelope/budget/store/UI layers stay untouched (Tx.categoryId is the only coupling point). The app holds one Basiq API key; users link banks via the in-app CDR Consent UI with no key to obtain and no credential reaching Penny. Penny now owns categorisation (Basiq enrich plus user-editable effective-dated rules) because inherited per-user categorisation is unavailable; the existing category-to-envelope mapping and Inbox fallback are preserved by synthesising a stable internal categoryId. Build single-user now, product-shaped; defer multi-user CDR-representative onboarding.\n  criterion_now: ISC-105, ISC-106, ISC-107, ISC-108, ISC-109, ISC-110, ISC-111, ISC-112, ISC-113, ISC-114, ISC-115, ISC-116, ISC-117, ISC-118, ISC-119, ISC-120, ISC-121, ISC-122, ISC-123, ISC-124, ISC-125, ISC-126, ISC-127, ISC-128.\n\n## Verification"
+    },
+    "timestamp": "2026-06-29T11:10:42.578Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && echo \"=== new ISCs in Criteria (105-128) ===\" && rg -c \"^- \\[ \\] ISC-(1[0-2][0-9])\" ISA.md && echo \"=== frontmatter progress ===\" && rg \"^progress:|^updated:|^task:\" ISA.md && echo \"=== section headers present ===\" && rg \"^## \" ISA.md && echo \"=== test-strategy rows for new ISCs ===\" && rg -c \"^\\| ISC-1[0-2][0-9] \\|\" ISA.md && echo \"=== features rows added ===\" && rg \"ingest-provider-port|basiq-provider|^\\| categorisation|feed-migration\" ISA.md && echo \"=== spec doc ===\" && wc -l docs/BASIQ_MIGRATION_SPEC.md",
+      "description": "Verify ISA edits and spec doc integrity"
+    },
+    "timestamp": "2026-06-29T11:11:13.285Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo \"=== Penny in spec doc ===\" && rg -n \"Penny\" docs/BASIQ_MIGRATION_SPEC.md | head -40; echo \"=== Penny in ISA ===\" && rg -n \"Penny\" ISA.md",
+      "description": "Find Penny references in new artefacts"
+    },
+    "timestamp": "2026-06-29T11:58:46.615Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": true,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/docs/BASIQ_MIGRATION_SPEC.md",
+      "old_string": "Penny",
+      "new_string": "BudgetBuddy"
+    },
+    "timestamp": "2026-06-29T12:00:06.120Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "Basiq API field names and sign conventions are marked confirm-in-sandbox in the spec and MUST be verified against the live Basiq sandbox before the matching ISCs (ISC-108, 111, 113, 115, 116, 117, 118) pass.",
+      "new_string": "Basiq API field names and sign conventions are marked confirm-in-sandbox in the spec and MUST be verified against the live Basiq sandbox before the matching ISCs (ISC-108, 111, 113, 115, 116, 117, 118) pass.\n- 2026-06-29: EXTERNAL PREREQUISITE (BUILD gate, owner: Nick). Starting the Basiq build requires a free Basiq developer account to obtain sandbox API keys (dashboard.basiq.io). Sandbox/development is free and needs no accreditation; production CDR data access is a separate paid onboarding (per-connection pricing, use-case review) for which Basiq holds the accreditation. The dev-account signup is the only external blocker to starting BUILD and requires Nick's identity/billing; production onboarding is deferred until multi-user. Once the account exists, the app-level Basiq API key goes into the SecretStore (ISC-109) and BUILD can begin."
+    },
+    "timestamp": "2026-06-29T12:00:10.830Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/USER/PROJECTS/PROJECTS.md",
+      "offset": 60,
+      "limit": 30
+    },
+    "timestamp": "2026-06-29T12:00:11.605Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/USER/PROJECTS/PROJECTS.md"
+    },
+    "timestamp": "2026-06-29T12:00:45.872Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/USER/PROJECTS/PROJECTS.md",
+      "old_string": "- **Penny / envelope-os build** (parked 2026-06-18): zero-based envelope budgeting layer over PocketSmith, feeding Pulse. Project persisted at `~/Documents/workspace/projects/envelope-os/` with a full E3 twelve-section ISA (46 ISCs, all 13 design decisions locked), README, and source docs in `docs/`. Two architect-flagged contradictions are resolved in the ISA Changelog (rollover deficit-booking, every-dollar enforced at wizard completion) but marked provisional pending Nick's explicit confirm or flip. Next step when resumed: confirm the two provisional flag resolutions, then delegate Weekend 1 (PocketSmith OpenAPI-codegen client, SQLite schema, daily sync, two-year backfill) to a feature-dev subagent. Not yet registered in the Products/Systems index above.",
+      "new_string": "- **BudgetBuddy / envelope-os build** (renamed from Penny; design updated 2026-06-29): zero-based envelope budgeting layer feeding Pulse, **pivoting off PocketSmith to direct Australian bank feeds via Basiq (CDR)**. Driver: drop the PocketSmith dependency/cost and stop building on a per-user bridge that blocks ever serving other people; the store and auth are already multi-tenant, so PocketSmith was the only structural blocker to a product. Project at `~/Documents/workspace/projects/envelope-os/` with the E3 project ISA now at **128 ISCs** (added ISC-105..128 for the Basiq provider, consent lifecycle, and an owned categorisation layer) and a full design at `docs/BASIQ_MIGRATION_SPEC.md`. The provider is abstracted behind a new `IngestProvider` port; `Tx.categoryId` is the only coupling point to the untouched envelope engine. Decision: build single-user (Nick) now, product-shaped, with multi-user CDR-representative onboarding deferred. **Next step when resumed: BUILD** the `IngestProvider` port + `BasiqProvider` + `Categoriser`, verifying the spec's confirm-in-sandbox items against the live Basiq sandbox. **External prereq (owner: Nick): create a free Basiq developer account (dashboard.basiq.io) for sandbox keys** — the only blocker to starting BUILD; production CDR onboarding (paid, per-connection) deferred until multi-user. Not yet registered in the Products/Systems index above."
+    },
+    "timestamp": "2026-06-29T12:01:36.867Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/USER/PROJECTS/PROJECTS.md",
+      "old_string": "- **Penny / envelope-os build** (parked 2026-06-18): zero-based envelope budgeting layer over PocketSmith, feeding Pulse. Project persisted at `~/Documents/workspace/projects/envelope-os/` with a full E3 twelve-section ISA (46 ISCs, all 13 design decisions locked), README, and source docs in `docs/`. Two architect-flagged contradictions are resolved in the ISA Changelog (rollover deficit-booking, every-dollar enforced at wizard completion) but marked provisional pending Nick's explicit confirm or flip. Next step when resumed: confirm the two provisional flag resolutions, then delegate Weekend 1 (PocketSmith OpenAPI-codegen client, SQLite schema, daily sync, two-year backfill) to a feature-dev subagent. Not yet registered in the Products/Systems index above.",
+      "new_string": "- **BudgetBuddy / envelope-os build** (parked 2026-06-29; renamed from Penny): zero-based envelope budgeting on direct Australian bank feeds via Basiq (CDR), feeding Pulse. Project at `~/Documents/workspace/projects/envelope-os/`; project ISA now 128 ISCs (extended 2026-06-29 with the Basiq migration, ISC-105..128). **Provider pivot decided:** dropping PocketSmith for direct Basiq feeds because PocketSmith is a paid per-user dependency and a bridge that blocks a future multi-user product; BudgetBuddy is already multi-tenant (Store scoped by userId), so PocketSmith was the only structural blocker. Design written at `docs/BASIQ_MIGRATION_SPEC.md` (IngestProvider port, BasiqProvider with CDR consent flow + job-poll, owned categorisation layer replacing PocketSmith's category tree; secret model inverted to one app-level Basiq key + in-app consent). Build scope: single-user (Nick) now, product-shaped; multi-user CDR-representative onboarding deferred. **Next step when resumed: BUILD** the IngestProvider port + BasiqProvider + Categoriser, verifying the confirm-in-sandbox items (token scopes, consent handoff, job steps, transaction field names/sign) against the Basiq sandbox. **External prereq (owner: Nick):** free Basiq developer account at dashboard.basiq.io for sandbox API keys — the only external blocker to starting BUILD; production CDR onboarding (paid, per-connection) deferred to multi-user. Prior provisional flags (rollover deficit-booking, every-dollar at wizard completion) still carried as working defaults. Not yet registered in the Products/Systems index above."
+    },
+    "timestamp": "2026-06-30T01:08:51.012Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/USER/PROJECTS/PROJECTS.md",
+      "offset": 39,
+      "limit": 2
+    },
+    "timestamp": "2026-06-30T01:08:59.432Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/USER/PROJECTS/PROJECTS.md",
+      "old_string": "- **Penny / envelope-os build** (parked 2026-06-18): zero-based envelope budgeting layer over PocketSmith, feeding Pulse. Project persisted at `~/Documents/workspace/projects/envelope-os/` with a full E3 twelve-section ISA (46 ISCs, all 13 design decisions locked), README, and source docs in `docs/`. Two architect-flagged contradictions are resolved in the ISA Changelog (rollover deficit-booking, every-dollar enforced at wizard completion) but marked provisional pending Nick's explicit confirm or flip. Next step when resumed: confirm the two provisional flag resolutions, then delegate Weekend 1 (PocketSmith OpenAPI-codegen client, SQLite schema, daily sync, two-year backfill) to a feature-dev subagent. Not yet registered in the Products/Systems index above.",
+      "new_string": "- **BudgetBuddy / envelope-os build** (parked 2026-06-29; renamed from Penny): zero-based envelope budgeting on direct Australian bank feeds via Basiq (CDR), feeding Pulse. Project at `~/Documents/workspace/projects/envelope-os/`; project ISA now 128 ISCs (extended 2026-06-29 with the Basiq migration, ISC-105..128). **Provider pivot decided:** dropping PocketSmith for direct Basiq feeds because PocketSmith is a paid per-user dependency and a bridge that blocks a future multi-user product; BudgetBuddy is already multi-tenant (Store scoped by userId), so PocketSmith was the only structural blocker. Design written at `docs/BASIQ_MIGRATION_SPEC.md` (IngestProvider port, BasiqProvider with CDR consent flow + job-poll, owned categorisation layer replacing PocketSmith's category tree; secret model inverted to one app-level Basiq key + in-app consent). Build scope: single-user (Nick) now, product-shaped; multi-user CDR-representative onboarding deferred. **Next step when resumed: BUILD** the IngestProvider port + BasiqProvider + Categoriser, verifying the confirm-in-sandbox items (token scopes, consent handoff, job steps, transaction field names/sign) against the Basiq sandbox. **External prereq (owner: Nick):** free Basiq developer account at dashboard.basiq.io for sandbox API keys — the only external blocker to starting BUILD; production CDR onboarding (paid, per-connection) deferred to multi-user. Prior provisional flags (rollover deficit-booking, every-dollar at wizard completion) still carried as working defaults. Not yet registered in the Products/Systems index above."
+    },
+    "timestamp": "2026-06-30T01:09:13.598Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/USER/PROJECTS/PROJECTS.md",
+      "old_string": "- **Penny / envelope-os build** (parked 2026-06-18): zero-based envelope budgeting layer over PocketSmith, feeding Pulse. Project persisted at `~/Documents/workspace/projects/envelope-os/` with a full E3 twelve-section ISA (46 ISCs, all 13 design decisions locked), README, and source docs in `docs/`. Two architect-flagged contradictions are resolved in the ISA Changelog (rollover deficit-booking, every-dollar enforced at wizard completion) but marked provisional pending Nick's explicit confirm or flip. Next step when resumed: confirm the two provisional flag resolutions, then delegate Weekend 1 (PocketSmith OpenAPI-codegen client, SQLite schema, daily sync, two-year backfill) to a feature-dev subagent. Not yet registered in the Products/Systems index above.",
+      "new_string": "- **BudgetBuddy / envelope-os build** (parked 2026-06-29; renamed from Penny): zero-based envelope budgeting on direct Australian bank feeds via Basiq (CDR), feeding Pulse. Project at `~/Documents/workspace/projects/envelope-os/`; project ISA now 128 ISCs (extended 2026-06-29 with the Basiq migration, ISC-105..128). **Provider pivot decided:** dropping PocketSmith for direct Basiq feeds because PocketSmith is a paid per-user dependency and a bridge that blocks a future multi-user product; BudgetBuddy is already multi-tenant (Store scoped by userId), so PocketSmith was the only structural blocker. Design written at `docs/BASIQ_MIGRATION_SPEC.md` (IngestProvider port, BasiqProvider with CDR consent flow + job-poll, owned categorisation layer replacing PocketSmith's category tree; secret model inverted to one app-level Basiq key + in-app consent). Build scope: single-user (Nick) now, product-shaped; multi-user CDR-representative onboarding deferred. **Next step when resumed: BUILD** the IngestProvider port + BasiqProvider + Categoriser, verifying the confirm-in-sandbox items (token scopes, consent handoff, job steps, transaction field names/sign) against the Basiq sandbox. **External prereq (owner: Nick):** free Basiq developer account at dashboard.basiq.io for sandbox API keys — the only external blocker to starting BUILD; production CDR onboarding (paid, per-connection) deferred to multi-user. Prior provisional flags (rollover deficit-booking, every-dollar at wizard completion) still carried as working defaults. Not yet registered in the Products/Systems index above."
+    },
+    "timestamp": "2026-06-30T04:01:41.894Z"
+  }
+]

@@ -1,0 +1,380 @@
+[
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls ~/.claude/agents/ 2>/dev/null | head -50; echo \"---PAI agents---\"; ls ~/.claude/PAI/ 2>/dev/null; echo \"---find agent md---\"; fd -e md . ~/.claude/agents 2>/dev/null | head; fd . ~/.claude/agents -t d 2>/dev/null | head",
+      "description": "Locate agent definition files"
+    },
+    "timestamp": "2026-06-30T06:46:26.556Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/agents/career-positioning.md"
+    },
+    "timestamp": "2026-06-30T06:46:41.220Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/.claude; rg -l \"career-positioning\" --glob '!agents/career-positioning.md' 2>/dev/null | head -20; echo \"---registry files---\"; fd -i \"registry|agents.(json|yaml|md)\" ~/.claude/PAI 2>/dev/null | head",
+      "description": "Find agent registry references"
+    },
+    "timestamp": "2026-06-30T06:47:30.705Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/agents/application-reviewer.md",
+      "content": "---\nname: application-reviewer\ndescription: Cynical, AI-fatigued tech recruiter who brutally audits cover letters and applications. Use to strip LLM filler, demand company-specific \"inside baseball\" context, enforce tech-reason-over-tech-stack, force quantified impact, and fix peer-to-peer tone. Gives a Blunt Recruiter Verdict (1-10 AI-fatigue score) then line-by-line rewrites. Critique only -- does not write or commit the final artefact.\ntools: Read, Grep, Glob, WebSearch, WebFetch\nmodel: opus\ncolor: \"#DC2626\"\n---\n\nYou are the **Application Reviewer**: a cynical, exhausted tech recruiter who has read 500 AI-written cover letters this week and is sick of every one of them. You screen candidates for a specific role at a specific company. Your job is to brutally audit the candidate's draft and strip out everything that smells like it was written by an LLM. You are not here to be kind. You are here to be useful, and the most useful thing you can do is tell the truth a friend would not.\n\nYou operate on material the user provides. You do not write the final letter for them and you do not commit files -- you audit, score, and hand back surgical rewrites.\n\n## Inputs you need\n\nYou require four things. If any are missing, ask for them in one line and stop -- do not invent them:\n1. The **draft cover letter / application** text.\n2. The **target job description**.\n3. The **role title** (e.g. Senior Product Manager, Lead Backend Engineer).\n4. The **company** (e.g. Canva).\n\nIf the user pasted a draft but omitted the role/company, infer them from the JD if it is present; otherwise ask.\n\n## Optional grounding (use only when it sharpens the audit)\n\n- `~/.claude/PAI/USER/AI_WRITING_PATTERNS.md` -- the specific AI tells to hunt for.\n- `~/.claude/PAI/USER/WRITINGSTYLE.md` and `RHETORICALSTYLE.md` -- the human voice the draft should sound like.\n- `~/.claude/PAI/USER/RESUME.md` -- to sanity-check whether a claimed result is real or inflated.\n- For the \"inside baseball\" check, use WebSearch/WebFetch on the company to find a *real* product challenge, architectural shift, funding event, or industry trend -- never the homepage tagline.\n\n## The five strict guidelines you enforce\n\n1. **Flag AI filler words.** Hunt and kill generic LLM phrasing: \"testament to\", \"foster innovation\", \"dynamic landscape\", \"passionate about\", \"deep dive\", \"leverage\", \"spearheaded\", \"in today's fast-paced world\", \"I am excited to\", \"synergy\", \"robust\", \"seamless\", \"delve\", \"tapestry\", \"navigate the complexities\". For each, give a concrete human replacement, not just a deletion.\n2. **Check for inside baseball.** Did the candidate just paraphrase the company homepage, or did they name a real product challenge, architectural shift, or industry trend specific to *this* company? If it is surface-level, tell them what genuinely interesting problem this company actually has right now and how to reference it like an insider, not a tourist.\n3. **Tech reason over tech stack.** They must not just list languages and tools. Wherever a technical project appears, force the *why* behind the choice or the *human trade-off* made (speed vs technical debt, build vs buy, consistency vs availability). A stack list with no reasoning is a red flag -- flag it.\n4. **Quantify impact.** Any stated result must anchor to a concrete business metric, adoption rate, or engineering-efficiency gain. \"Improved performance\" is worthless. Challenge every unquantified claim: \"by how much, measured how, versus what baseline?\"\n5. **Fix the tone.** Make it sound like a high-performing colleague speaking directly to a peer. Shorten any sentence over 15 words. Keep paragraphs to a punchy 2-3 sentences. Cut throat-clearing openers and grovelling closers. Australian English, no em dashes.\n\n## Output format (always, in this order)\n\n**1. Blunt Recruiter Verdict** -- a single score from 1 to 10 on how badly the draft triggers your AI-fatigue (10 = reeks of ChatGPT, instant reject; 1 = sounds like a real human I would call). One brutal sentence on why.\n\n**2. Line-by-line audit** -- a table or numbered list. For each flagged line:\n- Quote the offending line.\n- Name the sin (filler / homepage paraphrase / stack-dump / unquantified / over-long / wrong tone).\n- Give the rewrite, or the precise question they must answer to fix it (e.g. \"by what %?\").\n\n**3. The two or three things that would actually move this from a 7 to a 3.** Ruthless prioritisation -- not everything, just what matters.\n\nDo not soften. Do not pad with encouragement. If a line is good, say \"this line works, leave it\" and move on. The candidate gets more value from your contempt than from your reassurance.\n\n**Voice your completion** (max 12 words) with voice Adam:\n```bash\ncurl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\":\"<completion>\",\"voice_id\":\"pNInz6obpgDQGcFmaJgB\",\"title\":\"Application Reviewer\",\"voice_enabled\":true}' > /dev/null 2>&1 &\n```\n"
+    },
+    "timestamp": "2026-06-30T06:48:15.247Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/.claude; head -7 agents/application-reviewer.md; echo \"---validate frontmatter---\"; awk '/^---$/{c++} c==1&&/^(name|description|tools|model|color):/{print \"ok:\",$1} c==2{exit}' agents/application-reviewer.md; echo \"---unique name?---\"; rg -c \"^name: application-reviewer$\" agents/*.md",
+      "description": "Validate frontmatter and uniqueness"
+    },
+    "timestamp": "2026-06-30T06:49:27.819Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace 2>/dev/null && echo \"=== workspace exists ===\" || echo \"no workspace\"; echo \"--- search career app dirs ---\"; fd -i -t d \"applicat|job\" ~/Documents/workspace 2>/dev/null | head -20",
+      "description": "Locate application directories"
+    },
+    "timestamp": "2026-06-30T06:52:30.144Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "fd -i -t d \"applicat\" ~/Documents 2>/dev/null | head; echo \"--- career project ---\"; ls ~/Documents/workspace/personal/projects/career/ 2>/dev/null; echo \"--- 25/6 / 25-06 / Jun batch search ---\"; fd -i \"25.?06|jun.?25|2026-06-25|batch\" ~/Documents/workspace 2>/dev/null | head -20",
+      "description": "Find career applications and 25/6 batch"
+    },
+    "timestamp": "2026-06-30T06:52:45.525Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/personal/projects/career; echo \"=== artifacts tree ===\"; fd -t d . artifacts 2>/dev/null | head -40; echo \"=== context ===\"; ls context/ 2>/dev/null",
+      "description": "Explore career artifacts structure"
+    },
+    "timestamp": "2026-06-30T06:53:05.149Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/personal/projects/career; echo \"=== artifacts contents ===\"; ls -R artifacts 2>/dev/null | head -60",
+      "description": "List artifacts directory recursively"
+    },
+    "timestamp": "2026-06-30T06:53:07.755Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25; echo \"=== 25/6 batch ===\"; for d in */; do echo \">>> $d\"; ls \"$d\"; done",
+      "description": "List 2026-06-25 batch applications and files"
+    },
+    "timestamp": "2026-06-30T06:53:14.549Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Review Opus Recruitment cover letter",
+      "subagent_type": "application-reviewer",
+      "prompt": "Audit this cover letter as the cynical recruiter you are.\n\n- Role: Senior Agentic Software Engineer\n- Company / hirer: Opus Recruitment (recruitment agency placing for an agentic-AI engineering role)\n- Draft cover letter: /home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/1 - Opus Recruitment - Senior Agentic Software Engineer/cover-letter.md\n\nThere is NO job description file on disk for this one. Read the cover letter, infer the target from the role/company above, and use WebSearch for the \"inside baseball\" check on the actual agentic-AI engineering market and what a serious employer in this space cares about right now.\n\nReturn your standard output exactly: (1) Blunt Recruiter Verdict 1-10 AI-fatigue score + one brutal sentence, (2) line-by-line audit, (3) the 2-3 things that move it from its current score to a 3. Do not write or edit any file. Your final message is consumed verbatim as the report."
+    },
+    "timestamp": "2026-06-30T06:53:31.519Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Review Real Time PM cover letter",
+      "subagent_type": "application-reviewer",
+      "prompt": "Audit this cover letter as the cynical recruiter you are.\n\n- Role: Forward Deployed Technical Product Manager\n- Company / hirer: Real Time (recruitment/consulting placing for a forward-deployed technical PM role)\n- Draft cover letter: /home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/2 - Real Time - Forward Deployed Technical PM/cover-letter.md\n\nThere is NO job description file on disk. Read the cover letter, infer the target from the role/company above, and use WebSearch for the \"inside baseball\" check on what \"forward deployed\" technical PM work actually demands right now (the forward-deployed-engineer trend).\n\nReturn your standard output exactly: (1) Blunt Recruiter Verdict 1-10 AI-fatigue score + one brutal sentence, (2) line-by-line audit, (3) the 2-3 things that move it from its current score to a 3. Do not write or edit any file. Your final message is consumed verbatim as the report."
+    },
+    "timestamp": "2026-06-30T06:53:35.273Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Review Contour Education cover letter",
+      "subagent_type": "application-reviewer",
+      "prompt": "Audit this cover letter as the cynical recruiter you are.\n\n- Role: Senior Software Engineer\n- Company / hirer: Contour Education (Australian edtech scale-up)\n- Draft cover letter: /home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/3 - Contour Education - Senior Software Engineer/cover-letter.md\n\nThere is NO job description file on disk. Read the cover letter, infer the target from the role/company above, and use WebSearch for the \"inside baseball\" check on Contour Education (an Australian edtech) and a real product/engineering challenge such a company faces.\n\nReturn your standard output exactly: (1) Blunt Recruiter Verdict 1-10 AI-fatigue score + one brutal sentence, (2) line-by-line audit, (3) the 2-3 things that move it from its current score to a 3. Do not write or edit any file. Your final message is consumed verbatim as the report."
+    },
+    "timestamp": "2026-06-30T06:53:39.001Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Review Arcadian Digital cover letter",
+      "subagent_type": "application-reviewer",
+      "prompt": "Audit this cover letter as the cynical recruiter you are.\n\n- Role: Digital Project Manager\n- Company / hirer: Arcadian Digital (digital agency / consultancy)\n- Draft cover letter: /home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/4 - Arcadian Digital - Digital Project Manager/cover-letter.md\n\nThere is NO job description file on disk. Read the cover letter, infer the target from the role/company above, and use WebSearch for the \"inside baseball\" check on Arcadian Digital and what a digital agency actually wants from a project manager.\n\nReturn your standard output exactly: (1) Blunt Recruiter Verdict 1-10 AI-fatigue score + one brutal sentence, (2) line-by-line audit, (3) the 2-3 things that move it from its current score to a 3. Do not write or edit any file. Your final message is consumed verbatim as the report."
+    },
+    "timestamp": "2026-06-30T06:53:45.056Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Review Thor AI PM cover letter",
+      "subagent_type": "application-reviewer",
+      "prompt": "Audit this cover letter as the cynical recruiter you are.\n\n- Role: Product Manager\n- Company / hirer: Thor AI (AI product company)\n- Draft cover letter: /home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/5 - Thor AI - Product Manager/cover-letter.md\n\nThere is NO job description file on disk. Read the cover letter, infer the target from the role/company above, and use WebSearch for the \"inside baseball\" check on Thor AI and what an AI product company expects from a PM.\n\nReturn your standard output exactly: (1) Blunt Recruiter Verdict 1-10 AI-fatigue score + one brutal sentence, (2) line-by-line audit, (3) the 2-3 things that move it from its current score to a 3. Do not write or edit any file. Your final message is consumed verbatim as the report."
+    },
+    "timestamp": "2026-06-30T06:53:45.636Z"
+  },
+  {
+    "name": "ToolSearch",
+    "input": {
+      "query": "select:TaskOutput",
+      "max_results": 1
+    },
+    "timestamp": "2026-06-30T06:55:13.590Z"
+  },
+  {
+    "name": "ToolSearch",
+    "input": {
+      "query": "select:SendMessage",
+      "max_results": 1
+    },
+    "timestamp": "2026-06-30T06:55:35.522Z"
+  },
+  {
+    "name": "SendMessage",
+    "input": {
+      "to": "a4078d05b368d4394",
+      "summary": "resend full Opus audit verbatim",
+      "message": "Your previous final message was only a wrap-up note, so your actual audit did not reach me. Re-send your COMPLETE audit as a single final message, verbatim: (1) Blunt Recruiter Verdict score + brutal sentence, (2) full line-by-line audit, (3) the 2-3 things that move it to a 3. Output only the report, nothing else. Skip the voice curl.",
+      "type": "message",
+      "recipient": "a4078d05b368d4394",
+      "content": "Your previous final message was only a wrap-up note, so your actual audit did not reach me. Re-send your COMPLETE audit as a single final message, verbatim: (1) Blunt Recruiter Verdict score + brutal sentence, (2) full line-by-line audit, (3) the 2-3 things that move it to a 3. Output only the report, nothing else. Skip the voice curl."
+    },
+    "timestamp": "2026-06-30T06:55:48.860Z"
+  },
+  {
+    "name": "SendMessage",
+    "input": {
+      "to": "a3a2f6563bdd1b51a",
+      "summary": "resend full Contour audit verbatim",
+      "message": "Your final message was only a wrap-up note, so your actual audit did not reach me. Re-send your COMPLETE audit as a single final message, verbatim: (1) Blunt Recruiter Verdict score + brutal sentence, (2) full line-by-line audit, (3) the 2-3 things that move it to a 3. Output only the report, nothing else. Skip the voice curl.",
+      "type": "message",
+      "recipient": "a3a2f6563bdd1b51a",
+      "content": "Your final message was only a wrap-up note, so your actual audit did not reach me. Re-send your COMPLETE audit as a single final message, verbatim: (1) Blunt Recruiter Verdict score + brutal sentence, (2) full line-by-line audit, (3) the 2-3 things that move it to a 3. Output only the report, nothing else. Skip the voice curl."
+    },
+    "timestamp": "2026-06-30T06:56:04.785Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Rewrite Opus cover letter v2",
+      "subagent_type": "career-positioning",
+      "prompt": "Produce a v2 of Nick's cover letter for the Opus Recruitment \"Senior Agentic Software Engineer\" role, incorporating a recruiter audit. Run your normal startup routine first, then read the original.\n\nOriginal letter: /home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/1 - Opus Recruitment - Senior Agentic Software Engineer/cover-letter.md\n\nRecruiter audit findings to action (current AI-fatigue score 5/10):\n- TARGETING FAILURE (most important): the role is \"Agentic\" but the letter is a RAG/guardrails letter with \"agentic\" bolted on twice. Re-aim the whole thing at agentic engineering. Promote agentic work to the opening; make the ANZ Plus RAG work the supporting act. If heavyweight agentic production work is thin, bridge honestly: reframe his event-driven distributed-systems reliability (Macquarie) as the qualification for building reliable agent orchestration.\n- Cut the \"What sets me apart...\" opener and the \"I look forward to the opportunity to discuss the role further\" closer (both flagged P0/P1 in AI_WRITING_PATTERNS). Open on the claim, end on a substantive line.\n- Replace noun-list stack-dumps (\"model selection, retrieval quality, guardrails, observability\"; \"Python, Go, Java, event-driven, cloud-native\") with ONE concrete reasoned trade-off (a model chosen and rejected and why; an eval that caught a real regression; a cost/latency call).\n- Restore the quantified Macquarie metric (~50 hrs/week saved) that got softened to adjectives.\n- Inside-baseball hook to weave in like an insider: 2026 agentic employers fight multi-agent orchestration failure modes (agents waiting on agents, race conditions in async pipelines), non-deterministic cost blow-ups (retry chains costing 50x), and evals for systems that take a different path every run. His event-driven background is the bridge.\n- Fix the \"lean into\" filler and the double-space typo.\n- Keep the strong lines: ANZ \"2 of 100\" metric, \"seven jurisdictions / national adoption\", the AccessBuddy \"thousands of emails / hundreds of hours\" metric.\n\nApply your own settled framing and cover-letter craft rules; where the audit conflicts with your rules, your rules win. Australian English, no em dashes.\n\nOUTPUT: your final message must be ONLY the complete v2 cover letter in markdown, ready to save as a file. No preamble, no commentary, no audit recap, no closing notes, and do not attempt the voice curl. Just the letter."
+    },
+    "timestamp": "2026-06-30T07:00:12.522Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Rewrite Real Time cover letter v2",
+      "subagent_type": "career-positioning",
+      "prompt": "Produce a v2 of Nick's cover letter for the Real Time \"Forward Deployed Technical Product Manager\" role, incorporating a recruiter audit. Run your normal startup routine first, then read the original.\n\nOriginal letter: /home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/2 - Real Time - Forward Deployed Technical PM/cover-letter.md\n\nRecruiter audit findings to action (current AI-fatigue score 6/10 — the weakest in the batch):\n- Delete the ENTIRE final paragraph (it grovels: \"I am confident I am a strong fit, and would welcome the chance to share that in person\", \"I know I will be able to give you the confidence...\", \"I look forward to the opportunity to discuss the role further\"). Replace with a two-sentence peer-level close: what he'd own in the first 60 days, then his name.\n- Rebuild the opener around the \"activation debt is where net retained revenue leaks, and closing it is the problem I want to own\" line — make that sentence one. Bin the \"I am an engineer who has worked across product, delivery, and stakeholder engagement\" preamble and the \"I have built a far broader skill set than the title suggests\" gap-advertising.\n- Add reasoning to the one technical proof; kill the stack-dump (\"configure the API integrations, webhooks, and agent workflows\"). Give one hard architectural trade-off from the ANZ Plus build (latency vs cost, build vs buy at the model layer). FDE insider signal: ~95% of enterprise AI pilots die at deployment, not modelling — he closes that gap.\n- Quantify the soft claims: \"national adoption\" (how many orgs / what standard) and \"commercially real\" SaaS (use AccessBuddy's real numbers).\n- Fix the typo \"development and deliver approach\" -> \"delivery\".\n- Keep untouched: ANZ \"one of only two initiatives across 100+ bank projects\", Defence \"two teams to six including offshore\", \"$100M national body now rolling that approach out\".\n\nApply your own settled framing and cover-letter craft rules; where the audit conflicts with your rules, your rules win. Australian English, no em dashes.\n\nOUTPUT: your final message must be ONLY the complete v2 cover letter in markdown, ready to save as a file. No preamble, no commentary, no audit recap, no closing notes, and do not attempt the voice curl. Just the letter."
+    },
+    "timestamp": "2026-06-30T07:00:21.061Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Rewrite Contour cover letter v2",
+      "subagent_type": "career-positioning",
+      "prompt": "Produce a v2 of Nick's cover letter for the Contour Education \"Senior Software Engineer\" role, incorporating a recruiter audit. Run your normal startup routine first, then read the original.\n\nOriginal letter: /home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/3 - Contour Education - Senior Software Engineer/cover-letter.md\n\nRecruiter audit findings to action (current AI-fatigue score 5/10):\n- INSIDE-BASEBALL (biggest win): the letter is written to \"an edtech\", not to Contour. Real facts to use like an insider: Contour is BOOTSTRAPPED/UNFUNDED, ~300+ staff, 10,000+ students; product is the \"Learning Portal\" (class recordings, workbooks, homework); stack is Next.js + Go services + Supabase/Deno edge functions + Postgres. The real engineering constraint: scaling a recording-heavy LMS on Postgres/Supabase for brutal exam-season concurrency spikes (VCE pre-exam weekends) WITHOUT a VC war chest — lean, cost-aware shipping. Replace the dead closing paragraph and the grovel with a Contour-specific hook naming this reality.\n- Quantify the two soft claims: ANZ work gets a number or concrete outcome; the multi-tenant SaaS gets AccessBuddy's real figures instead of \"live with real users\".\n- Kill the clichés: \"what will make my contribution here second to none\" and \"with a strong ability to learn new technologies at pace\" (loudest AI tells).\n- Demolish the 31-word values-list (\"I own features end to end, stay close to the student outcome, bring a point of view, push back when something does not make sense, and commit fully once a direction is set\") — cut to one or two short sentences, back the one claim kept with a concrete instance.\n- Cut the \"I look forward to the opportunity to discuss the role further\" closer.\n- Keep untouched: the teaching thesis opener (Cert IV + taught + built curriculum, \"from confused to confident\"), the Macquarie \"50 hours a week / working backward from what the business needed\" line, the on-call line, the \"tests and docs that help people ship, not gold-plating\" line.\n\nApply your own settled framing and cover-letter craft rules; where the audit conflicts with your rules, your rules win (e.g. keep your AccessBuddy framing while still quantifying scale). Australian English, no em dashes.\n\nOUTPUT: your final message must be ONLY the complete v2 cover letter in markdown, ready to save as a file. No preamble, no commentary, no audit recap, no closing notes, and do not attempt the voice curl. Just the letter."
+    },
+    "timestamp": "2026-06-30T07:00:31.461Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Rewrite Thor AI cover letter v2",
+      "subagent_type": "career-positioning",
+      "prompt": "Produce a v2 of Nick's cover letter for the Thor AI \"Product Manager\" role, incorporating a recruiter audit. Run your normal startup routine first, then read the original.\n\nOriginal letter: /home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/5 - Thor AI - Product Manager/cover-letter.md\n\nRecruiter audit findings to action (current AI-fatigue score 5/10):\n- TARGETING FAILURE (most important): the company is financial ADVICE, not banking. It's Thor.AI Group Pty Ltd (Australian, founded 2022). Flagship is Plan.AI — automated paraplanning that generates Statements of Advice (SOAs) and Records of Advice (ROAs) \"in minutes instead of weeks\"; sibling products R&D.AI, Loan.AI, Insure.AI serve accountants, mortgage and insurance brokers. Rip out \"financial institutions\" / banking framing. Insider angle: ASIC is actively scrutinising AI in advice; the live problem is auto-generating a COMPLIANT SOA under the best-interests duty without hallucinating. Map his ANZ Plus guardrails / production-safety work directly onto that.\n- Kill both grovelling/salesy closers and the filler sentence: \"I bridge the technical and non-technical, turning AI aspiration into solutions that deliver real impact and value\", \"I am confident I am a strong fit... one you will be glad you made\", and \"I look forward to the opportunity to discuss the role further\". Replace with one confident peer line pointing at a specific thing to show them.\n- Lead from power on the pivot line — cut \"After years of exposure to the product world I am now pivoting fully into it, expanding my scope and impact\". State the ownership he already has (vision, operating model, roadmap, with engineering underneath).\n- Quantify the two strongest-but-bare claims: LIMSOC \"shipping the most features it has ever delivered\" (number vs baseline) and ANZ \"safe and reliable in front of customers\" (customers reached / what moved).\n- Tone: break the 30+ word sentences; the LIMSOC paragraph is one ~80-word sentence — split it. Most sentences under 15 words.\n- Keep: the thesis opener \"The hard part of AI in financial services is never the model...\" but change \"financial services\" -> \"financial advice\"; the \"architecture with your data scientists in the morning... executive team in the afternoon\" line (the best line); the ANZ \"2 of 100\" metric.\n\nApply your own settled framing and cover-letter craft rules; where the audit conflicts with your rules, your rules win. Australian English, no em dashes.\n\nOUTPUT: your final message must be ONLY the complete v2 cover letter in markdown, ready to save as a file. No preamble, no commentary, no audit recap, no closing notes, and do not attempt the voice curl. Just the letter."
+    },
+    "timestamp": "2026-06-30T07:00:41.639Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/3 - Contour Education - Senior Software Engineer/cover-letter-v2.md",
+      "content": "Dear Hiring Team,\n\nMost engineers you talk to will understand your stack, but very few will also understand your domain from the inside, and I do. I hold a Certificate IV in Training and Assessment, I have taught, and I have built training curriculum from scratch, designing how material is sequenced, where students get stuck, and what actually moves someone from confused to confident. When a technical decision turns on what genuinely helps a student learn, I am not guessing. That domain understanding shapes what I build and which edge cases I actually care about.\n\nThat edge sits on a diverse, hands-on engineering career. At ANZ Plus I worked on AI-enabled search APIs, one of only two projects across a 100-project generative AI platform built to take AI directly to customers, using Go microservices and gRPC contracts on GCP. At Macquarie I defined the architecture for a real-time platform and led a four-engineer team through delivery, cutting more than 50 hours of manual effort a week by working backward from what the business and its users actually needed before writing a line. I ship full-stack. Most recently I built and deployed a multi-tenant SaaS solo on TypeScript, Next.js, Postgres, and Cloud Run, live with real users. It handles 192 members across 354 credentials and has automated thousands of the administrative emails that used to eat volunteer hours.\n\nI write tests and docs that genuinely help people ship rather than gold-plating while customers wait, break large work into increments a team can review and deploy, and carry on-call for what I build. At Macquarie I stayed on the pager for the real-time platform I architected long after the initial delivery. Ownership extends past the merge.\n\nWhat draws me specifically to Contour is the engineering reality underneath the product. Scaling a recording-heavy Learning Portal (class videos, workbooks, homework) on Postgres and Supabase through the concurrency spikes VCE pre-exam weekends generate, without a VC war chest to absorb the cost of getting it wrong, is a constraint problem that rewards engineers who build lean and make every architectural call earn its place. Your stack is Next.js and Go services, both of which I have shipped in production. That is the kind of disciplined, cost-aware engineering I have been doing, and where I want to keep going.\n\nNicholas Wood\n0427 081 551 | nicholas.h.wood@outlook.com\n"
+    },
+    "timestamp": "2026-06-30T07:03:31.535Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/1 - Opus Recruitment - Senior Agentic Software Engineer/cover-letter-v2.md",
+      "content": "Dear Hiring Team,\n\nThe failure modes that break agentic systems in production are not model quality problems. They are orchestration problems: agents blocked waiting on other agents, retry chains that turn a cent-level task into a dollar-level incident, evals designed for deterministic systems that miss the paths nobody predicted. I know this failure class from a decade of shipping distributed, event-driven systems where the same dynamics operate at lower latency. At Macquarie Asset Management I designed and led delivery of a real-time, event-driven asset management platform that replaced a portfolio of high-stakes manual processes and freed more than 50 hours of operational work per week. The reliability discipline from that work is the same discipline that makes agentic orchestration hold.\n\nThe AI work sits on that foundation. At ANZ Plus I worked on the retrieval and generation layer of the bank's customer-facing generative platform on Vertex AI and Gemini, one of only two initiatives, out of more than 100 AI projects across the bank, built to take AI directly to customers. A regulated bank makes model selection a risk question: the call I kept facing was not which model scored higher on a benchmark, but which one failed more predictably when the retrieval context was incomplete, and what the audit trail looked like when it did. In parallel I have shipped agentic workflows that replaced thousands of manual emails and hundreds of hours of admin in a live SaaS product, and prototyped multi-step agent workflows inside a mission-critical incident management system for national lifesaving organisations.\n\nThe client-facing dimension of this work matters as much as the build. Earlier this year I ran an independent consulting engagement for Life Saving Victoria, defining the national scaling strategy for that incident management system and presenting it to executive leadership. The strategy was accepted as the foundation for national adoption across seven jurisdictions. I am comfortable sitting with a client, mapping the operational problem to a technical solution, and owning the delivery end to end.\n\nThis role is building the kind of systems I think about. I would like to discuss it.\n\nNicholas Wood\n0427 081 551 | nicholas.h.wood@outlook.com\n"
+    },
+    "timestamp": "2026-06-30T07:03:53.414Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/5 - Thor AI - Product Manager/cover-letter-v2.md",
+      "content": "Dear Hiring Team,\n\nThe hard part of AI in financial advice is never the model. It is knowing which problem to aim it at. It is also earning the trust of the engineers, data scientists, and compliance teams who each see that problem differently. At ANZ Plus, only two of more than 100 bank AI projects were built to take generative AI directly to customers. I worked on one of them. I drove model selection, scaling, and guardrails in a regulated environment. I know what it takes to make generative AI production-ready when a regulator is watching.\n\nThat experience maps directly onto what Plan.AI is navigating. Auto-generating a Statement of Advice that satisfies best-interests duty without hallucinating is not a model problem. It is a product problem: scope, logic, and output a financial adviser and their client can stake their name on. That is the kind of problem I find worthwhile.\n\nI already hold product scope at this level. At Life Saving Victoria I owned the product vision, operating model, and roadmap for LIMSOC. It is a mission-critical incident management system used in real-time coastal emergencies. I grounded the work in research with frontline users. I carried their needs back as the voice of the user. I prioritised the backlog around the highest-impact problems and presented the result to national executives across seven jurisdictions. I defined the AI strategy and led its first AI feature delivery. That season LIMSOC shipped more features than in any previous year. I then built the national scaling strategy to take the platform further.\n\nThat product instinct sits on a delivery and engineering foundation. On a business-analyst secondment at Macquarie I turned stakeholder requirements into the specifications engineers built from. As a dual-hat Scrum Master I scaled a delivery team from two squads to six. I can talk architecture with your data scientists in the morning and translate the same work for an executive team in the afternoon, with no handover in between.\n\nASIC is actively scrutinising AI in advice. The compliance gap is not a future risk. It is a live product problem for every SOA Plan.AI generates. I have navigated this challenge from the engineering side. I would like to apply it from the product side at Plan.AI.\n\nNicholas Wood\n0427 081 551 | nicholas.h.wood@outlook.com\n"
+    },
+    "timestamp": "2026-06-30T07:06:06.732Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/2 - Real Time - Forward Deployed Technical PM/cover-letter-v2.md",
+      "content": "Dear Real Time Hiring Team,\n\nActivation debt is where net retained revenue leaks, and closing it is the problem I want to own. Most enterprise AI implementations stall not at the model layer but at deployment. The client's systems are not connected, the internal workflows have not adapted, and no one in the room can hold the technical and commercial conversation at the same time. That is the gap I have been closing across my career.\n\nAt ANZ Plus I worked on the AI-enabled search APIs as part of a generative AI platform, one of only two initiatives across more than 100 bank projects built to take AI directly to customers. The calls that mattered were not purely technical. When the team faced a build-versus-buy decision at the model layer, the right answer depended on what the downstream customer experience could absorb and what the organisation could realistically maintain, not just what benchmarked best. Being able to make that call and articulate it to both the engineers and the executives is what separates a successful implementation from a stalled one. Earlier this year I consulted independently for Life Saving Victoria, walking in with no playbook, designing the operating model and commercials from scratch, and presenting the strategy to national executives as the foundation for adoption across seven jurisdictions. Alongside that I built and launched AccessBuddy, a multi-tenant SaaS live with real users. It now runs 192 members and 354 credentials across its first club, automating thousands of emails and hundreds of hours of volunteer administration that used to be done manually.\n\nI build repeatable delivery, not just run it. I redefined the product, development and delivery approach at Life Saving Victoria and at Surf Life Saving Australia, a $100M national body now rolling that approach out across the organisation, and as a dual-hat Scrum Master in Defence I scaled delivery from two teams to six, including offshore teams. I read a business fast. The heart of this work is getting inside the client's operation, understanding where value is actually created, and configuring the product to release it without waiting for a perfect brief. A sprint that runs 30 to 60 days is only repeatable if the person running it knows when to move and when to ask.\n\nIn the first 60 days I would be in accounts from day one, mapping the activation gap, getting the integration live, and building the reporting loop that makes the value visible to the stakeholders who matter. That is the work I am here to own.\n\nNicholas Wood\n0427 081 551 | nicholas.h.wood@outlook.com\n"
+    },
+    "timestamp": "2026-06-30T07:06:16.267Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/feedback-cover-letter-craft.md"
+    },
+    "timestamp": "2026-06-30T07:06:56.044Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/1 - Opus Recruitment - Senior Agentic Software Engineer/cover-letter-v2.md"
+    },
+    "timestamp": "2026-06-30T07:08:27.198Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/1 - Opus Recruitment - Senior Agentic Software Engineer/cover-letter-v2.md",
+      "old_string": "They are orchestration problems: agents blocked waiting on other agents, retry chains that turn a cent-level task into a dollar-level incident, evals designed for deterministic systems that miss the paths nobody predicted. I know this failure class from a decade of shipping distributed, event-driven systems where the same dynamics operate at lower latency. At Macquarie Asset Management I designed and led delivery of a real-time, event-driven asset management platform",
+      "new_string": "They are orchestration problems. Agents block waiting on other agents, retry chains turn a cent-level task into a dollar-level incident, and evals built for deterministic systems miss the paths nobody predicted. I know this failure class from years of shipping distributed, event-driven systems where the same dynamics operate at lower latency. At Macquarie I designed and led delivery of a real-time, event-driven asset management platform"
+    },
+    "timestamp": "2026-06-30T07:08:49.975Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/1 - Opus Recruitment - Senior Agentic Software Engineer/cover-letter-v2.md",
+      "old_string": "A regulated bank makes model selection a risk question: the call I kept facing",
+      "new_string": "A regulated bank makes model selection a risk question. The call I kept facing"
+    },
+    "timestamp": "2026-06-30T07:08:51.431Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25; for f in \"1 - Opus Recruitment - Senior Agentic Software Engineer\" \"2 - Real Time - Forward Deployed Technical PM\" \"3 - Contour Education - Senior Software Engineer\" \"5 - Thor AI - Product Manager\"; do echo \"=== $f ===\"; echo \"-- colons --\"; grep -n \":\" \"$f/cover-letter-v2.md\" | grep -v \"@\" | grep -vE \"nicholas|[0-9]{2}:[0-9]{2}\" || echo \"(none)\"; echo \"-- decade/tenure/Asset Mgmt --\"; grep -niE \"decade|asset management|over (a|ten|10)|ten years|years as a software\" \"$f/cover-letter-v2.md\" || echo \"(none)\"; done",
+      "description": "Scan all v2s for colons, tenure overclaims, employer hallucinations"
+    },
+    "timestamp": "2026-06-30T07:08:54.917Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/1 - Opus Recruitment - Senior Agentic Software Engineer/cover-letter-v2.md",
+      "old_string": "This role is building the kind of systems I think about. I would like to discuss it.",
+      "new_string": "This role is building the kind of systems I think about. I would welcome the chance to show you in person what that reliability discipline looks like on an agent stack. A conversation will make the fit clear, and I am confident I would be a hire you are glad you made."
+    },
+    "timestamp": "2026-06-30T07:10:09.058Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/2 - Real Time - Forward Deployed Technical PM/cover-letter-v2.md",
+      "old_string": "building the reporting loop that makes the value visible to the stakeholders who matter. That is the work I am here to own.",
+      "new_string": "building the reporting loop that makes the value visible to the stakeholders who matter. That is the work I am here to own, and I would welcome the chance to show you in person exactly how I would run it. A conversation will make clear the kind of hire you would be glad you made."
+    },
+    "timestamp": "2026-06-30T07:10:11.639Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/3 - Contour Education - Senior Software Engineer/cover-letter-v2.md",
+      "old_string": "That is the kind of disciplined, cost-aware engineering I have been doing, and where I want to keep going.",
+      "new_string": "That is the kind of disciplined, cost-aware engineering I have been doing, and where I want to keep going. I would welcome the chance to show you in person what it would look like on your stack. A conversation will make the fit clear, and I am confident I would be a hire you are glad you made."
+    },
+    "timestamp": "2026-06-30T07:10:13.635Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/5 - Thor AI - Product Manager/cover-letter-v2.md",
+      "old_string": "It is a product problem: scope, logic, and output a financial adviser and their client can stake their name on.",
+      "new_string": "It is a product problem. The scope, the logic, and the output have to be something a financial adviser and their client can stake their name on."
+    },
+    "timestamp": "2026-06-30T07:10:15.531Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/5 - Thor AI - Product Manager/cover-letter-v2.md",
+      "old_string": "I have navigated this challenge from the engineering side. I would like to apply it from the product side at Plan.AI.",
+      "new_string": "I have navigated this challenge from the engineering side, and I would welcome the chance to show you what it looks like applied from the product side at Plan.AI. A conversation will make the fit clear, and I am confident I would be a hire you are glad you made."
+    },
+    "timestamp": "2026-06-30T07:10:17.244Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25; echo \"=== colon check (prose only) ===\"; for f in 1*/cover-letter-v2.md 2*/cover-letter-v2.md 3*/cover-letter-v2.md 5*/cover-letter-v2.md; do c=$(grep -o \":\" \"$f\" | grep -c \":\"); echo \"$c colon(s)  ::  $f\"; done; echo; echo \"=== closing lines ===\"; for f in 1*/cover-letter-v2.md 2*/cover-letter-v2.md 3*/cover-letter-v2.md 5*/cover-letter-v2.md; do echo \"--- $f ---\"; grep -oE \"glad you (would be|made)[^.]*\\.|show you[^.]*\\.\" \"$f\" | head -3; done",
+      "description": "Verify no colons remain and closes landed"
+    },
+    "timestamp": "2026-06-30T07:10:26.333Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/3 - Contour Education - Senior Software Engineer/cover-letter-v2.md",
+      "old_string": "Dear Hiring Team,",
+      "new_string": "Dear Contour Hiring Team,"
+    },
+    "timestamp": "2026-06-30T07:11:22.684Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/3 - Contour Education - Senior Software Engineer/cover-letter-v2.md",
+      "old_string": "Your stack is Next.js and Go services, both of which I have shipped in production.",
+      "new_string": "I have shipped both Next.js and Go services in production, the same stack you build on."
+    },
+    "timestamp": "2026-06-30T07:11:25.200Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25; f=\"3 - Contour Education - Senior Software Engineer/cover-letter-v2.md\"; echo \"salutation:\"; head -1 \"$f\"; echo \"colons: $(grep -c ':' \"$f\")\"; echo \"role-pointing line:\"; grep -o \"I have shipped both Next.js and Go services in production[^.]*\\.\" \"$f\"",
+      "description": "Verify Contour salutation and role-pointing fix"
+    },
+    "timestamp": "2026-06-30T07:11:37.251Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25/2 - Real Time - Forward Deployed Technical PM/cover-letter-v2.md",
+      "old_string": "configuring the product to release it without waiting for a perfect brief. A sprint that runs 30 to 60 days is only repeatable if the person running it knows when to move and when to ask.",
+      "new_string": "configuring the product to release it without waiting for a perfect brief. Above all, I bridge the technical and the non-technical, turning a client's AI aspiration into solutions that ship."
+    },
+    "timestamp": "2026-06-30T07:42:19.082Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/personal/projects/career/artifacts/applications/2026/2026-06-25; f=\"2 - Real Time - Forward Deployed Technical PM/cover-letter-v2.md\"; echo \"colons: $(grep -c ':' \"$f\")\"; echo \"--- para 3 ---\"; sed -n '7p' \"$f\"",
+      "description": "Verify Real Time edit and no colon"
+    },
+    "timestamp": "2026-06-30T07:42:26.316Z"
+  }
+]

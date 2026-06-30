@@ -1,0 +1,91 @@
+/**
+ * Transaction -> envelope activity. This is the spend side of the ledger:
+ *
+ *   ISC-19  category->envelope mapping is many-to-one, effective-dated
+ *   ISC-20  unmapped transactions resolve to NO envelope (null); they sit outside
+ *           every budget and are surfaced only as a "to be categorised" summary
+ *   ISC-21  NAB card spend decrements the Credit Card Holding envelope on tx date
+ *   ISC-22  is_transfer transactions are excluded from envelope decrement
+ *   ISC-23  pending transactions are listed but never counted
+ *   ISC-24  posted transactions decrement the mapped envelope on tx date
+ *
+ * Pure functions over already-fetched data. Amounts are signed integer cents:
+ * a negative amount is an outflow that decrements the envelope.
+ */
+
+import type { Tx } from "../platform/store.ts";
+import type { CategoryMapping, Period } from "../domain/types.ts";
+import type { EngineConfig } from "./ports.ts";
+import { dateInPeriod } from "./period.ts";
+
+/**
+ * Resolve the effective envelope for a transaction (ISC-19, ISC-20). The
+ * most-recent mapping whose window covers the tx date wins. With no mapping we
+ * fall back to the envelope id stamped at import, and finally to null: an
+ * unmapped transaction resolves to NO envelope, so it never lands next to a
+ * budget. It is surfaced only through the grid's "to be categorised" summary.
+ */
+export function resolveEnvelopeId(
+  tx: Tx,
+  mappings: readonly CategoryMapping[],
+): string | null {
+  if (tx.categoryId !== null) {
+    let best: CategoryMapping | null = null;
+    for (const m of mappings) {
+      if (m.categoryId !== tx.categoryId) continue;
+      if (m.effectiveFrom > tx.date) continue;
+      if (m.effectiveTo !== null && tx.date >= m.effectiveTo) continue;
+      if (best === null || m.effectiveFrom > best.effectiveFrom) best = m;
+    }
+    if (best !== null) return best.envelopeId;
+  }
+  return tx.envelopeId ?? null;
+}
+
+/** Whether a transaction counts toward balances (posted, real spend). ISC-22, ISC-23. */
+export function countsTowardBalance(tx: Tx): boolean {
+  return !tx.isTransfer && !tx.isPending;
+}
+
+export interface ActivityResult {
+  /** Signed net activity per envelope id (negative = net outflow). */
+  readonly byEnvelope: ReadonlyMap<string, number>;
+  /** Signed net activity on the Credit Card Holding envelope (ISC-21). */
+  readonly holdingCents: number;
+}
+
+/**
+ * Net signed activity per envelope for transactions up to `asOf` (inclusive).
+ * Transfers and pending rows are excluded (ISC-22, ISC-23). Posted rows on a
+ * NAB card account also decrement the holding envelope (ISC-21). Pass `period`
+ * to restrict to a single month; omit it to accumulate everything up to `asOf`.
+ */
+export function computeActivity(
+  txs: readonly Tx[],
+  mappings: readonly CategoryMapping[],
+  config: EngineConfig,
+  opts: { readonly period?: Period; readonly asOf?: string } = {},
+): ActivityResult {
+  const byEnvelope = new Map<string, number>();
+  const nabCard = new Set(config.nabCardAccountIds);
+  let holdingCents = 0;
+
+  for (const tx of txs) {
+    if (!countsTowardBalance(tx)) continue;
+    if (opts.asOf !== undefined && tx.date > opts.asOf) continue;
+    if (opts.period !== undefined && !dateInPeriod(tx.date, opts.period)) continue;
+
+    // ISC-21: a card swipe moves the holding envelope on the same date, regardless
+    // of category mapping (it is account-based). This must run BEFORE the unmapped
+    // skip below, or unmapped card spend would stop moving the holding tripwire.
+    if (nabCard.has(tx.accountId)) holdingCents += tx.amountCents;
+
+    // Unmapped transactions resolve to NO envelope (null): they contribute to no
+    // envelope's activity and are simply absent from the grid (ISC-20).
+    const envId = resolveEnvelopeId(tx, mappings);
+    if (envId === null) continue;
+    byEnvelope.set(envId, (byEnvelope.get(envId) ?? 0) + tx.amountCents);
+  }
+
+  return { byEnvelope, holdingCents };
+}
