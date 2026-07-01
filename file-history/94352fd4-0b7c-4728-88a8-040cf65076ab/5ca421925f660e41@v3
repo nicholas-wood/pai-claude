@@ -1,0 +1,157 @@
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+import type { BudgetPeriod } from "@domain";
+import type { NamedPeriod } from "@contract";
+
+/** shadcn class-name combiner. */
+export function cn(...inputs: ClassValue[]): string {
+  return twMerge(clsx(inputs));
+}
+
+/**
+ * Formats integer cents as AUD. Money is always integer cents end to end; this
+ * is the single render boundary where cents become a human string.
+ */
+export function formatCents(cents: number, opts: { sign?: boolean } = {}): string {
+  const negative = cents < 0;
+  const abs = Math.abs(cents);
+  const dollars = (abs / 100).toLocaleString("en-AU", {
+    style: "currency",
+    currency: "AUD",
+    minimumFractionDigits: 2,
+  });
+  if (opts.sign && cents > 0) return `+${dollars}`;
+  return negative ? `-${dollars}` : dollars;
+}
+
+/** The four budget periods, ordered shortest to longest (ISC-94). */
+export const BUDGET_PERIODS: readonly BudgetPeriod[] = ["weekly", "fortnightly", "monthly", "annual"];
+
+/** Human labels for the four budget periods. */
+export const BUDGET_PERIOD_LABELS: Record<BudgetPeriod, string> = {
+  weekly: "Weekly",
+  fortnightly: "Fortnightly",
+  monthly: "Monthly",
+  annual: "Annual",
+};
+
+/** Compact labels for tight surfaces (the mobile per-row period chip, ISC-94). */
+export const BUDGET_PERIOD_SHORT: Record<BudgetPeriod, string> = {
+  weekly: "wk",
+  fortnightly: "fn",
+  monthly: "mo",
+  annual: "yr",
+};
+
+/** How many of each period fall in a year. The basis for live normalisation. */
+const PERIODS_PER_YEAR: Record<BudgetPeriod, number> = {
+  weekly: 52,
+  fortnightly: 26,
+  monthly: 12,
+  annual: 1,
+};
+
+/**
+ * Live-normalise an amount entered in one period into the equivalent amount in
+ * all four periods, mirroring Nick's spreadsheet (ISC-94). Money stays integer
+ * cents; we route through an exact annual figure and round each period once.
+ */
+export function normalisePeriods(cents: number, period: BudgetPeriod): Record<BudgetPeriod, number> {
+  const annual = cents * PERIODS_PER_YEAR[period];
+  return {
+    weekly: Math.round(annual / PERIODS_PER_YEAR.weekly),
+    fortnightly: Math.round(annual / PERIODS_PER_YEAR.fortnightly),
+    monthly: Math.round(annual / PERIODS_PER_YEAR.monthly),
+    annual: Math.round(annual),
+  };
+}
+
+/** The monthly-equivalent of an amount entered in a given period (the budget-out basis). */
+export function monthlyEquivalentCents(cents: number, period: BudgetPeriod): number {
+  return normalisePeriods(cents, period).monthly;
+}
+
+/**
+ * Display a stored monthly figure in an envelope's own natural period (ISC-94).
+ * The engine keeps every budget as a monthly equivalent; the grid shows each row
+ * in the period it was entered in (Car Insurance annual, Gym weekly) by routing
+ * the monthly figure back out through the normaliser.
+ */
+export function displayInPeriod(monthlyCents: number, period: BudgetPeriod): number {
+  return normalisePeriods(monthlyCents, "monthly")[period];
+}
+
+/** Human labels for the named budget-page period selections (ISC-103). */
+export const NAMED_PERIOD_LABELS: Record<NamedPeriod, string> = {
+  "this-month": "This month",
+  "last-month": "Last month",
+  "this-fy": "This financial year",
+  "last-fy": "Last financial year",
+};
+
+/** The named periods in selector order (ISC-103). */
+export const NAMED_PERIODS: readonly NamedPeriod[] = ["this-month", "last-month", "this-fy", "last-fy"];
+
+/**
+ * Resolve a named period to inclusive from/to dates (YYYY-MM-DD) for the trend and
+ * transaction endpoints. Australian financial year runs 1 Jul to 30 Jun.
+ */
+export function namedPeriodRange(name: NamedPeriod, now: Date = new Date()): { from: string; to: string } {
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const y = now.getFullYear();
+  const m = now.getMonth(); // 0-11
+  const fyStartYear = m >= 6 ? y : y - 1; // FY starts in July (month index 6)
+  switch (name) {
+    case "this-month":
+      return { from: iso(new Date(y, m, 1)), to: iso(now) };
+    case "last-month":
+      return { from: iso(new Date(y, m - 1, 1)), to: iso(new Date(y, m, 0)) };
+    case "this-fy":
+      return { from: `${fyStartYear}-07-01`, to: iso(now) };
+    case "last-fy":
+      return { from: `${fyStartYear - 1}-07-01`, to: `${fyStartYear}-06-30` };
+  }
+}
+
+/** Current period as ISO YYYY-MM. */
+export function currentPeriod(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** Human month label, e.g. "June 2026". */
+export function periodLabel(period: string): string {
+  const [y, m] = period.split("-").map(Number);
+  if (!y || !m) return period;
+  return new Date(y, m - 1, 1).toLocaleDateString("en-AU", { month: "long", year: "numeric" });
+}
+
+/** Today as ISO YYYY-MM-DD. */
+export function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+const isoDate = (d: Date): string => d.toISOString().slice(0, 10);
+
+/** A rolling window of N months ending today (e.g. today minus 3 months → today). */
+export function rollingRange(months: number, now: Date = new Date()): { from: string; to: string } {
+  return { from: isoDate(new Date(now.getFullYear(), now.getMonth() - months, now.getDate())), to: isoDate(now) };
+}
+
+/** The last N calendar months, month-aligned: the 1st of (N-1) months ago through today. */
+export function calendarRange(months: number, now: Date = new Date()): { from: string; to: string } {
+  return { from: isoDate(new Date(now.getFullYear(), now.getMonth() - (months - 1), 1)), to: isoDate(now) };
+}
+
+/**
+ * The inclusive day bounds (from/to as YYYY-MM-DD) of a period YYYY-MM. Drives
+ * the transactions list from the budget period selector (ISC-82).
+ */
+export function periodBounds(period: string): { from: string; to: string } {
+  const [y, m] = period.split("-").map(Number);
+  if (!y || !m) return { from: "", to: "" };
+  const from = `${period}-01`;
+  const lastDay = new Date(y, m, 0).getDate();
+  const to = `${period}-${String(lastDay).padStart(2, "0")}`;
+  return { from, to };
+}

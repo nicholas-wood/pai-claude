@@ -1,0 +1,254 @@
+/**
+ * Envelope route handlers: the Dave Ramsey grid with four-figure rollups, the
+ * time-travel as-of grid, per-envelope detail, and conserved move-money. Every
+ * route is scoped to the authenticated user (ISC-49) and reads/writes through
+ * the real envelope and budget engines.
+ *
+ * The grid first ensures the current month has its budget (auto-roll, ISC-29 /
+ * ISC-76) so a freshly opened month is never blank without any manual step.
+ */
+
+import { Hono } from "hono";
+import type { Container } from "../../composition.ts";
+import type { Services } from "../services.ts";
+import type { ApiError, MoveMoneyRequest, MoveMoneyResponse, DistributeRequest, DistributeResponse, CreateEnvelopeRequest, CreateEnvelopeResponse, SetCarryoverRequest, SetCarryoverResponse, ArchiveEnvelopeRequest, ArchiveEnvelopeResponse, ArchivedEnvelopesResponse, SetRolloverRequest, SetRolloverResponse } from "../contract.ts";
+import type { BudgetPeriod } from "../../domain/types.ts";
+import { currentPeriod, resolveSession, UNAUTHENTICATED } from "../http.ts";
+import { monthBounds, periodRange, resolveNamedPeriod, rangeFromDates, type NamedPeriod } from "../../envelope/period.ts";
+
+export function registerEnvelopes(api: Hono, container: Container, services: Services): void {
+  api.get("/envelopes", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const now = currentPeriod();
+    // Period selection (ISC-103/104): an explicit from/to custom range wins, else a
+    // named period (this/last month, this/last FY), else this month. The grid
+    // recomputes over the whole selected range.
+    const from = c.req.query("from");
+    const to = c.req.query("to");
+    const name = c.req.query("period") as NamedPeriod | undefined;
+    const named = name === "this-month" || name === "last-month" || name === "this-fy" || name === "last-fy";
+    const range = from && to ? rangeFromDates(from, to) : named ? resolveNamedPeriod(name!, now) : { from: now, to: now };
+    // ISC-29 / ISC-76: auto-roll the template into every month in the range.
+    for (const m of periodRange(range.from, range.to)) {
+      await services.budget.ensureMonth(session.userId, m);
+    }
+    const grid = await services.envelopes.getGridRange(session.userId, range);
+    return c.json(grid);
+  });
+
+  api.get("/envelopes/as-of", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const date = c.req.query("date");
+    if (!date) {
+      const err: ApiError = { error: "Missing date.", code: "bad_request" };
+      return c.json(err, 400);
+    }
+    const grid = await services.envelopes.getGridAsOf(session.userId, date);
+    return c.json(grid);
+  });
+
+  api.get("/envelopes/detail", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const id = c.req.query("id");
+    if (!id) {
+      const err: ApiError = { error: "Missing id.", code: "bad_request" };
+      return c.json(err, 400);
+    }
+    // An explicit from/to (YYYY-MM-DD) scopes the row + transactions to a period
+    // range, so the detail page reads one row for the selected period rather than
+    // pulling the whole grid. Omitting both is the current month.
+    const from = c.req.query("from");
+    const to = c.req.query("to");
+    const range = from && to ? rangeFromDates(from, to) : undefined;
+    const detail = await services.envelopes.getDetail(session.userId, id, currentPeriod(), range);
+    if (!detail) {
+      const err: ApiError = { error: "Envelope not found.", code: "not_found" };
+      return c.json(err, 404);
+    }
+    return c.json(detail);
+  });
+
+  // Spend-over-time series for the envelope-detail chart (GAP-A, ISC-16).
+  api.get("/envelopes/trend", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const id = c.req.query("id");
+    if (!id) {
+      const err: ApiError = { error: "Missing id.", code: "bad_request" };
+      return c.json(err, 400);
+    }
+    const bounds = monthBounds(currentPeriod());
+    const from = c.req.query("from") ?? bounds.first;
+    const to = c.req.query("to") ?? bounds.last;
+    // Materialise the template into every month in the range (ISC-29 / ISC-76) so the
+    // per-month budget buckets are populated even for months not yet opened on the grid.
+    const range = rangeFromDates(from, to);
+    for (const m of periodRange(range.from, range.to)) {
+      await services.budget.ensureMonth(session.userId, m);
+    }
+    const trend = await services.envelopes.getTrend(session.userId, id, from, to);
+    if (!trend) {
+      const err: ApiError = { error: "Envelope not found.", code: "not_found" };
+      return c.json(err, 404);
+    }
+    return c.json(trend);
+  });
+
+  api.post("/envelopes/move", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const req = (await c.req.json().catch(() => ({}))) as MoveMoneyRequest;
+    try {
+      const res: MoveMoneyResponse = await services.budget.moveMoney(session.userId, currentPeriod(), req);
+      return c.json(res);
+    } catch (e) {
+      const err: ApiError = { error: e instanceof Error ? e.message : "Move failed.", code: "bad_request" };
+      return c.json(err, 400);
+    }
+  });
+
+  // Distribute surplus: a conserved, multi-leg reallocation (mirrors move). The
+  // legs must net to exactly zero; a non-conserved set is rejected with a 400.
+  api.post("/envelopes/distribute", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const req = (await c.req.json().catch(() => ({}))) as DistributeRequest;
+    try {
+      const res: DistributeResponse = await services.budget.distribute(session.userId, currentPeriod(), req);
+      return c.json(res);
+    } catch (e) {
+      const err: ApiError = { error: e instanceof Error ? e.message : "Distribute failed.", code: "bad_request" };
+      return c.json(err, 400);
+    }
+  });
+
+  // Create a new envelope from the budget page, income or expense (ISC-87).
+  api.post("/envelopes", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const req = (await c.req.json().catch(() => ({}))) as Partial<CreateEnvelopeRequest>;
+    if (typeof req.name !== "string" || req.name.trim().length === 0 || (req.type !== "income" && req.type !== "expense")) {
+      const err: ApiError = { error: "Name and type (income|expense) are required.", code: "bad_request" };
+      return c.json(err, 400);
+    }
+    const id = crypto.randomUUID();
+    if (req.type === "income") {
+      await container.store.upsertIncomeEnvelope(session.userId, {
+        id,
+        userId: session.userId,
+        name: req.name.trim(),
+        source: req.name.trim(),
+        budgetedCents: req.budgetedCents ?? 0,
+        actualCents: 0,
+      });
+    } else {
+      await container.store.upsertEnvelope(session.userId, {
+        id,
+        parentId: req.parentId ?? null,
+        name: req.name.trim(),
+        group: "",
+        // The runtime rollover vocabulary is "roll_carry" (see imported data); the
+        // platform Store.Envelope type still carries the legacy enum. Cast around
+        // that pre-existing divergence rather than fork the value here.
+        rolloverRule: (req.rolloverRule ?? "roll_carry") as never,
+        targetType: "no_target",
+        targetAmountCents: 0,
+      });
+      // The schedule anchor (ISC-25..28): a new budget resets at its interval from
+      // the chosen start date. Default to today when none is given. Carryover starts
+      // at zero; setEnvelopeCarryover is the owned writer for the (carryover, start) pair.
+      const rolloverStart =
+        typeof req.rolloverStart === "string" && req.rolloverStart.length > 0
+          ? req.rolloverStart
+          : new Date().toISOString().slice(0, 10);
+      await container.store.setEnvelopeCarryover(session.userId, id, 0, rolloverStart);
+      if (typeof req.budgetedCents === "number" && req.budgetedCents !== 0) {
+        await container.store.putTemplateLine(session.userId, {
+          id: `bt-${id}`,
+          userId: session.userId,
+          envelopeId: id,
+          amountCents: req.budgetedCents,
+          period: req.period ?? "monthly",
+        });
+        await services.budget.ensureMonth(session.userId, currentPeriod());
+      }
+    }
+    const res: CreateEnvelopeResponse = { id, type: req.type };
+    return c.json(res);
+  });
+
+  // Manually reset an envelope's carried starting balance; logged as a traceable event.
+  api.post("/envelopes/carryover", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const req = (await c.req.json().catch(() => ({}))) as Partial<SetCarryoverRequest>;
+    if (typeof req.envelopeId !== "string" || typeof req.carryoverCents !== "number") {
+      const err: ApiError = { error: "envelopeId and carryoverCents are required.", code: "bad_request" };
+      return c.json(err, 400);
+    }
+    const res: SetCarryoverResponse = await services.envelopes.resetCarryover(
+      session.userId,
+      req.envelopeId,
+      Math.round(req.carryoverCents),
+    );
+    return c.json(res);
+  });
+
+  // Archive or unarchive an envelope; logged as a traceable envelope.archive event.
+  api.post("/envelopes/archive", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const req = (await c.req.json().catch(() => ({}))) as Partial<ArchiveEnvelopeRequest>;
+    if (typeof req.envelopeId !== "string" || typeof req.archived !== "boolean") {
+      const err: ApiError = { error: "envelopeId and archived are required.", code: "bad_request" };
+      return c.json(err, 400);
+    }
+    const result = await services.envelopes.archiveEnvelope(session.userId, req.envelopeId, req.archived);
+    const res: ArchiveEnvelopeResponse = { envelopeId: req.envelopeId, archived: result.after };
+    return c.json(res);
+  });
+
+  // Set an envelope's rollover schedule: the anchor date and optional interval.
+  // Recomputes the schedule (running balances + Left). Logged as a traceable event.
+  api.post("/envelopes/rollover", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const req = (await c.req.json().catch(() => ({}))) as Partial<SetRolloverRequest>;
+    const validPeriods: readonly BudgetPeriod[] = ["weekly", "fortnightly", "monthly", "annual"];
+    if (
+      typeof req.envelopeId !== "string" ||
+      typeof req.rolloverStart !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(req.rolloverStart) ||
+      (req.period !== undefined && !validPeriods.includes(req.period))
+    ) {
+      const err: ApiError = { error: "envelopeId and a valid rolloverStart (YYYY-MM-DD) are required.", code: "bad_request" };
+      return c.json(err, 400);
+    }
+    // Move the anchor (preserving carryover) and write the new period onto the
+    // recurring template line when one exists; the template holds the budget period.
+    await services.envelopes.setRolloverAnchor(session.userId, req.envelopeId, req.rolloverStart, req.period);
+    const template = await container.store.listTemplate(session.userId);
+    const line = template.find((t) => t.envelopeId === req.envelopeId);
+    const resolvedPeriod: BudgetPeriod = req.period ?? line?.period ?? "monthly";
+    if (req.period !== undefined && line !== undefined) {
+      await container.store.putTemplateLine(session.userId, { ...line, period: req.period });
+    }
+    const res: SetRolloverResponse = {
+      envelopeId: req.envelopeId,
+      rolloverStart: req.rolloverStart,
+      period: resolvedPeriod,
+    };
+    return c.json(res);
+  });
+
+  // The archived envelopes, for the budget page's "Show archived" list.
+  api.get("/envelopes/archived", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const res: ArchivedEnvelopesResponse = { envelopes: await services.envelopes.listArchived(session.userId) };
+    return c.json(res);
+  });
+}

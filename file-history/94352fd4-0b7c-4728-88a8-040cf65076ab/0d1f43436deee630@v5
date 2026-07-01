@@ -1,0 +1,738 @@
+/**
+ * SqliteStore — the local-default persistence adapter.
+ *
+ * This is the ONLY file in the whole codebase permitted to import bun:sqlite
+ * (ISC-57). Every other module depends on the Store interface. Every method
+ * that touches tenant data is scoped by userId in the WHERE clause (ISC-49).
+ *
+ * Upserts use `INSERT ... ON CONFLICT (...) DO UPDATE`, which both bun:sqlite
+ * and Postgres understand, so the business-visible SQL stays portable (ISC-59).
+ */
+
+import { Database } from "bun:sqlite";
+import type { UserId } from "../platform/auth.ts";
+import type { Tx, Envelope, LedgerEvent } from "../platform/store.ts";
+import type {
+  Actor,
+  BudgetChange,
+  BudgetPeriod,
+  BudgetTemplate,
+  CategoryMapping,
+  ChangeScope,
+  EnvelopeType,
+  IncomeEnvelope,
+  MoneyMovement,
+} from "../domain/types.ts";
+import type {
+  Allocation,
+  Category,
+  EnvelopeCarryover,
+  IncomeCarryover,
+  SnapshotPoint,
+} from "../envelope/ports.ts";
+import type { BudgetStore } from "../budget/ports.ts";
+import { ADDITIVE_COLUMNS, SCHEMA_SQL } from "./schema.ts";
+
+interface TxRow {
+  id: string;
+  txn_date: string;
+  amount_cents: number;
+  account_id: string;
+  category_id: string | null;
+  envelope_id: string | null;
+  payee: string;
+  is_transfer: number;
+  is_pending: number;
+  raw_json: string;
+}
+
+interface EnvelopeRow {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  grp: string;
+  rollover_rule: string;
+  target_type: string;
+  target_amount_cents: number;
+  type: string;
+  active: number;
+  archived: number;
+}
+
+interface SecretRow {
+  ciphertext: string;
+  wrapped_key: string;
+}
+
+interface MappingRow {
+  id: string;
+  category_id: string;
+  envelope_id: string;
+  effective_from: string;
+  effective_to: string | null;
+}
+
+interface AllocRow {
+  id: string;
+  envelope_id: string;
+  period: string;
+  amount_cents: number;
+  scope: string;
+}
+
+interface IncomeRow {
+  id: string;
+  name: string;
+  source: string;
+  budgeted_cents: number;
+  actual_cents: number;
+  target_cents: number;
+}
+
+interface TemplateRow {
+  id: string;
+  envelope_id: string;
+  amount_cents: number;
+  period: string;
+}
+
+interface HistoryRow {
+  id: string;
+  ts: number;
+  envelope_id: string;
+  before_cents: number;
+  after_cents: number;
+  scope: string;
+  actor: string;
+}
+
+interface MovementRow {
+  id: string;
+  ts: number;
+  from_envelope_id: string;
+  to_envelope_id: string;
+  amount_cents: number;
+  scope: string;
+  actor: string;
+  correlation_id: string;
+}
+
+export class SqliteStore implements BudgetStore {
+  private readonly db: Database;
+
+  constructor(path: string) {
+    this.db = new Database(path, { create: true });
+    // Enforce referential integrity locally so tenant FKs actually bite.
+    this.db.run("PRAGMA foreign_keys = ON");
+    this.db.run("PRAGMA journal_mode = WAL");
+  }
+
+  async migrate(): Promise<void> {
+    const run = this.db.transaction(() => {
+      for (const stmt of SCHEMA_SQL) this.db.run(stmt);
+      // Backfill additive columns on tables that predate them. SQLite has no
+      // ADD COLUMN IF NOT EXISTS, so guard each ALTER on PRAGMA table_info.
+      for (const { table, column, ddl } of ADDITIVE_COLUMNS) {
+        const cols = this.db.query(`PRAGMA table_info(${table})`).all() as { name: string }[];
+        if (!cols.some((c) => c.name === column)) {
+          this.db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+        }
+      }
+    });
+    run();
+  }
+
+  /**
+   * Ensure a tenant row exists. Public beyond the Store interface so test
+   * harnesses and the composition root can seed users (local seeds exactly one).
+   */
+  async ensureUser(userId: UserId, email?: string): Promise<void> {
+    this.db.run(
+      `INSERT INTO users (id, email, created_at, status)
+       VALUES (?, ?, ?, 'active')
+       ON CONFLICT (id) DO NOTHING`,
+      [userId, email ?? `${userId}@penny.local`, Date.now()],
+    );
+  }
+
+  async upsertTransactions(userId: UserId, txs: readonly Tx[]): Promise<void> {
+    const stmt = this.db.query(
+      `INSERT INTO transactions
+         (user_id, id, txn_date, amount_cents, account_id, category_id,
+          envelope_id, payee, is_transfer, is_pending, raw_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, id) DO UPDATE SET
+         txn_date = excluded.txn_date,
+         amount_cents = excluded.amount_cents,
+         account_id = excluded.account_id,
+         category_id = excluded.category_id,
+         envelope_id = excluded.envelope_id,
+         payee = excluded.payee,
+         is_transfer = excluded.is_transfer,
+         is_pending = excluded.is_pending,
+         raw_json = excluded.raw_json`,
+    );
+    const apply = this.db.transaction((rows: readonly Tx[]) => {
+      for (const t of rows) {
+        stmt.run(
+          userId,
+          t.id,
+          t.date,
+          t.amountCents,
+          t.accountId,
+          t.categoryId,
+          t.envelopeId,
+          t.payee,
+          t.isTransfer ? 1 : 0,
+          t.isPending ? 1 : 0,
+          t.rawJson,
+        );
+      }
+    });
+    apply(txs);
+  }
+
+  async listTransactions(
+    userId: UserId,
+    opts?: {
+      envelopeId?: string;
+      accountId?: string;
+      since?: string;
+      from?: string;
+      to?: string;
+      newestFirst?: boolean;
+    },
+  ): Promise<Tx[]> {
+    let sql =
+      `SELECT id, txn_date, amount_cents, account_id, category_id,
+              envelope_id, payee, is_transfer, is_pending, raw_json
+       FROM transactions WHERE user_id = ?`;
+    const params: (string | number)[] = [userId];
+    if (opts?.envelopeId !== undefined) {
+      sql += " AND envelope_id = ?";
+      params.push(opts.envelopeId);
+    }
+    if (opts?.accountId !== undefined) {
+      sql += " AND account_id = ?";
+      params.push(opts.accountId);
+    }
+    const lower = opts?.from ?? opts?.since;
+    if (lower !== undefined) {
+      sql += " AND txn_date >= ?";
+      params.push(lower);
+    }
+    if (opts?.to !== undefined) {
+      sql += " AND txn_date <= ?";
+      params.push(opts.to);
+    }
+    sql += opts?.newestFirst ? " ORDER BY txn_date DESC, id DESC" : " ORDER BY txn_date ASC, id ASC";
+    const rows = this.db.query(sql).all(...params) as TxRow[];
+    return rows.map(toTx);
+  }
+
+  async upsertEnvelope(userId: UserId, e: Envelope): Promise<void> {
+    this.db.run(
+      `INSERT INTO envelopes
+         (user_id, id, parent_id, name, grp, rollover_rule, target_type, target_amount_cents, type, active, archived)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, id) DO UPDATE SET
+         parent_id = excluded.parent_id,
+         name = excluded.name,
+         grp = excluded.grp,
+         rollover_rule = excluded.rollover_rule,
+         target_type = excluded.target_type,
+         target_amount_cents = excluded.target_amount_cents,
+         type = excluded.type,
+         active = excluded.active`,
+      // archived is intentionally NOT updated on conflict: it is owned by
+      // setEnvelopeArchived, so re-upserting an envelope never resurrects it.
+      [
+        userId,
+        e.id,
+        e.parentId,
+        e.name,
+        e.group,
+        e.rolloverRule,
+        e.targetType,
+        e.targetAmountCents,
+        e.type ?? "expense",
+        e.active === false ? 0 : 1,
+        e.archived === true ? 1 : 0,
+      ],
+    );
+  }
+
+  async listEnvelopes(userId: UserId): Promise<Envelope[]> {
+    const rows = this.db
+      .query(
+        `SELECT id, name, parent_id, grp, rollover_rule, target_type, target_amount_cents, type, active, archived
+         FROM envelopes WHERE user_id = ? ORDER BY name ASC`,
+      )
+      .all(userId) as EnvelopeRow[];
+    return rows.map(toEnvelope);
+  }
+
+  /** Set an envelope's archived flag (archive feature). Owned mutator for the flag. */
+  async setEnvelopeArchived(userId: UserId, envelopeId: string, archived: boolean): Promise<void> {
+    this.db.run(`UPDATE envelopes SET archived = ? WHERE user_id = ? AND id = ?`, [
+      archived ? 1 : 0,
+      userId,
+      envelopeId,
+    ]);
+  }
+
+  async appendEvent(userId: UserId, e: LedgerEvent): Promise<void> {
+    this.db.run(
+      `INSERT INTO events (user_id, id, ts, actor, correlation_id, kind, payload_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [userId, e.id, e.ts, e.actor, e.correlationId, e.kind, e.payloadJson],
+    );
+  }
+
+  async writeDailySnapshot(userId: UserId, date: string): Promise<void> {
+    const envelopes = await this.listEnvelopes(userId);
+    const balanceStmt = this.db.query(
+      `SELECT COALESCE(SUM(amount_cents), 0) AS bal
+       FROM transactions
+       WHERE user_id = ? AND envelope_id = ? AND txn_date <= ?
+         AND is_pending = 0 AND is_transfer = 0`,
+    );
+    const upsert = this.db.query(
+      `INSERT INTO snapshots (user_id, envelope_id, snap_date, balance_cents)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT (user_id, envelope_id, snap_date) DO UPDATE SET
+         balance_cents = excluded.balance_cents`,
+    );
+    const apply = this.db.transaction(() => {
+      for (const env of envelopes) {
+        const row = balanceStmt.get(userId, env.id, date) as { bal: number } | null;
+        upsert.run(userId, env.id, date, row?.bal ?? 0);
+      }
+    });
+    apply();
+  }
+
+  async getLastSyncAt(userId: UserId): Promise<string | null> {
+    const row = this.db
+      .query(`SELECT last_sync_at FROM sync_state WHERE user_id = ?`)
+      .get(userId) as { last_sync_at: string | null } | null;
+    return row?.last_sync_at ?? null;
+  }
+
+  async setLastSyncAt(userId: UserId, iso: string): Promise<void> {
+    this.db.run(
+      `INSERT INTO sync_state (user_id, last_sync_at) VALUES (?, ?)
+       ON CONFLICT (user_id) DO UPDATE SET last_sync_at = excluded.last_sync_at`,
+      [userId, iso],
+    );
+  }
+
+  // --- Envelope engine extras (mappings, categories, allocations, income) ---
+  // ISC-19, ISC-20, ISC-67, ISC-65. Every method is scoped by user_id (ISC-49).
+
+  async listMappings(userId: UserId): Promise<CategoryMapping[]> {
+    const rows = this.db
+      .query(
+        `SELECT id, category_id, envelope_id, effective_from, effective_to
+         FROM mappings WHERE user_id = ?`,
+      )
+      .all(userId) as MappingRow[];
+    return rows.map((r) => ({
+      id: r.id,
+      userId,
+      categoryId: r.category_id,
+      envelopeId: r.envelope_id,
+      effectiveFrom: r.effective_from,
+      effectiveTo: r.effective_to,
+    }));
+  }
+
+  async upsertMapping(userId: UserId, m: CategoryMapping): Promise<void> {
+    this.db.run(
+      `INSERT INTO mappings (user_id, id, category_id, envelope_id, effective_from, effective_to)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, id) DO UPDATE SET
+         category_id = excluded.category_id,
+         envelope_id = excluded.envelope_id,
+         effective_from = excluded.effective_from,
+         effective_to = excluded.effective_to`,
+      [userId, m.id, m.categoryId, m.envelopeId, m.effectiveFrom, m.effectiveTo],
+    );
+  }
+
+  async listCategories(userId: UserId): Promise<Category[]> {
+    const rows = this.db
+      .query(`SELECT id, name FROM categories WHERE user_id = ?`)
+      .all(userId) as { id: string; name: string }[];
+    return rows.map((r) => ({ id: r.id, name: r.name }));
+  }
+
+  async upsertCategory(userId: UserId, c: Category): Promise<void> {
+    this.db.run(
+      `INSERT INTO categories (user_id, id, name) VALUES (?, ?, ?)
+       ON CONFLICT (user_id, id) DO UPDATE SET name = excluded.name`,
+      [userId, c.id, c.name],
+    );
+  }
+
+  async listAllocations(userId: UserId, period: string): Promise<Allocation[]> {
+    const rows = this.db
+      .query(
+        `SELECT id, envelope_id, period, amount_cents, scope
+         FROM allocations WHERE user_id = ? AND period = ?`,
+      )
+      .all(userId, period) as AllocRow[];
+    return rows.map((r) => ({
+      id: r.id,
+      envelopeId: r.envelope_id,
+      period: r.period,
+      amountCents: r.amount_cents,
+      scope: r.scope as ChangeScope,
+    }));
+  }
+
+  async putAllocation(userId: UserId, a: Allocation): Promise<void> {
+    this.db.run(
+      `INSERT INTO allocations (user_id, id, envelope_id, period, amount_cents, scope)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, id) DO UPDATE SET
+         envelope_id = excluded.envelope_id,
+         period = excluded.period,
+         amount_cents = excluded.amount_cents,
+         scope = excluded.scope`,
+      [userId, a.id, a.envelopeId, a.period, a.amountCents, a.scope],
+    );
+  }
+
+  async listIncomeEnvelopes(userId: UserId): Promise<IncomeEnvelope[]> {
+    const rows = this.db
+      .query(
+        `SELECT id, name, source, budgeted_cents, actual_cents, target_cents, capital_to_expense_cents
+         FROM income_envelopes WHERE user_id = ?`,
+      )
+      .all(userId) as IncomeRow[];
+    return rows.map((r) => ({
+      id: r.id,
+      userId,
+      name: r.name,
+      source: r.source,
+      budgetedCents: r.budgeted_cents,
+      actualCents: r.actual_cents,
+      targetCents: r.target_cents,
+    }));
+  }
+
+  async upsertIncomeEnvelope(userId: UserId, e: IncomeEnvelope): Promise<void> {
+    this.db.run(
+      `INSERT INTO income_envelopes
+         (user_id, id, name, source, budgeted_cents, actual_cents, target_cents, capital_to_expense_cents)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, id) DO UPDATE SET
+         name = excluded.name,
+         source = excluded.source,
+         budgeted_cents = excluded.budgeted_cents,
+         actual_cents = excluded.actual_cents,
+         target_cents = excluded.target_cents,
+         capital_to_expense_cents = excluded.capital_to_expense_cents`,
+      [
+        userId,
+        e.id,
+        e.name,
+        e.source,
+        e.budgetedCents,
+        e.actualCents,
+        e.targetCents ?? 0,
+        0,
+      ],
+    );
+  }
+
+  // --- Carried rollover baseline (ISC-25..28 starting state, import step d) ---
+
+  async setEnvelopeCarryover(
+    userId: UserId,
+    envelopeId: string,
+    carryoverCents: number,
+    rolloverStart: string | null,
+  ): Promise<void> {
+    this.db.run(
+      `UPDATE envelopes SET carryover_cents = ?, rollover_start = ?
+       WHERE user_id = ? AND id = ?`,
+      [carryoverCents, rolloverStart, userId, envelopeId],
+    );
+  }
+
+  async listEnvelopeCarryover(userId: UserId): Promise<EnvelopeCarryover[]> {
+    const rows = this.db
+      .query(
+        `SELECT id, carryover_cents, rollover_start FROM envelopes WHERE user_id = ?`,
+      )
+      .all(userId) as { id: string; carryover_cents: number; rollover_start: string | null }[];
+    return rows.map((r) => ({
+      envelopeId: r.id,
+      carryoverCents: r.carryover_cents,
+      rolloverStart: r.rollover_start,
+    }));
+  }
+
+  async setIncomeCarryover(
+    userId: UserId,
+    incomeEnvelopeId: string,
+    carryoverCents: number,
+    rolloverStart: string | null,
+  ): Promise<void> {
+    this.db.run(
+      `UPDATE income_envelopes SET carryover_cents = ?, rollover_start = ?
+       WHERE user_id = ? AND id = ?`,
+      [carryoverCents, rolloverStart, userId, incomeEnvelopeId],
+    );
+  }
+
+  async listIncomeCarryover(userId: UserId): Promise<IncomeCarryover[]> {
+    const rows = this.db
+      .query(
+        `SELECT id, carryover_cents, rollover_start FROM income_envelopes WHERE user_id = ?`,
+      )
+      .all(userId) as { id: string; carryover_cents: number; rollover_start: string | null }[];
+    return rows.map((r) => ({
+      incomeEnvelopeId: r.id,
+      carryoverCents: r.carryover_cents,
+      rolloverStart: r.rollover_start,
+    }));
+  }
+
+  async listSnapshots(
+    userId: UserId,
+    envelopeId: string,
+    from: string,
+    to: string,
+  ): Promise<SnapshotPoint[]> {
+    const rows = this.db
+      .query(
+        `SELECT snap_date, balance_cents FROM snapshots
+         WHERE user_id = ? AND envelope_id = ? AND snap_date >= ? AND snap_date <= ?
+         ORDER BY snap_date ASC`,
+      )
+      .all(userId, envelopeId, from, to) as { snap_date: string; balance_cents: number }[];
+    return rows.map((r) => ({ date: r.snap_date, balanceCents: r.balance_cents }));
+  }
+
+  // --- Budget engine extras (recurring template + budget history) ---
+  // ISC-29, ISC-76, ISC-77. Scoped by user_id (ISC-49).
+
+  async listTemplate(userId: UserId): Promise<BudgetTemplate[]> {
+    const rows = this.db
+      .query(`SELECT id, envelope_id, amount_cents, period FROM budget_template WHERE user_id = ?`)
+      .all(userId) as TemplateRow[];
+    return rows.map((r) => ({
+      id: r.id,
+      userId,
+      envelopeId: r.envelope_id,
+      amountCents: r.amount_cents,
+      period: (r.period ?? "monthly") as BudgetPeriod,
+    }));
+  }
+
+  async putTemplateLine(userId: UserId, line: BudgetTemplate): Promise<void> {
+    this.db.run(
+      `INSERT INTO budget_template (user_id, id, envelope_id, amount_cents, period)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, id) DO UPDATE SET
+         envelope_id = excluded.envelope_id,
+         amount_cents = excluded.amount_cents,
+         period = excluded.period`,
+      [userId, line.id, line.envelopeId, line.amountCents, line.period ?? "monthly"],
+    );
+  }
+
+  async listBudgetHistory(userId: UserId): Promise<BudgetChange[]> {
+    const rows = this.db
+      .query(
+        `SELECT id, ts, envelope_id, before_cents, after_cents, scope, actor
+         FROM budget_history WHERE user_id = ? ORDER BY ts DESC`,
+      )
+      .all(userId) as HistoryRow[];
+    return rows.map((r) => ({
+      id: r.id,
+      userId,
+      ts: r.ts,
+      envelopeId: r.envelope_id,
+      beforeCents: r.before_cents,
+      afterCents: r.after_cents,
+      scope: r.scope as ChangeScope,
+      actor: r.actor as Actor,
+    }));
+  }
+
+  async appendBudgetHistory(userId: UserId, change: BudgetChange): Promise<void> {
+    this.db.run(
+      `INSERT INTO budget_history
+         (user_id, id, ts, envelope_id, before_cents, after_cents, scope, actor)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        userId,
+        change.id,
+        change.ts,
+        change.envelopeId,
+        change.beforeCents,
+        change.afterCents,
+        change.scope,
+        change.actor,
+      ],
+    );
+  }
+
+  // --- Money movements (ISC-89, ISC-90) ---
+
+  async appendMovement(userId: UserId, m: MoneyMovement): Promise<void> {
+    this.db.run(
+      `INSERT INTO money_movements
+         (user_id, id, ts, from_envelope_id, to_envelope_id, amount_cents, scope, actor, correlation_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        userId,
+        m.id,
+        m.ts,
+        m.fromEnvelopeId,
+        m.toEnvelopeId,
+        m.amountCents,
+        m.scope,
+        m.actor,
+        m.correlationId,
+      ],
+    );
+  }
+
+  async listMovements(userId: UserId): Promise<MoneyMovement[]> {
+    const rows = this.db
+      .query(
+        `SELECT id, ts, from_envelope_id, to_envelope_id, amount_cents, scope, actor, correlation_id
+         FROM money_movements WHERE user_id = ? ORDER BY ts DESC`,
+      )
+      .all(userId) as MovementRow[];
+    return rows.map((r) => ({
+      id: r.id,
+      userId,
+      ts: r.ts,
+      fromEnvelopeId: r.from_envelope_id,
+      toEnvelopeId: r.to_envelope_id,
+      amountCents: r.amount_cents,
+      scope: r.scope as ChangeScope,
+      actor: r.actor as Actor,
+      correlationId: r.correlation_id,
+    }));
+  }
+
+  async appendReconciliation(userId: UserId, rec: ReconciliationRecord): Promise<void> {
+    this.db.run(
+      `INSERT INTO reconciliations
+         (user_id, id, ts, statement_date, holding_cents, nab_statement_cents, drift_cents, matched)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        userId,
+        rec.id,
+        rec.ts,
+        rec.statementDate,
+        rec.holdingCents,
+        rec.nabStatementCents,
+        rec.driftCents,
+        rec.matched ? 1 : 0,
+      ],
+    );
+  }
+
+  async getLatestReconciliation(userId: UserId): Promise<ReconciliationRecord | null> {
+    const row = this.db
+      .query(
+        `SELECT id, ts, statement_date, holding_cents, nab_statement_cents, drift_cents, matched
+         FROM reconciliations WHERE user_id = ? ORDER BY ts DESC, id DESC LIMIT 1`,
+      )
+      .get(userId) as ReconciliationRow | null;
+    if (!row) return null;
+    return {
+      id: row.id,
+      ts: row.ts,
+      statementDate: row.statement_date,
+      holdingCents: row.holding_cents,
+      nabStatementCents: row.nab_statement_cents,
+      driftCents: row.drift_cents,
+      matched: row.matched === 1,
+    };
+  }
+
+  // --- Secret ciphertext persistence (used by the cloud KmsSecretStore) ---
+  // Public beyond the Store interface; ciphertext only, never plaintext (ISC-56).
+
+  async getSecretCiphertext(
+    userId: UserId,
+    name: string,
+  ): Promise<{ ciphertext: string; wrappedKey: string } | null> {
+    const row = this.db
+      .query(`SELECT ciphertext, wrapped_key FROM secrets WHERE user_id = ? AND name = ?`)
+      .get(userId, name) as SecretRow | null;
+    if (!row) return null;
+    return { ciphertext: row.ciphertext, wrappedKey: row.wrapped_key };
+  }
+
+  async putSecretCiphertext(
+    userId: UserId,
+    name: string,
+    rec: { ciphertext: string; wrappedKey: string },
+  ): Promise<void> {
+    this.db.run(
+      `INSERT INTO secrets (user_id, name, ciphertext, wrapped_key, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, name) DO UPDATE SET
+         ciphertext = excluded.ciphertext,
+         wrapped_key = excluded.wrapped_key,
+         updated_at = excluded.updated_at`,
+      [userId, name, rec.ciphertext, rec.wrappedKey, Date.now()],
+    );
+  }
+
+  async deleteSecretCiphertext(userId: UserId, name: string): Promise<void> {
+    this.db.run(`DELETE FROM secrets WHERE user_id = ? AND name = ?`, [userId, name]);
+  }
+
+  /** Adapter-internal table introspection for the store suite (SQLite dialect). */
+  async listTables(): Promise<string[]> {
+    const rows = this.db
+      .query(`SELECT name FROM sqlite_master WHERE type = 'table'`)
+      .all() as { name: string }[];
+    return rows.map((r) => r.name);
+  }
+
+  async close(): Promise<void> {
+    this.db.close();
+  }
+}
+
+function toTx(r: TxRow): Tx {
+  return {
+    id: r.id,
+    date: r.txn_date,
+    amountCents: r.amount_cents,
+    accountId: r.account_id,
+    categoryId: r.category_id,
+    envelopeId: r.envelope_id,
+    payee: r.payee,
+    isTransfer: r.is_transfer !== 0,
+    isPending: r.is_pending !== 0,
+    rawJson: r.raw_json,
+  };
+}
+
+function toEnvelope(r: EnvelopeRow): Envelope {
+  return {
+    id: r.id,
+    name: r.name,
+    parentId: r.parent_id,
+    group: r.grp,
+    rolloverRule: r.rollover_rule as Envelope["rolloverRule"],
+    targetType: r.target_type as Envelope["targetType"],
+    targetAmountCents: r.target_amount_cents,
+    type: (r.type ?? "expense") as EnvelopeType,
+    active: r.active !== 0,
+    archived: r.archived !== 0,
+  };
+}

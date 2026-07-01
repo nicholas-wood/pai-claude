@@ -1,0 +1,1177 @@
+[
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rclone lsl onedrive:00_Inbox 2>/dev/null | head -50; echo \"---LOCAL---\"; fd -i 'surf.risk|risk.rating' ~ 2>/dev/null | head; echo \"---INBOX DIRS---\"; ls -la ~/OneDrive*/00_Inbox 2>/dev/null; ls -d ~/OneDrive* 2>/dev/null",
+      "description": "Locate Surf Risk Rating brief in OneDrive Inbox"
+    },
+    "timestamp": "2026-07-01T09:20:37.662Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd \"$CLAUDE_JOB_DIR/tmp\"; cp ~/OneDrive/00_Inbox/LIMSOC-BRIEF-LSV-2026-005-SRR.docx srr.docx; mkdir -p srr && cd srr && unzip -o ../srr.docx >/dev/null 2>&1; echo \"=== FILES ===\"; ls -la word/ | grep -iE 'comment|document'; echo \"=== HAS COMMENTS FILE ===\"; ls word/comments*.xml 2>/dev/null",
+      "description": "Unzip docx and check for comments"
+    },
+    "timestamp": "2026-07-01T09:20:57.751Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd \"$CLAUDE_JOB_DIR/tmp\"; which pandoc && pandoc srr.docx -t markdown --track-changes=all 2>/dev/null | head -5 && echo \"PANDOC_OK\" || echo \"NO_PANDOC\"",
+      "description": "Check pandoc availability"
+    },
+    "timestamp": "2026-07-01T09:21:05.740Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd \"$CLAUDE_JOB_DIR/tmp\"/srr; python3 - <<'PY'\nimport re, xml.etree.ElementTree as ET\nns={'w':'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}\nW='{%s}'%ns['w']\n\n# --- Document body with comment anchors ---\ntree=ET.parse('word/document.xml'); root=tree.getroot()\nout=[]\ndef text_of_para(p):\n    # collect runs, note comment range starts/ends\n    buf=[]\n    for el in p.iter():\n        tag=el.tag\n        if tag==W+'t':\n            buf.append(el.text or '')\n        elif tag==W+'commentRangeStart':\n            buf.append('  ⟦C%s→ '%el.get(W+'id'))\n        elif tag==W+'commentRangeEnd':\n            buf.append(' →C%s⟧'%el.get(W+'id'))\n        elif tag==W+'tab':\n            buf.append('\\t')\n    return ''.join(buf)\n\nbody=root.find(W+'body')\nfor p in body.iter(W+'p'):\n    # style\n    pPr=p.find(W+'pPr')\n    style=''\n    if pPr is not None:\n        ps=pPr.find(W+'pStyle')\n        if ps is not None: style=ps.get(W+'val')\n    txt=text_of_para(p)\n    if txt.strip() or style:\n        prefix=('[%s] '%style) if style else ''\n        out.append(prefix+txt)\nprint('\\n'.join(out))\nPY",
+      "description": "Extract document body text with comment anchors"
+    },
+    "timestamp": "2026-07-01T09:21:14.360Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd \"$CLAUDE_JOB_DIR/tmp\"/srr; python3 - <<'PY'\nimport xml.etree.ElementTree as ET\nns={'w':'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}\nW='{%s}'%ns['w']\ntree=ET.parse('word/comments.xml'); root=tree.getroot()\nfor c in root.iter(W+'comment'):\n    cid=c.get(W+'id'); author=c.get(W+'author'); date=c.get(W+'date') or ''\n    txt=''.join(t.text or '' for t in c.iter(W+'t'))\n    print(f\"[C{cid}] ({author}) {txt.strip()}\")\n    print()\nPY",
+      "description": "Extract comment text mapped to IDs"
+    },
+    "timestamp": "2026-07-01T09:21:20.790Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/OneDrive/00_Inbox/Screenshot 2026-07-01 at 13.52.38.png"
+    },
+    "timestamp": "2026-07-01T09:21:26.863Z"
+  },
+  {
+    "name": "AskUserQuestion",
+    "input": {
+      "questions": [
+        {
+          "question": "Where should the MVP (first-pass) line sit? You flagged maps/notifications/prediction as 'is this first pass?' repeatedly — I need the committed v1 boundary so Primary/Secondary/Tertiary become real phases.",
+          "header": "MVP scope",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Lean capture MVP",
+              "description": "v1 = capture form + calculated score + patrol link (many-to-one) + score on end-of-day patrol email. Maps display, notifications, averaging, prediction all deferred to named later phases."
+            },
+            {
+              "label": "MVP + live visibility",
+              "description": "Lean MVP plus live score display on unit modals/maps and notifications on elevated risk. Averaging, population impact and prediction deferred."
+            },
+            {
+              "label": "MVP + aggregate intel",
+              "description": "The above plus zone/region/state averaging and historical trend reporting in v1. Only prediction deferred."
+            },
+            {
+              "label": "Full scope in v1",
+              "description": "Everything in the current brief (all three tiers) committed to first pass."
+            }
+          ]
+        },
+        {
+          "question": "How faithful should the scoring model be to SLSA's existing SRR tool (the one with the research backing you referenced)?",
+          "header": "SRR model",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Replicate exactly",
+              "description": "Reuse SLSA's existing SRR questions, weightings and scoring unchanged. We rebuild only the UX and LIMSOC integration. (I'll need the source framework.)"
+            },
+            {
+              "label": "Replicate then extend",
+              "description": "Start from SLSA's model unchanged, then add LIMSOC-specific automated environmental inputs as a clearly-labelled augmentation layer on top."
+            },
+            {
+              "label": "Redesign",
+              "description": "Define a new LIMSOC-native scoring model, using the SLSA tool only as reference."
+            }
+          ]
+        },
+        {
+          "question": "How should the aggregate-intelligence ambitions (zone/region/state averaging, population-based impact, predictive modelling) be treated? You were sceptical these belong.",
+          "header": "Intelligence",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Future phase, documented",
+              "description": "Named as explicit future direction, not committed, no methodology claimed yet. Keeps the vision without overpromising."
+            },
+            {
+              "label": "Cut entirely",
+              "description": "Remove from this brief; too speculative to belong in a feature brief at all."
+            },
+            {
+              "label": "Commit with methodology",
+              "description": "Include now as real requirements — but I'll need the data sources and the methodology for averaging and population impact from you."
+            }
+          ]
+        },
+        {
+          "question": "How should the performance targets (the 'under 60 seconds' completion, 'minimise input') be framed? You challenged the 60s benchmark's source.",
+          "header": "Perf targets",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Design principle",
+              "description": "Frame as a design goal ('path of least resistance', fewest taps) with no hard numeric SLA. Removes the unsourced 60s requirement."
+            },
+            {
+              "label": "Keep, but sourced",
+              "description": "Keep a measurable target, but I'll cite/justify the basis you give me. Needs a source or rationale for the number."
+            },
+            {
+              "label": "Drop entirely",
+              "description": "Remove speed/input targets from requirements altogether."
+            }
+          ]
+        }
+      ]
+    },
+    "timestamp": "2026-07-01T09:23:28.482Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "fd -t d -i 'lsv|comms|srr|surf.risk' ~/Documents/workspace 2>/dev/null | head; echo \"---\"; ls ~/Documents/workspace/projects 2>/dev/null",
+      "description": "Find LSV comms workspace folder"
+    },
+    "timestamp": "2026-07-01T09:31:20.381Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "mkdir -p ~/Documents/workspace/projects/lsv-comms/srr-feature-brief; echo created",
+      "description": "Create LSV comms SRR project folder"
+    },
+    "timestamp": "2026-07-01T09:32:27.855Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/lsv-comms/srr-feature-brief/LIMSOC-BRIEF-LSV-2026-005-SRR.md",
+      "content": "# LIMSOC FEATURE BRIEF\n\n## Surf Risk Rating in LIMSOC\n\n| Field | Detail |\n|---|---|\n| **Brief number** | LIMSOC-BRIEF-LSV-2026-005 |\n| **Version** | 2.0 (redraft) |\n| **Author** | Flynn Young |\n| **Revised by** | Nicholas Wood (State Lifesaving Communications Officer) |\n| **Date** | 01/07/2026 |\n\n---\n\n## Sign off\n\n**Feature category** (recommended: 3 - Moderate Business Impact. The SRR model itself is unaffected if the LIMSOC feature is unavailable, so this is high-value but not critical-path.)\n\n- 1 - Critical Operational Risk\n- 2 - High Impact, Recoverable\n- **3 - Moderate Business Impact** *(recommended)*\n- 4 - Low Operational Risk\n- 5 - No Operational Dependency\n\n| Role | Name | Date |\n|---|---|---|\n| Feature owner | _____________________ | |\n| Senior Manager - Capability | David Potter | |\n| State Lifesaving Communications Officer | Nicholas Wood | |\n\n---\n\n## Overview\n\n*High-level statement outlining the feature and any relevant background information.*\n\nThe Surf Risk Rating (SRR) feature brings SLSA's established Surf Risk Rating assessment into LIMSOC as a native experience. SLSA already provides an SRR model with research behind its questions and weightings, and members already use it. What is missing is a native LIMSOC experience that captures each assessment against a patrol, retains it, surfaces it to the roles that need it, and feeds it into reporting.\n\nThis feature rebuilds the SRR *experience* inside LIMSOC and connects it to core patrol workflows. It does not build a new risk model. The scoring model, question set and mitigators are replicated from the existing SLSA tool exactly, so the research backing is preserved.\n\n## Problem Statement\n\n*What problem are we solving?*\n\nMembers currently complete the Surf Risk Rating in [**confirm current tool: SLSA Ops app?**], separate from LIMSOC. That leaves three gaps:\n\n- **No persistence or feedback.** Assessments are entered but not retained against a patrol, so there is no record to review, compare against later conditions, or learn from.\n- **Limited visibility and traceability.** Operational roles off the beach (field, dispatch, duty officers) cannot see whether an assessment has been completed for a unit, or what it found.\n- **No connection to workflow.** The assessment sits outside patrol records and reporting, so it does not inform the operational picture or the end-of-day record.\n\nIn short, we have no way to capture the SRR against a patrol, retain it, surface it to the people who need it, and report on it.\n\n## Impact\n\n*Impact of solving the problem, including the impact if left unaddressed.*\n\n- **Drive adoption and integration.** A native, low-friction experience embedded in existing patrol workflows increases uptake of the SRR and makes it part of how patrols already work, rather than a separate step.\n- **Give off-beach roles visibility.** Field, dispatch and duty roles gain sight of local risk and of whether an assessment has been completed for each unit. This is the primary situational-awareness win, and it lands with members who are not on the beach.\n- **Make risk assessment traceable and documented.** The feature does not change how we operate, but it makes the assessment persistent, reviewable and auditable rather than transient. In practice it will also mean many more people use the SRR.\n- **Build the data foundation.** A retained, structured record is the prerequisite for the later reporting, trend analysis and predictive capability described in Future Improvements.\n\n## Proposed Solution\n\n*How are we going to do it?*\n\nRebuild the SLSA Surf Risk Rating experience natively within LIMSOC, replicating SLSA's existing SRR question set, weightings and scoring model exactly [**cite: SLSA SRR framework source**], and connecting it to patrol workflows. We are recreating the experience of a research-backed tool inside LIMSOC, not designing a new risk model.\n\nThe first pass (v1) will:\n\n- Capture locally observed environmental hazards through the existing SLSA SRR question set.\n- Prefill and augment the assessment with automated weather data from the Bureau of Meteorology (BOM) for the location nearest the unit.\n- Calculate the Surf Risk Rating using the SLSA scoring model.\n- Link each assessment (many-to-one) to a patrol/unit.\n- Make each assessment reviewable from patrol, field and dispatch views.\n- Include the SRR in the patrol report and allow export of an individual SRR.\n\nNotifications, aggregation, map display and predictive modelling are deferred to later phases (see Future Improvements).\n\n## Functional Requirements\n\n*What the system does. Primary = first pass (v1). Secondary = phase 2. Tertiary = future.*\n\n### Primary (v1 - first pass)\n\n- Provide a capture form built on the SLSA SRR question set. Minimise friction: automate wherever possible, prefill from data already captured, and use engagement/gamification to encourage completion.\n- Prefill and augment the assessment with BOM weather data for the location nearest the unit.\n- Calculate the SRR score using the SLSA scoring model.\n- Give each assessment a geospatial position.\n- Link each assessment (many-to-one) to a patrol/unit.\n- Make each assessment reviewable from **patrol, field and dispatch** views.\n- Show members the mitigators associated with the score, sourced from the SLSA SRR framework [**cite source**] and presented like the Stinger Log. *(Confirm: keep in v1 as part of replicating the experience?)*\n- Include the SRR in the patrol report.\n- Export an individual SRR.\n- **Feature flag:** a general on/off flag for the feature (see Configuration).\n- **Per-unit and per-patrol-type enablement** (see Configuration). *(Confirm granularity: per unit, per patrol type, or both?)*\n- Where enabled and not yet completed, show the unit in an alert colour until an assessment has been logged for that unit for the patrol period.\n\n### Secondary (phase 2)\n\n- Augment observed data with additional internal LIMSOC data (for example Stinger Logs and similar), beyond BOM.\n- Generate notifications when a score is elevated or falls outside defined parameters. *(Parameters and \"abnormal\" to be defined in the phase 2 brief.)*\n- Average scores across zone, then region, then state. *(To be defined against a clear, useful metric and outcome before committing.)*\n- Display scores on unit modals, maps and summaries.\n- Report on historic data and trends.\n\n### Tertiary (future)\n\n- Use forecast data to extrapolate future scores in a predictive nature.\n- Weight impact using current and previous population trends for a location. *(Requires a data source and an agreed methodology.)*\n- Present the data in a form that is meaningful to patrols and end users.\n\n## Non-functional Requirements\n\n*How well the system does it.*\n\n- **Low friction.** The assessment should be as low-friction as possible: automate wherever possible, prefill from data already captured, and use engagement/gamification to drive completion. (No hard completion-time SLA; the intent is minimum friction, not a stopwatch target.)\n- **Model fidelity.** Replicate the SLSA SRR scoring model faithfully. Hold the question set and weightings as configuration so changes to the SLSA model can be reflected without a code change.\n- **Integration.** Integrate with the existing LIMSOC patrol, unit and reporting data model, and with the mapping data model to support later map display.\n- **Reliable data.** Reliable BOM API integration, with graceful fallback to manual entry and override when data is unavailable or wrong.\n- **Statewide use.** Operate for all units across the state under the feature-flag rollout, so the feature can move from pilot to statewide without rework.\n\n## Timeline\n\n*Required timeline, considering each stage of the process. (Dates to be set with the feature owner.)*\n\n| Stage | Description | Target |\n|---|---|---|\n| 1. Confirm SRR model | Obtain and map the SLSA SRR question set, weightings, scoring and mitigators | TBC |\n| 2. Build v1 | Capture form, BOM prefill, scoring, patrol/unit link, review views, patrol report, export | TBC |\n| 3. Pilot | Enable per unit / patrol type via feature flag; validate adoption and data quality | TBC |\n| 4. Statewide | Roll out under the feature flag across the state | TBC |\n\n## Configuration requirements\n\n*What configuration is required prior to deployment, and how significant is the workload?*\n\nThis feature does require configuration. A direct connection to the SLSA/BOM API is necessary but not sufficient, and \"no configuration\" would contradict the feature-flag and per-type requirements above.\n\n- General feature flag to enable/disable the feature.\n- Per-unit and per-patrol-type enablement.\n- The SLSA SRR question set, weightings and scoring held as configuration, so SLSA model changes can be reflected without code changes.\n- BOM data source configuration, including the location mapping for each unit.\n\nWorkload is expected to be modest. The scoring model is inherited from SLSA rather than designed from scratch, and the BOM connection is a standard API integration.\n\n## Risks\n\n*Any risks that may come with implementing this feature.*\n\n| # | Risk | Impact | Mitigation | Outcome |\n|---|---|---|---|---|\n| 1 | Added friction reduces adoption | Members skip the assessment | Automate and prefill, keep to the SLSA question set, use gamification | High completion rates |\n| 2 | BOM data inaccurate or unavailable | Incorrect or missing scores | Validate API data, allow manual override, graceful fallback to manual entry | Reliable scores |\n| 3 | Divergence from the SLSA model over time | Loss of research backing / inconsistency | Hold model as configuration, govern against the SLSA source | Stays aligned with the research-backed model |\n| 4 | Feature-flag / per-type config complexity | Difficult or uneven rollout | Clear config model, pilot per unit/patrol type before statewide | Controlled, staged rollout |\n| 5 | Scope creep from deferred intelligence features | Delivery slips | This brief scopes v1 only; later capability is explicitly phased | Focused first pass |\n\n## Future Improvements\n\n*Anything we could consider in future to build on this feature.*\n\n- Notifications on elevated or out-of-parameter scores.\n- Aggregation and averaging across zone, region and state, once a useful metric and outcome are defined.\n- Display on maps, unit modals and summaries.\n- Population-based impact weighting, subject to a data source and agreed methodology.\n- Forecast-based predictive scoring using historical assessment data.\n- Broader augmentation from internal LIMSOC data (Stinger Logs and similar).\n"
+    },
+    "timestamp": "2026-07-01T09:33:14.618Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace; fd -t d -i 'lifesaving|lsv' . 2>/dev/null | head -20; echo \"---projects---\"; ls projects 2>/dev/null; echo \"---top level---\"; ls -d */ 2>/dev/null",
+      "description": "Find existing lifesaving/lsv structure"
+    },
+    "timestamp": "2026-07-01T09:46:06.590Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving; echo \"=== lifesaving/ ===\"; ls -la; echo \"=== lifesaving/lsv (if exists) ===\"; ls -la lsv 2>/dev/null || echo \"no lsv dir yet\"; echo \"=== find comms ===\"; fd -i 'comms|srr' . 2>/dev/null | head",
+      "description": "Inspect lifesaving folder structure"
+    },
+    "timestamp": "2026-07-01T09:46:11.765Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer; echo \"=== contents ===\"; ls -la; echo \"=== any projects/features subdir? ===\"; fd -t d -d 2 . 2>/dev/null",
+      "description": "Inspect lsv-comms-officer contents"
+    },
+    "timestamp": "2026-07-01T09:46:18.725Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects; echo \"=== projects/ ===\"; ls -la; echo; echo \"=== nested ===\"; fd -t d -d 2 . 2>/dev/null",
+      "description": "Inspect existing projects subdir"
+    },
+    "timestamp": "2026-07-01T09:46:23.665Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc; echo \"=== limsoc/ ===\"; ls -la; echo; echo \"=== tree depth 2 ===\"; fd -d 2 . 2>/dev/null | head -40",
+      "description": "Inspect limsoc project structure"
+    },
+    "timestamp": "2026-07-01T09:46:30.936Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc; echo \"=== incident-categorisation/ ===\"; ls -la incident-categorisation; echo \"=== artefacts/ ===\"; ls -la artefacts",
+      "description": "Inspect feature folder conventions"
+    },
+    "timestamp": "2026-07-01T09:46:42.224Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "set -e\nBASE=~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc\nDEST=\"$BASE/surf-risk-rating\"\nmkdir -p \"$DEST\"\nmv ~/Documents/workspace/projects/lsv-comms/srr-feature-brief/LIMSOC-BRIEF-LSV-2026-005-SRR.md \\\n   \"$DEST/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md\"\n# remove the stray folder I created earlier (only srr-feature-brief was inside)\nrmdir ~/Documents/workspace/projects/lsv-comms/srr-feature-brief ~/Documents/workspace/projects/lsv-comms 2>/dev/null || true\necho \"=== new location ===\"\nls -la \"$DEST\"\necho \"=== stray folder gone? ===\"\nls -d ~/Documents/workspace/projects/lsv-comms 2>/dev/null && echo \"STILL EXISTS\" || echo \"removed\"",
+      "description": "Move brief to limsoc feature folder, remove stray folder"
+    },
+    "timestamp": "2026-07-01T09:46:52.492Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "offset": 36,
+      "limit": 60
+    },
+    "timestamp": "2026-07-01T10:02:12.814Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "offset": 17,
+      "limit": 18
+    },
+    "timestamp": "2026-07-01T10:02:43.164Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "offset": 96,
+      "limit": 80
+    },
+    "timestamp": "2026-07-01T10:03:31.493Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "**Feature category** (recommended: 3 - Moderate Business Impact. The SRR model itself is unaffected if the LIMSOC feature is unavailable, so this is high-value but not critical-path.)\n\n- 1 - Critical Operational Risk\n- 2 - High Impact, Recoverable\n- **3 - Moderate Business Impact** *(recommended)*\n- 4 - Low Operational Risk\n- 5 - No Operational Dependency",
+      "new_string": "**Feature category: 3 - Moderate Business Impact.** The SRR model itself is unaffected if the LIMSOC feature is unavailable, so this is high-value but not critical-path.\n\n- 1 - Critical Operational Risk\n- 2 - High Impact, Recoverable\n- **3 - Moderate Business Impact** *(selected)*\n- 4 - Low Operational Risk\n- 5 - No Operational Dependency"
+    },
+    "timestamp": "2026-07-01T10:03:44.387Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "This feature rebuilds the SRR *experience* inside LIMSOC and connects it to core patrol workflows. It does not build a new risk model. The scoring model, question set and mitigators are replicated from the existing SLSA tool exactly, so the research backing is preserved.",
+      "new_string": "This feature rebuilds the SRR *experience* inside LIMSOC and connects it to core patrol workflows. It does not build a new risk model. The scoring model, question set and mitigants are replicated exactly from SLSA's Surf Risk Rating tool in the SLSA Operations App, so the research backing is preserved."
+    },
+    "timestamp": "2026-07-01T10:03:56.801Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "Members currently complete the Surf Risk Rating in [**confirm current tool: SLSA Ops app?**], separate from LIMSOC. That leaves three gaps:",
+      "new_string": "Members currently complete the Surf Risk Rating in the SLSA Operations App, separate from LIMSOC. That leaves three gaps:"
+    },
+    "timestamp": "2026-07-01T10:04:02.303Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "Rebuild the SLSA Surf Risk Rating experience natively within LIMSOC, replicating SLSA's existing SRR question set, weightings and scoring model exactly [**cite: SLSA SRR framework source**], and connecting it to patrol workflows. We are recreating the experience of a research-backed tool inside LIMSOC, not designing a new risk model.",
+      "new_string": "Rebuild the SLSA Surf Risk Rating experience natively within LIMSOC, replicating the question set, weightings, scoring and mitigants defined by SLSA's Surf Risk Rating tool in the SLSA Operations App, and connecting it to patrol workflows. We are recreating the experience of a research-backed tool inside LIMSOC, not designing a new risk model. The SLSA model definition is a delivery dependency (see Configuration requirements)."
+    },
+    "timestamp": "2026-07-01T10:04:08.959Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- Show members the mitigators associated with the score, sourced from the SLSA SRR framework [**cite source**] and presented like the Stinger Log. *(Confirm: keep in v1 as part of replicating the experience?)*\n- Include the SRR in the patrol report.\n- Export an individual SRR.\n- **Feature flag:** a general on/off flag for the feature (see Configuration).\n- **Per-unit and per-patrol-type enablement** (see Configuration). *(Confirm granularity: per unit, per patrol type, or both?)*",
+      "new_string": "- Present the mitigants for the resulting rating, listed at the end of the assessment. The mitigants are those defined by SLSA's Surf Risk Rating tool, presented like the Stinger Log.\n- Include the SRR in the patrol report.\n- Export an individual SRR.\n- **Feature flag:** a general on/off flag for the feature (see Configuration).\n- **Per-patrol-type enablement:** enable or disable the feature by patrol type (see Configuration)."
+    },
+    "timestamp": "2026-07-01T10:04:18.819Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "| 3. Pilot | Enable per unit / patrol type via feature flag; validate adoption and data quality | TBC |",
+      "new_string": "| 3. Pilot | Enable per patrol type via feature flag; validate adoption and data quality | TBC |"
+    },
+    "timestamp": "2026-07-01T10:04:33.313Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "This feature does require configuration. A direct connection to the SLSA/BOM API is necessary but not sufficient, and \"no configuration\" would contradict the feature-flag and per-type requirements above.\n\n- General feature flag to enable/disable the feature.\n- Per-unit and per-patrol-type enablement.\n- The SLSA SRR question set, weightings and scoring held as configuration, so SLSA model changes can be reflected without code changes.\n- BOM data source configuration, including the location mapping for each unit.\n\nWorkload is expected to be modest. The scoring model is inherited from SLSA rather than designed from scratch, and the BOM connection is a standard API integration.",
+      "new_string": "This feature does require configuration. \"No configuration\" would contradict the feature-flag and per-patrol-type requirements above.\n\n- General feature flag to enable/disable the feature.\n- Per-patrol-type enablement.\n- The SLSA SRR question set, weightings, scoring and mitigants held as configuration, so the SLSA model can be replicated and any SLSA changes reflected without code changes.\n- BOM data source configuration, including the location mapping for each unit.\n\n**Delivery dependency.** The SLSA SRR model definition (question set, weightings, scoring and mitigants) must be obtained from SLSA to populate this configuration. We do not currently hold SLSA's API or model documentation, so this is a prerequisite for Stage 1. Holding the model as owned configuration avoids a hard runtime dependency on an SLSA API.\n\nWorkload is expected to be modest. The scoring model is inherited from SLSA rather than designed from scratch, and the BOM connection is a standard API integration."
+    },
+    "timestamp": "2026-07-01T10:04:53.530Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "| 4 | Feature-flag / per-type config complexity | Difficult or uneven rollout | Clear config model, pilot per unit/patrol type before statewide | Controlled, staged rollout |\n| 5 | Scope creep from deferred intelligence features | Delivery slips | This brief scopes v1 only; later capability is explicitly phased | Focused first pass |",
+      "new_string": "| 4 | Feature-flag / per-patrol-type config complexity | Difficult or uneven rollout | Clear config model, pilot per patrol type before statewide | Controlled, staged rollout |\n| 5 | Scope creep from deferred intelligence features | Delivery slips | This brief scopes v1 only; later capability is explicitly phased | Focused first pass |\n| 6 | SLSA SRR model definition not yet available to us | Cannot build to the exact model; Stage 1 blocked | Obtain the SLSA model definition early; hold it as owned configuration rather than depending on an SLSA API | Faithful replication, no runtime SLSA dependency |"
+    },
+    "timestamp": "2026-07-01T10:05:01.828Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\necho \"=== stray placeholders (should be none) ===\"\nrg -n 'confirm|cite:|\\[\\*\\*' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md || echo \"none\"\necho\necho \"=== new requirement counts ===\"\necho \"Functional Primary:   $(awk '/### Primary/,/### Secondary/' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md | grep -c '^- ')\"\necho \"Functional Secondary: $(awk '/### Secondary/,/### Tertiary/' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md | grep -c '^- ')\"\necho \"Functional Tertiary:  $(awk '/### Tertiary/,/## Non-functional/' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md | grep -c '^- ')\"\necho \"Non-functional:       $(awk '/## Non-functional Requirements/,/## Timeline/' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md | grep -c '^- ')\"",
+      "description": "Verify placeholders gone and count new requirements"
+    },
+    "timestamp": "2026-07-01T10:05:42.220Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "offset": 33,
+      "limit": 130
+    },
+    "timestamp": "2026-07-01T10:09:23.071Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "This feature rebuilds the SRR *experience* inside LIMSOC and connects it to core patrol workflows. It does not build a new risk model. The scoring model, question set and mitigants are replicated exactly from SLSA's Surf Risk Rating tool in the SLSA Operations App, so the research backing is preserved.",
+      "new_string": "This feature rebuilds the SRR *experience* inside LIMSOC and connects it to core patrol workflows. It does not build the scoring engine. LIMSOC collects the assessment inputs, passes them to SLSA's Surf Risk Rating API, and presents the score, rating and mitigants the API returns. SLSA owns the model and the research behind it; LIMSOC owns the experience, the persistence of each result, and the link to a patrol."
+    },
+    "timestamp": "2026-07-01T10:09:31.231Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "Rebuild the SLSA Surf Risk Rating experience natively within LIMSOC, replicating the question set, weightings, scoring and mitigants defined by SLSA's Surf Risk Rating tool in the SLSA Operations App, and connecting it to patrol workflows. We are recreating the experience of a research-backed tool inside LIMSOC, not designing a new risk model. The SLSA model definition is a delivery dependency (see Configuration requirements).\n\nThe first pass (v1) will:\n\n- Capture locally observed environmental hazards through the existing SLSA SRR question set.\n- Prefill and augment the assessment with automated weather data from the Bureau of Meteorology (BOM) for the location nearest the unit.\n- Calculate the Surf Risk Rating using the SLSA scoring model.\n- Link each assessment (many-to-one) to a patrol/unit.\n- Make each assessment reviewable from patrol, field and dispatch views.\n- Include the SRR in the patrol report and allow export of an individual SRR.\n\nNotifications, aggregation, map display and predictive modelling are deferred to later phases (see Future Improvements).",
+      "new_string": "Rebuild the SLSA Surf Risk Rating experience natively within LIMSOC. LIMSOC provides the form and the workflow; the SLSA Surf Risk Rating API provides the score, rating and mitigation list. We are recreating the experience of a research-backed tool inside LIMSOC, not building the engine behind it. Access to the SLSA API and its request/response contract is a delivery dependency (see Assumptions and Configuration requirements).\n\nThe first pass (v1) will:\n\n- Capture the inputs required by the SLSA SRR API, including locally observed environmental hazards.\n- Prefill and augment those inputs with automated weather data from the Bureau of Meteorology (BOM) for the location nearest the unit.\n- Submit the inputs to the SLSA API and return the score, rating and mitigation list it provides.\n- Persist the completed assessment in LIMSOC and link it (many-to-one) to a patrol/unit.\n- Make each assessment reviewable from patrol, field and dispatch views.\n- Include the SRR in the patrol report and allow export of an individual SRR.\n- Block the form when the SLSA API is not healthy (see Assumptions).\n\nNotifications, aggregation, map display and predictive modelling are deferred to later phases (see Future Improvements)."
+    },
+    "timestamp": "2026-07-01T10:09:43.108Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- Provide a capture form built on the SLSA SRR question set. Minimise friction: automate wherever possible, prefill from data already captured, and use engagement/gamification to encourage completion.\n- Prefill and augment the assessment with BOM weather data for the location nearest the unit.\n- Calculate the SRR score using the SLSA scoring model.\n- Give each assessment a geospatial position.\n- Link each assessment (many-to-one) to a patrol/unit.\n- Make each assessment reviewable from **patrol, field and dispatch** views.\n- Present the mitigants for the resulting rating, listed at the end of the assessment. The mitigants are those defined by SLSA's Surf Risk Rating tool, presented like the Stinger Log.\n- Include the SRR in the patrol report.\n- Export an individual SRR.\n- **Feature flag:** a general on/off flag for the feature (see Configuration).\n- **Per-patrol-type enablement:** enable or disable the feature by patrol type (see Configuration).\n- Where enabled and not yet completed, show the unit in an alert colour until an assessment has been logged for that unit for the patrol period.",
+      "new_string": "- Provide a capture form that collects the inputs required by the SLSA SRR API. Minimise friction: automate wherever possible, prefill from data already captured, and use engagement/gamification to encourage completion.\n- Prefill and augment those inputs with BOM weather data for the location nearest the unit.\n- Submit the collected inputs to the SLSA API and retrieve the score, rating and mitigation list it returns. LIMSOC does not compute the score.\n- **Check SLSA API health before an assessment can be started, and block the form if a healthy response is not returned.** Do not allow an assessment to be completed without a live SLSA scoring response. Surface a clear unavailable state to the member.\n- Give each assessment a geospatial position.\n- Persist the completed assessment (inputs, and the returned score, rating and mitigants) in LIMSOC and link it (many-to-one) to a patrol/unit.\n- Make each assessment reviewable from **patrol, field and dispatch** views.\n- Present the mitigants returned by the SLSA API for the resulting rating, listed at the end of the assessment, presented like the Stinger Log.\n- Include the SRR in the patrol report.\n- Export an individual SRR.\n- **Feature flag:** a general on/off flag for the feature (see Configuration).\n- **Per-patrol-type enablement:** enable or disable the feature by patrol type (see Configuration).\n- Where enabled and not yet completed, show the unit in an alert colour until an assessment has been logged for that unit for the patrol period."
+    },
+    "timestamp": "2026-07-01T10:09:57.273Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- **Model fidelity.** Replicate the SLSA SRR scoring model faithfully. Hold the question set and weightings as configuration so changes to the SLSA model can be reflected without a code change.\n- **Integration.** Integrate with the existing LIMSOC patrol, unit and reporting data model, and with the mapping data model to support later map display.\n- **Reliable data.** Reliable BOM API integration, with graceful fallback to manual entry and override when data is unavailable or wrong.\n- **Statewide use.** Operate for all units across the state under the feature-flag rollout, so the feature can move from pilot to statewide without rework.",
+      "new_string": "- **Scoring authority.** LIMSOC does not compute the score. Scoring, rating and mitigants come from the SLSA API; LIMSOC only passes inputs and presents the response. This keeps LIMSOC always aligned with the current SLSA model.\n- **Integration.** Integrate with the existing LIMSOC patrol, unit and reporting data model, and with the mapping data model to support later map display.\n- **External API dependence.** The feature depends on two external APIs: SLSA (scoring) and BOM (weather). For SLSA, check health before an assessment and block the form on an unhealthy response, so no assessment is completed without a live score. For BOM, fall back gracefully to manual entry and override when data is unavailable or wrong.\n- **Performance under a slow dependency.** Health checks, submissions and responses should handle SLSA API latency without hanging the member, with clear timeout and retry behaviour, given SLSA's history of variable performance and availability.\n- **Statewide use.** Operate for all units across the state under the feature-flag rollout, so the feature can move from pilot to statewide without rework."
+    },
+    "timestamp": "2026-07-01T10:10:08.859Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "Notifications, aggregation, map display and predictive modelling are deferred to later phases (see Future Improvements).\n\n## Functional Requirements",
+      "new_string": "Notifications, aggregation, map display and predictive modelling are deferred to later phases (see Future Improvements).\n\n## Assumptions\n\n*What must hold true for this feature to work as described. Several centre on the SLSA API, which is the scoring engine.*\n\n- **SLSA owns the engine; LIMSOC owns the form and the record.** LIMSOC does not build or hold the scoring logic. The form collects the inputs, passes them to the SLSA API, and the SLSA API returns the score, rating and mitigation list. LIMSOC then owns persistence of that result and the link to a patrol.\n- **The SLSA API returns the score, rating and mitigation list.** The response contains all three, so LIMSOC does not need to derive any of them.\n- **The SLSA API is performant and reliable.** This is assumed but not proven. SLSA has a history of APIs that are neither, so this assumption carries material risk and drives the fail-behaviour below.\n- **A health-check endpoint is available on the SLSA API.** LIMSOC can query it to determine availability before allowing an assessment.\n- **Fail behaviour: the form is blocked without a healthy SLSA response.** If the health check fails or the API does not return a healthy response, the assessment form is blocked and a clear unavailable state is shown. LIMSOC does not accept an assessment it cannot score, so no un-scored or locally-guessed assessments are recorded.\n\n## Functional Requirements"
+    },
+    "timestamp": "2026-07-01T10:10:25.107Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- General feature flag to enable/disable the feature.\n- Per-patrol-type enablement.\n- The SLSA SRR question set, weightings, scoring and mitigants held as configuration, so the SLSA model can be replicated and any SLSA changes reflected without code changes.\n- BOM data source configuration, including the location mapping for each unit.\n\n**Delivery dependency.** The SLSA SRR model definition (question set, weightings, scoring and mitigants) must be obtained from SLSA to populate this configuration. We do not currently hold SLSA's API or model documentation, so this is a prerequisite for Stage 1. Holding the model as owned configuration avoids a hard runtime dependency on an SLSA API.\n\nWorkload is expected to be modest. The scoring model is inherited from SLSA rather than designed from scratch, and the BOM connection is a standard API integration.",
+      "new_string": "- General feature flag to enable/disable the feature.\n- Per-patrol-type enablement.\n- SLSA API connection: endpoint, credentials, the scoring request/response contract, and the health-check endpoint.\n- BOM data source configuration, including the location mapping for each unit.\n\n**Delivery dependency.** Access to the SLSA API and its documentation (the input contract, the score/rating/mitigant response, and a health-check endpoint) must be obtained from SLSA. We do not currently hold SLSA's API documentation, so this is a prerequisite for Stage 1. A commitment on SLSA API performance and availability should be sought at the same time, since the feature depends on it at runtime.\n\nWorkload on the LIMSOC side is expected to be modest. The scoring engine is SLSA's, so LIMSOC builds the form, the persistence, the patrol link and two API integrations (SLSA and BOM)."
+    },
+    "timestamp": "2026-07-01T10:10:40.153Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "| 1 | Added friction reduces adoption | Members skip the assessment | Automate and prefill, keep to the SLSA question set, use gamification | High completion rates |\n| 2 | BOM data inaccurate or unavailable | Incorrect or missing scores | Validate API data, allow manual override, graceful fallback to manual entry | Reliable scores |\n| 3 | Divergence from the SLSA model over time | Loss of research backing / inconsistency | Hold model as configuration, govern against the SLSA source | Stays aligned with the research-backed model |\n| 4 | Feature-flag / per-patrol-type config complexity | Difficult or uneven rollout | Clear config model, pilot per patrol type before statewide | Controlled, staged rollout |\n| 5 | Scope creep from deferred intelligence features | Delivery slips | This brief scopes v1 only; later capability is explicitly phased | Focused first pass |\n| 6 | SLSA SRR model definition not yet available to us | Cannot build to the exact model; Stage 1 blocked | Obtain the SLSA model definition early; hold it as owned configuration rather than depending on an SLSA API | Faithful replication, no runtime SLSA dependency |",
+      "new_string": "| 1 | Added friction reduces adoption | Members skip the assessment | Automate and prefill, keep the form minimal, use gamification | High completion rates |\n| 2 | SLSA API slow or unavailable (their history on both) | Members cannot complete an assessment | Health-check before starting, block the form on an unhealthy response, clear timeout/retry, seek a performance/availability commitment from SLSA | Controlled failure, no un-scored assessments |\n| 3 | SLSA API access and contract not yet available to us | Stage 1 blocked; cannot build the integration | Obtain SLSA API documentation and access early as a Stage 1 prerequisite | Build proceeds against a known contract |\n| 4 | BOM data inaccurate or unavailable | Missing or wrong prefill | Validate BOM data, allow manual override, graceful fallback to manual entry | Reliable inputs |\n| 5 | Feature-flag / per-patrol-type config complexity | Difficult or uneven rollout | Clear config model, pilot per patrol type before statewide | Controlled, staged rollout |\n| 6 | Scope creep from deferred intelligence features | Delivery slips | This brief scopes v1 only; later capability is explicitly phased | Focused first pass |"
+    },
+    "timestamp": "2026-07-01T10:10:56.511Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "| 1. Confirm SRR model | Obtain and map the SLSA SRR question set, weightings, scoring and mitigators | TBC |\n| 2. Build v1 | Capture form, BOM prefill, scoring, patrol/unit link, review views, patrol report, export | TBC |",
+      "new_string": "| 1. Secure SLSA API | Obtain SLSA API access, the request/response contract, the health-check endpoint, and a performance/availability commitment | TBC |\n| 2. Build v1 | Capture form, BOM prefill, SLSA API submit/retrieve, health-check and block behaviour, persistence, patrol/unit link, review views, patrol report, export | TBC |"
+    },
+    "timestamp": "2026-07-01T10:11:11.501Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\necho \"=== stale contradictions (replicate/calculate/owned config) — expect none problematic ===\"\nrg -ni 'replicat|calculate the srr|owned configuration|held as configuration|scoring model can be' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md || echo \"none\"\necho\necho \"=== requirement counts (post-rework) ===\"\necho \"Functional Primary:   $(awk '/### Primary/,/### Secondary/' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md | grep -c '^- ')\"\necho \"Functional Secondary: $(awk '/### Secondary/,/### Tertiary/' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md | grep -c '^- ')\"\necho \"Functional Tertiary:  $(awk '/### Tertiary/,/## Non-functional/' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md | grep -c '^- ')\"\necho \"Non-functional:       $(awk '/## Non-functional Requirements/,/## Timeline/' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md | grep -c '^- ')\"\necho \"Assumptions:          $(awk '/## Assumptions/,/## Functional/' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md | grep -c '^- ')\"\necho \"Risks rows:           $(awk '/## Risks/,/## Future/' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md | grep -c '^| [0-9]')\"",
+      "description": "Verify no contradictions and recount requirements"
+    },
+    "timestamp": "2026-07-01T10:11:23.050Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\nrg -n ';' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "description": "Find all semicolons in the brief"
+    },
+    "timestamp": "2026-07-01T10:25:54.487Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "The Surf Risk Rating (SRR) feature brings SLSA's established Surf Risk Rating assessment into LIMSOC as a native experience. SLSA already provides an SRR model with research behind its questions and weightings, and members already use it. What is missing is a native LIMSOC experience that captures each assessment against a patrol, retains it, surfaces it to the roles that need it, and feeds it into reporting.\n\nThis feature rebuilds the SRR *experience* inside LIMSOC and connects it to core patrol workflows. It does not build the scoring engine. LIMSOC collects the assessment inputs, passes them to SLSA's Surf Risk Rating API, and presents the score, rating and mitigants the API returns. SLSA owns the model and the research behind it; LIMSOC owns the experience, the persistence of each result, and the link to a patrol.",
+      "new_string": "The Surf Risk Rating (SRR) is an established, research-backed SLSA assessment that members already use. Today it lives in the SLSA Operations App, and that solution no longer meets our operational needs. It is not native to LIMSOC, it is unreliable, and the result cannot flow into our operational workflows and data.\n\nSLSA has recently released an SRR API. This project uses that newly released API to build a native SRR experience within LIMSOC, giving members a cohesive experience and integrating the assessment into operational workflows."
+    },
+    "timestamp": "2026-07-01T10:26:12.496Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "Members currently complete the Surf Risk Rating in the SLSA Operations App, separate from LIMSOC. That leaves three gaps:\n\n- **No persistence or feedback.** Assessments are entered but not retained against a patrol, so there is no record to review, compare against later conditions, or learn from.\n- **Limited visibility and traceability.** Operational roles off the beach (field, dispatch, duty officers) cannot see whether an assessment has been completed for a unit, or what it found.\n- **No connection to workflow.** The assessment sits outside patrol records and reporting, so it does not inform the operational picture or the end-of-day record.\n\nIn short, we have no way to capture the SRR against a patrol, retain it, surface it to the people who need it, and report on it.",
+      "new_string": "Members currently complete the Surf Risk Rating in the SLSA Operations App, separate from LIMSOC. That leaves three problems:\n\n- **Not native to LIMSOC.** The assessment lives in a separate app, degrading the user experience and keeping it outside the workflows members already use.\n- **The Operations App is unreliable.** Members cannot depend on the current tool being available or working when they need it.\n- **The score is not accessible to operational workflows.** The result cannot flow into LIMSOC operational workflows, reporting or data. It is not retained against a patrol, and off-beach roles (field, dispatch, duty officers) cannot see whether an assessment was completed or what it found.\n\nIn short, we cannot capture the SRR natively, rely on it, or use the score in our operational workflows and data."
+    },
+    "timestamp": "2026-07-01T10:26:25.519Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- **Drive adoption and integration.** A native, low-friction experience embedded in existing patrol workflows increases uptake of the SRR and makes it part of how patrols already work, rather than a separate step.\n- **Give off-beach roles visibility.**",
+      "new_string": "- **Integrate risk assessment into operational workflows.** Bringing the SRR into LIMSOC lets the score plug into operational workflows. This makes the assessment easier for the member while better facilitating risk-management SOPs, so it has a direct impact on how we manage operational risk.\n- **Drive adoption and integration.** A native, low-friction experience embedded in existing patrol workflows increases uptake of the SRR and makes it part of how patrols already work, rather than a separate step.\n- **Give off-beach roles visibility.**"
+    },
+    "timestamp": "2026-07-01T10:26:32.553Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "Rebuild the SLSA Surf Risk Rating experience natively within LIMSOC. LIMSOC provides the form and the workflow; the SLSA Surf Risk Rating API provides the score, rating and mitigation list. We are recreating the experience of a research-backed tool inside LIMSOC, not building the engine behind it. Access to the SLSA API and its request/response contract is a delivery dependency (see Assumptions and Configuration requirements).\n\nThe first pass (v1) will:",
+      "new_string": "Build a native SRR experience in LIMSOC on top of the SLSA API. LIMSOC provides the form, the workflow and the record. The SLSA API provides the score, rating and mitigation list. Access to the SLSA API and its contract is a delivery dependency (see Assumptions and Configuration requirements).\n\nThe first pass (v1) will:"
+    },
+    "timestamp": "2026-07-01T10:26:39.938Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- **SLSA owns the engine; LIMSOC owns the form and the record.** LIMSOC does not build or hold the scoring logic. The form collects the inputs, passes them to the SLSA API, and the SLSA API returns the score, rating and mitigation list. LIMSOC then owns persistence of that result and the link to a patrol.\n- **The SLSA API returns the score, rating and mitigation list.** The response contains all three, so LIMSOC does not need to derive any of them.\n- **The SLSA API is performant and reliable.** This is assumed but not proven. SLSA has a history of APIs that are neither, so this assumption carries material risk and drives the fail-behaviour below.\n- **A health-check endpoint is available on the SLSA API.** LIMSOC can query it to determine availability before allowing an assessment.\n- **Fail behaviour: the form is blocked without a healthy SLSA response.** If the health check fails or the API does not return a healthy response, the assessment form is blocked and a clear unavailable state is shown. LIMSOC does not accept an assessment it cannot score, so no un-scored or locally-guessed assessments are recorded.",
+      "new_string": "- **SLSA owns the engine. LIMSOC owns the form and the record.** LIMSOC does not build or hold the scoring logic. The form collects the inputs, passes them to the SLSA API, and the SLSA API returns the score, rating and mitigation list. LIMSOC then owns persistence of that result and the link to a patrol.\n- **The SLSA API returns the score, rating and mitigation list.** The response contains all three, so LIMSOC does not need to derive any of them.\n- **The SLSA API is performant and reliable.** This is assumed but not proven. SLSA has a history of APIs that are neither, so this assumption carries material risk and drives the block-on-unhealthy requirement in Functional Requirements.\n- **A health-check endpoint is available on the SLSA API.** LIMSOC can query it to determine availability before allowing an assessment."
+    },
+    "timestamp": "2026-07-01T10:26:50.607Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "use engagement/gamification to drive completion. (No hard completion-time SLA; the intent is minimum friction, not a stopwatch target.)",
+      "new_string": "use engagement/gamification to drive completion. (No hard completion-time SLA. The intent is minimum friction, not a stopwatch target.)"
+    },
+    "timestamp": "2026-07-01T10:27:16.404Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "Scoring, rating and mitigants come from the SLSA API; LIMSOC only passes inputs and presents the response.",
+      "new_string": "Scoring, rating and mitigants come from the SLSA API. LIMSOC only passes inputs and presents the response."
+    },
+    "timestamp": "2026-07-01T10:27:35.503Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "| 3. Pilot | Enable per patrol type via feature flag; validate adoption and data quality | TBC |",
+      "new_string": "| 3. Pilot | Enable per patrol type via feature flag, and validate adoption and data quality | TBC |"
+    },
+    "timestamp": "2026-07-01T10:27:41.077Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "| 3 | SLSA API access and contract not yet available to us | Stage 1 blocked; cannot build the integration |",
+      "new_string": "| 3 | SLSA API access and contract not yet available to us | Stage 1 blocked, cannot build the integration |"
+    },
+    "timestamp": "2026-07-01T10:28:02.978Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "| 6 | Scope creep from deferred intelligence features | Delivery slips | This brief scopes v1 only; later capability is explicitly phased | Focused first pass |",
+      "new_string": "| 6 | Scope creep from deferred intelligence features | Delivery slips | This brief scopes v1 only. Later capability is explicitly phased | Focused first pass |"
+    },
+    "timestamp": "2026-07-01T10:28:11.329Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- **SLSA owns the engine. LIMSOC owns the form and the record.** LIMSOC does not build or hold the scoring logic. The form collects the inputs, passes them to the SLSA API, and the SLSA API returns the score, rating and mitigation list. LIMSOC then owns persistence of that result and the link to a patrol.\n- **The SLSA API returns the score, rating and mitigation list.** The response contains all three, so LIMSOC does not need to derive any of them.\n- **The SLSA API is performant and reliable.** This is assumed but not proven. SLSA has a history of APIs that are neither, so this assumption carries material risk and drives the block-on-unhealthy requirement in Functional Requirements.\n- **A health-check endpoint is available on the SLSA API.** LIMSOC can query it to determine availability before allowing an assessment.",
+      "new_string": "- **SLSA owns the scoring engine, and LIMSOC owns the form and the record.** LIMSOC collects the inputs, sends them to the SLSA API, and the API returns the score, rating and mitigation list. LIMSOC owns persistence of that result and the link to a patrol.\n- **The SLSA API returns the score, rating and mitigation list.**\n- **The SLSA API is performant and reliable.** SLSA has a history of APIs that are neither, so this is assumed, not proven.\n- **A health-check endpoint is available on the SLSA API.**"
+    },
+    "timestamp": "2026-07-01T10:28:19.979Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\necho \"=== semicolons (expect none) ===\"; rg -n ';' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md || echo \"none\"\necho; echo \"=== Overview + Assumptions sections ===\"\nawk '/## Overview/,/## Problem Statement/' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md\necho \"...\"\nawk '/## Assumptions/,/## Functional Requirements/' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md\necho \"=== Assumptions count ===\"; awk '/## Assumptions/,/## Functional/' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md | grep -c '^- '",
+      "description": "Verify semicolons gone and review overview/assumptions"
+    },
+    "timestamp": "2026-07-01T10:28:31.212Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- Provide a capture form that collects the inputs required by the SLSA SRR API. Minimise friction: automate wherever possible, prefill from data already captured, and use engagement/gamification to encourage completion.\n- Prefill and augment those inputs with BOM weather data for the location nearest the unit.",
+      "new_string": "- Provide a capture form that collects the inputs required by the SLSA SRR API. Minimise friction: automate wherever possible, prefill from data already captured, and use engagement/gamification to encourage completion.\n- **Select the location.** Default to the user's GPS location and list the five closest beaches, each showing its distance from that location. If GPS is not available, fall back to the unit's location. Allow a location to be found by typing a search. Draw from the same location set used for incidents.\n- Prefill and augment those inputs with BOM weather data for the selected location."
+    },
+    "timestamp": "2026-07-01T10:40:03.159Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- Prefill and augment those inputs with automated weather data from the Bureau of Meteorology (BOM) for the location nearest the user.",
+      "new_string": "- Determine the location from the user's GPS (falling back to the unit location), and prefill and augment the inputs with automated weather data from the Bureau of Meteorology (BOM) for that location."
+    },
+    "timestamp": "2026-07-01T10:40:09.457Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- BOM data source configuration, including the location mapping for each unit.",
+      "new_string": "- BOM data source configuration, mapping the shared incident location set to BOM weather data."
+    },
+    "timestamp": "2026-07-01T10:40:13.769Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- **A health-check endpoint is available on the SLSA API.**",
+      "new_string": "- **A health-check endpoint is available on the SLSA API.**\n- **The location set used for incidents is available to reuse for SRR.**"
+    },
+    "timestamp": "2026-07-01T10:40:18.841Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\necho \"=== Primary requirements ===\"\nawk '/### Primary/,/### Secondary/' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md | grep '^- '\necho\necho \"Primary count: $(awk '/### Primary/,/### Secondary/' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md | grep -c '^- ')\"\necho \"Assumptions:   $(awk '/## Assumptions/,/## Functional/' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md | grep -c '^- ')\"\necho \"=== semicolon check ===\"; rg -q ';' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md && echo \"FOUND\" || echo \"none\"",
+      "description": "Verify primary requirements and counts"
+    },
+    "timestamp": "2026-07-01T10:40:28.866Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "offset": 110,
+      "limit": 80
+    },
+    "timestamp": "2026-07-01T10:59:03.244Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\ncat > \"$CLAUDE_JOB_DIR/tmp/func.md\" <<'EOF'\n## Functional Requirements\n\n*Grouped by capability area. Unless marked, requirements are first pass (v1). Deferred items are marked (Phase 2) or (Future).*\n\n### 1. Completing and reviewing the form (patrol view)\n\n- Provide a capture form that collects the inputs required by the SLSA SRR API. Minimise friction: automate wherever possible, prefill from data already captured, and use engagement/gamification to encourage completion.\n- **Select the location.** Default to the user's GPS location and list the five closest beaches, each showing its distance from that location. If GPS is not available, fall back to the unit's location. Allow a location to be found by typing a search. Draw from the same location set used for incidents.\n- Prefill and augment those inputs with BOM weather data for the selected location.\n- Submit the collected inputs to the SLSA API and retrieve the score, rating and mitigation list it returns. LIMSOC does not compute the score.\n- **Check SLSA API health before an assessment can be started, and block the form if a healthy response is not returned.** Do not allow an assessment to be completed without a live SLSA scoring response. Surface a clear unavailable state to the member.\n- Give each assessment a geospatial position.\n- Present the mitigants returned by the SLSA API for the resulting rating, listed at the end of the assessment, presented like the Stinger Log.\n- Review the SRR within the patrol view. Show the latest score as key data alongside the key details of the activity, with a link to the latest SRR. Make all SRRs available in the same way as other documentation.\n- Augment observed data with other internal LIMSOC data, for example Stinger Logs and similar. *(Phase 2)*\n\n### 2. Integrating into workflows\n\n- Persist the completed assessment (inputs, and the returned score, rating and mitigants) in LIMSOC.\n- **Activity and unit linking.**\n    - An SRR completed as part of an activity is linked to an ACTIVITY and a UNIT. The unit is implied by the activity.\n    - An SRR not completed as part of an activity is associated with the UNIT only. A member reaches the SRR through a unit, so every SRR has at least a unit.\n    - On completion with no activity signed on, offer to link the SRR to a signed-on activity. If nothing is signed on, prompt the member to sign on. If the member chooses not to link, log the SRR against the unit they are signed in as.\n    - When signing on to an activity, offer to link an existing SRR completed before sign-on. Offer only SRR completions for that unit, that day, and the same activity.\n    - An SRR can be linked to at most one activity.\n    - *Note: an SRR must not be linked to more than one activity. Participant numbers are an input to the rating and differ between activities, and other inputs may differ too, so one SRR cannot be valid for more than one activity.*\n- Reflect the linking in the comm log entry, showing whether the SRR is against a unit only, or against a unit and an activity.\n- An updated SRR for an activity adds a log to the general log.\n- **Feature flag.** A general on/off flag governs whether the feature is available (see Configuration).\n- **Per patrol type: required or optional** (see Configuration).\n    - Required: the SRR must be completed as part of the activity.\n    - Optional: the SRR may be completed but is not mandatory.\n- Where an SRR is required and not yet completed, show the unit in an alert colour until an SRR has been logged for that unit or activity for the patrol period.\n- Include the SRR in the patrol report.\n- Export an individual SRR.\n\n### 3. Notifications\n\n- When an SRR score is at or above a configurable threshold, open a dangerous conditions incident. The incident must comply with our existing, externally created incident workflow.\n- Make the trigger score configurable, so the score that opens an incident can be set without code changes.\n- If a dangerous conditions incident is already open with the relevant unit attached, do not open another. Add a log note to that incident instead.\n- Notifications for a dangerous rating are triggered off the incident and are out of scope for this feature.\n- Generate notifications when a score is elevated or falls outside defined parameters. *(Phase 2. Parameters and \"abnormal\" to be defined in the phase 2 brief.)*\n\n### 4. Discoverability (outside patrol view)\n\n- **Full assisted workflow.** Support a fully assisted SRR workflow that can be completed from the LSV Comms view, including over the radio, so a comms operator can complete an SRR on behalf of a patrol.\n- Display scores on unit modals, maps and summaries. *(Phase 2)*\n- Average scores across zone, then region, then state. *(Phase 2. To be defined against a clear, useful metric and outcome before committing.)*\n- Report on historic data and trends. *(Phase 2)*\n- Use forecast data to extrapolate future scores in a predictive nature. *(Future)*\n- Weight impact using current and previous population trends for a location. *(Future. Requires a data source and an agreed methodology.)*\n- Present the data in a form that is meaningful to patrols and end users. *(Future)*\n\nEOF\npython3 - <<'PY'\nf=\"LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md\"\ns=open(f).read()\nnew=open(\"/home/nicholas-wood/.claude/jobs/6fd2be19/tmp/func.md\").read()\na=s.index(\"## Functional Requirements\")\nb=s.index(\"## Non-functional Requirements\")\ns2=s[:a]+new+s[b:]\nopen(f,\"w\").write(s2)\nprint(\"spliced OK; new length\", len(s2))\nPY",
+      "description": "Splice restructured Functional Requirements into 4 categories"
+    },
+    "timestamp": "2026-07-01T11:00:32.101Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "offset": 150,
+      "limit": 60
+    },
+    "timestamp": "2026-07-01T11:00:40.548Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- General feature flag to enable/disable the feature.\n- Per-patrol-type enablement.\n- SLSA API connection: endpoint, credentials, the scoring request/response contract, and the health-check endpoint.\n- BOM data source configuration, mapping the shared incident location set to BOM weather data.",
+      "new_string": "- General feature flag to make the feature available or not.\n- Per patrol type: required or optional.\n- The score threshold that triggers a dangerous conditions incident.\n- SLSA API connection: endpoint, credentials, the scoring request/response contract, and the health-check endpoint.\n- BOM data source configuration, mapping the shared incident location set to BOM weather data."
+    },
+    "timestamp": "2026-07-01T11:00:48.518Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "| 2. Build v1 | Capture form, BOM prefill, SLSA API submit/retrieve, health-check and block behaviour, persistence, patrol/unit link, review views, patrol report, export | TBC |",
+      "new_string": "| 2. Build v1 | Capture form, location select, BOM prefill, SLSA submit/retrieve, health-check and block, persistence, unit/activity linking, required/optional, patrol-view review, dangerous-conditions incident trigger, assisted Comms workflow, patrol report, export | TBC |"
+    },
+    "timestamp": "2026-07-01T11:00:54.365Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "| 6 | Scope creep from deferred intelligence features | Delivery slips | This brief scopes v1 only. Later capability is explicitly phased | Focused first pass |",
+      "new_string": "| 6 | Scope creep from deferred intelligence features | Delivery slips | This brief scopes v1 only. Later capability is explicitly phased | Focused first pass |\n| 7 | Dangerous-conditions incident diverges from or duplicates the incident workflow | Divergent or duplicate incidents | Reuse the existing incident workflow, and where an incident is already open for the unit add a log note instead of opening a second | Compliant, no duplicate incidents |"
+    },
+    "timestamp": "2026-07-01T11:01:03.068Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "*Anything we could consider in future to build on this feature.*\n\n- Notifications on elevated or out-of-parameter scores.\n- Aggregation and averaging across zone, region and state, once a useful metric and outcome are defined.\n- Display on maps, unit modals and summaries.\n- Population-based impact weighting, subject to a data source and agreed methodology.\n- Forecast-based predictive scoring using historical assessment data.\n- Broader augmentation from internal LIMSOC data (Stinger Logs and similar).",
+      "new_string": "*Anything we could consider in future to build on this feature.*\n\nPhase 2 and Future scope is marked inline in Functional Requirements. In summary: notifications on elevated or out-of-parameter scores, aggregation and averaging across zone, region and state, display on maps, unit modals and summaries, historic trend reporting, forecast-based predictive scoring, population-based impact weighting, and broader augmentation from internal LIMSOC data. Nothing further at this stage."
+    },
+    "timestamp": "2026-07-01T11:01:16.225Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\necho \"=== semicolons (expect none) ===\"; rg -n ';' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md || echo \"none\"\necho; echo \"=== category headers ===\"; rg -n '^### ' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md\necho; echo \"=== enabled/disabled leftovers (expect none in per-type) ===\"; rg -ni 'enable or disable|per-patrol-type enablement' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md || echo \"none\"\necho; echo \"=== Functional Requirements section ===\"\nawk '/## Functional Requirements/,/## Non-functional/' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "description": "Verify restructured section and check for leftovers"
+    },
+    "timestamp": "2026-07-01T11:01:23.914Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- Review the SRR within the patrol view. Show the latest score as key data alongside the key details of the activity, with a link to the latest SRR. Make all SRRs available in the same way as other documentation.\n- Augment observed data with other internal LIMSOC data, for example Stinger Logs and similar. *(Phase 2)*",
+      "new_string": "- Review the SRR within the patrol view. Show the latest score as key data alongside the key details of the activity, with a link to the latest SRR. Make all SRRs available in the same way as other documentation.\n- Only show an SRR as key data if it is from the same day. When a past date is selected in the LSV Comms date picker, show that day's SRR ratings in the documentation list, but not as key information.\n- Next to the latest score in the key unit information, provide a **show trend** button. It shows a trend of scores for that day only, rendered as a mouse-anchored pop-up that appears while hovering over the button.\n- Augment observed data with other internal LIMSOC data, for example Stinger Logs and similar. *(Phase 2)*"
+    },
+    "timestamp": "2026-07-01T11:03:55.025Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "### 3. Notifications\n\n- When an SRR score is at or above a configurable threshold, open a dangerous conditions incident. The incident must comply with our existing, externally created incident workflow.\n- Make the trigger score configurable, so the score that opens an incident can be set without code changes.\n- If a dangerous conditions incident is already open with the relevant unit attached, do not open another. Add a log note to that incident instead.\n- Notifications for a dangerous rating are triggered off the incident and are out of scope for this feature.\n- Generate notifications when a score is elevated or falls outside defined parameters. *(Phase 2. Parameters and \"abnormal\" to be defined in the phase 2 brief.)*",
+      "new_string": "### 3. Notifications and escalation\n\n*Notifications are out of scope for this feature. What this area covers is opening a Dangerous Conditions Incident, which is Phase 2. Notifications for a dangerous rating are triggered off that incident, not off the SRR, so they sit with the incident workflow, not here.*\n\n- When an SRR score is at or above a configurable threshold, open a Dangerous Conditions Incident. The incident must comply with our existing, externally created incident workflow. *(Phase 2)*\n- Make the trigger score configurable, so the score that opens an incident can be set without code changes. *(Phase 2)*\n- If a Dangerous Conditions Incident is already open with the relevant unit attached, do not open another. Add a log note to that incident instead. *(Phase 2)*"
+    },
+    "timestamp": "2026-07-01T11:04:30.158Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- **Full assisted workflow.** Support a fully assisted SRR workflow that can be completed from the LSV Comms view, including over the radio, so a comms operator can complete an SRR on behalf of a patrol.\n- Display scores on unit modals, maps and summaries. *(Phase 2)*\n- Average scores across zone, then region, then state. *(Phase 2. To be defined against a clear, useful metric and outcome before committing.)*\n- Report on historic data and trends. *(Phase 2)*\n- Use forecast data to extrapolate future scores in a predictive nature. *(Future)*\n- Weight impact using current and previous population trends for a location. *(Future. Requires a data source and an agreed methodology.)*\n- Present the data in a form that is meaningful to patrols and end users. *(Future)*",
+      "new_string": "- **Full assisted workflow.** Support a fully assisted SRR workflow that can be completed from the LSV Comms view, including over the radio, so a comms operator can complete an SRR on behalf of a patrol.\n- Display scores on unit modals, maps and summaries. *(Phase 2)*\n- **Heatmap layer.** Show the SRR score as a heatmap layer, using the geoinformation from each entry. *(Phase 2)*\n    - Always use the latest score for a location. Never use old scores or aggregate scores.\n    - Reflect the level of the rating, not how many SRRs have been completed for a location.\n    - Show no colour where there is no SRR, and make that visually distinct from a low rating.\n- Average scores across zone, then region, then state. *(Phase 2. To be defined against a clear, useful metric and outcome before committing.)*\n- Report on historic data and trends. *(Phase 2)*\n- From an open incident, provide a **see closest SRR** option, considering only SRR entries from that day. *(Phase 3)*\n- Use forecast data to extrapolate future scores in a predictive nature. *(Phase 3)*\n- Weight impact using current and previous population trends for a location. *(Phase 3. Requires a data source and an agreed methodology.)*\n- Present the data in a form that is meaningful to patrols and end users. *(Phase 3)*"
+    },
+    "timestamp": "2026-07-01T11:04:43.883Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "*Grouped by capability area. Unless marked, requirements are first pass (v1). Deferred items are marked (Phase 2) or (Future).*",
+      "new_string": "*Grouped by capability area. Unless marked, requirements are first pass (v1). Deferred items are marked (Phase 2) or (Phase 3).*"
+    },
+    "timestamp": "2026-07-01T11:04:51.784Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "| 2. Build v1 | Capture form, location select, BOM prefill, SLSA submit/retrieve, health-check and block, persistence, unit/activity linking, required/optional, patrol-view review, dangerous-conditions incident trigger, assisted Comms workflow, patrol report, export | TBC |",
+      "new_string": "| 2. Build v1 | Capture form, location select, BOM prefill, SLSA submit/retrieve, health-check and block, persistence, unit/activity linking, required/optional, patrol-view review, same-day key data, trend pop-up, assisted Comms workflow, patrol report, export | TBC |"
+    },
+    "timestamp": "2026-07-01T11:04:58.265Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- The score threshold that triggers a dangerous conditions incident.",
+      "new_string": "- The score threshold that triggers a Dangerous Conditions Incident. *(Phase 2)*"
+    },
+    "timestamp": "2026-07-01T11:05:04.733Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "Notifications, aggregation, map display and predictive modelling are deferred to later phases (see Future Improvements).",
+      "new_string": "Aggregation, map display, the Dangerous Conditions Incident trigger and predictive modelling are deferred to later phases. Notifications are out of scope (see Functional Requirements)."
+    },
+    "timestamp": "2026-07-01T11:05:20.352Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\necho \"=== semicolons (expect none) ===\"; rg -n ';' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md || echo \"none\"\necho \"=== leftover (Future) tags (expect none) ===\"; rg -n '\\*\\(Future' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md || echo \"none\"\necho \"=== phase tag distribution ===\"; rg -o '\\*\\(Phase [0-9]' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md | sort | uniq -c\necho \"=== Categories 3 & 4 ===\"; awk '/### 3\\./,/## Non-functional/' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "description": "Verify phase tags, no semicolons, categories 3-4"
+    },
+    "timestamp": "2026-07-01T11:05:28.799Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "*Notifications are out of scope for this feature. What this area covers is opening a Dangerous Conditions Incident, which is Phase 2. Notifications for a dangerous rating are triggered off that incident, not off the SRR, so they sit with the incident workflow, not here.*",
+      "new_string": "*Notifications are out of scope for this feature. In our methodology, notifications are driven off an incident, not off an event that feeds an incident. If a condition is important enough to notify people about, it is important enough to be an incident. So the escalation this area provides is opening a Dangerous Conditions Incident (Phase 2), and any notifications then flow from that incident through the existing incident workflow, not from the SRR itself.*"
+    },
+    "timestamp": "2026-07-01T11:05:41.935Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "offset": 92,
+      "limit": 70
+    },
+    "timestamp": "2026-07-01T11:17:22.894Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\ncat > \"$CLAUDE_JOB_DIR/tmp/func2.md\" <<'EOF'\n## Functional Requirements\n\n*First pass (v1) requirements are grouped by capability area (1.1 to 1.4). Phase 2 and Phase 3 requirements follow in their own sections.*\n\n### 1. First pass (v1)\n\n#### 1.1 Completing and reviewing the form (patrol view)\n\n- Provide a capture form that collects the inputs required by the SLSA SRR API. Minimise friction: automate wherever possible, prefill from data already captured, and use engagement/gamification to encourage completion.\n- **Select the location.** Default to the user's GPS location and list the five closest beaches, each showing its distance from that location. If GPS is not available, fall back to the unit's location. Allow a location to be found by typing a search. Draw from the same location set used for incidents.\n- Prefill and augment those inputs with BOM weather data for the selected location.\n- Submit the collected inputs to the SLSA API and retrieve the score, rating and mitigation list it returns. LIMSOC does not compute the score.\n- **Check SLSA API health before an assessment can be started, and block the form if a healthy response is not returned.** Do not allow an assessment to be completed without a live SLSA scoring response. Surface a clear unavailable state to the member.\n- Give each assessment a geospatial position.\n- Present the mitigants returned by the SLSA API for the resulting rating, listed at the end of the assessment, presented like the Stinger Log.\n- **Activity menu.** Present the SRR alongside the other options for a given activity (alongside roster, powercraft and so on). Show the latest SRR score from that day in the menu. If no SRR has been done for that activity, show \"no SRR available\".\n- **SRR menu.** Show a collated list of all SRR entries for that unit, making clear which activity each SRR is linked to.\n- When viewing SRR entries for a unit or activity, show a trend graph if there are multiple SRR entries for a given day.\n\n#### 1.2 Integrating into workflows\n\n- Persist the completed assessment (inputs, and the returned score, rating and mitigants) in LIMSOC.\n- **Activity and unit linking.**\n    - An SRR completed as part of an activity is linked to an ACTIVITY and a UNIT. The unit is implied by the activity.\n    - An SRR not completed as part of an activity is associated with the UNIT only. A member reaches the SRR through a unit, so every SRR has at least a unit.\n    - On completion with no activity signed on, offer to link the SRR to a signed-on activity. If nothing is signed on, prompt the member to sign on. If the member chooses not to link, log the SRR against the unit they are signed in as.\n    - When signing on to an activity, offer to link an existing SRR completed before sign-on. Offer only SRR completions for that unit, that day, and the same activity.\n    - An SRR can be linked to at most one activity.\n    - *Note: an SRR must not be linked to more than one activity. Participant numbers are an input to the rating and differ between activities, and other inputs may differ too, so one SRR cannot be valid for more than one activity.*\n- Reflect the linking in the comm log entry, showing whether the SRR is against a unit only, or against a unit and an activity.\n- An updated SRR for an activity adds a log to the general log.\n- **Feature flag.** A general on/off flag governs whether the feature is available (see Configuration).\n- **Per patrol type: required or optional** (see Configuration).\n    - Required: the SRR must be completed as part of the activity.\n    - Optional: the SRR may be completed but is not mandatory.\n- Where an SRR is required and not yet completed, show the unit in an alert colour until an SRR has been logged for that unit or activity for the patrol period.\n- Include the SRR in the patrol report.\n- Export an individual SRR.\n\n#### 1.3 Notifications and escalation\n\n*Notifications are out of scope for this feature. In our methodology, notifications are driven off an incident, not off an event that feeds an incident. If a condition is important enough to notify people about, it is important enough to be an incident. The escalation this area provides is opening a Dangerous Conditions Incident, which is Phase 2 (see section 2). Any notifications then flow from that incident through the existing incident workflow, not from the SRR itself. There are no first-pass requirements in this area.*\n\n#### 1.4 Discoverability (outside patrol view)\n\n- **Full assisted workflow.** Support a fully assisted SRR workflow that can be completed from the Comms view, so a comms operator can complete an SRR on behalf of a patrol.\n- Show the latest SRR score as key data alongside the key details of the activity, with a link to the latest SRR. Available in Comms and Field view.\n- Make all SRRs for a given day available in the same way as other documentation (for example First Aids). Available in Comms and Field view.\n- Only show an SRR as key data if it is from the same day. When a past date is selected in the LSV Comms date picker, show that day's SRR ratings in the documentation list, but not as key information.\n- Next to the latest score in the key unit information, provide a **show trend** button. It shows a trend of scores for that day only, rendered as a mouse-anchored pop-up that appears while hovering over the button. Available in Comms and Field view.\n\n### 2. Phase 2\n\n- **Augment inputs.** Augment observed data with other internal LIMSOC data, for example Stinger Logs and similar.\n- **Dangerous Conditions Incident.** When an SRR score is at or above a configurable threshold, open a Dangerous Conditions Incident. The incident must comply with our existing, externally created incident workflow.\n    - Make the trigger score configurable, so the score that opens an incident can be set without code changes.\n    - If a Dangerous Conditions Incident is already open with the relevant unit attached, do not open another. Add a log note to that incident instead.\n- **Map display.** Display scores on the mapping interface for a given location.\n- **Heatmap layer.** Show the SRR score as a heatmap layer, using the geoinformation from each entry.\n    - Always use the latest score for a location. Never use old scores or aggregate scores.\n    - Reflect the level of the rating, not how many SRRs have been completed for a location.\n    - Show no colour where there is no SRR, and make that visually distinct from a low rating.\n- **Aggregation.** Average scores across zone, then region, then state. To be defined against a clear, useful metric and outcome before committing.\n- **Historic reporting.** Report on historic data and trends.\n\n### 3. Phase 3\n\n- **See closest SRR.** From an open incident, provide a see closest SRR option, considering only SRR entries from that day.\n- **Predictive scoring.** Use forecast data to extrapolate future scores in a predictive nature.\n- **Population-based impact.** Weight impact using current and previous population trends for a location. Requires a data source and an agreed methodology.\n- **Meaningful visualisation.** Present the data in a form that is meaningful to patrols and end users.\n\nEOF\npython3 - <<'PY'\nf=\"LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md\"\ns=open(f).read()\nnew=open(\"/home/nicholas-wood/.claude/jobs/6fd2be19/tmp/func2.md\").read()\na=s.index(\"## Functional Requirements\")\nb=s.index(\"## Non-functional Requirements\")\nopen(f,\"w\").write(s[:a]+new+s[b:])\nprint(\"spliced OK\")\nPY",
+      "description": "Restructure into 1.1-1.4 / Phase 2 / Phase 3 sections"
+    },
+    "timestamp": "2026-07-01T11:18:49.003Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "Members currently complete the Surf Risk Rating in the SLSA Operations App, separate from LIMSOC. That leaves three problems:\n\n- **Not native to LIMSOC.** The assessment lives in a separate app, degrading the user experience and keeping it outside the workflows members already use.\n- **The Operations App is unreliable.** Members cannot depend on the current tool being available or working when they need it.\n- **Data is not tracable**: The data is not persisted in an accessible way. It is not retained against a patrol, and off-beach roles (field, dispatch, duty officers) cannot see whether an assessment was completed or what it found.\n- **The score is not accessible to operational workflows.** The result cannot flow into LIMSOC operational workflows, reporting or data. ",
+      "new_string": "Members currently complete the Surf Risk Rating in the SLSA Operations App, separate from LIMSOC. That leaves four problems:\n\n- **Not native to LIMSOC.** The assessment lives in a separate app, degrading the user experience and keeping it outside the workflows members already use.\n- **The Operations App is unreliable.** Members cannot depend on the current tool being available or working when they need it.\n- **Data is not traceable.** The data is not persisted in an accessible way. It is not retained against a patrol, and off-beach roles (field, dispatch, duty officers) cannot see whether an assessment was completed or what it found.\n- **The score is not accessible to operational workflows.** The result cannot flow into LIMSOC operational workflows, reporting or data."
+    },
+    "timestamp": "2026-07-01T11:18:59.030Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "offset": 41,
+      "limit": 12
+    },
+    "timestamp": "2026-07-01T11:19:07.302Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "Members currently complete the Surf Risk Rating in the SLSA Operations App, separate from LIMSOC. That leaves three problems:\n\n- **Not native to LIMSOC.** The assessment lives in a separate app, degrading the user experience and keeping it outside the workflows members already use.\n- **The Operations App is unreliable.** Members cannot depend on the current tool being available or working when they need it.\n- **Data is not tracable**: The data is not persisted in an accessible way. It is not retained against a patrol, and off-beach roles (field, dispatch, duty officers) cannot see whether an assessment was completed or what it found.\n- **The score is not accessible to operational workflows.** The result cannot flow into LIMSOC operational workflows, reporting or data. ",
+      "new_string": "Members currently complete the Surf Risk Rating in the SLSA Operations App, separate from LIMSOC. That leaves four problems:\n\n- **Not native to LIMSOC.** The assessment lives in a separate app, degrading the user experience and keeping it outside the workflows members already use.\n- **The Operations App is unreliable.** Members cannot depend on the current tool being available or working when they need it.\n- **Data is not traceable.** The data is not persisted in an accessible way. It is not retained against a patrol, and off-beach roles (field, dispatch, duty officers) cannot see whether an assessment was completed or what it found.\n- **The score is not accessible to operational workflows.** The result cannot flow into LIMSOC operational workflows, reporting or data."
+    },
+    "timestamp": "2026-07-01T11:19:17.238Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "offset": 196,
+      "limit": 40
+    },
+    "timestamp": "2026-07-01T11:19:22.104Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "Phase 2 and Future scope is marked inline in Functional Requirements. In summary: notifications on elevated or out-of-parameter scores, aggregation and averaging across zone, region and state, display on maps, unit modals and summaries, historic trend reporting, forecast-based predictive scoring, population-based impact weighting, and broader augmentation from internal LIMSOC data. Nothing further at this stage.",
+      "new_string": "Phase 2 and Phase 3 scope is captured in Functional Requirements, sections 2 and 3. Nothing further at this stage."
+    },
+    "timestamp": "2026-07-01T11:19:28.212Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\necho \"=== heading tree ===\"; rg -n '^#{2,4} ' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md\necho; echo \"=== semicolons (expect none) ===\"; rg -q ';' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md && rg -n ';' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md || echo \"none\"\necho; echo \"=== leftover inline phase tags in v1 (expect none) ===\"; rg -n '\\*\\(Phase' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md || echo \"none inline\"\necho; echo \"=== residual typos check ===\"; rg -ni 'tracable|entried|locaion|it show ' LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md || echo \"none\"",
+      "description": "Verify heading structure, no semicolons, typos fixed"
+    },
+    "timestamp": "2026-07-01T11:19:37.772Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md"
+    },
+    "timestamp": "2026-07-01T11:20:45.537Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "content": "# LIMSOC FEATURE BRIEF\n\n## Surf Risk Rating in LIMSOC\n\n| Field | Detail |\n|---|---|\n| **Brief number** | LIMSOC-BRIEF-LSV-2026-005 |\n| **Version** | 2.1 (redraft) |\n| **Author** | Flynn Young |\n| **Revised by** | Nicholas Wood (State Lifesaving Communications Officer) |\n| **Date** | 01/07/2026 |\n\n---\n\n## Sign off\n\n**Feature category: 3 - Moderate Business Impact.**\n\n- 1 - Critical Operational Risk\n- 2 - High Impact, Recoverable\n- **3 - Moderate Business Impact** *(selected)*\n- 4 - Low Operational Risk\n- 5 - No Operational Dependency\n\n| Role | Name | Date |\n|---|---|---|\n| Feature owner | _____________________ | |\n| Senior Manager - Capability | David Potter | |\n| State Lifesaving Communications Officer | Nicholas Wood | |\n\n---\n\n## Overview\n\n*High-level statement outlining the feature and any relevant background information.*\n\nThe Surf Risk Rating (SRR) is an established, research-backed SLSA assessment that members already use. Today it lives in the SLSA Operations App, and that solution no longer meets our operational needs. It is not native to LIMSOC, it is unreliable, and the result cannot flow into our operational workflows and data.\n\nSLSA has recently released an SRR API. This project uses that newly released API to build a native SRR experience within LIMSOC, giving members a cohesive experience and integrating the assessment into operational workflows.\n\n## Problem Statement\n\n*What problem are we solving?*\n\nMembers currently complete the Surf Risk Rating in the SLSA Operations App, separate from LIMSOC. That leaves four problems:\n\n- **Not native to LIMSOC.** The assessment lives in a separate app, degrading the user experience and keeping it outside the workflows members already use.\n- **The Operations App is unreliable.** Members cannot depend on the current tool being available or working when they need it.\n- **Data is not traceable.** The data is not persisted in an accessible way. It is not retained against a patrol, and off-beach roles (field, dispatch, duty officers) cannot see whether an assessment was completed or what it found.\n- **The score is not accessible to operational workflows.** The result cannot flow into LIMSOC operational workflows, reporting or data.\n\nIn short, we cannot capture the SRR natively, rely on it, or use the score in our operational workflows and data.\n\n## Impact\n\n*Impact of solving the problem, including the impact if left unaddressed.*\n\n- **Integrate risk assessment into operational workflows.** Bringing the SRR into LIMSOC lets the score plug into operational workflows. This makes the assessment easier for the member while better facilitating risk-management SOPs, so it has a direct impact on how we manage operational risk.\n- **Drive adoption and integration.** A native, low-friction experience embedded in existing patrol workflows increases uptake of the SRR and makes it part of how patrols already work, rather than a separate step.\n- **Give off-beach roles visibility.** Field and dispatch users gain sight of local risk and of whether an assessment has been completed for each unit. This is the primary situational-awareness win, and it lands with members who are not on the beach.\n- **Make risk assessment traceable and consistent.** We should already be using the SRR, so this feature does not introduce a new obligation. It makes the assessment persistent, reviewable and auditable rather than transient, embeds it in our existing flows, and drives more consistent use across units.\n- **Build the data foundation.** A retained, structured record is the prerequisite for the later reporting, trend analysis and predictive capability described in Future Improvements.\n\n## Success Metrics\n\n*How we will know the first pass has succeeded.*\n\n- **Coverage: 100% of activities have a valid SRR.** Every activity that should carry an SRR has a valid, same-day SRR recorded against it.\n- **Linkage: 80% of SRRs are linked to an activity.** The remainder may legitimately be unit-only, completed outside an activity.\n- **Not a success metric: Dangerous Conditions Incident volume.** The number of Dangerous Conditions Incidents is a function of the conditions being assessed, not of how the tool is used. It is deliberately not a usage or success measure.\n\n## Glossary and Domain Model\n\n*Defined so the brief reads the same to someone new to LIMSOC or to the domain. Terms marked \"confirm\" still need your input.*\n\n- **Unit** — an operational unit that members sign in through. A unit has a one-to-many relationship to activities. *(confirm precise definition)*\n- **Activity** — a unit's operational activity. An activity belongs to exactly one unit. In the LIMSOC data model the object is called `patrol`, a debt from patrol being the first activity type before the model grew. This brief writes \"patrol/activity\" where the object name (`patrol`) aids developers and system administrators. In plain terms, a patrol is an activity.\n- **Activity type (patrol type)** — the category of an activity. The SRR can be configured required or optional per activity type.\n- **Patrol period** — the operational period a unit is signed on for. *(confirm definition and how it bounds \"same day\")*\n- **Sign-on** — a member signing on to an activity for a unit.\n- **Patrol view** — the LIMSOC view used by patrol members. *(confirm)*\n- **Field view** — the LIMSOC view used by duty officers. *(confirm)*\n- **Comms view** — the LIMSOC view used by comms operators. *(confirm)*\n- **SRR (Surf Risk Rating)** — the SLSA assessment that produces a score, rating and mitigation list.\n- **Score / rating** — outputs from the SLSA API. *(confirm: is the score numeric and the rating a band/label, and what is the scale? Needed for the heatmap levels, the incident threshold and the trend graph.)*\n- **Mitigants (mitigations)** — the mitigation actions the SLSA API returns for a rating, shown at the end of the assessment and presented like the Stinger Log.\n- **Stinger Log** — an existing LIMSOC feature used here as a UI precedent for presenting the mitigant list. *(confirm one-line description)*\n- **Surf Risk Rating (Online Modules)** — the SLSA online learning qualification that gates SRR visibility in patrol view. *(confirm exact credential name and how the system checks it)*\n- **Key data / key unit information** — the summary information shown prominently for a unit or activity, as distinct from the documentation list. This brief uses \"key data\" consistently.\n- **Documentation list** — the list where a unit's documents (for example First Aids) are shown. SRRs appear here as documentation.\n- **Dangerous Conditions Incident** — an incident type in the existing, externally created incident workflow, opened when conditions are dangerous.\n\n## Proposed Solution\n\n*How are we going to do it?*\n\nBuild a native SRR experience in LIMSOC on top of the SLSA API. LIMSOC provides the form, the workflow and the record. The SLSA API provides the score, rating and mitigation list. Access to the SLSA API and its contract is a delivery dependency (see Assumptions and Configuration requirements).\n\nThe first pass (v1) will:\n\n- Capture the inputs required by the SLSA SRR API, including locally observed environmental hazards.\n- Determine the location from the user's GPS (falling back to the unit location), and prefill and augment the inputs with automated weather data from the Bureau of Meteorology (BOM) for that location.\n- Submit the inputs to the SLSA API and return the score, rating and mitigation list it provides.\n- Persist the completed assessment in LIMSOC and link it (many-to-one) to a patrol/activity.\n- Make each assessment reviewable from patrol, field and comms views.\n- Include the SRR in the patrol report and allow export of an individual SRR.\n- Block the form when the SLSA API is not healthy (see Assumptions).\n\nAggregation, map display, the Dangerous Conditions Incident trigger and predictive modelling are deferred to later phases. Notifications are out of scope (see Functional Requirements).\n\n## Assumptions\n\n*What must hold true for this feature to work as described. Several centre on the SLSA API, which is the scoring engine.*\n\n- **SLSA owns the scoring engine, and LIMSOC owns the form and the record.** LIMSOC collects the inputs, sends them to the SLSA API, and the API returns the score, rating and mitigation list. LIMSOC owns persistence of that result and the link to a patrol/activity.\n- **The SLSA API returns the score, rating and mitigation list.**\n- **The SLSA API is performant and reliable.** SLSA has a history of APIs that are neither, so this is assumed, not proven.\n- **A health-check endpoint is available on the SLSA API.**\n- **The location set used for incidents is available to reuse for SRR.**\n\n## Personas and User Stories\n\n*Personas are drafted from current understanding. Items marked \"confirm\" need your input.*\n\n**Personas**\n\n- **Patrol Member** — completes SRRs from patrol view, typically on a mobile device on the beach. *(confirm device assumption)*\n- **Duty Officer (Field view)** — oversees units in the field and needs visibility of current risk.\n- **Comms Operator (Comms view)** — coordinates from the operations centre, can complete an SRR on a patrol's behalf, and needs broad visibility. *(confirm whether this is statewide)*\n- **Administrator (Reporting)** — uses the admin portal for reporting and data management, and is the only role that can delete an SRR.\n\n**User stories**\n\nPatrol Member\n\n- As a patrol member, I want to complete an SRR quickly from my patrol view, so that I can record current risk without leaving my workflow.\n- As a patrol member, I want the location and weather prefilled, so that I do the least possible manual entry.\n- As a patrol member, I want to complete the SRR before or during sign-on and link it to my activity, so that the assessment is tied to the right activity.\n- As a patrol member on a required activity type, I want to be told I must complete an SRR before I can sign on, so that the assessment is a clear prerequisite.\n\nDuty Officer (Field view)\n\n- As a duty officer, I want to see the latest SRR score and rating for each unit, so that I have situational awareness of local risk without being on the beach.\n- As a duty officer, I want to see whether a unit has completed its SRR, so that I can follow up if it has not.\n- As a duty officer, I want to see the day's trend for a unit, so that I can tell whether conditions are worsening.\n\nComms Operator (Comms view)\n\n- As a comms operator, I want to complete an SRR on a patrol's behalf, including over the radio, so that a unit without app access is still covered.\n- As a comms operator, I want visibility of SRR scores across the units I coordinate, so that I can monitor risk. *(confirm scope: statewide?)*\n- As a comms operator, I want to see the day's SRRs for a unit as documentation, so that I can review what was assessed.\n\nAdministrator (Reporting)\n\n- As an administrator, I want to report on SRR completion and linkage, so that I can measure adoption against our targets.\n- As an administrator, I want to delete an erroneous SRR from the admin portal, so that bad data can be removed, noting there is no delete in the app UI.\n- As an administrator, I want historic SRR data retained, so that reporting and later analysis are possible.\n\n## Use Cases\n\n*Worked scenarios for the flows that prose alone leaves ambiguous. Acceptance criteria use Given / When / Then.*\n\n**UC-1: Complete an SRR during a signed-on activity**\n\n- Actor: Patrol Member (patrol view). Preconditions: signed on to an activity, holds the SRR Online Modules qualification, SLSA API healthy.\n- AC1: Given a signed-on activity and a healthy SLSA API, when the member submits the form, then the SRR is scored, persisted, and linked to that activity and its unit.\n- AC2: Given the SLSA API is not healthy, when the member opens the form, then the form is blocked and an unavailable state is shown, and no SRR is recorded.\n- AC3: Given the member leaves the page before submitting, then no SRR is saved.\n\n**UC-2: Complete an SRR before sign-on, then link it on sign-on**\n\n- Actor: Patrol Member.\n- AC1: Given an SRR completed earlier today for the unit with no activity, when the member signs on to a matching activity, then that SRR is offered for linking, filtered to the same unit, the same day and the same activity.\n- AC2: Given the member links it, then the SRR is associated with the activity and its unit, and it remains linked to at most one activity.\n\n**UC-3: Complete an SRR with nothing signed on**\n\n- Actor: Patrol Member.\n- AC1: Given nothing is signed on, when the member completes an SRR, then the member is prompted to sign on.\n- AC2: Given nothing is signed on and the member declines to link, then the SRR is logged against the unit they are signed in as, and the comm log entry shows the SRR is against a unit only.\n\n**UC-4: Sign on to an activity where SRR is required**\n\n- Actor: Patrol Member.\n- AC1: Given an activity type configured SRR-required, when a member attempts to sign on without a completed or linked SRR, then sign-on is blocked until a valid SRR is completed or an existing valid SRR is linked.\n- AC2: Given an activity type configured SRR-optional, when a member signs on without an SRR, then sign-on proceeds and the SRR remains available but non-blocking.\n\n**UC-5: Duty officer reviews unit risk in Field view**\n\n- Actor: Duty Officer (Field view).\n- AC1: Given a unit with a same-day SRR, when the duty officer opens Field view, then the latest score shows as key data with a link to the SRR, regardless of whether they hold the SRR Online Modules qualification.\n- AC2: Given a past date is selected in the date picker, then that day's SRRs appear in the documentation list, not as key data.\n\n**UC-6 (Phase 2): SRR crosses the Dangerous Conditions threshold**\n\n- Actor: system, on submission of an SRR.\n- AC1: Given an SRR score at or above the configured threshold and no open Dangerous Conditions Incident for the unit, when it is submitted, then a Dangerous Conditions Incident is opened per the existing incident workflow.\n- AC2: Given the unit is already attached to an open Dangerous Conditions Incident, when a qualifying SRR is submitted, then no new incident is opened and a log note is added to the existing incident.\n\n## Functional Requirements\n\n*Requirements are atomic and numbered (FR-x.y.z). Modal strength follows the phase: Phase 1 requirements are MUST, Phase 2 are SHOULD, Phase 3 are COULD.*\n\n### 1. First pass (v1) — MUST\n\n#### 1.1 Completing and reviewing the form (patrol view)\n\n- **FR-1.1.1** Provide a form that captures the inputs required by the SLSA SRR API, including locally observed environmental hazards.\n- **FR-1.1.2** Prefill and automate any input LIMSOC already holds, to minimise manual entry.\n- **FR-1.1.3** Default the assessment location to the user's GPS location, and fall back to the unit's location when GPS is not available.\n- **FR-1.1.4** Present the five closest beaches to the resolved location, each showing its distance from that location.\n- **FR-1.1.5** Allow a location to be found by typing a search.\n- **FR-1.1.6** Draw all locations from the same location set used for incidents.\n- **FR-1.1.7** Prefill and augment the inputs with BOM weather data for the selected location.\n- **FR-1.1.8** Submit the collected inputs to the SLSA API and retrieve the score, rating and mitigation list it returns. LIMSOC does not compute the score (see NFR Scoring authority).\n- **FR-1.1.9** Check SLSA API health, via its health-check endpoint, before an assessment can be started.\n- **FR-1.1.10** Block the form and prevent completion if a healthy SLSA response is not available.\n- **FR-1.1.11** Surface a clear unavailable state to the member when the form is blocked.\n- **FR-1.1.12** Record a geospatial position on each assessment.\n- **FR-1.1.13** Present the mitigants the SLSA API returns for the resulting rating, listed at the end of the assessment, presented like the Stinger Log.\n- **FR-1.1.14** Do not autosave the form. Progress is held only in the browser and is lost if the member leaves the page.\n- **FR-1.1.15** Save the assessment only on submit.\n- **FR-1.1.16** The no-autosave behaviour is deliberate and must be built as specified. The SRR depends on all inputs being current at the moment of submission, so save-and-return is not supported. This differs from the first aid form, and the difference must not be \"corrected\" to match it.\n- **FR-1.1.17** Run the form logic client-side so the form remains usable through intermittent connectivity. A connection is required only to submit, in order to score via the SLSA API and to persist.\n- **FR-1.1.18** In patrol view, only members holding the Surf Risk Rating (Online Modules) qualification may see the SRR.\n- **FR-1.1.19** In the activity menu, present the SRR alongside the other options for the activity (for example roster, powercraft).\n- **FR-1.1.20** Show the latest SRR score from that day in the activity menu. If no SRR has been done for that activity, show \"no SRR available\".\n- **FR-1.1.21** Provide an SRR menu that lists all SRR entries for the unit, making clear which activity each SRR is linked to.\n- **FR-1.1.22** When viewing SRR entries for a unit or activity, show a trend graph when there is more than one SRR entry for a given day.\n\n#### 1.2 Integrating into workflows\n\n- **FR-1.2.1** Persist the completed assessment (inputs, and the returned score, rating and mitigants) in LIMSOC.\n- **FR-1.2.2** Link an SRR completed as part of an activity to that activity and its unit. The unit is implied by the activity.\n- **FR-1.2.3** Associate an SRR not completed as part of an activity with the unit only. Every SRR has at least a unit, because a member reaches the SRR through a unit.\n- **FR-1.2.4** On completing an SRR with no activity signed on, offer to link it to a signed-on activity.\n- **FR-1.2.5** If nothing is signed on when an SRR is completed, prompt the member to sign on.\n- **FR-1.2.6** If the member declines to link, log the SRR against the unit they are signed in as.\n- **FR-1.2.7** When signing on to an activity, offer to link an existing SRR completed before sign-on.\n- **FR-1.2.8** Restrict that link choice to SRR completions for the same unit, the same day, and the same activity.\n- **FR-1.2.9** Link an SRR to at most one activity. Participant numbers are an input to the rating and differ between activities, and other inputs may differ too, so one SRR cannot be valid for more than one activity.\n- **FR-1.2.10** Reflect the linking in the comm log entry, showing whether the SRR is against a unit only, or against a unit and an activity.\n- **FR-1.2.11** When a new full SRR is submitted for a unit (an updated score), add a log entry to the general log.\n- **FR-1.2.12** Provide a general on/off feature flag that governs whether the feature is available.\n- **FR-1.2.13** Allow each activity type (patrol type) to be configured as SRR-required or SRR-optional.\n- **FR-1.2.14** Where SRR is required for an activity type, block sign-on to an activity of that type until a valid SRR is completed or an existing valid SRR is linked. Sign-on is a blocking step and cannot proceed without it.\n- **FR-1.2.15** Where SRR is optional, present the SRR but do not block sign-on.\n- **FR-1.2.16** Where an SRR is required and not yet completed, show the unit in an alert colour until a valid SRR is logged for that unit or activity for the patrol period.\n- **FR-1.2.17** Include the SRR in the patrol report.\n- **FR-1.2.18** Allow export of an individual SRR.\n- **FR-1.2.19** Retain every submitted SRR. There is no delete in the app UI.\n- **FR-1.2.20** Allow only admin portal members to delete an SRR. To supersede a score, a member submits a new SRR, which makes the previous one redundant.\n\n#### 1.3 Notifications and escalation\n\n*Notifications are out of scope for this feature. In our methodology, notifications are driven off an incident, not off an event that feeds an incident. If a condition is important enough to notify people about, it is important enough to be an incident. The escalation this area provides is opening a Dangerous Conditions Incident, which is Phase 2 (see section 2). Any notifications then flow from that incident through the existing incident workflow, not from the SRR itself. There are no first-pass requirements in this area.*\n\n#### 1.4 Discoverability (outside patrol view)\n\n- **FR-1.4.1** Support a fully assisted SRR workflow that can be completed from the Comms view, so a comms operator can complete an SRR on behalf of a patrol.\n- **FR-1.4.2** Show the latest SRR score as key data alongside the key details of the activity, with a link to the latest SRR, in Comms and Field view.\n- **FR-1.4.3** Make all SRRs for a given day available in the same way as other documentation (for example First Aids), in Comms and Field view.\n- **FR-1.4.4** Show an SRR as key data only if it is from the same day.\n- **FR-1.4.5** When a past date is selected in the LSV Comms date picker, show that day's SRRs in the documentation list, but not as key information.\n- **FR-1.4.6** Provide a show-trend button next to the latest score in the key unit information. It shows a trend of that day's scores only, rendered as a mouse-anchored pop-up that appears while hovering over the button, in Comms and Field view.\n- **FR-1.4.7** Allow Field and Comms view users to see the SRR regardless of the Surf Risk Rating (Online Modules) qualification (in contrast to the patrol-view gate in FR-1.1.18).\n\n### 2. Phase 2 — SHOULD\n\n- **FR-2.1** Augment observed data with other internal LIMSOC data, for example Stinger Logs and similar.\n- **FR-2.2** When an SRR score is at or above a configurable threshold, open a Dangerous Conditions Incident that complies with the existing, externally created incident workflow.\n- **FR-2.3** Make the trigger score configurable, so the score that opens an incident can be set without code changes.\n- **FR-2.4** If the unit is already attached to an open Dangerous Conditions Incident, do not open another. Add a log note to that incident instead.\n- **FR-2.5** Display scores on the mapping interface for a given location.\n- **FR-2.6** Show the SRR score as a heatmap layer, using the geoinformation from each entry.\n- **FR-2.7** Use only the latest score for a location in the heatmap. Never use old scores or aggregate scores.\n- **FR-2.8** Make the heatmap reflect the level of the rating, not how many SRRs have been completed for a location.\n- **FR-2.9** Show no colour on the heatmap where there is no SRR, and make that visually distinct from a low rating.\n- **FR-2.10** Average scores across zone, then region, then state. To be defined against a clear, useful metric and outcome before committing.\n- **FR-2.11** Report on historic data and trends.\n\n### 3. Phase 3 — COULD\n\n- **FR-3.1** From an open incident, provide a \"see closest SRR\" option, considering only SRR entries from that day.\n- **FR-3.2** Use forecast data to extrapolate future scores in a predictive nature.\n- **FR-3.3** Weight impact using current and previous population trends for a location. Requires a data source and an agreed methodology.\n- **FR-3.4** Present the data in a form that is meaningful to patrols and end users.\n\n## Non-functional Requirements\n\n*How well the system does it.*\n\n- **Low friction.** The assessment should be as low-friction as possible: automate wherever possible, prefill from data already captured, and use engagement techniques such as gamification to drive completion. There is no hard completion-time SLA. The intent is minimum friction, not a stopwatch target.\n- **Scoring authority.** LIMSOC does not compute the score. Scoring, rating and mitigants come from the SLSA API. LIMSOC only passes inputs and presents the response. This keeps LIMSOC always aligned with the current SLSA model.\n- **Connection resilience.** The web form runs its logic client-side and remains usable through intermittent connectivity. A connection is required only at submit, to score via the SLSA API and to persist. Progress is not saved before submit (see FR-1.1.14 to FR-1.1.16).\n- **Integration.** Integrate with the existing LIMSOC patrol, unit and reporting data model, and with the mapping data model to support later map display.\n- **External API dependence.** The feature depends on two external APIs: SLSA (scoring) and BOM (weather). For SLSA, check health before an assessment and block the form on an unhealthy response, so no assessment is completed without a live score. For BOM, fall back gracefully to manual entry and override when data is unavailable or wrong.\n- **Performance under a slow dependency.** Health checks, submissions and responses should handle SLSA API latency without hanging the member, with clear timeout and retry behaviour, given SLSA's history of variable performance and availability.\n- **Access control.** SRR visibility follows the view: patrol view is gated on the Surf Risk Rating (Online Modules) qualification (FR-1.1.18), while Field and Comms views are not (FR-1.4.7). Deletion is restricted to admin portal members (FR-1.2.20).\n- **Data sensitivity.** The SRR contains no sensitive information. Standard access controls apply, and no special handling for sensitive data is required.\n- **Statewide use.** Operate for all units across the state under the feature-flag rollout, so the feature can move from pilot to statewide without rework.\n\n## Timeline\n\n*Required timeline, considering each stage of the process. (Dates to be set with the feature owner.)*\n\n| Stage | Description | Target |\n|---|---|---|\n| 1. Secure SLSA API | Obtain SLSA API access, the request/response contract, the health-check endpoint, and a performance/availability commitment | TBC |\n| 2. Build v1 | The Phase 1 requirements (FR-1.1.x, FR-1.2.x, FR-1.4.x): capture form, location select, BOM prefill, SLSA submit/retrieve, health-check and block, connection-resilient no-autosave form, persistence, unit/activity linking, required/optional sign-on gating, patrol-view module gate, review and menus, assisted Comms workflow, patrol report, export | TBC |\n| 3. Pilot | Enable per activity type via feature flag, and validate adoption and data quality against the success metrics | TBC |\n| 4. Statewide | Roll out under the feature flag across the state | TBC |\n\n## Configuration requirements\n\n*What configuration is required prior to deployment, and how significant is the workload?*\n\nThis feature does require configuration. \"No configuration\" would contradict the feature-flag and per-activity-type requirements above.\n\n- General feature flag to make the feature available or not.\n- Per activity type (patrol type): SRR required (blocks sign-on) or optional (presented, non-blocking).\n- The score threshold that triggers a Dangerous Conditions Incident. *(Phase 2)*\n- SLSA API connection: endpoint, credentials, the scoring request/response contract, and the health-check endpoint.\n- BOM data source configuration, mapping the shared incident location set to BOM weather data.\n\n**Delivery dependency.** Access to the SLSA API and its documentation (the input contract, the score/rating/mitigant response, and a health-check endpoint) must be obtained from SLSA. We do not currently hold SLSA's API documentation, so this is a prerequisite for Stage 1. A commitment on SLSA API performance and availability should be sought at the same time, since the feature depends on it at runtime.\n\nWorkload on the LIMSOC side is expected to be modest. The scoring engine is SLSA's, so LIMSOC builds the form, the persistence, the patrol link and two API integrations (SLSA and BOM).\n\n## Risks\n\n*Any risks that may come with implementing this feature.*\n\n| # | Risk | Impact | Mitigation | Outcome |\n|---|---|---|---|---|\n| 1 | Added friction reduces adoption | Members skip the assessment | Automate and prefill, keep the form minimal, use gamification | High completion rates |\n| 2 | SLSA API slow or unavailable (their history on both) | Members cannot complete an assessment | Health-check before starting, block the form on an unhealthy response, clear timeout/retry, seek a performance/availability commitment from SLSA | Controlled failure, no un-scored assessments |\n| 3 | SLSA API access and contract not yet available to us | Stage 1 blocked, cannot build the integration | Obtain SLSA API documentation and access early as a Stage 1 prerequisite | Build proceeds against a known contract |\n| 4 | BOM data inaccurate or unavailable | Missing or wrong prefill | Validate BOM data, allow manual override, graceful fallback to manual entry | Reliable inputs |\n| 5 | Poor beach connectivity blocks submission | Members cannot submit at the point of need | Client-side form logic, clear retry on reconnect, connection required only at submit | Usable through intermittent connectivity |\n| 6 | Feature-flag / per-activity-type config complexity | Difficult or uneven rollout | Clear config model, pilot per activity type before statewide | Controlled, staged rollout |\n| 7 | Scope creep from deferred intelligence features | Delivery slips | This brief scopes v1 only. Later capability is explicitly phased | Focused first pass |\n| 8 | Dangerous Conditions Incident diverges from or duplicates the incident workflow | Divergent or duplicate incidents | Reuse the existing incident workflow, and where an incident is already open for the unit add a log note instead of opening a second | Compliant, no duplicate incidents |\n\n## Future Improvements\n\n*Anything we could consider in future to build on this feature.*\n\nPhase 2 and Phase 3 scope is captured in Functional Requirements, sections 2 and 3. Nothing further at this stage.\n"
+    },
+    "timestamp": "2026-07-01T11:46:52.067Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\nf=LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md\necho \"=== em dash count ===\"; grep -o '—' \"$f\" | wc -l\necho \"=== en dash count ===\"; grep -o '–' \"$f\" | wc -l\necho \"=== semicolons ===\"; grep -c ';' \"$f\"",
+      "description": "Count em/en dashes and semicolons"
+    },
+    "timestamp": "2026-07-01T11:47:08.818Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\nf=LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md\npython3 - <<'PY'\nf=\"LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md\"\ns=open(f).read()\ns=s.replace(\" — \",\" - \")     # spaced em dash -> spaced hyphen\ns=s.replace(\"—\",\" - \")        # any stragglers\nopen(f,\"w\").write(s)\nprint(\"em dashes now:\", s.count(\"—\"))\nPY\necho \"=== verify ===\"; grep -c '—' \"$f\"; echo \"semicolons:\"; grep -c ';' \"$f\"",
+      "description": "Replace em dashes with spaced hyphens"
+    },
+    "timestamp": "2026-07-01T11:47:15.193Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\nf=LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md\necho \"=== section headings ===\"; rg -n '^#{2,4} ' \"$f\"\necho; echo \"=== requirement counts ===\"\necho \"FR-1.1.x: $(rg -c '\\*\\*FR-1\\.1\\.' \"$f\")\"\necho \"FR-1.2.x: $(rg -c '\\*\\*FR-1\\.2\\.' \"$f\")\"\necho \"FR-1.4.x: $(rg -c '\\*\\*FR-1\\.4\\.' \"$f\")\"\necho \"FR-2.x:   $(rg -c '\\*\\*FR-2\\.' \"$f\")\"\necho \"FR-3.x:   $(rg -c '\\*\\*FR-3\\.' \"$f\")\"\necho \"Total FR: $(rg -c '\\*\\*FR-' \"$f\")\"\necho \"Use cases: $(rg -c '^\\*\\*UC-' \"$f\")\"\necho \"AC lines: $(rg -c 'AC[0-9]:' \"$f\")\"",
+      "description": "Verify heading tree and requirement/UC/AC counts"
+    },
+    "timestamp": "2026-07-01T11:47:25.307Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "offset": 121,
+      "limit": 40
+    },
+    "timestamp": "2026-07-01T11:56:39.968Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- **Unit** - an operational unit that members sign in through. A unit has a one-to-many relationship to activities. *(confirm precise definition)*\n- **Activity** - a unit's operational activity. An activity belongs to exactly one unit. In the LIMSOC data model the object is called `patrol`, a debt from patrol being the first activity type before the model grew. This brief writes \"patrol/activity\" where the object name (`patrol`) aids developers and system administrators. In plain terms, a patrol is an activity.\n- **Activity type (patrol type)** - the category of an activity. The SRR can be configured required or optional per activity type.\n- **Patrol period** - the operational period a unit is signed on for. *(confirm definition and how it bounds \"same day\")*\n- **Sign-on** - a member signing on to an activity for a unit.\n- **Patrol view** - the LIMSOC view used by patrol members. *(confirm)*\n- **Field view** - the LIMSOC view used by duty officers. *(confirm)*\n- **Comms view** - the LIMSOC view used by comms operators. *(confirm)*\n- **SRR (Surf Risk Rating)** - the SLSA assessment that produces a score, rating and mitigation list.\n- **Score / rating** - outputs from the SLSA API. *(confirm: is the score numeric and the rating a band/label, and what is the scale? Needed for the heatmap levels, the incident threshold and the trend graph.)*\n- **Mitigants (mitigations)** - the mitigation actions the SLSA API returns for a rating, shown at the end of the assessment and presented like the Stinger Log.\n- **Stinger Log** - an existing LIMSOC feature used here as a UI precedent for presenting the mitigant list. *(confirm one-line description)*\n- **Surf Risk Rating (Online Modules)** - the SLSA online learning qualification that gates SRR visibility in patrol view. *(confirm exact credential name and how the system checks it)*",
+      "new_string": "- **Unit** - a lifesaving service. Members sign in through a unit. A unit has a one-to-many relationship to activities.\n- **Activity** - a unit's operational activity. An activity belongs to exactly one unit. In the LIMSOC data model the object is called `patrol`, a debt from patrol being the first activity type before the model grew. This brief writes \"patrol/activity\" where the object name (`patrol`) aids developers and system administrators. In plain terms, a patrol is an activity.\n- **Activity type (patrol type)** - the category of an activity. The SRR can be configured required or optional per activity type.\n- **Sign-on** - a member signing on to an activity for a unit.\n- **Patrol view** - the LIMSOC view used by patrol members. Only patrol members access this view.\n- **Field view** - the LIMSOC view used by duty officers. Only duty officers access this view.\n- **Comms view** - the LIMSOC view used by comms operators, with statewide visibility. Only comms operators access this view.\n- **SRR (Surf Risk Rating)** - the SLSA assessment that produces a score, rating and mitigation list.\n- **Score and rating** - the SLSA API returns a numerical score and a rating band running from low risk to extreme risk. Each band maps to a numbered score range, and a higher score means higher risk.\n- **Valid SRR** - an SRR that has been completed through to submission. Same-day is a visibility rule, not a validity rule, so an SRR remains valid on later days.\n- **Mitigants (mitigations)** - the mitigation actions the SLSA API returns for a rating, shown at the end of the assessment and presented like the Stinger Log.\n- **Stinger Log** - an existing LIMSOC log of actions completed following a stinger drag in tropical locations, used here as a UI precedent for presenting the mitigant list.\n- **Surf Risk Rating (Online Modules)** - the SLSA credential that gates SRR visibility in patrol view. It is available from SurfGuard (SG) and retrieved the same way as other member awards."
+    },
+    "timestamp": "2026-07-01T11:56:57.832Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- **Coverage: 100% of activities have a valid SRR.** Every activity that should carry an SRR has a valid, same-day SRR recorded against it.\n- **Linkage: 80% of SRRs are linked to an activity.** The remainder may legitimately be unit-only, completed outside an activity.",
+      "new_string": "- **Coverage: 100% of required-type activities have a valid SRR.** Every activity of a required activity type has a valid SRR (completed through to submission) linked to it.\n- **Linkage: 80% of SRRs are linked to an activity.** The remainder may legitimately be unit-only, completed outside an activity."
+    },
+    "timestamp": "2026-07-01T11:57:06.599Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- **Patrol Member** - completes SRRs from patrol view, typically on a mobile device on the beach. *(confirm device assumption)*\n- **Duty Officer (Field view)** - oversees units in the field and needs visibility of current risk.\n- **Comms Operator (Comms view)** - coordinates from the operations centre, can complete an SRR on a patrol's behalf, and needs broad visibility. *(confirm whether this is statewide)*",
+      "new_string": "- **Patrol Member** - completes SRRs from patrol view, on a mobile device on the beach.\n- **Duty Officer (Field view)** - oversees units in the field and needs visibility of current risk.\n- **Comms Operator (Comms view)** - coordinates from the operations centre with statewide visibility, and can complete an SRR on a patrol's behalf."
+    },
+    "timestamp": "2026-07-01T11:57:14.474Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- As a comms operator, I want visibility of SRR scores across the units I coordinate, so that I can monitor risk. *(confirm scope: statewide?)*",
+      "new_string": "- As a comms operator, I want statewide visibility of SRR scores, so that I can monitor risk across the state."
+    },
+    "timestamp": "2026-07-01T11:57:20.507Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- **FR-1.1.4** Present the five closest beaches to the resolved location, each showing its distance from that location.",
+      "new_string": "- **FR-1.1.4** Present the five closest beaches to the resolved location, each showing its straight-line distance from that location."
+    },
+    "timestamp": "2026-07-01T11:57:25.799Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- **FR-1.1.22** When viewing SRR entries for a unit or activity, show a trend graph when there is more than one SRR entry for a given day.",
+      "new_string": "- **FR-1.1.22** When viewing SRR entries for a unit or activity, show a trend graph when there is more than one SRR entry for a given day. Plot time on the x-axis and score on the y-axis."
+    },
+    "timestamp": "2026-07-01T11:57:31.505Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- **FR-1.4.6** Provide a show-trend button next to the latest score in the key unit information. It shows a trend of that day's scores only, rendered as a mouse-anchored pop-up that appears while hovering over the button, in Comms and Field view.",
+      "new_string": "- **FR-1.4.6** Provide a show-trend button next to the latest score in the key unit information. It shows a trend of that day's scores only (time on the x-axis, score on the y-axis), rendered as a mouse-anchored pop-up that appears while hovering over the button, in Comms and Field view."
+    },
+    "timestamp": "2026-07-01T11:57:37.266Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- **FR-1.2.16** Where an SRR is required and not yet completed, show the unit in an alert colour until a valid SRR is logged for that unit or activity for the patrol period.",
+      "new_string": "- **FR-1.2.16** Where a unit has no valid SRR logged for the current day, show the unit in an alert colour until one is logged."
+    },
+    "timestamp": "2026-07-01T11:57:48.711Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\nf=LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md\necho \"=== (confirm) leftovers ===\"; rg -n '\\(confirm' \"$f\" || echo \"none\"\necho \"=== patrol period leftovers ===\"; rg -ni 'patrol period' \"$f\" || echo \"none\"\necho \"=== em dashes ===\"; grep -c '—' \"$f\"\necho \"=== semicolons ===\"; grep -c ';' \"$f\"",
+      "description": "Verify confirm flags and patrol period cleared"
+    },
+    "timestamp": "2026-07-01T11:57:55.483Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- **FR-1.2.16** Where a unit has no valid SRR logged for the current day, show the unit in an alert colour until one is logged.",
+      "new_string": "- **FR-1.2.16** Where a unit is signed on to an activity and has no valid SRR for the current day, show the unit in an alert colour until one is logged. In practice this affects only optional activity types, because required types are blocked from sign-on without an SRR (FR-1.2.14)."
+    },
+    "timestamp": "2026-07-01T11:59:26.855Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\nf=LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md\necho \"=== all FR-1.2.1[6-9]/20 lines and any references to them ===\"\nrg -n 'FR-1\\.2\\.(1[6-9]|20)' \"$f\"",
+      "description": "Find FR-1.2.16-20 definitions and cross-references"
+    },
+    "timestamp": "2026-07-01T12:00:46.944Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- **FR-1.2.16** Where a unit is signed on to an activity and has no valid SRR for the current day, show the unit in an alert colour until one is logged. In practice this affects only optional activity types, because required types are blocked from sign-on without an SRR (FR-1.2.14).\n- **FR-1.2.17** Include the SRR in the patrol report.\n- **FR-1.2.18** Allow export of an individual SRR.\n- **FR-1.2.19** Retain every submitted SRR. There is no delete in the app UI.\n- **FR-1.2.20** Allow only admin portal members to delete an SRR. To supersede a score, a member submits a new SRR, which makes the previous one redundant.",
+      "new_string": "- **FR-1.2.16** Include the SRR in the patrol report.\n- **FR-1.2.17** Allow export of an individual SRR.\n- **FR-1.2.18** Retain every submitted SRR. There is no delete in the app UI.\n- **FR-1.2.19** Allow only admin portal members to delete an SRR. To supersede a score, a member submits a new SRR, which makes the previous one redundant."
+    },
+    "timestamp": "2026-07-01T12:01:00.750Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "Deletion is restricted to admin portal members (FR-1.2.20).",
+      "new_string": "Deletion is restricted to admin portal members (FR-1.2.19)."
+    },
+    "timestamp": "2026-07-01T12:01:08.274Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\nf=LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md\necho \"=== FR-1.2.x sequence ===\"; rg -o 'FR-1\\.2\\.[0-9]+' \"$f\" | sort -t. -k3 -n | uniq\necho \"=== dangling FR-1.2.20 ===\"; rg -n 'FR-1\\.2\\.20' \"$f\" || echo \"none\"\necho \"=== alert colour leftovers ===\"; rg -ni 'alert colour' \"$f\" || echo \"none\"",
+      "description": "Verify contiguous numbering and no dangling refs"
+    },
+    "timestamp": "2026-07-01T12:01:17.764Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- **FR-1.1.22** When viewing SRR entries for a unit or activity, show a trend graph when there is more than one SRR entry for a given day. Plot time on the x-axis and score on the y-axis.",
+      "new_string": "- **FR-1.1.22** When viewing SRR entries for a unit or activity, show a trend graph when there is more than one SRR entry for a given day. Plot time on the x-axis and score on the y-axis.\n- **FR-1.1.23** On completing an SRR, invite the member to give a brief experience score (a lightweight satisfaction rating). Keep it quick and optional so it adds no friction, and collate the scores for reporting."
+    },
+    "timestamp": "2026-07-01T12:03:29.379Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- **Linkage: 80% of SRRs are linked to an activity.** The remainder may legitimately be unit-only, completed outside an activity.",
+      "new_string": "- **Linkage: 80% of SRRs are linked to an activity.** The remainder may legitimately be unit-only, completed outside an activity.\n- **User satisfaction: a positive average experience score.** Measured from the experience score members give on completing an SRR (FR-1.1.23). Target to be set, for example an average of at least 4 out of 5."
+    },
+    "timestamp": "2026-07-01T12:03:37.153Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\npython3 - <<'PY'\nf=\"LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md\"\ns=open(f).read()\nstart=s.index(\"## Glossary and Domain Model\")\nend=s.index(\"## Proposed Solution\")\nblock=s[start:end].rstrip()+\"\\n\"      # the glossary section\nrest=s[:start]+s[end:]                # doc without glossary\nrest=rest.rstrip()+\"\\n\\n\"+block       # append glossary at end\nopen(f,\"w\").write(rest)\nprint(\"moved. glossary now starts at char\", rest.index(\"## Glossary\"))\nprint(\"last 3 headings:\")\nimport re\nhs=re.findall(r'^## .*', rest, re.M)\nprint(\"\\n\".join(hs[-3:]))\nPY",
+      "description": "Move Glossary section to end of document"
+    },
+    "timestamp": "2026-07-01T12:05:40.079Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "*Defined so the brief reads the same to someone new to LIMSOC or to the domain. Terms marked \"confirm\" still need your input.*",
+      "new_string": "*Defined so the brief reads the same to someone new to LIMSOC or to the domain.*"
+    },
+    "timestamp": "2026-07-01T12:05:53.098Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\nf=LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md\necho \"=== section order ===\"; rg -n '^## ' \"$f\"\necho \"=== em dashes / semicolons ===\"; echo \"em: $(grep -c '—' \"$f\")  semi: $(grep -c ';' \"$f\")\"",
+      "description": "Verify final section order and formatting"
+    },
+    "timestamp": "2026-07-01T12:05:59.346Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\nf=LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md\necho \"=== all FR-x.y.z cross-references that appear OUTSIDE their own definition line (i.e. in prose) ===\"\nrg -n 'FR-[0-9]' \"$f\" | rg -v '^\\s*[0-9]+:- \\*\\*FR-' \necho\necho \"=== current 1.2 requirement lines ===\"\nrg -n '\\*\\*FR-1\\.2\\.' \"$f\"",
+      "description": "Find FR cross-references and current 1.2 numbering"
+    },
+    "timestamp": "2026-07-01T12:18:02.866Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\ncat > \"$CLAUDE_JOB_DIR/tmp/s12.md\" <<'EOF'\n#### 1.2 Integrating into workflows\n\n- **FR-1.2.1** Persist the completed assessment (inputs, and the returned score, rating and mitigants) in LIMSOC.\n- **FR-1.2.2** Allow an SRR to be linked to an activity, an incident, or both. Every SRR is also associated with a unit.\n- **FR-1.2.3** Link an SRR completed as part of an activity to that activity and its unit. The unit is implied by the activity.\n- **FR-1.2.4** Associate an SRR not completed as part of an activity with the unit only. Every SRR has at least a unit, because a member reaches the SRR through a unit.\n- **FR-1.2.5** On completing an SRR with no activity signed on, offer to link it to a signed-on activity.\n- **FR-1.2.6** If nothing is signed on when an SRR is completed, prompt the member to sign on.\n- **FR-1.2.7** If the member declines to link, log the SRR against the unit they are signed in as.\n- **FR-1.2.8** When signing on to an activity, offer to link an existing SRR completed before sign-on.\n- **FR-1.2.9** Restrict that link choice to SRR completions for the same unit, the same day, and the same activity.\n- **FR-1.2.10** Link an SRR to at most one activity. Participant numbers are an input to the rating and differ between activities, and other inputs may differ too, so one SRR cannot be valid for more than one activity.\n- **FR-1.2.11** Allow an SRR to be tagged to an incident, including retrospectively for an SRR completed earlier the same day.\n- **FR-1.2.12** Offer only same-day SRRs for incident linking. After its day has passed, an SRR can no longer be linked to an incident.\n- **FR-1.2.13** Link an SRR to at most one incident. *(confirm: one incident only, or allow more than one?)*\n- **FR-1.2.14** Reflect the linking in the comm log entry, showing whether the SRR is against a unit only, an activity, an incident, or a combination.\n- **FR-1.2.15** When a new full SRR is submitted for a unit (an updated score), add a log entry to the general log.\n- **FR-1.2.16** Where an SRR is linked to an incident, show its rating updates in that incident's log.\n- **FR-1.2.17** Show a trend of SRR scores for the records attached to an incident. Plot time on the x-axis and score on the y-axis.\n- **FR-1.2.18** Provide a general on/off feature flag that governs whether the feature is available.\n- **FR-1.2.19** Allow each activity type (patrol type) to be configured as SRR-required or SRR-optional.\n- **FR-1.2.20** Where SRR is required for an activity type, block sign-on to an activity of that type until a valid SRR is completed or an existing valid SRR is linked. Sign-on is a blocking step and cannot proceed without it.\n- **FR-1.2.21** Where SRR is optional, present the SRR but do not block sign-on.\n- **FR-1.2.22** Include the SRR in the patrol report.\n- **FR-1.2.23** Allow export of an individual SRR.\n- **FR-1.2.24** Retain every submitted SRR. There is no delete in the app UI.\n- **FR-1.2.25** Allow only admin portal members to delete an SRR. To supersede a score, a member submits a new SRR, which makes the previous one redundant.\n\nEOF\npython3 - <<'PY'\nf=\"LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md\"\ns=open(f).read()\nnew=open(\"/home/nicholas-wood/.claude/jobs/6fd2be19/tmp/s12.md\").read()\na=s.index(\"#### 1.2 Integrating into workflows\")\nb=s.index(\"#### 1.3 Notifications and escalation\")\nopen(f,\"w\").write(s[:a]+new+s[b:])\nprint(\"1.2 spliced OK\")\nPY",
+      "description": "Rewrite 1.2 with incident linking, renumbered"
+    },
+    "timestamp": "2026-07-01T12:18:39.550Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "Deletion is restricted to admin portal members (FR-1.2.19).",
+      "new_string": "Deletion is restricted to admin portal members (FR-1.2.25)."
+    },
+    "timestamp": "2026-07-01T12:18:47.051Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "offset": 282,
+      "limit": 8
+    },
+    "timestamp": "2026-07-01T12:18:52.658Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "Deletion is restricted to admin portal members (FR-1.2.19).",
+      "new_string": "Deletion is restricted to admin portal members (FR-1.2.25)."
+    },
+    "timestamp": "2026-07-01T12:19:04.331Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- **Linkage: 80% of SRRs are linked to an activity.** The remainder may legitimately be unit-only, completed outside an activity.",
+      "new_string": "- **Linkage: 80% of SRRs are linked to an activity or an incident.** The remainder may legitimately be unit-only, completed outside an activity or incident."
+    },
+    "timestamp": "2026-07-01T12:19:15.212Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "offset": 168,
+      "limit": 18
+    },
+    "timestamp": "2026-07-01T12:19:55.257Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- AC2: Given the unit is already attached to an open Dangerous Conditions Incident, when a qualifying SRR is submitted, then no new incident is opened and a log note is added to the existing incident.\n\n## Functional Requirements",
+      "new_string": "- AC2: Given the unit is already attached to an open Dangerous Conditions Incident, when a qualifying SRR is submitted, then no new incident is opened and a log note is added to the existing incident.\n\n**UC-7: Tag an SRR to an incident (retrospective, same day)**\n\n- Actor: Comms Operator or member.\n- AC1: Given an SRR completed earlier the same day, when a user tags it to an incident, then the SRR is linked to that incident and its rating updates appear in the incident's log.\n- AC2: Given an SRR from a previous day, when a user tries to link it to an incident, then it is not offered, because only same-day SRRs can be linked.\n- AC3: Given more than one SRR is attached to an incident, when a user views the incident, then a trend of those SRR scores is shown, with time on the x-axis and score on the y-axis.\n\n**UC-8 (Phase 2): Link multiple concurrent SRRs into one consolidated score**\n\n- Actor: member or Comms Operator. Context: several members complete an SRR at the same time, a practice taught in training.\n- AC1: Given several SRRs completed at the same time, when a user links them, then they form one consolidated assessment.\n- AC2: Given SRRs are being linked, when the consolidated assessment is created, then a final score is required and defaults to the average of the linked scores, rounded to the nearest whole number.\n- AC3: Given a consolidated assessment, when it is created, then a justification note may be added to the link and its final score.\n- AC4: Given a consolidated assessment, when it is viewed in any other view, then it appears as a single score, with the ability to drill in to see every contributing form and who completed it.\n\n## Functional Requirements"
+    },
+    "timestamp": "2026-07-01T12:20:13.364Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "offset": 277,
+      "limit": 18
+    },
+    "timestamp": "2026-07-01T12:20:25.529Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- **FR-2.10** Average scores across zone, then region, then state. To be defined against a clear, useful metric and outcome before committing.\n- **FR-2.11** Report on historic data and trends.\n\n### 3. Phase 3 - COULD",
+      "new_string": "- **FR-2.10** Average scores across zone, then region, then state. To be defined against a clear, useful metric and outcome before committing.\n- **FR-2.11** Report on historic data and trends.\n- **FR-2.12** Allow multiple SRRs completed at the same time (a practice taught in our training) to be linked together into one consolidated assessment. There may be many contributing SRRs.\n- **FR-2.13** When SRRs are linked, require a final score for the consolidated assessment, defaulting to the average of the linked scores rounded to the nearest whole number.\n- **FR-2.14** Allow a justification note to be added to the link and its final score.\n- **FR-2.15** Once linked, present the consolidated assessment as a single score in all other views, with the ability to drill in and see every contributing form and who completed it.\n\n### 3. Phase 3 - COULD"
+    },
+    "timestamp": "2026-07-01T12:20:47.085Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating\nf=LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md\necho \"=== 1.2 sequence ===\"; rg -o 'FR-1\\.2\\.[0-9]+' \"$f\" | sort -t. -k3 -n | uniq | tr '\\n' ' '; echo\necho \"=== 2.x sequence ===\"; rg -o 'FR-2\\.[0-9]+' \"$f\" | sort -t. -k2 -n | uniq | tr '\\n' ' '; echo\necho \"=== dangling FR-1.2.19 refs in prose ===\"; rg -n 'FR-1\\.2\\.19' \"$f\" || echo \"none\"\necho \"=== em/semi ===\"; echo \"em: $(grep -c '—' \"$f\")  semi: $(grep -c ';' \"$f\")\"\necho \"=== UC count ===\"; rg -c '^\\*\\*UC-' \"$f\"",
+      "description": "Verify numbering, references, formatting"
+    },
+    "timestamp": "2026-07-01T12:21:13.152Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/surf-risk-rating/LIMSOC-BRIEF-LSV-2026-005-Surf-Risk-Rating.md",
+      "old_string": "- **Dangerous Conditions Incident** - an incident type in the existing, externally created incident workflow, opened when conditions are dangerous.",
+      "new_string": "- **Incident** - an operational incident recorded in LIMSOC's existing incident workflow. An SRR can be linked to an incident.\n- **Dangerous Conditions Incident** - an incident type in the existing, externally created incident workflow, opened when conditions are dangerous.\n- **Consolidated assessment (Phase 2)** - a single SRR score formed by linking multiple SRRs completed at the same time. The final score defaults to the average of the linked scores, rounded to the nearest whole number."
+    },
+    "timestamp": "2026-07-01T12:21:29.751Z"
+  }
+]

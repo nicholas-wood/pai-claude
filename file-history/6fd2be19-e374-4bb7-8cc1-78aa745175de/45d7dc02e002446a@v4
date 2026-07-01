@@ -1,0 +1,184 @@
+# LIMSOC FEATURE BRIEF
+
+## Surf Risk Rating in LIMSOC
+
+| Field | Detail |
+|---|---|
+| **Brief number** | LIMSOC-BRIEF-LSV-2026-005 |
+| **Version** | 2.0 (redraft) |
+| **Author** | Flynn Young |
+| **Revised by** | Nicholas Wood (State Lifesaving Communications Officer) |
+| **Date** | 01/07/2026 |
+
+---
+
+## Sign off
+
+**Feature category: 3 - Moderate Business Impact.** 
+
+- 1 - Critical Operational Risk
+- 2 - High Impact, Recoverable
+- **3 - Moderate Business Impact** *(selected)*
+- 4 - Low Operational Risk
+- 5 - No Operational Dependency
+
+| Role | Name | Date |
+|---|---|---|
+| Feature owner | _____________________ | |
+| Senior Manager - Capability | David Potter | |
+| State Lifesaving Communications Officer | Nicholas Wood | |
+
+---
+
+## Overview
+
+*High-level statement outlining the feature and any relevant background information.*
+
+The Surf Risk Rating (SRR) is an established, research-backed SLSA assessment that members already use. Today it lives in the SLSA Operations App, and that solution no longer meets our operational needs. It is not native to LIMSOC, it is unreliable, and the result cannot flow into our operational workflows and data.
+
+SLSA has recently released an SRR API. This project uses that newly released API to build a native SRR experience within LIMSOC, giving members a cohesive experience and integrating the assessment into operational workflows.
+
+## Problem Statement
+
+*What problem are we solving?*
+
+Members currently complete the Surf Risk Rating in the SLSA Operations App, separate from LIMSOC. That leaves three problems:
+
+- **Not native to LIMSOC.** The assessment lives in a separate app, degrading the user experience and keeping it outside the workflows members already use.
+- **The Operations App is unreliable.** Members cannot depend on the current tool being available or working when they need it.
+- **Data is not tracable**: The data is not persisted in an accessible way. It is not retained against a patrol, and off-beach roles (field, dispatch, duty officers) cannot see whether an assessment was completed or what it found.
+- **The score is not accessible to operational workflows.** The result cannot flow into LIMSOC operational workflows, reporting or data. 
+
+In short, we cannot capture the SRR natively, rely on it, or use the score in our operational workflows and data.
+
+## Impact
+
+*Impact of solving the problem, including the impact if left unaddressed.*
+
+- **Integrate risk assessment into operational workflows.** Bringing the SRR into LIMSOC lets the score plug into operational workflows. This makes the assessment easier for the member while better facilitating risk-management SOPs, so it has a direct impact on how we manage operational risk.
+- **Drive adoption and integration.** A native, low-friction experience embedded in existing patrol workflows increases uptake of the SRR and makes it part of how patrols already work, rather than a separate step.
+- **Give off-beach roles visibility.** Field, dispatch and duty roles gain sight of local risk and of whether an assessment has been completed for each unit. This is the primary situational-awareness win, and it lands with members who are not on the beach.
+- **Make risk assessment traceable and documented.** The feature does not change how we operate, but it makes the assessment persistent, reviewable and auditable rather than transient. In practice it will also mean many more people use the SRR.
+- **Build the data foundation.** A retained, structured record is the prerequisite for the later reporting, trend analysis and predictive capability described in Future Improvements.
+
+## Proposed Solution
+
+*How are we going to do it?*
+
+Build a native SRR experience in LIMSOC on top of the SLSA API. LIMSOC provides the form, the workflow and the record. The SLSA API provides the score, rating and mitigation list. Access to the SLSA API and its contract is a delivery dependency (see Assumptions and Configuration requirements).
+
+The first pass (v1) will:
+
+- Capture the inputs required by the SLSA SRR API, including locally observed environmental hazards.
+- Prefill and augment those inputs with automated weather data from the Bureau of Meteorology (BOM) for the location nearest the user.
+- Submit the inputs to the SLSA API and return the score, rating and mitigation list it provides.
+- Persist the completed assessment in LIMSOC and link it (many-to-one) to a patrol/unit.
+- Make each assessment reviewable from patrol, field and dispatch views.
+- Include the SRR in the patrol report and allow export of an individual SRR.
+- Block the form when the SLSA API is not healthy (see Assumptions).
+
+Notifications, aggregation, map display and predictive modelling are deferred to later phases (see Future Improvements).
+
+## Assumptions
+
+*What must hold true for this feature to work as described. Several centre on the SLSA API, which is the scoring engine.*
+
+- **SLSA owns the scoring engine, and LIMSOC owns the form and the record.** LIMSOC collects the inputs, sends them to the SLSA API, and the API returns the score, rating and mitigation list. LIMSOC owns persistence of that result and the link to a patrol.
+- **The SLSA API returns the score, rating and mitigation list.**
+- **The SLSA API is performant and reliable.** SLSA has a history of APIs that are neither, so this is assumed, not proven.
+- **A health-check endpoint is available on the SLSA API.**
+
+## Functional Requirements
+
+*What the system does. Primary = first pass (v1). Secondary = phase 2. Tertiary = future.*
+
+### Primary (v1 - first pass)
+
+- Provide a capture form that collects the inputs required by the SLSA SRR API. Minimise friction: automate wherever possible, prefill from data already captured, and use engagement/gamification to encourage completion.
+- Prefill and augment those inputs with BOM weather data for the location nearest the unit.
+- Submit the collected inputs to the SLSA API and retrieve the score, rating and mitigation list it returns. LIMSOC does not compute the score.
+- **Check SLSA API health before an assessment can be started, and block the form if a healthy response is not returned.** Do not allow an assessment to be completed without a live SLSA scoring response. Surface a clear unavailable state to the member.
+- Give each assessment a geospatial position.
+- Persist the completed assessment (inputs, and the returned score, rating and mitigants) in LIMSOC and link it (many-to-one) to a patrol/unit.
+- Make each assessment reviewable from **patrol, field and dispatch** views.
+- Present the mitigants returned by the SLSA API for the resulting rating, listed at the end of the assessment, presented like the Stinger Log.
+- Include the SRR in the patrol report.
+- Export an individual SRR.
+- **Feature flag:** a general on/off flag for the feature (see Configuration).
+- **Per-patrol-type enablement:** enable or disable the feature by patrol type (see Configuration).
+- Where enabled and not yet completed, show the unit in an alert colour until an assessment has been logged for that unit for the patrol period.
+
+### Secondary (phase 2)
+
+- Augment observed data with additional internal LIMSOC data (for example Stinger Logs and similar), beyond BOM.
+- Generate notifications when a score is elevated or falls outside defined parameters. *(Parameters and "abnormal" to be defined in the phase 2 brief.)*
+- Average scores across zone, then region, then state. *(To be defined against a clear, useful metric and outcome before committing.)*
+- Display scores on unit modals, maps and summaries.
+- Report on historic data and trends.
+
+### Tertiary (future)
+
+- Use forecast data to extrapolate future scores in a predictive nature.
+- Weight impact using current and previous population trends for a location. *(Requires a data source and an agreed methodology.)*
+- Present the data in a form that is meaningful to patrols and end users.
+
+## Non-functional Requirements
+
+*How well the system does it.*
+
+- **Low friction.** The assessment should be as low-friction as possible: automate wherever possible, prefill from data already captured, and use engagement/gamification to drive completion. (No hard completion-time SLA. The intent is minimum friction, not a stopwatch target.)
+- **Scoring authority.** LIMSOC does not compute the score. Scoring, rating and mitigants come from the SLSA API. LIMSOC only passes inputs and presents the response. This keeps LIMSOC always aligned with the current SLSA model.
+- **Integration.** Integrate with the existing LIMSOC patrol, unit and reporting data model, and with the mapping data model to support later map display.
+- **External API dependence.** The feature depends on two external APIs: SLSA (scoring) and BOM (weather). For SLSA, check health before an assessment and block the form on an unhealthy response, so no assessment is completed without a live score. For BOM, fall back gracefully to manual entry and override when data is unavailable or wrong.
+- **Performance under a slow dependency.** Health checks, submissions and responses should handle SLSA API latency without hanging the member, with clear timeout and retry behaviour, given SLSA's history of variable performance and availability.
+- **Statewide use.** Operate for all units across the state under the feature-flag rollout, so the feature can move from pilot to statewide without rework.
+
+## Timeline
+
+*Required timeline, considering each stage of the process. (Dates to be set with the feature owner.)*
+
+| Stage | Description | Target |
+|---|---|---|
+| 1. Secure SLSA API | Obtain SLSA API access, the request/response contract, the health-check endpoint, and a performance/availability commitment | TBC |
+| 2. Build v1 | Capture form, BOM prefill, SLSA API submit/retrieve, health-check and block behaviour, persistence, patrol/unit link, review views, patrol report, export | TBC |
+| 3. Pilot | Enable per patrol type via feature flag, and validate adoption and data quality | TBC |
+| 4. Statewide | Roll out under the feature flag across the state | TBC |
+
+## Configuration requirements
+
+*What configuration is required prior to deployment, and how significant is the workload?*
+
+This feature does require configuration. "No configuration" would contradict the feature-flag and per-patrol-type requirements above.
+
+- General feature flag to enable/disable the feature.
+- Per-patrol-type enablement.
+- SLSA API connection: endpoint, credentials, the scoring request/response contract, and the health-check endpoint.
+- BOM data source configuration, including the location mapping for each unit.
+
+**Delivery dependency.** Access to the SLSA API and its documentation (the input contract, the score/rating/mitigant response, and a health-check endpoint) must be obtained from SLSA. We do not currently hold SLSA's API documentation, so this is a prerequisite for Stage 1. A commitment on SLSA API performance and availability should be sought at the same time, since the feature depends on it at runtime.
+
+Workload on the LIMSOC side is expected to be modest. The scoring engine is SLSA's, so LIMSOC builds the form, the persistence, the patrol link and two API integrations (SLSA and BOM).
+
+## Risks
+
+*Any risks that may come with implementing this feature.*
+
+| # | Risk | Impact | Mitigation | Outcome |
+|---|---|---|---|---|
+| 1 | Added friction reduces adoption | Members skip the assessment | Automate and prefill, keep the form minimal, use gamification | High completion rates |
+| 2 | SLSA API slow or unavailable (their history on both) | Members cannot complete an assessment | Health-check before starting, block the form on an unhealthy response, clear timeout/retry, seek a performance/availability commitment from SLSA | Controlled failure, no un-scored assessments |
+| 3 | SLSA API access and contract not yet available to us | Stage 1 blocked, cannot build the integration | Obtain SLSA API documentation and access early as a Stage 1 prerequisite | Build proceeds against a known contract |
+| 4 | BOM data inaccurate or unavailable | Missing or wrong prefill | Validate BOM data, allow manual override, graceful fallback to manual entry | Reliable inputs |
+| 5 | Feature-flag / per-patrol-type config complexity | Difficult or uneven rollout | Clear config model, pilot per patrol type before statewide | Controlled, staged rollout |
+| 6 | Scope creep from deferred intelligence features | Delivery slips | This brief scopes v1 only. Later capability is explicitly phased | Focused first pass |
+
+## Future Improvements
+
+*Anything we could consider in future to build on this feature.*
+
+- Notifications on elevated or out-of-parameter scores.
+- Aggregation and averaging across zone, region and state, once a useful metric and outcome are defined.
+- Display on maps, unit modals and summaries.
+- Population-based impact weighting, subject to a data source and agreed methodology.
+- Forecast-based predictive scoring using historical assessment data.
+- Broader augmentation from internal LIMSOC data (Stinger Logs and similar).

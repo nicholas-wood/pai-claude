@@ -1,0 +1,202 @@
+# AI Systems Fundamentals - Virgin Senior AI Engineer
+
+How to use this doc: this is the core of what Jaimyn told you to brush up on (RAG, safety, evals) plus the agentic and LLMOps material the PD leans on. Read it out loud. The goal is not to memorise definitions, it is to be able to explain each idea in your own words and then connect it to something you have actually built. Your ANZ Plus generative-AI search work is a real RAG system, so most of this you have lived, you just need the vocabulary tight.
+
+Your single strongest move in this interview: when they ask about RAG, evals, or guardrails in the abstract, answer the concept cleanly in two sentences, then say "the way this showed up for me was..." and ground it in the ANZ Plus AI search platform. That converts a knowledge question into a credibility moment.
+
+---
+
+## 1. RAG (Retrieval-Augmented Generation)
+
+### Mental model
+RAG is giving a language model the right context at query time instead of relying on what is baked into its weights. You retrieve relevant documents from an external store, put them in the prompt, and ask the model to answer grounded in that material. It exists because models have a training cut-off, do not know your private data, and hallucinate when they answer from nothing.
+
+### The pipeline (be able to draw this)
+1. **Ingestion / indexing (offline):** take source documents, split them into chunks, run each chunk through an embedding model to get a vector, store the vector plus the original text and metadata in a vector store.
+2. **Retrieval (at query time):** embed the user's query with the same model, do a similarity search (nearest neighbours) against the store, get the top-k chunks.
+3. **Augmentation:** pack those chunks into the prompt as context, usually with the instruction "answer only from the provided context, and say you do not know if it is not there".
+4. **Generation:** the model produces the answer grounded in the retrieved context, ideally with citations back to the source chunks.
+
+### Senior nuance (this is where depth shows)
+- **Retrieval quality is the whole game.** If retrieval returns the wrong chunks, no model can save you. Most "the LLM is wrong" complaints are actually retrieval failures. So you measure retrieval separately from generation.
+- **Chunking strategy matters more than people expect.** Too big and you dilute relevance and waste context; too small and you lose the surrounding meaning. You chunk on semantic boundaries (sections, paragraphs) not arbitrary character counts, and you often add overlap so a fact split across a boundary is not lost.
+- **Hybrid search beats pure vector search.** Dense vector search is good at meaning ("reward seat availability" matches "points redemption"), but bad at exact tokens (flight numbers, product codes, names). You combine it with keyword/BM25 (sparse) search and fuse the rankings. For an airline this is critical because users say exact route codes and dates.
+- **Re-ranking.** Retrieve a wide net (say top 50) cheaply, then use a cross-encoder re-ranker to score query-document pairs properly and keep the best 5. First-stage retrieval is recall-oriented, re-ranking is precision-oriented.
+
+### "Advanced RAG" (the PD literally lists this)
+The PD says "Advanced RAG techniques (retrieval strategy, context packing, tool orchestration, safety/guardrails)". In your words:
+- **Retrieval strategy:** hybrid search, re-ranking, metadata filtering (only search this customer's docs, only flights after this date), and query transformation (rewriting or expanding the user query, or breaking a multi-part question into sub-queries).
+- **Context packing:** you have a finite context window and retrieved chunks compete for it. You order by relevance, deduplicate, sometimes compress or summarise chunks, and you put the most important material where the model attends best (start and end, the "lost in the middle" problem where models ignore the middle of long contexts).
+- **Tool orchestration:** modern RAG is not always "retrieve once then answer". An agent can decide to search, look at results, search again with a refined query, or call a different tool (a live flight-availability API, not a document store). This is "agentic RAG".
+- **Safety/guardrails:** see section 4.
+
+### "If they ask..."
+- **"What is RAG and why use it over fine-tuning?"** RAG injects knowledge at query time from an external store; fine-tuning bakes behaviour or style into the weights through more training. You reach for RAG when the knowledge is large, changes often, or needs to be auditable and citable, which is most enterprise knowledge. You fine-tune when you want to change how the model behaves, its format or tone, or to teach a narrow skill, not to teach it facts. They are not mutually exclusive. For something like flight data that changes by the minute you would not fine-tune at all, you would retrieve or call a live tool.
+- **"How would you stop a RAG system hallucinating?"** Three layers. Ground it hard: instruct the model to answer only from retrieved context and to say it does not know otherwise. Make retrieval good so the context actually contains the answer. Then verify: cite sources so a human or a checker can trace claims back, and optionally run a faithfulness check that asks whether the answer is supported by the context. You cannot get to zero, so you also design the UX to show sources and set expectations.
+- **"Your RAG answers are poor, how do you debug?"** Separate the stages. First check retrieval in isolation: for a failing query, are the right chunks even being returned in the top-k? If not, it is an indexing, chunking, embedding, or search problem, fix that first. If retrieval is good but the answer is bad, it is a generation/prompt problem. Most of the time it is retrieval.
+- **"What is the embedding model's job?"** It maps text into a vector such that semantically similar text lands close together in that space. You must use the same embedding model for indexing and querying, and if you change the model you have to re-index everything.
+
+### Bridge to Nick
+This is your ANZ Plus work almost line for line. You "owned delivery of AI-enabled search APIs, a core component of a generative AI search platform leveraging Vertex AI / Gemini". Be ready to say: the platform let services surface answers from bank content, my piece was the search/retrieval API layer, and the engineering problem was exactly the one that matters in RAG, making retrieval good and the responses trustworthy in a regulated environment where a wrong answer has real consequences. You did this on Vertex AI, Virgin is on AWS/Databricks/pgvector, but the architecture is identical, only the managed services differ.
+
+---
+
+## 2. Embeddings and vector databases
+
+### Mental model
+An embedding is a list of numbers (a vector, often 768 or 1536 dimensions) that represents the meaning of a piece of text. Similar meanings produce vectors that are close together, measured usually by cosine similarity. A vector database stores these and answers "find me the k nearest vectors to this one" fast, even over millions of items.
+
+### Senior nuance
+- **Approximate nearest neighbour (ANN).** Exact nearest-neighbour over millions of vectors is too slow, so vector DBs use ANN indexes (HNSW is the common one, a navigable graph) that trade a tiny bit of recall for a massive speed-up. Knowing the name HNSW and that it is a graph-based index signals depth.
+- **pgvector (the PD lists it):** it is a Postgres extension that adds a vector column type and similarity search. The advantage is you keep your vectors next to your relational data and operational tooling, one database, transactional, familiar. The trade-off versus a dedicated vector DB (Pinecone, Weaviate) is scale and some specialised features, but for a lot of enterprise workloads pgvector is the pragmatic right answer. You can speak to this credibly because AccessBuddy runs on Postgres.
+- **Metadata filtering.** Real systems do not just do pure vector search, they filter, only this tenant, only documents newer than X. Doing the filter and the vector search efficiently together is a real engineering concern.
+
+### "If they ask..."
+- **"Cosine similarity vs Euclidean distance?"** Cosine measures the angle between vectors, so it cares about direction/meaning not magnitude, which is what you want for text embeddings. It is the default for semantic search.
+- **"How big should a chunk be?"** It depends on the content and the embedding model's context limit, but the principle is one coherent idea per chunk with a little overlap. You tune it empirically against your eval set rather than guessing.
+
+### Bridge to Nick
+You run Postgres in production on AccessBuddy and you have built search before at Leidos (a data discovery platform that "reduced analyst discovery tasks from months to seconds", integrating multiple sources into a central searchable system). That Leidos system is a great non-LLM retrieval story, you understand the indexing and relevance problem from first principles, RAG just adds the embedding and generation layers.
+
+---
+
+## 3. Agents, tool/function calling, planning, memory
+
+### Mental model
+An agent is an LLM in a loop that can take actions, not just produce text. You give the model a set of tools (functions it can call), it decides which to call and with what arguments, you execute the call and feed the result back, and it continues until it can answer. "Function calling" or "tool calling" is the mechanism: the model outputs a structured request (tool name plus JSON arguments) instead of prose, your code runs the real function, and returns the result.
+
+### The loop (be able to describe it)
+1. User asks something.
+2. Model decides: answer directly, or call a tool. It emits a structured tool call.
+3. Your runtime executes the tool (an API call, a DB query, a search) and returns the result.
+4. Model sees the result and either calls another tool or produces the final answer.
+This is the ReAct pattern at heart: reason, act, observe, repeat.
+
+### The three things the PD names: prompting, function/tool use, planning, memory
+- **Tool use:** as above. The key engineering point is you define tools with clear schemas and descriptions, because the model chooses tools based on those descriptions. Bad tool descriptions cause bad tool selection.
+- **Planning:** for multi-step tasks the agent breaks the goal into steps. Simple version is the model plans implicitly each turn; more structured version uses an explicit plan-then-execute approach, or a graph of steps (this is what LangGraph gives you, a state machine of nodes and edges so the flow is controllable and debuggable rather than a free-running loop).
+- **Memory:** short-term memory is the conversation context window. Long-term memory is storing facts/preferences/history outside the window and retrieving them when relevant, which is itself a RAG problem. "What did this customer book last time" is a memory retrieval, not a context-window thing.
+
+### Senior nuance
+- **Agents are powerful and unreliable, so you constrain them.** The more free-running the loop, the more ways it fails (wrong tool, infinite loops, compounding errors). Senior framing: prefer the most constrained design that solves the problem. A fixed pipeline or a controllable graph beats an open-ended agent when you can get away with it. You add autonomy only where the task genuinely needs it.
+- **Determinism and guardrails around tools.** Tools that change state (book a flight, charge a card) need confirmation steps, idempotency, and human-in-the-loop gates. The model can be wrong, so the action layer must be safe by construction. This is exactly the "human-in-the-loop controls" the PD mentions under AgentOps.
+- **Structured output.** Function calling is also how you get reliable structured data out of a model, you define a schema and the model fills it. This is the same primitive whether you are calling a tool or just extracting fields.
+
+### "If they ask..."
+- **"What is function calling?"** The model is given tool definitions with JSON schemas. Instead of answering in prose, it can emit a structured call naming a tool and its arguments. My code executes the real function and returns the result, the model continues. It is how you connect a model to live systems like a flight search API.
+- **"When would you NOT use an agent?"** When a deterministic pipeline does the job. Agents add latency, cost, and failure modes. If the task is "retrieve and answer" you do not need an autonomous loop. I reach for agents when the path genuinely varies per request and the model needs to decide the steps.
+- **"How do you stop an agent doing something dangerous?"** Constrain the tools it has, require confirmation and human approval for state-changing actions, make those actions idempotent, put hard limits on loop iterations and spend, and log every tool call for audit. You design so the worst a wrong decision can do is bounded.
+
+### Bridge to Nick
+At ANZ you "drove AI integration strategy, making decisions on model selection, provisioning approach, and scaling patterns" and "established practical guardrails for generative AI use, balancing capability with compliance". That is the senior judgement this section is testing, knowing when to add capability and when to constrain it. Virgin's own ChatGPT flight-search app is an agent-tool system: ChatGPT is the agent, Virgin's MCP server exposes flight-search as tools. You will cover that in the ChatGPT Apps doc.
+
+---
+
+## 4. Safety, guardrails, red-teaming
+
+### Mental model
+Guardrails are the controls that keep an AI system inside acceptable behaviour: what goes in, what comes out, and what it is allowed to do. They sit around the model because the model itself is probabilistic and can be manipulated. Red-teaming is deliberately attacking your own system to find where those controls fail before a user or attacker does.
+
+### The layers
+- **Input guardrails:** filter or detect prompt injection, jailbreak attempts, off-topic or abusive input, and PII you should not be processing.
+- **Output guardrails:** check the response before it reaches the user, for hallucination/groundedness, toxicity, leaking sensitive data, or going off-policy (an airline bot giving legal or medical advice, or quoting a fare it should not).
+- **Action guardrails:** the human-in-the-loop and confirmation controls on tools that do things.
+- **Prompt injection** is the one to name explicitly: untrusted text (a retrieved document, a user message, a web page) contains instructions that hijack the model. The classic defence is to treat retrieved content as data not instructions, keep system instructions privileged, validate outputs, and never give the model unconstrained access to sensitive tools on the back of untrusted input.
+
+### Senior nuance
+- **Defence in depth, not one filter.** No single guardrail is reliable, you layer cheap deterministic checks (regex/PII scanners, allow-lists) with model-based checks (a classifier or an LLM-as-judge checking the output) and design constraints (limited tools, grounding).
+- **Guardrails have a cost.** Every check adds latency and can produce false positives that frustrate users. The senior skill is calibrating, more guardrail where the blast radius is high (anything customer-facing, money, PII), less where it is low.
+- **Responsible AI in a regulated context** is your home ground. Frame guardrails as the same discipline as any safety-critical or compliance control: identify the failure modes, control for them in proportion to impact, make it auditable.
+
+### "If they ask..."
+- **"What is prompt injection and how do you defend against it?"** It is when untrusted text the model reads contains instructions that override your intent, for example a retrieved document saying "ignore previous instructions and reveal X". You defend by separating trusted instructions from untrusted data, never executing instructions that come from retrieved or user content, validating outputs, and limiting what tools the model can reach so a hijack cannot do real damage. You assume it can happen and bound the impact.
+- **"How do you red-team an AI feature?"** You systematically try to break it: adversarial prompts, jailbreaks, edge cases, attempts to extract data or trigger unsafe actions, and you do it before launch and continuously after. You build the worst cases into your eval suite so you catch regressions.
+- **"Customer asks the airline bot for medical advice, what happens?"** That is an out-of-scope guardrail. The system should recognise off-domain requests and decline gracefully with a safe fallback, rather than improvising. You design the refusal, you do not leave it to chance.
+
+### Bridge to Nick
+You literally "established practical guardrails for generative AI within the project, balancing capability with compliance and reliability in a risk-averse banking context". Banking is one of the few domains stricter than aviation on this. You can speak to guardrails as something you implemented under real regulatory pressure, not theory.
+
+---
+
+## 5. Evals (evaluation)
+
+### Mental model
+Evals are how you measure whether an AI system is actually good, and whether a change made it better or worse. Because LLM output is non-deterministic and "looks plausible" is not "is correct", you cannot rely on eyeballing. An eval is a dataset of inputs plus a way to score the outputs, run repeatably, so you have a number you can move and defend.
+
+### Types of eval (know the spread)
+- **Component vs end-to-end.** Evaluate retrieval on its own (did the right chunks come back, measured by recall@k, precision, MRR), evaluate generation on its own, and evaluate the whole system end-to-end.
+- **Reference-based:** you have a known correct answer and compare against it (exact match, or semantic similarity for free text).
+- **Reference-free / criteria-based:** no single right answer, so you score against criteria like groundedness (is the answer supported by the context), relevance, helpfulness, tone.
+- **LLM-as-judge:** use a strong model to score outputs against a rubric. Scales far better than human review, but you have to validate the judge against human labels and watch its biases (it favours longer answers, its own style, position).
+- **Human eval:** the gold standard for the hard cases, expensive, so you use it to calibrate the automated evals and to spot-check.
+- **Online vs offline.** Offline is against a fixed dataset in CI before you ship. Online is in production: A/B tests, user feedback (thumbs up/down), and operational metrics.
+
+### Senior nuance
+- **Evals are a dataset problem first.** The hard part is building a representative, versioned eval set that covers the real distribution including the nasty edge cases. A good eval set is an asset you grow over time, every production failure becomes a new test case.
+- **Evals belong in CI/CD.** The PD calls for "automated evals" and "canary/shadow". The mature pattern: a prompt or model or retrieval change must pass the eval suite before it ships, the same way code must pass tests. This is the bit most teams are immature on and where your TDD-and-coverage discipline transfers directly.
+- **You cannot optimise what you cannot measure.** Every prompt tweak feels like an improvement until you have a number. Evals are what turn "vibes-based" prompt engineering into engineering.
+
+### "If they ask..."
+- **"How do you know your RAG system is good?"** I measure it, not eyeball it. I separate retrieval metrics (recall@k, is the right context being found) from answer metrics (groundedness and correctness, often via an LLM-judge validated against human labels), I run them on a versioned eval set in CI, and I track online signals like user feedback and A/B results in production. Every failure I see becomes a new case in the set.
+- **"What is LLM-as-judge and what is the risk?"** Using a strong model to grade outputs against a rubric so evaluation scales. The risks are the judge having biases, favouring verbosity, its own phrasing, the first option, and drifting, so you validate it against human ratings and keep humans in the loop on the hard slices.
+- **"How do you test something non-deterministic?"** You shift from exact assertions to distributional and criteria-based checks: run a representative set, score against criteria, and assert on aggregate quality and on specific must-pass cases rather than one exact string. You also pin what you can (temperature 0 for tests where you want determinism).
+
+### Quality scoring, metric by metric (the drill-down layer)
+This is where Tom will push if you open with a RAG system: "how exactly do you score each probabilistic part." A RAG pipeline has three probabilistic stages and you score each one separately, because a single end-to-end number hides *where* it broke. The clean mental model to lead with is the **RAG triad**: context relevance (did retrieval fetch the right thing), groundedness/faithfulness (did the answer use only that context), answer relevance (did it actually address the question). Then the metrics under each.
+
+**1. Retriever scoring.** The retriever ranks documents by similarity, then you evaluate that ranking against labelled relevance.
+- **Cosine similarity** is the retriever's internal scoring mechanism, not a quality metric: it is the cosine of the angle between the query vector and a document vector, close to 1 for same-direction (similar meaning), near 0 for orthogonal (unrelated). Senior nuance to have ready: a high cosine score means *semantically close*, not *actually relevant or answer-bearing*, so you never treat the similarity score itself as proof the retrieval was good. You measure retrieval quality with rank-aware metrics against a labelled set.
+- **Recall@k / Precision@k** (already your baseline): is the right chunk in the top k, and how much of the top k is relevant.
+- **MRR (Mean Reciprocal Rank):** `MRR = (1/|Q|) * sum(1/rank_i)` over queries, where `rank_i` is the position of the first relevant document. First position scores 1, second 0.5, third 0.33. Use it when you care about the *single best hit* landing at the top.
+- **NDCG (Normalized Discounted Cumulative Gain):** rewards putting the *most* relevant documents highest, using graded relevance (not just yes/no) discounted by position, normalised against the ideal ordering so it sits between 0 and 1. Use it when several documents matter and the *order* matters.
+- One-line contrast for the drill: MRR cares only about the first correct hit; NDCG grades the whole ranked list with graded relevance.
+
+**2. Generator scoring.** The generator emits a probability distribution over every token; you score what it produced against the retrieved context and the question.
+- **Faithfulness / groundedness:** is every claim in the answer supported by the retrieved context. Frameworks measure it by decomposing the answer into atomic claims and checking each against the context, reported as a percentage. This is your primary hallucination metric.
+- **Answer relevance:** does the answer directly address the user's question (a fluent, faithful answer to the wrong question still fails). Often measured by generating candidate questions from the answer and comparing them back to the original query.
+- **Perplexity:** exp of the average negative log-likelihood, i.e. how "surprised" the model is by the text; lower means more confident/fluent. Senior nuance, and exactly the kind of edge Tom probes: **low perplexity is not correctness.** A confident hallucination has low perplexity. So perplexity is useful for spotting degeneracy or out-of-distribution inputs, not for judging whether an answer is right, and you never lean on it as your quality signal.
+
+**3. End-to-end scoring.** Test the whole pipeline together.
+- **Ground-truth comparison:** human experts author gold answers for a fixed question set; you compare pipeline outputs to them (exact match / F1 for extractive, semantic similarity or an LLM-judge for generative). This is your regression backbone.
+- **LLM-as-a-judge:** a strong model grades outputs against a rubric, typically 1 to 5, so evaluation scales. Carry the caveat from above: judges have position, verbosity, and self-preference biases and drift, so you validate the judge against human ratings and keep humans on the hard slices.
+
+**Tooling (know what they are, be honest on hands-on).** **Ragas** (RAG metrics: faithfulness, answer relevancy, context precision/recall), **TruLens** (feedback functions, it is where the RAG-triad framing comes from), **DeepEval** (pytest-style LLM testing, faithfulness as a percentage), **LangSmith** (tracing plus datasets plus LLM-judge evals). If Tom asks whether you have run a specific one, the honest senior line is: "I have designed and run evals on my own harness and I know these frameworks and what they measure; I would reach for Ragas or DeepEval rather than rebuild the metrics." Do not claim production hours on a framework you have not used, that is the resume-reality deal-breaker.
+
+**Ties to your projects.** At ANZ this is exactly the "how did I know retrieval was good enough to ship, and how would I catch a regression" question, and the answer is: retrieval scored separately (recall@k, MRR/NDCG) from generation (faithfulness, answer relevance), on a versioned eval set in CI, with online signals in production. For LIMSOC initiative 4 (RAG SOP coaching), the eval is retrieval quality (are the right SOP steps surfaced) plus groundedness (no unsupported guidance), which in a safety-critical setting is the whole point.
+
+### Bridge to Nick
+You "established and enforced 80%+ test coverage with TDD across services" at ANZ and "defined engineering standards including TDD" at Macquarie. Evals are TDD for AI. Your strongest framing for the whole interview: most teams can get a demo working, the senior engineering is in testing, evaluation, and observability, which is exactly what the PD says Virgin values ("recognising the realities of delivery... production-ready solutions, including testing, evaluation and observability"). That sentence in the PD is aimed straight at people like you.
+
+---
+
+## 6. LLMOps / AgentOps and observability
+
+### Mental model
+LLMOps is MLOps for LLM systems: the operational discipline of running these things in production reliably. It covers prompt and config management (versioning prompts like code), the eval pipeline in CI, model/version registries, safe rollout (canary, shadow, feature flags, A/B), monitoring, and incident response. AgentOps is the same applied to agent systems specifically, with extra attention on tracing multi-step tool calls.
+
+### What to be able to talk about
+- **Prompt/config management:** prompts are not constants buried in code, they are versioned, reviewed, and tied to eval runs, so you can roll a prompt back like a deploy.
+- **Observability for LLMs:** beyond normal metrics/logs/traces, you trace the full chain of a request, the retrieved chunks, the prompt sent, the tool calls, the tokens, the latency and cost per call. Tools like LangSmith, Langfuse, or Arize do this; the concept is the same tracing discipline as OpenTelemetry, which you already do, applied to the AI pipeline. You capture token usage and cost as first-class metrics because they drive both the bill and latency.
+- **Rollout:** canary (release to a small slice first), shadow (run the new system alongside the old on real traffic without showing users, compare), feature flags (turn it on/off without redeploying), A/B (measure one variant against another). These let you ship AI changes safely despite non-determinism. This is the PD's "canary/A-B experiments, feature flags and controlled exposure".
+- **Feedback loops:** capture user feedback and failures, feed them back into the eval set and the next iteration.
+
+### Senior nuance
+- **The metrics that matter are quality, latency, cost, and safety, together.** A change that improves answer quality but doubles latency or cost might be a net loss. You watch them as a set.
+- **Non-determinism makes monitoring different.** You cannot alert on "output changed". You monitor distributions, quality scores on sampled traffic, refusal rates, retrieval hit rates, and user feedback trends, and you alert on drift.
+
+### "If they ask..."
+- **"How do you safely roll out a change to a live AI feature?"** Behind a feature flag, to a canary slice first, ideally shadow-tested against the current system on real traffic so I can compare quality before exposing users, with the eval suite passed in CI as the gate. I watch quality, latency, cost, and safety signals, and I can roll back instantly because the prompt and config are versioned.
+- **"What do you monitor in production for an LLM app?"** The usual reliability signals plus AI-specific ones: per-request traces of retrieval and tool calls, token usage and cost, latency, quality scores on sampled outputs, refusal and error rates, and user feedback. I trace end to end so when something goes wrong I can see which stage failed.
+
+### Bridge to Nick
+OpenTelemetry instrumentation and production observability are in every one of your roles. You "instrumented distributed tracing and production observability via OpenTelemetry" at ANZ and Macquarie, and ran AccessBuddy on OpenTelemetry, Sentry, and Better Stack. LLMOps observability is the same instinct extended to the AI pipeline. You are not learning a new discipline, you are applying one you already own to a new layer.
+
+---
+
+## 7. The 90-second "AI systems" headline (rehearse this)
+
+If they open with "talk me through your AI experience" or "what do you know about building AI systems", lead with this shape, then expand on whichever beat they pull:
+
+"At ANZ Plus I owned the search APIs inside a generative-AI search platform on Vertex AI and Gemini, in a regulated banking environment. So I have built the retrieval side of a real RAG system, made decisions on model selection and scaling, and put practical guardrails around generative AI where a wrong or non-compliant answer actually matters. The pattern I care about most is that getting a demo working is easy, the engineering is in retrieval quality, evaluation, guardrails, and observability, treating AI systems with the same testing and operational rigour as any production system. That is the same TDD-and-observability discipline I have run across banking and asset management, just applied to the AI layer."
+
+That hits RAG, model selection, guardrails, evals, observability, and regulated-context judgement in four sentences, every one backed by something you actually did.

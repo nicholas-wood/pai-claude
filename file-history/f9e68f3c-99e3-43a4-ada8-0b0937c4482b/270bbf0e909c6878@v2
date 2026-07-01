@@ -1,0 +1,48 @@
+# NotebookLM Flashcard Prompt
+
+Use this to turn the prep pack into a drillable flashcard deck. NotebookLM grounds its output in the sources you give it, so the cards will reflect *your* pack and *your* real experience, not generic internet answers.
+
+## Setup (do this first)
+1. Open a new NotebookLM notebook.
+2. **Upload these files as sources** (the fundamentals + your talking points are what Tom drills):
+   - `09-round-2-tom-deep-technical.md` (the anchor answers + hit-list)
+   - `04-react-hooks.md`
+   - `04a-javascript-and-typescript.md`
+   - `05-senior-python.md`
+   - `02-ai-systems-fundamentals.md` and `02a-ai-safety-systems.md` (for the productionisation cards)
+   - `01-pd-decode-and-fit.md` (for the ANZ / project narrative cards)
+3. Paste the prompt below into the chat. (Or, if you prefer NotebookLM's **Flashcards** studio button, paste the "Focus" paragraph from the prompt into its instructions box.)
+
+---
+
+## The prompt (copy from here)
+
+You are helping me prepare for a deep-technical engineering interview. My interviewer is extremely experienced and will drill into each topic until he finds the edge of my knowledge, so I need flashcards that build genuine depth, not surface recall.
+
+Generate a set of **spaced-repetition flashcards** grounded strictly in the uploaded sources. Output as plain text, one card per block, in this exact format so I can paste it into Anki:
+
+```
+Q: <question>
+A: <answer>
+---
+```
+
+Requirements:
+- **Coverage and weighting.** Produce roughly 60 cards, weighted: 40% JavaScript + React fundamentals (event loop, micro/macrotask ordering, closures, garbage collection, promises, how `useState` works, `useEffect` and dependency arrays, batching, immutability, rules of hooks); 35% Python fundamentals (reference counting and generational GC, the GIL, threading vs multiprocessing vs asyncio, async/await, generators, memory); 25% AI productionisation (RAG and retrieval quality, guardrails and safety controls, evaluation, observability with metrics/logs/traces, reliability and fallbacks).
+- **Depth ladders.** For the most important concepts (JS event loop, `useState`, the GIL, garbage collection in both languages), include a chain of 3 progressively harder cards on the same topic: (1) the core explanation, (2) a "why" or mechanism card, (3) a tricky edge case or trade-off. This mirrors how the interviewer digs deeper on one answer.
+- **Answer style.** Answers must be concise (2 to 5 sentences), technically precise, and phrased so I can say them out loud naturally. Australian English. No em dashes. Prefer explaining the mechanism over listing keywords.
+- **Grounding.** Base every card only on the uploaded sources. Where a source ties a concept to my real experience (for example ANZ Plus retrieval APIs, guardrails, observability), write the card so the answer includes that concrete grounding, because "here is how this showed up in something I built" is exactly what I need to rehearse.
+- **Two special cards at the end.** (1) A card whose question is "Open the interview: pick a recent AI project and talk about it with a productionisation focus" and whose answer is the 2-minute ANZ Plus pitch from the sources. (2) A card on how to respond when I hit the limit of my knowledge (reason out loud from fundamentals, state where my certainty ends, describe how I would confirm it).
+- Do not invent facts, metrics, or experience that are not in the sources. If a concept in the sources is thin, write a card that flags what I still need to shore up rather than fabricating detail.
+
+Start now and output all cards in one block.
+
+## (End of prompt)
+
+---
+
+## Notes
+- If NotebookLM truncates, ask it "continue from where you stopped, same format."
+- To load into Anki: save the output as a `.txt`, then File > Import, set the field separator to the line break style Anki expects, or simply paste Q/A pairs into a Basic note type. The `Q:` / `A:` / `---` structure is deliberately import-friendly.
+- Add a second pass later: "Now generate 15 harder edge-case cards focused only on the JavaScript event loop and Python GIL, same format." That gives you a targeted hard deck for the two areas most likely to be drilled.
+- Remember the pack rule: these cards are for genuine learning so you can explain each idea *as yourself*. Say the answers aloud; do not memorise them verbatim.

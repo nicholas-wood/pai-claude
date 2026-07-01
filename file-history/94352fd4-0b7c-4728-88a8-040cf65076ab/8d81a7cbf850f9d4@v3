@@ -1,0 +1,63 @@
+/**
+ * Off-box backup of the local BudgetBuddy SQLite DB to OneDrive, so a dead Linux
+ * box does not mean lost data. VACUUM INTO produces a clean single-file snapshot
+ * (it folds the WAL and is safe while the service is running); rclone copyto
+ * uploads it under a date-stamped name; snapshots older than 30 days are pruned.
+ *
+ * Run via the penny-backup.timer (daily) or by hand: bun run scripts/backup-db.ts
+ */
+
+import { Database } from "bun:sqlite";
+import { statSync } from "node:fs";
+
+const HOME = process.env.HOME!;
+const DB = `${HOME}/.penny/penny.db`;
+const stamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (one snapshot per day)
+const tmp = `${HOME}/.penny/backup-${stamp}.db`;
+const DEST_DIR = "onedrive:Backups/BudgetBuddy";
+const dest = `${DEST_DIR}/penny-${stamp}.db`;
+
+function rclone(args: string[]): number {
+  const p = Bun.spawnSync(["rclone", ...args], { stdout: "inherit", stderr: "inherit" });
+  return p.exitCode ?? 1;
+}
+
+// 1. Consistent snapshot (folds the WAL into one file). busy_timeout lets the
+// snapshot wait out a concurrent writer (a reseed) instead of failing. VACUUM INTO
+// will not bind a parameter and refuses an existing target, so clear any stale temp
+// and inline the (controlled) path.
+Bun.spawnSync(["rm", "-f", tmp]);
+const db = new Database(DB);
+db.run("PRAGMA busy_timeout = 60000");
+db.run(`VACUUM INTO '${tmp.replace(/'/g, "''")}'`);
+db.close();
+
+const snapBytes = statSync(tmp).size;
+
+// 2. Upload it (copyto, not a mount — mount uploads stall silently). rclone to
+// OneDrive uploads the bytes reliably but can hang on exit cleaning up the idle
+// connection, so we BOUND the call with `timeout` and judge success by the remote
+// file size, not the exit code.
+Bun.spawnSync(["timeout", "300", "rclone", "copyto", tmp, dest, "--timeout", "45s", "--retries", "2", "--low-level-retries", "3"], { stdout: "inherit", stderr: "inherit" });
+
+// 3. Verify the upload by comparing the remote size to the snapshot size.
+const ls = Bun.spawnSync(["rclone", "lsl", dest]);
+const remoteBytes = Number((new TextDecoder().decode(ls.stdout).trim().match(/^\s*(\d+)\s/) ?? [])[1] ?? 0);
+Bun.spawnSync(["rm", "-f", tmp]);
+if (remoteBytes !== snapBytes || snapBytes === 0) {
+  console.error(`[backup] upload verify FAILED: local ${snapBytes}B vs remote ${remoteBytes}B`);
+  process.exit(1);
+}
+
+// 4. Prune snapshots older than 30 days.
+rclone(["delete", DEST_DIR, "--min-age", "30d"]);
+
+// 5. Record verified-backup status so the app can surface a REAL last-backup
+// time (ISC-46, ISC-83). Written only after the upload verifies, so the app
+// never shows a time for a backup that did not actually land.
+await Bun.write(
+  `${HOME}/.penny/backup-status.json`,
+  JSON.stringify({ lastBackupAt: new Date().toISOString(), sizeBytes: snapBytes, dest }),
+);
+
+console.log(`[backup] snapshot uploaded + verified (${(snapBytes / 1e6).toFixed(1)}MB) -> ${dest}`);

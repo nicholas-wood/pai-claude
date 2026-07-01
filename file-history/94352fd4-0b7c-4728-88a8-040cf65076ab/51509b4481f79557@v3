@@ -1,0 +1,232 @@
+import * as React from "react";
+import { useNavigate } from "react-router-dom";
+import { TrendingUp, Pencil } from "lucide-react";
+import type { IncomeEnvelopeView } from "@contract";
+import { cn, formatCents } from "@/lib/utils";
+import { LeftValue } from "@/components/budget/figures";
+import { SectionShell } from "@/components/budget/SectionShell";
+import type { PopoverAnchor } from "@/components/budget/TransactionPopover";
+
+/**
+ * Income envelopes, shown up top (ISC-65, ISC-101). Each income source is a
+ * first-class income envelope rendered with the SAME four columns as an expense
+ * row — Carryover, Budget, Received, Left — so the two read identically. The
+ * Received figure opens the contributing income transactions (the drill-down),
+ * exactly like an expense row's Spent. The whole row opens the income source's
+ * own detail page. Figures come straight from the grid response, never invented
+ * (ISC-83).
+ */
+
+export function IncomeSection({
+  income,
+  period,
+  onEdit,
+  onOpenTransactions,
+}: {
+  income: readonly IncomeEnvelopeView[];
+  /** Inclusive day bounds of the current grid period, for the Received drill-down. */
+  period: { from: string; to: string };
+  onEdit?: (income: IncomeEnvelopeView) => void;
+  onOpenTransactions: (anchor: PopoverAnchor) => void;
+}) {
+  const navigate = useNavigate();
+  const [open, setOpen] = React.useState(true);
+
+  const totalCarry = income.reduce((s, i) => s + i.carryoverCents, 0);
+  const totalBudget = income.reduce((s, i) => s + i.budgetedCents, 0);
+  const totalReceived = income.reduce((s, i) => s + i.receivedCents, 0);
+  const totalLeft = income.reduce((s, i) => s + i.leftCents, 0);
+
+  if (income.length === 0) {
+    return (
+      <SectionShell
+        title="Income"
+        subtitle="actual pay vs budget"
+        icon={TrendingUp}
+        open={open}
+        onToggleOpen={() => setOpen((o) => !o)}
+        count={0}
+        total={formatCents(0)}
+      >
+        {open && (
+          <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+            No income sources yet. Add an income budget to track actual pay against your budget.
+          </div>
+        )}
+      </SectionShell>
+    );
+  }
+
+  const receivedButton = (i: IncomeEnvelopeView, extra?: string) => (
+    <button
+      type="button"
+      aria-label={`Show ${i.name} income transactions`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpenTransactions({
+          envelopeId: i.id,
+          envelopeName: i.name,
+          from: period.from,
+          to: period.to,
+          x: e.clientX,
+          y: e.clientY,
+        });
+      }}
+      className={cn(
+        "tnum rounded text-sm tabular-nums underline decoration-dotted decoration-muted-foreground/50 underline-offset-2 hover:bg-accent hover:decoration-foreground",
+        extra
+      )}
+    >
+      {formatCents(i.receivedCents)}
+    </button>
+  );
+
+  return (
+    <SectionShell
+      title="Income"
+      subtitle="actual pay vs budget"
+      icon={TrendingUp}
+      open={open}
+      onToggleOpen={() => setOpen((o) => !o)}
+      count={income.length}
+      total={formatCents(totalBudget)}
+    >
+      {/* Column headers (desktop table only; mobile cards are self-labelled) */}
+      <div className="hidden grid-cols-[1fr_repeat(4,minmax(0,5.75rem))] gap-3 border-b bg-card px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground md:grid">
+        <div>Source</div>
+        <div className="text-right">Carry</div>
+        <div className="text-right">Budget</div>
+        <div className="text-right">Received</div>
+        <div className="text-right">Left</div>
+      </div>
+
+      {open && (
+      <div className="divide-y divide-border/40">
+        {income.map((i) => {
+          const goDetail = () => navigate(`/envelope/${i.id}`);
+          const onRowKey = (e: React.KeyboardEvent) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              goDetail();
+            }
+          };
+          const editButton = onEdit && (
+            <button
+              type="button"
+              aria-label={`Edit ${i.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(i);
+              }}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground md:h-8 md:w-8"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+          );
+          return (
+            <React.Fragment key={i.id}>
+              {/* Desktop: dense table row, four columns mirroring an expense row */}
+              <div
+                role="button"
+                tabIndex={0}
+                aria-label={`Open ${i.name}`}
+                onClick={goDetail}
+                onKeyDown={onRowKey}
+                className="hidden cursor-pointer grid-cols-[1fr_repeat(4,minmax(0,5.75rem))] items-center gap-3 px-3 py-2 transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:grid"
+              >
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">{i.name}</div>
+                    <div className="truncate text-xs text-muted-foreground">{i.source}</div>
+                  </div>
+                  {editButton && <span className="ml-auto">{editButton}</span>}
+                </div>
+                <div className="tnum text-right text-sm">{formatCents(i.carryoverCents)}</div>
+                <div className="tnum text-right text-sm">{formatCents(i.budgetedCents)}</div>
+                <div className="text-right">{receivedButton(i)}</div>
+                <div className="text-right">
+                  <LeftValue cents={i.leftCents} />
+                </div>
+              </div>
+
+              {/* Mobile: stacked card row with labelled figures */}
+              <div
+                role="button"
+                tabIndex={0}
+                aria-label={`Open ${i.name}`}
+                onClick={goDetail}
+                onKeyDown={onRowKey}
+                className="flex cursor-pointer flex-col gap-2 px-2 py-2.5 transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:hidden"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium">{i.name}</div>
+                    <div className="truncate text-xs text-muted-foreground">{i.source}</div>
+                  </div>
+                  {editButton}
+                  <div className="shrink-0 text-right">
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Left</div>
+                    <LeftValue cents={i.leftCents} className="text-base font-semibold" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2 pl-2">
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Carry</div>
+                    <div className="tnum truncate text-sm">{formatCents(i.carryoverCents)}</div>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Budget</div>
+                    <div className="tnum truncate text-sm">{formatCents(i.budgetedCents)}</div>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Received</div>
+                    {receivedButton(i, "block text-left")}
+                  </div>
+                </div>
+              </div>
+            </React.Fragment>
+          );
+        })}
+      </div>
+      )}
+
+      {/* Totals row */}
+      <div className="border-t bg-muted/40 text-sm font-semibold">
+        {/* Desktop totals */}
+        <div className="hidden grid-cols-[1fr_repeat(4,minmax(0,5.75rem))] gap-3 px-3 py-2.5 md:grid">
+          <div>Total income</div>
+          <div className="tnum text-right">{formatCents(totalCarry)}</div>
+          <div className="tnum text-right">{formatCents(totalBudget)}</div>
+          <div className="tnum text-right">{formatCents(totalReceived)}</div>
+          <div className="text-right">
+            <LeftValue cents={totalLeft} />
+          </div>
+        </div>
+        {/* Mobile totals */}
+        <div className="flex flex-col gap-2 px-2 py-2.5 md:hidden">
+          <div className="flex items-center justify-between gap-2">
+            <span>Total income</span>
+            <div className="text-right">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Left</div>
+              <LeftValue cents={totalLeft} className="text-base" />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2 pl-2 font-normal">
+            <div className="min-w-0">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Carry</div>
+              <div className="tnum truncate text-sm">{formatCents(totalCarry)}</div>
+            </div>
+            <div className="min-w-0">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Budget</div>
+              <div className="tnum truncate text-sm">{formatCents(totalBudget)}</div>
+            </div>
+            <div className="min-w-0">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Received</div>
+              <div className="tnum truncate text-sm">{formatCents(totalReceived)}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </SectionShell>
+  );
+}

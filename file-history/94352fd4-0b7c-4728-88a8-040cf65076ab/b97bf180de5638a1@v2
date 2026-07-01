@@ -1,0 +1,481 @@
+import * as React from "react";
+import { Link } from "react-router-dom";
+import {
+  CalendarClock,
+  CalendarRange,
+  ArrowLeftRight,
+  AlertTriangle,
+  Pencil,
+  RotateCcw,
+  Plus,
+  Receipt,
+  Wallet,
+  Scale,
+  PiggyBank,
+  Mail,
+  Shuffle,
+  Archive,
+  Coins,
+} from "lucide-react";
+import type { GridResponse, EnvelopeRow, IncomeEnvelopeView, NamedPeriod, ArchivedEnvelopeView } from "@contract";
+import { call } from "@/lib/api";
+import { cn, formatCents, periodLabel, todayIso, NAMED_PERIODS, NAMED_PERIOD_LABELS } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { IncomeSection } from "@/components/budget/IncomeSection";
+import { BudgetSection } from "@/components/budget/BudgetSection";
+import { ZeroBaseHeadline } from "@/components/budget/ZeroBaseHeadline";
+import { TransactionPopover, type PopoverAnchor } from "@/components/budget/TransactionPopover";
+import { CarryoverPopover, type CarryoverAnchor } from "@/components/budget/CarryoverPopover";
+import { NetPositionWidget } from "@/components/budget/NetPositionWidget";
+import { MoveMoneyModal } from "@/components/MoveMoneyModal";
+import { DistributeSurplusModal } from "@/components/DistributeSurplusModal";
+import { AddBudgetModal, type BudgetEditTarget } from "@/components/AddBudgetModal";
+// Lazy-load the (heavy, recharts-based) budget charts so they never block the
+// grid's first paint or initial taps on mobile.
+const WhereTheMoneyGoes = React.lazy(() => import("@/components/charts/BudgetCharts").then((m) => ({ default: m.WhereTheMoneyGoes })));
+const OverUnderLeft = React.lazy(() => import("@/components/charts/BudgetCharts").then((m) => ({ default: m.OverUnderLeft })));
+
+/** The period selection (ISC-103/104): a named period or an explicit custom range. */
+type PeriodSel = NamedPeriod | "custom";
+
+/**
+ * The budget screen — a full spreadsheet replacement (ISC-34, ISC-70). A period
+ * selector (this month by default, plus last month, this/last financial year, and
+ * a custom range) drives GET /api/envelopes so the whole grid recomputes (ISC-103).
+ * The zero-base headline leads, then four grouped, collapsible sections: Income,
+ * Savings, Expenses, Envelopes — each row carrying its four figures in its own
+ * natural period (ISC-94). A group/flat toggle collapses the four sections into a
+ * single income-vs-spending list. Clicking a row's spent/received figure opens the
+ * contributing transactions (ISC-35). An "as of" pill time-travels balances
+ * (ISC-36). Figures come from the grid response and are never invented (ISC-83).
+ */
+export function BudgetPage() {
+  const [grid, setGrid] = React.useState<GridResponse | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [asOf, setAsOf] = React.useState<string>(""); // empty = live/current
+  const [periodSel, setPeriodSel] = React.useState<PeriodSel>("this-month");
+  const [customFrom, setCustomFrom] = React.useState<string>("");
+  const [customTo, setCustomTo] = React.useState<string>("");
+  const [grouped, setGrouped] = React.useState(true);
+  const [showArchived, setShowArchived] = React.useState(false);
+  const [archived, setArchived] = React.useState<readonly ArchivedEnvelopeView[]>([]);
+  const [moveOpen, setMoveOpen] = React.useState(false);
+  const [distributeOpen, setDistributeOpen] = React.useState(false);
+  const [addOpen, setAddOpen] = React.useState(false);
+  const [editTarget, setEditTarget] = React.useState<BudgetEditTarget | null>(null);
+  const [popover, setPopover] = React.useState<PopoverAnchor | null>(null);
+  const [carryoverAnchor, setCarryoverAnchor] = React.useState<CarryoverAnchor | null>(null);
+
+  const openAdd = () => {
+    setEditTarget(null);
+    setAddOpen(true);
+  };
+  const editRow = (row: EnvelopeRow) => {
+    setEditTarget({
+      id: row.id,
+      name: row.name,
+      type: row.type,
+      active: row.active,
+      parentId: row.parentId,
+      monthlyCents: row.allocationCents,
+      period: row.period,
+      targetCents: 0,
+    });
+    setAddOpen(true);
+  };
+  const editIncome = (i: IncomeEnvelopeView) => {
+    setEditTarget({
+      id: i.id,
+      name: i.name,
+      type: "income",
+      active: true,
+      parentId: null,
+      monthlyCents: 0,
+      targetCents: i.budgetedCents,
+    });
+    setAddOpen(true);
+  };
+
+  const customReady = periodSel !== "custom" || (customFrom !== "" && customTo !== "");
+
+  const load = React.useCallback(async () => {
+    setError(null);
+    try {
+      const res = asOf
+        ? await call("GET /api/envelopes/as-of", { date: asOf })
+        : periodSel === "custom"
+          ? await call("GET /api/envelopes", { from: customFrom, to: customTo })
+          : await call("GET /api/envelopes", { period: periodSel });
+      setGrid(res);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load the budget.");
+    } finally {
+      setLoading(false);
+    }
+  }, [asOf, periodSel, customFrom, customTo]);
+
+  React.useEffect(() => {
+    // Hold a half-entered custom range; only fetch once both bounds are present.
+    if (!customReady) return;
+    void load();
+  }, [load, customReady]);
+
+  // The archived envelopes are fetched only when the "Show archived" toggle is on
+  // (the grid itself excludes them entirely). Each links to its detail page, where
+  // the Unarchive control lives.
+  React.useEffect(() => {
+    if (!showArchived) return;
+    let live = true;
+    void call("GET /api/envelopes/archived")
+      .then((r) => {
+        if (live) setArchived(r.envelopes);
+      })
+      .catch(() => {
+        if (live) setArchived([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, [showArchived]);
+
+  if (loading) {
+    return <div className="py-16 text-center text-sm text-muted-foreground animate-pulse">Loading budget…</div>;
+  }
+
+  if (error || !grid) {
+    return (
+      <div className="mx-auto max-w-md py-16 text-center">
+        <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-warning" />
+        <p className="text-sm text-muted-foreground">{error ?? "Budget unavailable."}</p>
+        <Button className="mt-4" variant="outline" size="sm" onClick={() => void load()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  const isSetUp = grid.isSetUp;
+  const period = grid.period;
+  // The rendered range's actual day bounds drive the transaction drill-down.
+  const bounds = { from: grid.from, to: grid.to };
+
+  const savings = grid.rows.filter((r) => r.type === "saving");
+  const expenses = grid.rows.filter((r) => r.type === "expense");
+  const envelopes = grid.rows.filter((r) => r.type === "envelope");
+  // Working envelopes render in their own section, separate from the budget and the
+  // flat spending list, and are absent from the zero-base headline (server-side).
+  const working = grid.rows.filter((r) => r.type === "working");
+  const spending = grid.rows.filter((r) => r.type !== "income" && r.type !== "working");
+
+  const headingLabel = periodSel === "custom" ? `${grid.from} to ${grid.to}` : NAMED_PERIOD_LABELS[periodSel];
+
+  return (
+    <div className="mx-auto max-w-4xl space-y-5">
+      {/* Net-position master reconciliation: cash − card owed vs total left. */}
+      <NetPositionWidget />
+
+      {/* Header: period, as-of pill, actions */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight md:text-2xl">{headingLabel}</h1>
+          <p className="text-sm text-muted-foreground">{periodLabel(period)} · every dollar gets a job.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* As-of time-travel pill (ISC-36) */}
+          <div
+            className={cn(
+              "flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm",
+              asOf ? "border-warning bg-warning/10 text-warning" : "bg-card text-muted-foreground"
+            )}
+          >
+            <CalendarClock className="h-4 w-4" />
+            <span className="hidden sm:inline">As of</span>
+            <Input
+              type="date"
+              value={asOf || todayIso()}
+              max={todayIso()}
+              onChange={(e) => setAsOf(e.target.value === todayIso() ? "" : e.target.value)}
+              className="h-7 w-[8.5rem] border-0 bg-transparent p-0 text-sm focus-visible:ring-0"
+            />
+            {asOf && (
+              <button onClick={() => setAsOf("")} title="Back to today" className="rounded p-0.5 hover:bg-warning/20">
+                <RotateCcw className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <Button variant="outline" size="sm" onClick={openAdd}>
+            <Plus className="h-4 w-4" /> Add budget
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/edit-budget">
+              <Pencil className="h-4 w-4" /> Edit budget
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setDistributeOpen(true)} disabled={!isSetUp}>
+            <Coins className="h-4 w-4" /> Distribute surplus
+          </Button>
+          <Button size="sm" onClick={() => setMoveOpen(true)} disabled={!isSetUp}>
+            <ArrowLeftRight className="h-4 w-4" /> Move money
+          </Button>
+        </div>
+      </div>
+
+      {/* Period selector + group/flat toggle (ISC-103). Disabled while time-travelling. */}
+      <div className="flex flex-col gap-3 rounded-lg border bg-card px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <CalendarRange className="h-4 w-4" /> Period
+          </span>
+          <Select
+            value={periodSel}
+            onValueChange={(v) => setPeriodSel(v as PeriodSel)}
+            disabled={Boolean(asOf)}
+          >
+            <SelectTrigger className="h-8 w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {NAMED_PERIODS.map((p) => (
+                <SelectItem key={p} value={p}>
+                  {NAMED_PERIOD_LABELS[p]}
+                </SelectItem>
+              ))}
+              <SelectItem value="custom">Custom range…</SelectItem>
+            </SelectContent>
+          </Select>
+          {periodSel === "custom" && (
+            <div className="flex items-center gap-1.5">
+              <Input
+                type="date"
+                aria-label="Custom range start"
+                value={customFrom}
+                max={customTo || todayIso()}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="h-8 w-[8.5rem]"
+                disabled={Boolean(asOf)}
+              />
+              <span className="text-xs text-muted-foreground">to</span>
+              <Input
+                type="date"
+                aria-label="Custom range end"
+                value={customTo}
+                min={customFrom}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="h-8 w-[8.5rem]"
+                disabled={Boolean(asOf)}
+              />
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-4">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-input accent-primary"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+            />
+            Show archived
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-input accent-primary"
+              checked={!grouped}
+              onChange={(e) => setGrouped(!e.target.checked)}
+            />
+            Flat list
+          </label>
+        </div>
+      </div>
+
+      {!isSetUp ? (
+        <>
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-4 py-3">
+            <div className="flex items-center gap-2 text-sm">
+              <Wallet className="h-5 w-5 text-muted-foreground" />
+              <span className="font-medium text-muted-foreground">No budget set up yet.</span>
+            </div>
+            <Badge variant="secondary">Not set up</Badge>
+          </div>
+          <div className="rounded-lg border border-dashed bg-card px-6 py-12 text-center">
+            <Wallet className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+            <p className="text-sm font-medium">No budget set up yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Add your first income source and a few expense envelopes to get started.
+            </p>
+            <Button className="mt-4" size="sm" onClick={openAdd}>
+              <Plus className="h-4 w-4" /> Add budget
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Zero-base headline (ISC-98): the spreadsheet's Full Budget E2 */}
+          <ZeroBaseHeadline
+            capitalProvidedCents={grid.capitalProvidedCents}
+            budgetedOutCents={grid.budgetedOutCents}
+            residualCents={grid.residualCents}
+          />
+
+          {asOf && (
+            <p className="text-xs text-warning">
+              Time-travel view — balances as at end of day {asOf}. This is read-only history.
+            </p>
+          )}
+
+          {/* Uncategorised summary: unmapped transactions sit outside every budget. */}
+          {grid.uncategorisedCount > 0 && (
+            <Link
+              to="/transactions"
+              className="flex items-center justify-between gap-3 rounded-lg border border-dashed bg-card px-4 py-3 text-sm hover:bg-accent"
+            >
+              <span className="font-medium">
+                {grid.uncategorisedCount} transaction{grid.uncategorisedCount === 1 ? "" : "s"} to be categorised
+              </span>
+              <span className="tnum text-muted-foreground">Total: {formatCents(grid.uncategorisedTotalCents)}</span>
+            </Link>
+          )}
+
+          {/* Grouped: four sections. Flat: income vs a single spending list (ISC). */}
+          <div className="space-y-4">
+            <IncomeSection
+              income={grid.income}
+              period={bounds}
+              onEdit={editIncome}
+              onOpenTransactions={setPopover}
+            />
+            {grouped ? (
+              <>
+                <BudgetSection
+                  title="Savings"
+                  subtitle="set aside; unlikely to spend"
+                  icon={PiggyBank}
+                  rows={savings}
+                  period={bounds}
+                  onEdit={editRow}
+                  onOpenTransactions={setPopover}
+                  onAdjustCarryover={setCarryoverAnchor}
+                />
+                <BudgetSection
+                  title="Expenses"
+                  subtitle="fixed bills by category"
+                  icon={Receipt}
+                  rows={expenses}
+                  period={bounds}
+                  onEdit={editRow}
+                  onOpenTransactions={setPopover}
+                  onAdjustCarryover={setCarryoverAnchor}
+                />
+                <BudgetSection
+                  title="Envelopes"
+                  subtitle="variable spending with targets"
+                  icon={Mail}
+                  rows={envelopes}
+                  period={bounds}
+                  onEdit={editRow}
+                  onOpenTransactions={setPopover}
+                  onAdjustCarryover={setCarryoverAnchor}
+                />
+              </>
+            ) : (
+              <BudgetSection
+                title="Spending"
+                subtitle="savings, expenses and envelopes, flat"
+                icon={Wallet}
+                rows={spending}
+                period={bounds}
+                onEdit={editRow}
+                onOpenTransactions={setPopover}
+                onAdjustCarryover={setCarryoverAnchor}
+              />
+            )}
+
+            {/* Working: tracked but outside the zero-based budget (carry/budget are zero). */}
+            {working.length > 0 && (
+              <BudgetSection
+                title="Working"
+                subtitle="tracked, outside the budget"
+                icon={Shuffle}
+                rows={working}
+                period={bounds}
+                onEdit={editRow}
+                onOpenTransactions={setPopover}
+                onAdjustCarryover={setCarryoverAnchor}
+              />
+            )}
+          </div>
+
+          {/* Where-the-money-goes and over/under triage charts (plan #3, #6), lazy so
+              the heavy recharts chunk never blocks the grid or initial interaction. */}
+          {!asOf && (
+            <React.Suspense fallback={null}>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <WhereTheMoneyGoes rows={spending} />
+                <OverUnderLeft rows={spending} />
+              </div>
+            </React.Suspense>
+          )}
+
+          {/* Archived envelopes (Show archived toggle): a small read-only list linking
+              to each detail page, where the Unarchive control lives. */}
+          {showArchived && (
+            <div className="rounded-lg border bg-card px-4 py-3">
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                <Archive className="h-4 w-4" /> Archived envelopes
+              </div>
+              {archived.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No archived envelopes.</p>
+              ) : (
+                <ul className="divide-y divide-border/40">
+                  {archived.map((a) => (
+                    <li key={a.id}>
+                      <Link
+                        to={`/envelope/${a.id}`}
+                        className="flex items-center justify-between py-2 text-sm hover:text-foreground"
+                      >
+                        <span>{a.name}</span>
+                        <span className="text-xs capitalize text-muted-foreground">{a.type}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          <p className="text-right text-xs text-muted-foreground">
+            Balances as of {new Date(grid.asOf).toLocaleString("en-AU")}
+          </p>
+        </>
+      )}
+
+      {popover && <TransactionPopover anchor={popover} onClose={() => setPopover(null)} />}
+      {carryoverAnchor && (
+        <CarryoverPopover
+          anchor={carryoverAnchor}
+          onClose={() => setCarryoverAnchor(null)}
+          onSaved={load}
+        />
+      )}
+      <MoveMoneyModal open={moveOpen} onOpenChange={setMoveOpen} rows={grid.rows} onMoved={load} />
+      <DistributeSurplusModal
+        open={distributeOpen}
+        onOpenChange={setDistributeOpen}
+        rows={grid.rows}
+        onDistributed={load}
+      />
+      <AddBudgetModal
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        rows={grid.rows}
+        onCreated={load}
+        editTarget={editTarget}
+      />
+    </div>
+  );
+}

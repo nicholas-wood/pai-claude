@@ -1,0 +1,81 @@
+# NotebookLM Flashcard Prompt
+
+Use this to turn the prep pack into a drillable flashcard deck. NotebookLM grounds its output in the sources you give it, so the cards will reflect *your* pack and *your* real experience, not generic internet answers.
+
+## Setup (do this first)
+1. Open a new NotebookLM notebook.
+2. **Upload these files as sources** (the fundamentals + your talking points are what Tom drills):
+   - `09-round-2-tom-deep-technical.md` (the anchor answers + hit-list)
+   - `04-react-hooks.md`
+   - `04a-javascript-and-typescript.md`
+   - `05-senior-python.md`
+   - `02-ai-systems-fundamentals.md` and `02a-ai-safety-systems.md` (for the productionisation cards)
+   - `01-pd-decode-and-fit.md` (for the ANZ / project narrative cards)
+3. Open the **Flashcards** feature in the Studio panel, and paste the instructions below into its focus/customise box, then generate. (NotebookLM builds and formats the cards for you; you are just steering coverage and depth.)
+
+---
+
+## The instructions (copy from here)
+
+These are flashcards for a deep-technical engineering interview. My interviewer is extremely experienced and will drill into each topic until he finds the edge of my knowledge, so I need cards that build genuine depth, not surface recall. Ground every card strictly in the uploaded sources.
+
+- **Coverage and weighting.** Aim for roughly 60 cards, weighted: 40% JavaScript + React fundamentals (event loop, micro/macrotask ordering, closures, garbage collection, promises, how `useState` works, `useEffect` and dependency arrays, batching, immutability, rules of hooks); 35% Python fundamentals (reference counting and generational GC, the GIL, threading vs multiprocessing vs asyncio, async/await, generators, memory); 25% AI productionisation, which must include a block of **RAG evaluation metrics**: cosine similarity (and why it is not a relevance metric), recall@k/precision@k, MRR, NDCG, the RAG triad, faithfulness/groundedness, answer relevance, perplexity (and why low perplexity is not correctness), ground-truth comparison, LLM-as-a-judge and its biases, plus guardrails, observability, and reliability/fallbacks.
+- **Depth ladders.** For the most important concepts (JS event loop, `useState`, the GIL, garbage collection in both languages), include a chain of 3 progressively harder cards on the same topic: (1) the core explanation, (2) a "why" or mechanism card, (3) a tricky edge case or trade-off. This mirrors how the interviewer digs deeper on one answer.
+- **Answer style.** Answers must be concise (2 to 5 sentences), technically precise, and phrased so I can say them out loud naturally. Australian English. No em dashes. Prefer explaining the mechanism over listing keywords.
+- **Grounding.** Base every card only on the uploaded sources. Where a source ties a concept to my real experience (for example ANZ Plus retrieval APIs, guardrails, observability), write the card so the answer includes that concrete grounding, because "here is how this showed up in something I built" is exactly what I need to rehearse.
+- **Two special cards at the end.** (1) A card whose question is "Open the interview: pick a recent AI project and talk about it with a productionisation focus" and whose answer is the 2-minute ANZ Plus pitch from the sources. (2) A card on how to respond when I hit the limit of my knowledge (reason out loud from fundamentals, state where my certainty ends, describe how I would confirm it).
+- Do not invent facts, metrics, or experience that are not in the sources. If a concept in the sources is thin, write a card that flags what I still need to shore up rather than fabricating detail.
+
+## (End of instructions)
+
+---
+
+## Notes
+- Add a second pass later: regenerate with the focus "harder edge-case cards on only the JavaScript event loop and Python GIL." That gives you a targeted hard deck for the two areas most likely to be drilled.
+- Sanity-check the generated metric cards against the ready-made deck below, since NotebookLM can paraphrase a precise formula or nuance into something subtly wrong.
+- Remember the pack rule: these cards are for genuine learning so you can explain each idea *as yourself*. Say the answers aloud; do not memorise them verbatim.
+
+---
+
+## Ready-made deck: RAG evaluation metrics
+Hand-written and verified (metrics are precise enough that I would not trust generation for them). Read these aloud as-is, and use them to check NotebookLM's generated metric cards for accuracy.
+
+```
+Q: What does cosine similarity measure in a retriever, and what is the catch?
+A: It is the cosine of the angle between the query and document embedding vectors: close to 1 means same direction (similar meaning), near 0 means unrelated. The catch is it measures semantic closeness, not actual relevance, so a high score does not prove the chunk answers the question. You never use the similarity score itself as your retrieval-quality metric.
+---
+Q: What are recall@k and precision@k for a retriever?
+A: Recall@k asks whether the relevant chunk is somewhere in the top k results. Precision@k asks what fraction of the top k are actually relevant. First-stage retrieval is tuned for recall (cast a wide net), re-ranking for precision.
+---
+Q: What is Mean Reciprocal Rank (MRR) and when do you use it?
+A: MRR averages 1/rank of the first relevant document across queries: first position scores 1, second 0.5, third 0.33. Formula: (1/|Q|) times the sum of 1/rank_i. Use it when you care about the single best hit landing at the top.
+---
+Q: What is NDCG and how does it differ from MRR?
+A: Normalized Discounted Cumulative Gain rewards putting the most relevant documents highest, using graded relevance discounted by position and normalised against the ideal ordering, so it sits between 0 and 1. MRR only credits the first correct hit; NDCG grades the whole ranked list. Use NDCG when several documents matter and order matters.
+---
+Q: What is the RAG triad?
+A: Three quality dimensions, one per stage: context relevance (did retrieval fetch the right thing), groundedness or faithfulness (did the answer use only that context), and answer relevance (did it address the question). It is the clean mental model for scoring a RAG pipeline stage by stage.
+---
+Q: What is faithfulness / groundedness and how is it measured?
+A: Whether every claim in the answer is supported by the retrieved context. It is measured by decomposing the answer into atomic claims and checking each against the context, reported as a percentage. It is the primary hallucination metric.
+---
+Q: What is answer relevance, and why is faithfulness not enough on its own?
+A: Answer relevance is whether the answer directly addresses the user's question. A fluent, faithful answer to the wrong question still fails, so you measure relevance separately, often by generating candidate questions from the answer and comparing them back to the original query.
+---
+Q: What is perplexity, and why is low perplexity not a quality metric?
+A: Perplexity is exp of the average negative log-likelihood: how surprised the model is by the text, lower meaning more confident and fluent. But low perplexity is not correctness, a confident hallucination has low perplexity. It is useful for spotting degeneracy or out-of-distribution inputs, not for judging whether an answer is right.
+---
+Q: How does ground-truth comparison work in end-to-end RAG evaluation?
+A: Human experts author gold answers for a fixed question set, then you compare pipeline outputs to them: exact match or F1 for extractive answers, semantic similarity or an LLM-judge for generative ones. It is your regression backbone in CI.
+---
+Q: What is LLM-as-a-judge and what are its risks?
+A: A strong model grades outputs against a rubric, typically 1 to 5, so evaluation scales. The risks are position, verbosity, and self-preference biases, plus drift. You mitigate by validating the judge against human ratings and keeping humans on the hard slices.
+---
+Q: Why score retrieval and generation separately instead of one end-to-end number?
+A: A single end-to-end score hides where the pipeline broke, and most "the LLM is wrong" failures are actually retrieval failures. So you measure the retriever (recall@k, MRR, NDCG) apart from the generator (faithfulness, answer relevance), then end-to-end, so you know which stage to fix.
+---
+Q: What do Ragas, TruLens, DeepEval and LangSmith do, and how should I talk about them?
+A: Ragas gives RAG metrics like faithfulness and context precision/recall. TruLens provides feedback functions and is where the RAG-triad framing comes from. DeepEval is pytest-style LLM testing with faithfulness as a percentage. LangSmith does tracing, datasets, and LLM-judge evals. Honest line: know what each measures, but do not claim production hours on one I have not run.
+---
+```
+

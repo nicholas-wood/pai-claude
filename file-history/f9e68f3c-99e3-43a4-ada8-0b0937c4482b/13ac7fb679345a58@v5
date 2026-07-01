@@ -1,0 +1,169 @@
+# Round 2 - Tom (Head of AI) - Deep Technical Drill + Revision Plan
+
+This is the master doc for round 2. It is built directly on what Jaimyn told you about Tom and the interview style. Read this first, then work the revision plan at the bottom. Interview is **Friday 3 July, 3:30pm**.
+
+---
+
+## The intel (verbatim signal from Jaimyn)
+- Tom is the interviewer. He is **extremely experienced and deeply technically skilled.**
+- He will **drill down deep wherever he thinks your skills might be weaker, to find your limits.** This is a limit-finding interview by design.
+- The style is **bespoke and adaptive** - built on how you answer, digging deeper into your thinking as you go. Socratic, not a fixed script.
+- Prepare by **knowing React hooks, JavaScript, and Python fundamentals well.** Expect questions on **memory management, thread management, async/promises, garbage collection.**
+- Literal example questions given: **"explain the best you can how the useState hook works"** and **"how does the JavaScript event loop work."**
+- **The one deal-breaker:** lack of technical skill, OR **a mismatch between your resume and what you actually did.**
+- **The opening move:** the first thing they ask is for you to **pick a good recent project or two on a similar AI tech stack and talk about it really well, focused on productionisation (observability, safety, reliability).** That answer **sets the direction for the rest of the interview.**
+- Logistics signal (delivered as a joke about a prior candidate): be on time, dressed properly, in a quiet professional setting. Do not turn up late, in a hoody and cap, walking around a park.
+
+---
+
+## What this interview actually is
+Not a strategy conversation. Not "where does AI give Virgin leverage." That was my earlier read and it was wrong. This is a **deep technical depth interview** run by a very strong engineer whose explicit method is to push on each area until he finds the edge of what you actually know.
+
+Two consequences flow from that, and they govern everything:
+
+1. **He will reach your limit. That is the point, and it is fine.** Hitting the edge of your knowledge is expected and is not a fail. **Bluffing past the edge is the fail.** The winning behaviour when you hit your limit: reason out loud from fundamentals, state clearly where your certainty ends, and describe how you would find the answer. "I am not certain beyond this point, here is how I would reason about it and here is how I would confirm it" is a senior, passing answer. A confident wrong answer delivered to cover a gap is the losing one, and Tom is specifically good at spotting it.
+
+2. **Honesty is not just ethics here, it is the literal pass/fail gate.** Jaimyn named exactly one deal-breaker beyond raw skill: **resume-vs-reality mismatch.** That kills the idea of claiming you built LIMSOC POCs you only designed. Tom drills. If you open a claim you cannot go three layers deep on, you walk straight into the one thing that fails candidates. Everything you put on the table must be something you can be drilled on and hold. Designed-and-scoped is true and defensible; built-and-shipped is a trap. Label the boundary yourself before he finds it.
+
+---
+
+## The opening move - the most important five minutes
+They open by asking you to pick a recent AI project (or two) and talk about it with a **productionisation** focus. This sets the direction of the whole interview, because they drill into **whatever you open with.** So the choice of project is a strategic decision, not a warm-up.
+
+**Rule: open with the project where your depth is deepest AND fully truthful, because that is the ground you will be fighting on for the next 40 minutes.**
+
+### Primary project: ANZ Plus generative-AI search platform
+This is the right opener. It is real, it is AI, it is production, it is regulated (so productionisation was non-negotiable), and you owned a specific, defensible slice of it.
+
+- **Own your actual slice, out loud, early.** You owned the **search/retrieval APIs** inside the platform and drove the team's AI integration strategy and guardrails. Say that precisely. Do not narrate the whole platform as if you built all of it - that is exactly the resume-reality gap Tom hunts. Owning a clear slice deeply beats claiming a broad surface thinly.
+- **Lead with productionisation, because that is what they asked for and it is your edge:**
+  - **Observability:** OpenTelemetry - metrics, logs, traces across the retrieval path. What you measured (latency, retrieval quality signals, failure rates).
+  - **Safety / guardrails:** name a *specific* control you put in and *why*, in a context where a wrong answer has compliance consequences.
+  - **Reliability:** fallbacks, latency budgets, what happened when retrieval degraded, how you handled model/version changes.
+  - **Evaluation:** how you knew retrieval was good enough to ship, and how you would catch regressions.
+- **Build the drill-down ladder now.** Under each of the above, write the next two layers of depth, because Tom *will* ask "how" and then "why" and then "what did you trade off." Prepare: the embedding/retrieval approach, chunking, why Vertex/Gemini, how you evaluated grounding, a specific incident or failure mode and what you changed.
+
+### Secondary project: LIMSOC applied-AI designs (your choice)
+You are using LIMSOC as the second. That works **because it is the most AI-relevant second example you have** - AccessBuddy is a strong full-stack/ops build but it is not an AI system, and the opener specifically asks for AI stack. But LIMSOC carries one risk you must neutralise in your **opening sentence**, every time: it is **design work, not a shipped production system**, and Tom's single deal-breaker is resume-reality mismatch.
+
+**The rule: label the boundary yourself before he finds it.** Introduce it as design, then let the depth of your design reasoning carry it:
+
+> "My second example is deliberately a design rather than something shipped. For LIMSOC I architected a set of applied-AI initiatives - entity extraction, RAG-backed SOP coaching, ETA prediction - and what I want to talk through is how I would productionise them: how I would evaluate them, guardrail them, and operate them safely in a real-time emergency context."
+
+Why this is actually a strong secondary, not a weak one:
+- It shows you think about **productionisation before building**, which is exactly the maturity the PD hammers.
+- It lets you demonstrate **judgment**, not just recall. Lead with **initiative 6 (ETA prediction), where you argue *not* to use an LLM** - knowing when not to reach for a model is a senior signal Tom will respect.
+- You can go genuinely deep on **eval design, guardrail design, observability plan, failure modes** because you did the design thinking - so the drill-down lands on real ground.
+
+**The one thing that fails you:** letting "designed" drift into sounding like "built and ran." The moment Tom probes production texture (incidents, real latency, what broke) on something that was never shipped, and you improvise instead of holding the design line, you hit the deal-breaker. So when he pushes past the design into "what happened in production," the honest, senior answer is: "That is the design; it has not been shipped, so I would be speculating on the operational specifics - but here is how I would expect it to behave and how I would validate that." That sentence keeps you clean and still shows depth.
+
+### The scripted LIMSOC secondary pitch (rehearse this aloud, ~2 minutes)
+Say it in your own words, not verbatim. The shape matters more than the exact wording: **design-boundary opener → platform framing → ETA showpiece → guardrail close + Virgin bridge.**
+
+> "My second example is deliberately a design rather than something shipped. For LIMSOC, the real-time incident-management system for surf lifesaving, I was the product owner and engineer, and I designed a set of applied-AI initiatives. What I want to talk through isn't that they're live, because they're not, it's how I'd productionise them, because in a safety-critical operation the design and the guardrails are the hard part.
+>
+> The framing I care about is that these aren't seven separate features. They sit on one substrate: a structured incident state, an extraction and grounding layer, a RAG layer over standard operating procedures and past incidents, and one shared eval-and-guardrail framework. Build that once and the use cases compose. And one consistent safety philosophy runs through all of them: AI assists, humans decide, everything is grounded and cited, and the sensitive domains are suggestion-only with a full audit trail.
+>
+> The one I'd go deep on is ETA prediction, because the most important design decision was *not* to use an LLM. Predicting when a rescue asset reaches an incident is a predictive-modelling problem, not a language problem. So I'd start with an explainable physics baseline, distance over effective speed adjusted for sea state and wind, which ships immediately, and only then earn an ML correction trained on historical transit-time-versus-conditions telemetry. And the model is downstream of the data: if we don't have quality historical transit times paired with conditions, the data pipeline is the first piece of work, and the physics baseline carries us until the data earns the model. I'd always express the ETA as a range with uncertainty, never false precision, because it feeds a dispatch decision where minutes matter.
+>
+> The same discipline, grounded assistance, hard human-in-the-loop guardrails, and real evals, is exactly how I'd approach an operations-control or disruption assistant at Virgin."
+
+### When Tom drills, go here (depth ladders under the pitch)
+He will pick a thread and dig. Have these ready so the drill-down lands on real ground:
+
+- **If he drills ETA (your showpiece):** the baseline is `distance / effective_speed` with effective speed adjusted for conditions; features are asset position and type, route/distance, sea state, wind, tide, crew. Why regression not an LLM: it is a numeric prediction with structured inputs, an LLM would be slower, more expensive, less accurate, and unexplainable. The mature form is a **hybrid**: physics baseline plus an ML model that learns the *residual* (the condition adjustments physics misses). Cold-start: no data means no model, so the physics baseline ships first and you stand up the transit-time data pipeline in parallel. **Eval:** mean absolute error against actual arrival times, plus calibration of the uncertainty range (are your 80% ranges right 80% of the time). **Guardrail:** widen the range honestly when data is sparse rather than faking precision.
+- **If he steers to RAG (initiative 4, the PD's core):** retrieval is vector similarity **plus metadata filtering** on incident type, conditions, and location; every recommendation is **cited** back to the SOP or past incident; the hard part is **relevance under stress**, so the design optimises for the few most relevant prompts, not an essay. **Eval:** retrieval quality (are the right SOP steps surfaced) and grounding (no unsupported claims). **Guardrail:** decision *support*, not decision automation, and constrained retrieval rather than a free-running agent. *If he drills into how you score each stage (retriever metrics like MRR/NDCG, generator metrics like faithfulness/answer-relevance, end-to-end ground-truth and LLM-judge), go to the metric-by-metric quality-scoring subsection in `02-ai-systems-fundamentals.md`.*
+- **If he probes the eval/guardrail framework:** versioned eval sets built from **real de-identified incidents**, must-pass safety cases, and the consistent "assist not decide, ground everything, audit the sensitive ones" controls, shared across all initiatives.
+- **If he pushes past design into "what happened in production":** hold the line honestly. "That's the design; it hasn't shipped, so I'd be speculating on the operational specifics, but here's how I'd expect it to behave and how I'd validate that." Then reason forward. This keeps you clean of the resume-reality deal-breaker and still shows depth.
+
+### Fallback / corroboration: AccessBuddy
+Keep AccessBuddy in your back pocket. If Tom wants a *shipped, operated* system you own end to end - or if the LIMSOC "it is design" framing leaves him wanting production scar tissue - pivot to AccessBuddy: **solo-built, live, multi-tenant SaaS** with real operational ownership (observability via Sentry and Better Stack, CI/CD, auth, payments, GCP). It is the one thing you can be drilled on without limit because you built every line. It is not AI-centric, so it is the corroborating full-stack/ops proof, not the AI headline - but it is your safety net if the conversation wants shipped-and-operated over designed.
+
+---
+
+## The fundamentals hit-list - drill each to depth
+Jaimyn named the exact territory: **memory management, thread management, async/promises, garbage collection**, across **React hooks, JavaScript, Python.** These are the areas Tom will drill. For each, the target is not recognition, it is being able to explain it out loud, in your own words, and survive two "go deeper" follow-ups. Full treatment is in the existing docs; this is the priority map.
+
+| Area | What to be able to explain cold | Doc |
+|---|---|---|
+| **JS event loop** | Call stack, task (macrotask) queue vs microtask queue, why promises resolve before setTimeout(0), how async/await schedules continuations as microtasks, why long sync work blocks rendering/input | `04a` |
+| **JS closures** | What a closure captures, why it matters for hooks (stale closures), memory implications | `04a` |
+| **JS garbage collection** | Mark-and-sweep, reachability, what causes leaks (retained references, forgotten listeners, closures over large scope) | `04a` |
+| **Promises / async** | Pending/fulfilled/rejected, microtask timing, async/await as sugar over promises, error propagation | `04a` |
+| **React useState** | See scripted answer below - fiber slot, call-order/rules-of-hooks, closure over render, setter schedules re-render, batching, functional updates, immutability + Object.is bail-out | `04` |
+| **React useEffect / deps** | When effects run, dependency array semantics, cleanup, why the deps lint rule exists (stale closures again) | `04` |
+| **Python memory management** | Reference counting as primary mechanism, generational GC for cycles, when objects are freed | `05` |
+| **Python GIL / threads** | Why threading does not give CPU parallelism, threading (I/O-bound) vs multiprocessing (CPU-bound) vs asyncio (single-thread concurrency) | `05` |
+| **Python async / generators** | async/await + event loop, generators/yield and lazy evaluation, why they save memory | `05` |
+
+**The bridge that plays to your strength:** you understand concurrency, memory, and scheduling deeply from Java and Go. Reason about Python and JS *from that base* out loud - "in Go you'd handle this with goroutines and a scheduler; Python's asyncio is a single-threaded cooperative version of the same idea, and the GIL is why threads don't buy you CPU parallelism." A polyglot reasoning from fundamentals reads as *more* senior than someone reciting one language's idioms. But do not oversell Python fluency - Jaimyn's deal-breaker cuts both ways.
+
+---
+
+## Two anchor answers to rehearse out loud (Jaimyn handed you these)
+
+### "Explain the best you can how the useState hook works."
+Skeleton to say in your own words:
+- useState lets a function component hold state that survives across re-renders. You call `useState(initial)`, it returns the current value and a setter.
+- React stores that state on the component's **fiber node** (its slot in the fiber tree), keyed by **call order** - which is why hooks must be called unconditionally, in the same order every render (rules of hooks).
+- The value your component sees is **captured in a closure for that render**. Calling the setter does not mutate a variable, it **schedules a re-render**; on the next render, `useState` hands back the updated value.
+- Setters are **batched** within an event handler (multiple sets = one re-render). Updates **replace, not merge**. If the new value derives from the old, use the **functional form** `setX(prev => ...)` to avoid stale-closure bugs.
+- React uses **Object.is** to bail out if the value has not changed, and compares references - which is why you treat state as **immutable** and create new objects/arrays rather than mutating.
+- Follow-ups he may push: why call-order matters (fiber slots), stale closures, batching, why not mutate, how this differs from class `this.setState`.
+
+### "How does the JavaScript event loop work?"
+Skeleton:
+- JS is **single-threaded** with one **call stack**. Synchronous code runs to completion on the stack.
+- Async work (timers, I/O, fetch) is handed to the **host** (browser/Node) APIs; when it completes, its callback is **queued**, not run immediately.
+- The **event loop**: when the call stack is empty, it takes the next callback and pushes it on. There are two priority levels - the **microtask queue** (promise callbacks, `queueMicrotask`) is drained **completely after each task**, before the next macrotask or render; the **macrotask/task queue** (`setTimeout`, I/O, UI events) yields **one task per turn**.
+- That ordering is why a resolved **promise callback runs before `setTimeout(0)`**. `async/await` is sugar over promises: `await` yields control back to the loop and resumes the continuation as a **microtask**.
+- Consequence: long synchronous work **blocks everything** - rendering, input - so you offload with async or Web Workers.
+- Follow-ups he may push: microtask vs macrotask ordering, starvation, `requestAnimationFrame` timing, Node's loop phases (timers/poll/check).
+
+Practice both cold, no notes, out loud, until they are automatic. Then have someone fire "go deeper" on a random branch.
+
+---
+
+## Logistics (the joke was a real signal)
+- Be **seated and connected 5 minutes early.** Never late.
+- **Quiet, professional, indoors.** Neutral background, good light. Not a park, not walking.
+- Dressed for a senior interview. Camera on, framed properly.
+- **Test camera, mic, and connection beforehand.** A tech scramble at 3:30 costs you the opening.
+- Have water, and your one-page opener notes off to the side (for you, not on camera).
+
+---
+
+## Detailed step-by-step revision plan
+Runway: **Wed evening + all of Thursday + Friday morning.** Rebalanced for the intel: heavy on fundamentals drilling and the opening narrative; the FastMCP build is now optional, not central, because Tom drills fundamentals, not Virgin's product architecture.
+
+### Wednesday (tonight) - Foundation + opening - ~2.5-3 hrs
+1. **(45 min)** Read this doc and `01` (fit map). Internalise the two governing facts: limit-finding drill, and resume-reality is the deal-breaker.
+2. **(60 min)** Build your **opening**. Write the 2-minute ANZ Plus productionisation pitch (what it did, your actual slice, guardrails, observability, evals, reliability). Under each point, write the next **two layers of drill-down** you would give. Read it aloud 3 times.
+3. **(30 min)** Prep AccessBuddy as the optional second project - lighter, same productionisation lens.
+4. **(15 min)** Skim `04a`, `04`, `05` headings so you know Thursday's terrain.
+
+### Thursday - Fundamentals to depth - full day
+**Morning: JavaScript + React (~3 hrs)**
+1. **(75 min)** `04a` - event loop, micro/macrotask, closures, GC, promises. Write the **event-loop answer** in your own words; say it aloud until fluent. Drill: "what logs first, the promise or setTimeout(0), and why."
+2. **(75 min)** `04` - useState internals, useEffect, deps, immutability, batching, stale closures. Write the **useState answer**; say it aloud.
+3. **(30 min)** Answer both anchor questions **cold, no notes**, out loud. Record yourself if useful.
+
+**Afternoon: Python (~3 hrs)**
+4. **(90 min)** `05` - reference counting + generational GC, the GIL, threading vs multiprocessing vs asyncio, async/await, generators. Map each to Jaimyn's list (memory / threads / async / GC). Rehearse the Go/Java-to-Python bridge lines out loud.
+5. **(60 min)** *Optional* - stand up a tiny FastAPI async endpoint with a Pydantic model, only if fundamentals above are already solid. It reinforces async fluency and makes "I have been building with FastAPI recently" true. Skip without guilt if you are not fluent on the fundamentals yet - those come first.
+6. **(30 min)** Skim `02`/`02a` to refresh productionisation vocab (guardrails, evals, observability) so drill-downs into your ANZ opener have depth on tap.
+
+**Evening: full mock (~1 hr)**
+7. Do the **opening pitch cold**, then have someone (or self-simulate) fire the two anchor questions plus three "why / go deeper" probes. **Rehearse the limit-admission move explicitly:** "I would reason about it like X; the edge of what I am certain on is Y; here is how I would confirm." Practising this is as important as the content - it is the behaviour Tom is grading.
+
+### Friday morning - light polish - until ~1pm
+1. **(30 min)** Re-read your opening pitch + drill ladder. One aloud run.
+2. **(30 min)** Re-say the two anchor answers. Skim the one-line summaries for GC, event loop, GIL.
+3. **(20 min)** Review questions to ask Tom (`01`, tuned technical - eval/LLMOps maturity, how the AI team draws boundaries with Data Science/Platform).
+4. **(logistics)** Test camera/mic/connection. Quiet professional room. Dressed. Seated 5 min early.
+5. **No new material after ~1pm.** Eat, rest, walk. Arrive fresh, not crammed.
+
+---
+
+## The one sentence to carry in
+Open with the project you can be drilled on forever because it is true and it is yours; reason out loud from fundamentals; and when you reach your limit, name it cleanly and reason past it - because Tom is measuring how you think at the edge, not whether you have memorised everything.

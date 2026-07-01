@@ -1,0 +1,252 @@
+import * as React from "react";
+import { NavLink, useNavigate } from "react-router-dom";
+import {
+  LayoutGrid,
+  Receipt,
+  Scale,
+  GitCompareArrows,
+  History,
+  Settings,
+  LogOut,
+  Lock,
+  MoreHorizontal,
+  type LucideIcon,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useSession, IDLE_TIMEOUT_MS } from "@/lib/session";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { BrandMark } from "@/components/BrandMark";
+
+interface NavItem {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+}
+
+/**
+ * Full destination list for the desktop sidebar. Reconcile uses a distinct
+ * compare icon (Scale stays with the Zero-base surface only). "Balance" is
+ * renamed "Zero-base" so the word "balance" reads as money, not a route.
+ */
+const NAV: readonly NavItem[] = [
+  { to: "/", label: "Budget", icon: LayoutGrid },
+  { to: "/balance", label: "Zero-base", icon: Scale },
+  { to: "/transactions", label: "Transactions", icon: Receipt },
+  { to: "/reconcile", label: "Reconcile", icon: GitCompareArrows },
+  { to: "/history", label: "History", icon: History },
+  { to: "/settings", label: "Settings", icon: Settings },
+];
+
+/** Four thumb-zone primaries for the mobile bottom bar (5th slot is "More"). */
+const MOBILE_PRIMARY: readonly NavItem[] = [
+  { to: "/", label: "Budget", icon: LayoutGrid },
+  { to: "/transactions", label: "Transactions", icon: Receipt },
+  { to: "/reconcile", label: "Reconcile", icon: GitCompareArrows },
+];
+
+/** Everything else, surfaced from the "More" sheet on mobile. */
+const MOBILE_MORE: readonly NavItem[] = [
+  { to: "/balance", label: "Zero-base", icon: Scale },
+  { to: "/history", label: "History", icon: History },
+  { to: "/settings", label: "Settings", icon: Settings },
+];
+
+/**
+ * Live countdown of the idle session deadline (ISC-39). The indicator does not
+ * just display the deadline — it acts on it: once the remaining time reaches
+ * zero it locks the session and routes to sign-in, a backstop for the provider's
+ * own timer (which a backgrounded/throttled tab can stall). The pill turns amber
+ * inside the final two minutes so the impending lock is visible.
+ */
+function IdleIndicator() {
+  const { idleExpiresAt, signOut } = useSession();
+  const navigate = useNavigate();
+  const [now, setNow] = React.useState(Date.now());
+  const locking = React.useRef(false);
+
+  React.useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 5_000);
+    return () => clearInterval(t);
+  }, []);
+
+  React.useEffect(() => {
+    if (!idleExpiresAt) return;
+    if (now >= idleExpiresAt && !locking.current) {
+      locking.current = true;
+      void signOut("idle").then(() => navigate("/signin", { replace: true }));
+    }
+  }, [now, idleExpiresAt, signOut, navigate]);
+
+  React.useEffect(() => {
+    // Re-arm for the next session when a fresh deadline is issued.
+    if (idleExpiresAt) locking.current = false;
+  }, [idleExpiresAt]);
+
+  if (!idleExpiresAt) return null;
+  const remaining = Math.max(0, idleExpiresAt - now);
+  const mins = Math.ceil(remaining / 60000);
+  const total = IDLE_TIMEOUT_MS / 60000;
+  const soon = remaining <= 2 * 60_000;
+  return (
+    <span
+      className={cn("flex items-center gap-1 text-xs", soon ? "font-medium text-warning" : "text-muted-foreground")}
+      title="Session idle timeout (30 min)"
+    >
+      <Lock className="h-3 w-3" />
+      Locks in {mins} / {total} min
+    </span>
+  );
+}
+
+/**
+ * The "More" bottom sheet for the secondary mobile destinations. Built on the
+ * Radix Dialog (m2) so focus trapping, focus restore, Escape, and overlay
+ * dismissal come from the primitive rather than being hand-rolled. Positioned as
+ * a bottom sheet by overriding the centered DialogContent classes.
+ */
+function MoreSheet({ open, onClose, onSignOut }: { open: boolean; onClose: () => void; onSignOut: () => void }) {
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+    >
+      <DialogContent
+        aria-describedby={undefined}
+        className="inset-x-0 bottom-0 left-0 top-auto max-w-none translate-x-0 translate-y-0 gap-0 rounded-b-none rounded-t-2xl border-x-0 border-b-0 p-0 pb-[env(safe-area-inset-bottom)] md:hidden"
+      >
+        <DialogHeader className="flex-row items-center justify-between space-y-0 border-b px-4 py-3">
+          <DialogTitle className="text-sm font-semibold">More</DialogTitle>
+        </DialogHeader>
+        <nav className="grid grid-cols-2 gap-2 p-3">
+          {MOBILE_MORE.map(({ to, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              onClick={onClose}
+              className={({ isActive }) =>
+                cn(
+                  "flex min-h-[3.25rem] items-center gap-3 rounded-md border px-3 py-2 text-sm font-medium",
+                  isActive ? "border-primary bg-primary text-primary-foreground" : "text-foreground hover:bg-accent"
+                )
+              }
+            >
+              <Icon className="h-5 w-5 shrink-0" />
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+        <div className="border-t px-3 py-3">
+          <Button variant="outline" size="sm" className="min-h-11 w-full justify-start" onClick={onSignOut}>
+            <LogOut className="h-4 w-4" /> Sign out
+          </Button>
+          <div className="mt-2 text-center text-[10px] text-muted-foreground/70">{__BUILD_INFO__}</div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  const { signOut, userId } = useSession();
+  const navigate = useNavigate();
+  const [moreOpen, setMoreOpen] = React.useState(false);
+
+  const onSignOut = async () => {
+    setMoreOpen(false);
+    await signOut("manual");
+    navigate("/signin", { replace: true });
+  };
+
+  return (
+    <div className="flex min-h-dvh flex-col md:flex-row">
+      {/* Desktop sidebar */}
+      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r bg-card px-3 py-4 md:flex">
+        <div className="mb-6 flex items-center gap-2 px-2">
+          <BrandMark className="h-9 w-9 rounded-lg" />
+          <div>
+            <div className="text-lg font-semibold leading-none">BudgetBuddy</div>
+            <div className="text-xs text-muted-foreground">Envelope budget</div>
+          </div>
+        </div>
+        <nav className="flex flex-1 flex-col gap-1">
+          {NAV.map(({ to, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === "/"}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                )
+              }
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+        <div className="mt-4 space-y-3 border-t pt-3">
+          <IdleIndicator />
+          <div className="px-1 text-xs text-muted-foreground">Signed in as {userId ?? "—"}</div>
+          <div className="px-1 text-[10px] text-muted-foreground/70">{__BUILD_INFO__}</div>
+          <Button variant="outline" size="sm" className="w-full justify-start" onClick={onSignOut}>
+            <LogOut className="h-4 w-4" /> Sign out
+          </Button>
+        </div>
+      </aside>
+
+      {/* Main column */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Mobile top bar */}
+        <header className="sticky top-0 z-30 flex items-center justify-between border-b bg-card px-4 py-3 md:hidden">
+          <div className="flex items-center gap-2">
+            <BrandMark className="h-7 w-7 rounded-md" />
+            <span className="font-semibold">BudgetBuddy</span>
+          </div>
+          <IdleIndicator />
+        </header>
+
+        <main className="flex-1 px-4 py-4 pb-24 md:px-8 md:py-8 md:pb-8">{children}</main>
+      </div>
+
+      {/* Mobile bottom-tab nav: 4 primaries + More */}
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t bg-card pb-[env(safe-area-inset-bottom)] md:hidden">
+        {MOBILE_PRIMARY.map(({ to, label, icon: Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end={to === "/"}
+            className={({ isActive }) =>
+              cn(
+                "flex min-h-[3.25rem] flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium",
+                isActive ? "text-primary" : "text-muted-foreground"
+              )
+            }
+          >
+            <Icon className="h-5 w-5" />
+            {label}
+          </NavLink>
+        ))}
+        <button
+          type="button"
+          aria-label="More"
+          aria-expanded={moreOpen}
+          onClick={() => setMoreOpen(true)}
+          className={cn(
+            "flex min-h-[3.25rem] flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium",
+            moreOpen ? "text-primary" : "text-muted-foreground"
+          )}
+        >
+          <MoreHorizontal className="h-5 w-5" />
+          More
+        </button>
+      </nav>
+
+      <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} onSignOut={onSignOut} />
+    </div>
+  );
+}

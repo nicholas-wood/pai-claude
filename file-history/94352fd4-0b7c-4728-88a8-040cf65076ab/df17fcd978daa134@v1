@@ -1,0 +1,508 @@
+import * as React from "react";
+import { useNavigate } from "react-router-dom";
+import { ChevronRight, ChevronUp, ChevronDown, ChevronsUpDown, Pencil, TriangleAlert } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import type { EnvelopeRow } from "@contract";
+import { cn, formatCents, displayInPeriod, BUDGET_PERIOD_LABELS, BUDGET_PERIOD_SHORT } from "@/lib/utils";
+import { SectionShell } from "@/components/budget/SectionShell";
+import type { PopoverAnchor } from "@/components/budget/TransactionPopover";
+import type { CarryoverAnchor } from "@/components/budget/CarryoverPopover";
+
+interface TreeNode {
+  row: EnvelopeRow;
+  children: TreeNode[];
+}
+
+/** The sortable columns of the budget grid (ISC sort-by-column). */
+type SortKey = "name" | "carry" | "alloc" | "spent" | "left";
+type SortDir = "asc" | "desc";
+
+/** Build the parent/child tree from the flat, depth-tagged rows of one section. */
+function buildTree(rows: readonly EnvelopeRow[]): TreeNode[] {
+  const byId = new Map<string, TreeNode>();
+  rows.forEach((row) => byId.set(row.id, { row, children: [] }));
+  const roots: TreeNode[] = [];
+  rows.forEach((row) => {
+    const node = byId.get(row.id)!;
+    if (row.parentId && byId.has(row.parentId)) byId.get(row.parentId)!.children.push(node);
+    else roots.push(node);
+  });
+  return roots;
+}
+
+function leftTone(cents: number): string {
+  if (cents < 0) return "text-destructive";
+  if (cents === 0) return "text-muted-foreground";
+  return "text-success";
+}
+
+/** Spent is the period outflow: total (carry + alloc) minus what is left. */
+function spentCents(row: EnvelopeRow): number {
+  return row.totalCents - row.leftCents;
+}
+
+/** The budget shown in the row's own natural period (ISC-94): annual, weekly, etc. */
+function budgetInPeriod(row: EnvelopeRow): number {
+  return displayInPeriod(row.allocationCents, row.period);
+}
+
+/** Comparable value for a row under a given sort key. */
+function sortValue(row: EnvelopeRow, key: SortKey): number | string {
+  switch (key) {
+    case "name":
+      return row.name.toLowerCase();
+    case "carry":
+      return row.carryoverCents;
+    case "alloc":
+      return row.allocationCents;
+    case "spent":
+      return spentCents(row);
+    case "left":
+      return row.leftCents;
+  }
+}
+
+/** Sort a tree level (and recursively its children) by the active column. */
+function sortTree(nodes: TreeNode[], key: SortKey, dir: SortDir): TreeNode[] {
+  const factor = dir === "asc" ? 1 : -1;
+  const sorted = [...nodes].sort((a, b) => {
+    const av = sortValue(a.row, key);
+    const bv = sortValue(b.row, key);
+    const c = typeof av === "string" ? av.localeCompare(bv as string) : (av as number) - (bv as number);
+    return c * factor;
+  });
+  return sorted.map((n) => ({ row: n.row, children: sortTree(n.children, key, dir) }));
+}
+
+/**
+ * The "Left" figure. Deficit is never carried by hue alone (ISC a11y): a
+ * negative value pairs the red tone with a warning icon, and formatCents keeps
+ * the minus sign, so colourblind and grayscale readers still read the shortfall.
+ */
+function LeftValue({ cents, className }: { cents: number; className?: string }) {
+  const negative = cents < 0;
+  return (
+    <span className={cn("tnum inline-flex items-center justify-end gap-1 tabular-nums", leftTone(cents), className)}>
+      {negative && <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+      {formatCents(cents)}
+    </span>
+  );
+}
+
+/** One right-aligned money figure for the desktop table layout. */
+function Figure({ value, tone }: { value: number; tone?: string }) {
+  return <div className={cn("tnum text-right text-sm tabular-nums", tone)}>{formatCents(value)}</div>;
+}
+
+/** A labelled figure for the mobile stacked card (per-figure labels, ISC-70). */
+function LabelledFigure({ label, value, tone }: { label: string; value: number; tone?: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className={cn("tnum truncate text-sm tabular-nums", tone)}>{formatCents(value)}</div>
+    </div>
+  );
+}
+
+/** A clickable desktop column header that sorts the grid by its column (ISC sort). */
+function SortHeader({
+  label,
+  col,
+  sortKey,
+  sortDir,
+  onSort,
+  align = "right",
+}: {
+  label: string;
+  col: SortKey;
+  sortKey: SortKey | null;
+  sortDir: SortDir;
+  onSort: (col: SortKey) => void;
+  align?: "left" | "right";
+}) {
+  const active = sortKey === col;
+  const Icon = !active ? ChevronsUpDown : sortDir === "asc" ? ChevronUp : ChevronDown;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(col)}
+      aria-label={`Sort by ${label}`}
+      aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+      className={cn(
+        "flex items-center gap-1 rounded hover:text-foreground",
+        align === "right" ? "ml-auto justify-end" : "justify-start",
+        active && "text-foreground"
+      )}
+    >
+      {label}
+      <Icon className="h-3 w-3 shrink-0 opacity-70" aria-hidden="true" />
+    </button>
+  );
+}
+
+function SectionRow({
+  node,
+  expanded,
+  onToggle,
+  onEdit,
+  onActualClick,
+  onCarryoverClick,
+}: {
+  node: TreeNode;
+  expanded: Set<string>;
+  onToggle: (id: string) => void;
+  onEdit?: ((row: EnvelopeRow) => void) | undefined;
+  onActualClick: (row: EnvelopeRow, e: React.MouseEvent) => void;
+  onCarryoverClick: (row: EnvelopeRow, e: React.MouseEvent) => void;
+}) {
+  const navigate = useNavigate();
+  const { row, children } = node;
+  const hasChildren = children.length > 0;
+  const isOpen = expanded.has(row.id);
+  const spent = spentCents(row);
+  const budget = budgetInPeriod(row);
+
+  const goDetail = () => navigate(`/envelope/${row.id}`);
+  const onRowKey = (e: React.KeyboardEvent) => {
+    // Activate the primary row action by keyboard (ISC a11y): Enter / Space.
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      goDetail();
+    }
+  };
+
+  const chevron = hasChildren ? (
+    <button
+      type="button"
+      aria-label={isOpen ? `Collapse ${row.name}` : `Expand ${row.name}`}
+      aria-expanded={isOpen}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle(row.id);
+      }}
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded hover:bg-accent md:h-7 md:w-7"
+    >
+      <ChevronRight className={cn("h-4 w-4 text-muted-foreground transition-transform", isOpen && "rotate-90")} />
+    </button>
+  ) : (
+    <span className="inline-block w-11 shrink-0 md:w-7" />
+  );
+
+  const editButton = onEdit && (
+    <button
+      type="button"
+      aria-label={`Edit ${row.name}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onEdit(row);
+      }}
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground md:h-8 md:w-8"
+    >
+      <Pencil className="h-4 w-4" />
+    </button>
+  );
+
+  const spentButton = (extra?: string) => (
+    <button
+      type="button"
+      aria-label={`Show ${row.name} transactions`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onActualClick(row, e);
+      }}
+      className={cn(
+        "tnum rounded text-sm tabular-nums underline decoration-dotted decoration-muted-foreground/50 underline-offset-2 hover:bg-accent hover:decoration-foreground",
+        extra
+      )}
+    >
+      {formatCents(spent)}
+    </button>
+  );
+
+  const carryoverButton = (extra?: string) => (
+    <button
+      type="button"
+      aria-label={`Adjust ${row.name} carryover`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onCarryoverClick(row, e);
+      }}
+      className={cn(
+        "tnum rounded text-sm tabular-nums underline decoration-dotted decoration-muted-foreground/50 underline-offset-2 hover:bg-accent hover:decoration-foreground",
+        extra
+      )}
+    >
+      {formatCents(row.carryoverCents)}
+    </button>
+  );
+
+  const periodChip = (
+    <span className="shrink-0 rounded bg-muted px-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="sm:hidden">{BUDGET_PERIOD_SHORT[row.period]}</span>
+      <span className="hidden sm:inline">{BUDGET_PERIOD_LABELS[row.period]}</span>
+    </span>
+  );
+
+  return (
+    <>
+      {/* Desktop: dense table row (Carry · Budget · Total · Spent · Left) */}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={`Open ${row.name}`}
+        onClick={goDetail}
+        onKeyDown={onRowKey}
+        className={cn(
+          "hidden cursor-pointer grid-cols-[1fr_repeat(4,minmax(0,4.5rem))] items-center gap-3 px-3 py-2 transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:grid",
+          hasChildren && "bg-muted/40 font-medium",
+          !row.active && "opacity-50"
+        )}
+        style={{ paddingLeft: `${0.75 + row.depth * 1.1}rem` }}
+      >
+        <div className="flex min-w-0 items-center gap-1.5">
+          {chevron}
+          <span className="truncate text-sm">{row.name}</span>
+          {periodChip}
+          {hasChildren && (
+            <span className="hidden shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground lg:inline">
+              {children.length} {children.length === 1 ? "item" : "items"}
+            </span>
+          )}
+          {!row.active && (
+            <span className="hidden shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground lg:inline">inactive</span>
+          )}
+          {editButton && <span className="ml-auto">{editButton}</span>}
+        </div>
+        <div className="text-right">{carryoverButton()}</div>
+        <Figure value={budget} />
+        <div className="text-right">{spentButton()}</div>
+        <div className="text-right">
+          <LeftValue cents={row.leftCents} />
+        </div>
+      </div>
+
+      {/* Mobile: stacked card row — name on its own line, labelled figures below */}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={`Open ${row.name}`}
+        onClick={goDetail}
+        onKeyDown={onRowKey}
+        className={cn(
+          "flex cursor-pointer flex-col gap-2 px-2 py-2.5 transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:hidden",
+          hasChildren && "bg-muted/40",
+          !row.active && "opacity-50"
+        )}
+        style={{ paddingLeft: `${0.5 + row.depth * 0.9}rem` }}
+      >
+        <div className="flex items-center gap-1.5">
+          {chevron}
+          <span className={cn("min-w-0 flex-1 truncate text-sm", hasChildren && "font-semibold")}>{row.name}</span>
+          {periodChip}
+          {!row.active && (
+            <span className="shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground">inactive</span>
+          )}
+          {editButton}
+          <div className="shrink-0 text-right">
+            <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Left</div>
+            <LeftValue cents={row.leftCents} className="text-base font-semibold" />
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2 pl-12">
+          <div className="min-w-0">
+            <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Carry</div>
+            {carryoverButton("block text-left")}
+          </div>
+          <LabelledFigure label="Budget" value={budget} />
+          <div className="min-w-0">
+            <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Spent</div>
+            {spentButton("block text-left")}
+          </div>
+        </div>
+      </div>
+
+      {hasChildren &&
+        isOpen &&
+        children.map((child) => (
+          <SectionRow
+            key={child.row.id}
+            node={child}
+            expanded={expanded}
+            onToggle={onToggle}
+            onEdit={onEdit}
+            onActualClick={onActualClick}
+            onCarryoverClick={onCarryoverClick}
+          />
+        ))}
+    </>
+  );
+}
+
+/**
+ * One grouped, collapsible budget section for a single envelope type (saving,
+ * expense, or envelope). Renders the category hierarchy with the full ISC-70
+ * figure set per row — carryover, the budget in its own natural period (ISC-94),
+ * total available, spent, and left — plus a rolled-up totals row. Clicking any
+ * column header sorts the grid by that column, ascending then descending (ISC
+ * sort-by-column). The layout is responsive: a dense table on desktop and a
+ * stacked, labelled card per row on mobile. Parents default to collapsed for a
+ * clean overview; Expand all / Collapse all and per-row chevrons drill in (ISC-75).
+ */
+export function BudgetSection({
+  title,
+  subtitle,
+  icon,
+  rows,
+  period,
+  onEdit,
+  onOpenTransactions,
+  onAdjustCarryover,
+}: {
+  title: string;
+  subtitle?: string;
+  icon: LucideIcon;
+  rows: readonly EnvelopeRow[];
+  /** Inclusive day bounds of the current grid period, for the transaction drill-down. */
+  period: { from: string; to: string };
+  onEdit?: ((row: EnvelopeRow) => void) | undefined;
+  onOpenTransactions: (anchor: PopoverAnchor) => void;
+  /** Opens the cursor-anchored carryover adjust popover for a row (ISC carryover.reset). */
+  onAdjustCarryover: (anchor: CarryoverAnchor) => void;
+}) {
+  const [sortKey, setSortKey] = React.useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = React.useState<SortDir>("asc");
+
+  const onSort = (col: SortKey) => {
+    if (sortKey === col) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(col);
+      setSortDir("asc");
+    }
+  };
+
+  const tree = React.useMemo(() => {
+    const base = buildTree(rows);
+    return sortKey ? sortTree(base, sortKey, sortDir) : base;
+  }, [rows, sortKey, sortDir]);
+
+  const parentIds = React.useMemo(
+    () => rows.filter((r) => rows.some((c) => c.parentId === r.id)).map((r) => r.id),
+    [rows]
+  );
+
+  const [open, setOpen] = React.useState(true);
+  // Sensible default: parents collapsed to their rolled-up row for a clean overview.
+  const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set());
+
+  const onToggle = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  const onActualClick = (row: EnvelopeRow, e: React.MouseEvent) => {
+    onOpenTransactions({
+      envelopeId: row.id,
+      envelopeName: row.name,
+      from: period.from,
+      to: period.to,
+      x: e.clientX,
+      y: e.clientY,
+    });
+  };
+
+  const onCarryoverClick = (row: EnvelopeRow, e: React.MouseEvent) => {
+    onAdjustCarryover({
+      envelopeId: row.id,
+      envelopeName: row.name,
+      currentCents: row.carryoverCents,
+      x: e.clientX,
+      y: e.clientY,
+    });
+  };
+
+  // Section totals: only roots count, since parent figures already roll up children.
+  const roots = tree.map((n) => n.row);
+  const totalCarry = roots.reduce((s, r) => s + r.carryoverCents, 0);
+  const totalAlloc = roots.reduce((s, r) => s + r.allocationCents, 0);
+  const totalSpent = roots.reduce((s, r) => s + spentCents(r), 0);
+  const totalLeft = roots.reduce((s, r) => s + r.leftCents, 0);
+
+  if (rows.length === 0) {
+    return (
+      <SectionShell title={title} subtitle={subtitle} icon={icon} open={open} onToggleOpen={() => setOpen((o) => !o)} count={0} total={formatCents(0)}>
+        {open && <div className="px-4 py-6 text-center text-sm text-muted-foreground">No {title.toLowerCase()} yet.</div>}
+      </SectionShell>
+    );
+  }
+
+  return (
+    <SectionShell
+      title={title}
+      subtitle={subtitle}
+      icon={icon}
+      open={open}
+      onToggleOpen={() => setOpen((o) => !o)}
+      count={rows.length}
+      total={formatCents(totalAlloc)}
+      onExpandAll={parentIds.length ? () => setExpanded(new Set(parentIds)) : undefined}
+      onCollapseAll={parentIds.length ? () => setExpanded(new Set()) : undefined}
+    >
+      {/* Column headers (desktop table only; mobile cards are self-labelled). Each sorts. */}
+      <div className="hidden grid-cols-[1fr_repeat(4,minmax(0,4.5rem))] gap-3 border-b bg-card px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground md:grid">
+        <SortHeader label="Envelope · period" col="name" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="left" />
+        <SortHeader label="Carry" col="carry" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+        <SortHeader label="Budget" col="alloc" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+        <SortHeader label="Spent" col="spent" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+        <SortHeader label="Left" col="left" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+      </div>
+
+      {open && (
+        <div className="divide-y divide-border/40">
+          {tree.map((node) => (
+            <SectionRow
+              key={node.row.id}
+              node={node}
+              expanded={expanded}
+              onToggle={onToggle}
+              onEdit={onEdit}
+              onActualClick={onActualClick}
+              onCarryoverClick={onCarryoverClick}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Totals row */}
+      <div className="border-t bg-muted/40 text-sm font-semibold">
+        {/* Desktop totals */}
+        <div className="hidden grid-cols-[1fr_repeat(4,minmax(0,4.5rem))] gap-3 px-3 py-2.5 md:grid">
+          <div>Total {title.toLowerCase()}</div>
+          <div className="tnum text-right">{formatCents(totalCarry)}</div>
+          <div className="tnum text-right">{formatCents(totalAlloc)}</div>
+          <div className="tnum text-right">{formatCents(totalSpent)}</div>
+          <div className="text-right">
+            <LeftValue cents={totalLeft} />
+          </div>
+        </div>
+        {/* Mobile totals */}
+        <div className="flex flex-col gap-2 px-2 py-2.5 md:hidden">
+          <div className="flex items-center justify-between gap-2">
+            <span>Total {title.toLowerCase()}</span>
+            <div className="text-right">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Left</div>
+              <LeftValue cents={totalLeft} className="text-base" />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2 pl-12 font-normal">
+            <LabelledFigure label="Carry" value={totalCarry} />
+            <LabelledFigure label="Budget" value={totalAlloc} />
+            <LabelledFigure label="Spent" value={totalSpent} />
+          </div>
+        </div>
+      </div>
+    </SectionShell>
+  );
+}

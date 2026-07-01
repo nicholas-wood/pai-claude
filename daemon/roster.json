@@ -1,61 +1,8 @@
 {
   "proto": 1,
-  "supervisorPid": 3408681,
-  "updatedAt": 1782820641450,
+  "supervisorPid": 2666776,
+  "updatedAt": 1782908423361,
   "workers": {
-    "60178108": {
-      "pid": 425783,
-      "procStart": "241112469",
-      "sessionId": "60178108-4ea0-4ca8-bdb7-834d4b3f2343",
-      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/60178108.sock",
-      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/c1e30527.pty.sock",
-      "cliVersion": "2.1.196",
-      "startedAt": 1782701661587,
-      "attempt": 2,
-      "cwd": "/home/nicholas-wood/.claude",
-      "dispatch": {
-        "proto": 1,
-        "short": "60178108",
-        "nonce": "743d8711",
-        "sessionId": "60178108-4ea0-4ca8-bdb7-834d4b3f2343",
-        "createdAt": 1782701661585,
-        "source": "fleet",
-        "cwd": "/home/nicholas-wood/.claude",
-        "launch": {
-          "mode": "resume",
-          "sessionId": "60178108-4ea0-4ca8-bdb7-834d4b3f2343",
-          "transcriptPath": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/60178108-4ea0-4ca8-bdb7-834d4b3f2343.jsonl",
-          "fork": false,
-          "flagArgs": [
-            "--agent",
-            "claude"
-          ]
-        },
-        "env": {},
-        "isolation": "none",
-        "respawnFlags": [
-          "--agent",
-          "claude"
-        ],
-        "agent": "claude",
-        "seed": {
-          "intent": ""
-        },
-        "cols": 189,
-        "rows": 78
-      },
-      "decModes": [
-        1000,
-        1002,
-        1003,
-        1006,
-        2004,
-        1004,
-        2031
-      ],
-      "rvAuth": "3671251c7ec8a6df0f4cc558897c4799",
-      "ptyAuth": "8f89133d9e000e48d8f0ecd8b6cdfb27"
-    },
     "fbf081be": {
       "pid": 667289,
       "procStart": "216575926",
@@ -108,33 +55,32 @@
       "rvAuth": "8b4f683b8afa3543e19939af99f03fed",
       "ptyAuth": "e349c8aa7da2c5cb08438e13ca60411f"
     },
-    "e557fc90": {
-      "pid": 2544815,
-      "procStart": "242147075",
-      "sessionId": "e557fc90-9d6b-4a77-bee6-5b2f522ed1e5",
-      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/e557fc90.sock",
-      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/e18a6cb3.pty.sock",
-      "cliVersion": "2.1.196",
-      "startedAt": 1782801963758,
+    "b8d57280": {
+      "pid": 2287082,
+      "procStart": "250807742",
+      "sessionId": "b8d57280-3acb-48b4-a66c-724be361a66c",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/b8d57280.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/f50411c9.pty.sock",
+      "cliVersion": "2.1.197",
+      "startedAt": 1782887203978,
       "attempt": 1,
       "cwd": "/home/nicholas-wood/.claude",
       "dispatch": {
         "proto": 1,
-        "short": "e557fc90",
-        "nonce": "ec231a6c",
-        "sessionId": "e557fc90-9d6b-4a77-bee6-5b2f522ed1e5",
-        "createdAt": 1782801963753,
+        "short": "b8d57280",
+        "nonce": "d1f9264b",
+        "sessionId": "b8d57280-3acb-48b4-a66c-724be361a66c",
+        "createdAt": 1782887203971,
         "source": "fleet",
         "cwd": "/home/nicholas-wood/.claude",
         "launch": {
-          "mode": "prompt",
-          "args": [
-            "--session-id",
-            "e557fc90-9d6b-4a77-bee6-5b2f522ed1e5",
+          "mode": "resume",
+          "sessionId": "b8d57280-3acb-48b4-a66c-724be361a66c",
+          "transcriptPath": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/b8d57280-3acb-48b4-a66c-724be361a66c.jsonl",
+          "fork": false,
+          "flagArgs": [
             "--agent",
-            "claude",
-            "--",
-            "Please add an application review agent with this brief Act as a cynical, exhausted Tech Recruiter looking at candidates for an [INSERT ROLE, e.g., Senior Product Manager / Lead Backend Engineer] role at [INSERT COMPANY, e.g., Canva]. \n\nI am going to provide you with a draft of my cover letter and the target job description. Your job is to brutally audit it and strip out everything that sounds like it was written by an AI.\n\nPlease review my draft using these strict guidelines:\n\n1. Flag \"AI Filler Words\": Identify and replace generic LLM-style phrasing (e.g., \"testament to,\" \"foster innovation,\" \"dynamic landscape,\" \"passionate about,\" \"deep dive\").\n2. Check for \"Inside Baseball\" Context: Did I just repeat their website homepage, or did I mention a real product challenge, architectural shift, or industry trend relevant to this specific company? Suggest how I can make my company research sound deeper and more human.\n3. Enforce \"Tech Reason over Tech Stack\": Ensure I am not just listing languages and tools. Where I mention a technical project, help me briefly explain the *why* behind the choice or the *human trade-off* I had to make (e.g., speed vs. technical debt).\n4. Quantify Impact: If I state a result, challenge me to anchor it to a concrete business metric, product adoption rate, or engineering efficiency gain.\n5. Fix the Tone: Make the voice sound like a high-performing colleague speaking directly to a peer. Shorten any sentences over 15 words. Keep paragraphs to a punchy 2-3 sentences max.\n\nFirst, give me a \"Blunt Recruiter Verdict\" score from 1-10 on how badly it triggers your AI-fatigue. Then, provide specific line-by-line rewrite suggestions."
+            "claude"
           ]
         },
         "env": {},
@@ -145,10 +91,10 @@
         ],
         "agent": "claude",
         "seed": {
-          "intent": "Please add an application review agent with this brief Act as a cynical, exhausted Tech Recruiter looking at candidates for an [INSERT ROLE, e.g., Senior Product Manager / Lead Backend Engineer] role at [INSERT COMPANY, e.g., Canva]. \n\nI am going to provide you with a draft of my cover letter and the target job description. Your job is to brutally audit it and strip out everything that sounds like it was written by an AI.\n\nPlease review my draft using these strict guidelines:\n\n1. Flag \"AI Filler Words\": Identify and replace generic LLM-style phrasing (e.g., \"testament to,\" \"foster innovation,\" \"dynamic landscape,\" \"passionate about,\" \"deep dive\").\n2. Check for \"Inside Baseball\" Context: Did I just repeat their website homepage, or did I mention a real product challenge, architectural shift, or industry trend relevant to this specific company? Suggest how I can make my company research sound deeper and more human.\n3. Enforce \"Tech Reason over Tech Stack\": Ensure I am not just listing languages and tools. Where I mention a technical project, help me briefly explain the *why* behind the choice or the *human trade-off* I had to make (e.g., speed vs. technical debt).\n4. Quantify Impact: If I state a result, challenge me to anchor it to a concrete business metric, product adoption rate, or engineering efficiency gain.\n5. Fix the Tone: Make the voice sound like a high-performing colleague speaking directly to a peer. Shorten any sentences over 15 words. Keep paragraphs to a punchy 2-3 sentences max.\n\nFirst, give me a \"Blunt Recruiter Verdict\" score from 1-10 on how badly it triggers your AI-fatigue. Then, provide specific line-by-line rewrite suggestions."
+          "intent": ""
         },
-        "cols": 105,
-        "rows": 51
+        "cols": 214,
+        "rows": 52
       },
       "decModes": [
         1000,
@@ -159,8 +105,62 @@
         1004,
         2031
       ],
-      "rvAuth": "8716e13cdb58920ae1a940de1e96ea78",
-      "ptyAuth": "3c576d3e9d810d7226e9b2e76a6bed81"
+      "rvAuth": "5c8db63722930b48f0aa7e19649ef218",
+      "ptyAuth": "bfb805d7a7915f7151eacf5f1b09399b"
+    },
+    "6fd2be19": {
+      "pid": 4020263,
+      "procStart": "252533563",
+      "sessionId": "6fd2be19-e374-4bb7-8cc1-78aa745175de",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/6fd2be19.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/baf3297d.pty.sock",
+      "cliVersion": "2.1.197",
+      "startedAt": 1782897630942,
+      "attempt": 1,
+      "cwd": "/home/nicholas-wood/.claude",
+      "dispatch": {
+        "proto": 1,
+        "short": "6fd2be19",
+        "nonce": "d567784d",
+        "sessionId": "6fd2be19-e374-4bb7-8cc1-78aa745175de",
+        "createdAt": 1782897630939,
+        "source": "fleet",
+        "cwd": "/home/nicholas-wood/.claude",
+        "launch": {
+          "mode": "prompt",
+          "args": [
+            "--session-id",
+            "6fd2be19-e374-4bb7-8cc1-78aa745175de",
+            "--agent",
+            "claude",
+            "--",
+            "This is a new project as LSV comms officer. Please take a look at the feature brief that I have put into the Onedrive Inbox. This Surf Risk Rating project is going to go ahead but I am quite unhappy with the detail in the brief. I have left comments on the doc. Please read the document and my comments, then ask me the questions you need to redraft the document, using the same structure, but doing it properly."
+          ]
+        },
+        "env": {},
+        "isolation": "none",
+        "respawnFlags": [
+          "--agent",
+          "claude"
+        ],
+        "agent": "claude",
+        "seed": {
+          "intent": "This is a new project as LSV comms officer. Please take a look at the feature brief that I have put into the Onedrive Inbox. This Surf Risk Rating project is going to go ahead but I am quite unhappy with the detail in the brief. I have left comments on the doc. Please read the document and my comments, then ask me the questions you need to redraft the document, using the same structure, but doing it properly."
+        },
+        "cols": 214,
+        "rows": 52
+      },
+      "decModes": [
+        1000,
+        1002,
+        1003,
+        1006,
+        2004,
+        1004,
+        2031
+      ],
+      "rvAuth": "8a1c45127e1ed2300c1c85183dde8bf6",
+      "ptyAuth": "ff4515691413a9960cce980ef987a2a8"
     }
   }
 }

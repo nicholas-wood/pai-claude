@@ -1,0 +1,170 @@
+# LIMSOC FEATURE BRIEF
+
+## Surf Risk Rating in LIMSOC
+
+| Field | Detail |
+|---|---|
+| **Brief number** | LIMSOC-BRIEF-LSV-2026-005 |
+| **Version** | 2.0 (redraft) |
+| **Author** | Flynn Young |
+| **Revised by** | Nicholas Wood (State Lifesaving Communications Officer) |
+| **Date** | 01/07/2026 |
+
+---
+
+## Sign off
+
+**Feature category: 3 - Moderate Business Impact.** The SRR model itself is unaffected if the LIMSOC feature is unavailable, so this is high-value but not critical-path.
+
+- 1 - Critical Operational Risk
+- 2 - High Impact, Recoverable
+- **3 - Moderate Business Impact** *(selected)*
+- 4 - Low Operational Risk
+- 5 - No Operational Dependency
+
+| Role | Name | Date |
+|---|---|---|
+| Feature owner | _____________________ | |
+| Senior Manager - Capability | David Potter | |
+| State Lifesaving Communications Officer | Nicholas Wood | |
+
+---
+
+## Overview
+
+*High-level statement outlining the feature and any relevant background information.*
+
+The Surf Risk Rating (SRR) feature brings SLSA's established Surf Risk Rating assessment into LIMSOC as a native experience. SLSA already provides an SRR model with research behind its questions and weightings, and members already use it. What is missing is a native LIMSOC experience that captures each assessment against a patrol, retains it, surfaces it to the roles that need it, and feeds it into reporting.
+
+This feature rebuilds the SRR *experience* inside LIMSOC and connects it to core patrol workflows. It does not build a new risk model. The scoring model, question set and mitigants are replicated exactly from SLSA's Surf Risk Rating tool in the SLSA Operations App, so the research backing is preserved.
+
+## Problem Statement
+
+*What problem are we solving?*
+
+Members currently complete the Surf Risk Rating in the SLSA Operations App, separate from LIMSOC. That leaves three gaps:
+
+- **No persistence or feedback.** Assessments are entered but not retained against a patrol, so there is no record to review, compare against later conditions, or learn from.
+- **Limited visibility and traceability.** Operational roles off the beach (field, dispatch, duty officers) cannot see whether an assessment has been completed for a unit, or what it found.
+- **No connection to workflow.** The assessment sits outside patrol records and reporting, so it does not inform the operational picture or the end-of-day record.
+
+In short, we have no way to capture the SRR against a patrol, retain it, surface it to the people who need it, and report on it.
+
+## Impact
+
+*Impact of solving the problem, including the impact if left unaddressed.*
+
+- **Drive adoption and integration.** A native, low-friction experience embedded in existing patrol workflows increases uptake of the SRR and makes it part of how patrols already work, rather than a separate step.
+- **Give off-beach roles visibility.** Field, dispatch and duty roles gain sight of local risk and of whether an assessment has been completed for each unit. This is the primary situational-awareness win, and it lands with members who are not on the beach.
+- **Make risk assessment traceable and documented.** The feature does not change how we operate, but it makes the assessment persistent, reviewable and auditable rather than transient. In practice it will also mean many more people use the SRR.
+- **Build the data foundation.** A retained, structured record is the prerequisite for the later reporting, trend analysis and predictive capability described in Future Improvements.
+
+## Proposed Solution
+
+*How are we going to do it?*
+
+Rebuild the SLSA Surf Risk Rating experience natively within LIMSOC, replicating the question set, weightings, scoring and mitigants defined by SLSA's Surf Risk Rating tool in the SLSA Operations App, and connecting it to patrol workflows. We are recreating the experience of a research-backed tool inside LIMSOC, not designing a new risk model. The SLSA model definition is a delivery dependency (see Configuration requirements).
+
+The first pass (v1) will:
+
+- Capture locally observed environmental hazards through the existing SLSA SRR question set.
+- Prefill and augment the assessment with automated weather data from the Bureau of Meteorology (BOM) for the location nearest the unit.
+- Calculate the Surf Risk Rating using the SLSA scoring model.
+- Link each assessment (many-to-one) to a patrol/unit.
+- Make each assessment reviewable from patrol, field and dispatch views.
+- Include the SRR in the patrol report and allow export of an individual SRR.
+
+Notifications, aggregation, map display and predictive modelling are deferred to later phases (see Future Improvements).
+
+## Functional Requirements
+
+*What the system does. Primary = first pass (v1). Secondary = phase 2. Tertiary = future.*
+
+### Primary (v1 - first pass)
+
+- Provide a capture form built on the SLSA SRR question set. Minimise friction: automate wherever possible, prefill from data already captured, and use engagement/gamification to encourage completion.
+- Prefill and augment the assessment with BOM weather data for the location nearest the unit.
+- Calculate the SRR score using the SLSA scoring model.
+- Give each assessment a geospatial position.
+- Link each assessment (many-to-one) to a patrol/unit.
+- Make each assessment reviewable from **patrol, field and dispatch** views.
+- Present the mitigants for the resulting rating, listed at the end of the assessment. The mitigants are those defined by SLSA's Surf Risk Rating tool, presented like the Stinger Log.
+- Include the SRR in the patrol report.
+- Export an individual SRR.
+- **Feature flag:** a general on/off flag for the feature (see Configuration).
+- **Per-patrol-type enablement:** enable or disable the feature by patrol type (see Configuration).
+- Where enabled and not yet completed, show the unit in an alert colour until an assessment has been logged for that unit for the patrol period.
+
+### Secondary (phase 2)
+
+- Augment observed data with additional internal LIMSOC data (for example Stinger Logs and similar), beyond BOM.
+- Generate notifications when a score is elevated or falls outside defined parameters. *(Parameters and "abnormal" to be defined in the phase 2 brief.)*
+- Average scores across zone, then region, then state. *(To be defined against a clear, useful metric and outcome before committing.)*
+- Display scores on unit modals, maps and summaries.
+- Report on historic data and trends.
+
+### Tertiary (future)
+
+- Use forecast data to extrapolate future scores in a predictive nature.
+- Weight impact using current and previous population trends for a location. *(Requires a data source and an agreed methodology.)*
+- Present the data in a form that is meaningful to patrols and end users.
+
+## Non-functional Requirements
+
+*How well the system does it.*
+
+- **Low friction.** The assessment should be as low-friction as possible: automate wherever possible, prefill from data already captured, and use engagement/gamification to drive completion. (No hard completion-time SLA; the intent is minimum friction, not a stopwatch target.)
+- **Model fidelity.** Replicate the SLSA SRR scoring model faithfully. Hold the question set and weightings as configuration so changes to the SLSA model can be reflected without a code change.
+- **Integration.** Integrate with the existing LIMSOC patrol, unit and reporting data model, and with the mapping data model to support later map display.
+- **Reliable data.** Reliable BOM API integration, with graceful fallback to manual entry and override when data is unavailable or wrong.
+- **Statewide use.** Operate for all units across the state under the feature-flag rollout, so the feature can move from pilot to statewide without rework.
+
+## Timeline
+
+*Required timeline, considering each stage of the process. (Dates to be set with the feature owner.)*
+
+| Stage | Description | Target |
+|---|---|---|
+| 1. Confirm SRR model | Obtain and map the SLSA SRR question set, weightings, scoring and mitigators | TBC |
+| 2. Build v1 | Capture form, BOM prefill, scoring, patrol/unit link, review views, patrol report, export | TBC |
+| 3. Pilot | Enable per patrol type via feature flag; validate adoption and data quality | TBC |
+| 4. Statewide | Roll out under the feature flag across the state | TBC |
+
+## Configuration requirements
+
+*What configuration is required prior to deployment, and how significant is the workload?*
+
+This feature does require configuration. "No configuration" would contradict the feature-flag and per-patrol-type requirements above.
+
+- General feature flag to enable/disable the feature.
+- Per-patrol-type enablement.
+- The SLSA SRR question set, weightings, scoring and mitigants held as configuration, so the SLSA model can be replicated and any SLSA changes reflected without code changes.
+- BOM data source configuration, including the location mapping for each unit.
+
+**Delivery dependency.** The SLSA SRR model definition (question set, weightings, scoring and mitigants) must be obtained from SLSA to populate this configuration. We do not currently hold SLSA's API or model documentation, so this is a prerequisite for Stage 1. Holding the model as owned configuration avoids a hard runtime dependency on an SLSA API.
+
+Workload is expected to be modest. The scoring model is inherited from SLSA rather than designed from scratch, and the BOM connection is a standard API integration.
+
+## Risks
+
+*Any risks that may come with implementing this feature.*
+
+| # | Risk | Impact | Mitigation | Outcome |
+|---|---|---|---|---|
+| 1 | Added friction reduces adoption | Members skip the assessment | Automate and prefill, keep to the SLSA question set, use gamification | High completion rates |
+| 2 | BOM data inaccurate or unavailable | Incorrect or missing scores | Validate API data, allow manual override, graceful fallback to manual entry | Reliable scores |
+| 3 | Divergence from the SLSA model over time | Loss of research backing / inconsistency | Hold model as configuration, govern against the SLSA source | Stays aligned with the research-backed model |
+| 4 | Feature-flag / per-patrol-type config complexity | Difficult or uneven rollout | Clear config model, pilot per patrol type before statewide | Controlled, staged rollout |
+| 5 | Scope creep from deferred intelligence features | Delivery slips | This brief scopes v1 only; later capability is explicitly phased | Focused first pass |
+| 6 | SLSA SRR model definition not yet available to us | Cannot build to the exact model; Stage 1 blocked | Obtain the SLSA model definition early; hold it as owned configuration rather than depending on an SLSA API | Faithful replication, no runtime SLSA dependency |
+
+## Future Improvements
+
+*Anything we could consider in future to build on this feature.*
+
+- Notifications on elevated or out-of-parameter scores.
+- Aggregation and averaging across zone, region and state, once a useful metric and outcome are defined.
+- Display on maps, unit modals and summaries.
+- Population-based impact weighting, subject to a data source and agreed methodology.
+- Forecast-based predictive scoring using historical assessment data.
+- Broader augmentation from internal LIMSOC data (Stinger Logs and similar).

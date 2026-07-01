@@ -1,0 +1,48 @@
+# Virgin Australia - Senior AI Engineer - Interview Prep Pack
+
+Prep for the Virgin Australia Senior AI Engineer role (Brisbane, CIO/AI team, reports to Head of AI). Round 1 is run by Harry (engineer) and the engineering lead; round 2, if reached, is the Head of AI and possibly Jaimyn.
+
+## What the round actually is (from Jaimyn)
+- High-level and conversational. No coding challenge, no leetcode.
+- A few very specific pointed questions to test depth across AI systems, frontend JavaScript/React, and Python/APIs, plus some higher-level problem-solving.
+- They do not expect you to get everything right or go into too much detail. Confident articulation in your own words beats exhaustive recall.
+- Using AI at all during the interview is an instant fail. So this pack is for genuine learning. Read it out loud, do not memorise, be able to explain each idea as yourself.
+
+## The pack
+| File | Covers | Who |
+|---|---|---|
+| `01-pd-decode-and-fit.md` | The PD decoded, fit map (strong / bridge / honest gaps), your narrative spine, questions to ask them | strategic |
+| `02-ai-systems-fundamentals.md` | RAG, embeddings/vector DBs, agents & tool calling, safety/guardrails, evals, LLMOps - all tied to your ANZ work | core (Jaimyn's list) |
+| `02a-ai-safety-systems.md` | Dedicated safety treatment: threat surface, three-layer guardrails, prompt injection, red-teaming, safety evals, responsible AI | core (Jaimyn's list) |
+| `03-fastapi-and-fastmcp.md` | FastAPI fundamentals + MCP/FastMCP, every concept bridged from your Spring/Go background | core (PD stack) |
+| `04-react-hooks.md` | useState/useEffect/useMemo/useCallback, rules of hooks, RSC, modern data fetching | core (Jaimyn's list) |
+| `04a-javascript-and-typescript.md` | JavaScript language fundamentals (event loop, closures, this, prototypes) + TypeScript (structural typing, generics) | core (Jaimyn's list) |
+| `05-senior-python.md` | GIL, generators, async, decorators, typing, dataclasses/Pydantic, testing - via Go/Java analogies | core (PD stack) |
+| `06-chatgpt-apps-and-virgin-build.md` | How a ChatGPT App works, how Virgin's flight search is built, how you would build and operate one | differentiator |
+| `07-limsoc-ai-design-examples.md` | Seven LIMSOC AI initiatives, high-level staff-level designs + the platform framing + build sequencing | applied-AI portfolio |
+
+## How the workstreams you asked for map to the pack
+1. Brush up on the PD/job ad -> `01` (full decode and fit map).
+2. FastAPI fundamentals -> `03` (plus FastMCP, which the PD lists and which is what Virgin's ChatGPT app is built on).
+3. Senior-level Python -> `05`.
+4. Jaimyn's key things (RAG/safety/evals + frontend JavaScript/React + Python/API) -> `02`, `02a` (safety), `04`, `04a` (JS/TS), `03`, `05`.
+5. LIMSOC enhancements as a staff-level AI engineer -> `07` (seven initiatives designed: brief auto-summarisation, entity extraction, data-entry correction, SOP coaching, completeness assurance, ETA prediction, post-incident review).
+6. (Your additions) Building a ChatGPT app + how Virgin's flight search works -> `06`.
+
+## Suggested study order
+1. `01` first - it frames everything and tells you where to lean and where to be honest.
+2. `02` - the heart of the AI questions, and your strongest ground because of ANZ.
+3. `06` - the differentiator; ties FastMCP, agents, evals, and Virgin's own product together.
+4. `03` and `05` - the stack fundamentals, read the "if they ask" answers aloud.
+5. `04` - React hooks, lighter touch, you are competent here already.
+6. `07` - your applied-AI portfolio; lead with the platform framing, go deep on initiative 4 (SOP coaching/RAG) or 6 (ETA, where you show you know when not to use an LLM).
+
+## The two things to nail above all else
+1. **Convert knowledge questions into credibility moments.** Answer the concept in two sentences, then ground it in something you actually built. "The way this showed up for me was at ANZ Plus..." Your real RAG/guardrails/observability/evals experience is your edge over candidates who only know the theory.
+2. **The Virgin ChatGPT app thread (`06`).** Their flagship AI product is a ChatGPT App, which is an MCP server, which is why FastMCP is in the PD. If you can reason about how it is built and operated, you are demonstrating their product and their stack at once. This is your single best card.
+
+## Standing reminders (your positioning rules)
+- Recommendation first, then reasoning. No sycophancy. Australian English, no em dashes, direct.
+- ANZ and Macquarie lead. AccessBuddy is a supplementary engineering example, never the headline.
+- Saying "I have not used X" cleanly, then bridging to the transferable concept, reads as senior. Bluffing reads as junior and the pointed questions will expose it.
+- Do not volunteer GPA. Do not use "this is exactly the work I already do" constructions.

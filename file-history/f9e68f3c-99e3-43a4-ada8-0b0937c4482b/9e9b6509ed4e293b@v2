@@ -1,0 +1,82 @@
+# PD Decode and Fit Map - Virgin Senior AI Engineer
+
+How to use this doc: this turns the position description into a fit map so you know, before you walk in, where you are obviously strong, where you bridge from adjacent experience, and where the honest gaps are and how to handle them. Round 1 is run by Harry (engineer who started when Jaimyn did) and the engineering lead. **Round 2 is with Tom, the Head of AI - a deeply technical limit-finding drill; see `09-round-2-tom-deep-technical.md` for the definitive round-2 prep and plan.**
+
+---
+
+## The role in one line
+Senior AI Engineer, CIO Division / AI team, Brisbane, reports to Head of AI, Level 2B, no direct reports. A hands-on applied-AI plus full-stack engineer who ships production AI systems and is trusted with the delivery realities: testing, evaluation, observability, safe rollout, and stakeholder communication. This is an individual-contributor senior role with mentoring expectations, not a management role.
+
+## What Virgin actually wants (read between the lines)
+The PD says it three times in different words: "recognising the realities of delivery, trade-offs and compromise", "what it takes to deliver production-ready solutions, including testing, evaluation and observability", "technical excellence while recognising the realities of delivery". They have been burned by, or are guarding against, people who can prototype with an LLM but cannot operate it in production. Your entire career is production engineering rigour in regulated, high-stakes environments. That is the centre of your fit. Lead with it.
+
+---
+
+## Fit map: requirement → your evidence → confidence
+
+### Strong (claim directly, with receipts)
+| PD requirement | Your evidence |
+|---|---|
+| 3+ years production-grade systems | 6.5 years, senior/lead, ANZ + Macquarie + Leidos |
+| Hands-on with LLMs (RAG, tool/function calling) | ANZ Plus generative-AI search platform on Vertex AI/Gemini, you owned the search/retrieval APIs |
+| Cross-functional delivery (Product, Eng, Security, Legal/Privacy, Ops) | Regulated banking at ANZ; defined requirements directly with business at Macquarie; seven-jurisdiction stakeholder alignment at SLSA |
+| Safety/guardrails, responsible AI | Established generative-AI guardrails in a risk-averse banking context |
+| Observability (metrics, logs, traces) | OpenTelemetry across ANZ, Macquarie, AccessBuddy; Sentry, Better Stack |
+| Security & privacy (IAM, secrets, PII, auditability) | Regulated banking; Secure Code Warrior; AWS Solutions Architect; data discovery for a critical govt agency at Leidos |
+| Software engineering best practice (testing, CI/CD, design reviews) | TDD with 80%+ coverage enforced at ANZ and Macquarie; GitHub Actions, Bitbucket Pipelines |
+| Agile delivery, roadmap ownership, estimation, stakeholder comms | Scrum Master scaling 2→6 teams in SAFe; LIMSOC product ownership and roadmap; exec presentations |
+| Communicate to non-technical / executive audiences | Authored and presented national strategy to executive leadership; C-suite presentations |
+| AWS cloud concepts | AWS Solutions Architect Associate; AWS used at ANZ, Macquarie, Leidos |
+| Mentoring junior engineers | Mentored juniors at Macquarie; coached teams as Scrum Master |
+| React + TypeScript | Macquarie real-time portal, Leidos rewrite, AccessBuddy Next.js |
+
+### Bridge (true, but you adapt from adjacent ground, say so confidently)
+| PD requirement | How you bridge |
+|---|---|
+| Python as primary language | You have used Python (Macquarie, ANZ stack) but Go and Java are your deepest. Bridge: strong polyglot, fluent in Python, and you reason about it from a deep systems base. See the senior-Python doc. Do not oversell, do not apologise. |
+| FastAPI / FastMCP | Not used in production. Bridge: you know API design deeply (gRPC/Protobuf/REST, Google AIP standards at ANZ), FastAPI is a clean Python framing of the same concerns, and MCP is the protocol behind Virgin's own ChatGPT app. You have clearly done the reading. See the FastAPI/FastMCP doc and the ChatGPT Apps doc. |
+| Advanced RAG | You built the retrieval side of a real RAG platform. Bridge: you have lived the core (retrieval quality, grounding, guardrails); the "advanced" techniques (re-ranking, hybrid, agentic RAG) you can discuss fluently. See the AI fundamentals doc. |
+| Agentic systems (planning, memory) | You drove AI integration strategy and guardrails; agents are the next step. Bridge: you understand the loop, the risks, and the constraint-first design philosophy. |
+| AWS (vs your GCP depth) | Your hands-on cloud depth is GCP (Cloud Run, Spanner, Pub/Sub, Dataflow, BigQuery). Bridge: AWS Solutions Architect certified, AWS used across roles, and cloud concepts transfer; you map GCP service to AWS equivalent comfortably (Cloud Run≈ECS/Fargate/App Runner, Pub/Sub≈SNS/SQS/EventBridge, BigQuery≈Redshift/Athena, Spanner≈Aurora/DynamoDB). |
+
+### Honest gaps (do not hide, handle cleanly)
+| Gap | Handling |
+|---|---|
+| Databricks (MLflow / Mosaic AI) | You have not used it. It is a desirable, not essential. Honest line: "I have not worked in Databricks specifically, I have worked across the GCP data stack, BigQuery, Dataflow, Spanner. I understand the lakehouse pattern and MLflow's role as a model registry and experiment tracker, and picking up a managed platform is not where I see risk." Then pivot to the transferable concept (registries, experiment tracking, automated evals) which you do understand. |
+| pgvector / AWS Cognitive Search specifically | Concept is solid (you run Postgres, you understand vector search and ANN). You have not used pgvector in anger. Say the concept clearly and be honest you have not shipped on it. |
+| Airline/travel domain | Desirable, not essential. You have zero airline experience and should not pretend otherwise. Counter-weight: you have deep regulated, safety-critical, real-time operational domain experience (banking, plus literal coastal emergency operations through LIMSOC). The mental model of safety-critical, real-time, high-consequence systems transfers; the domain specifics you would learn fast. |
+| LangGraph / LangChain | Desirable. Know what they are (LangChain = LLM app framework/abstractions; LangGraph = graph/state-machine for controllable agent flows). Honest: you have read on them and understand the orchestration problem they solve, you have not built production on them. |
+
+---
+
+## The narrative spine for this interview (your layered story)
+This is the exact thing the BCG post-mortem flagged: have a 90-second headline and pre-built 2-3 minute expansions per beat so "expand on the second pass" is mechanical.
+
+**Headline (90 sec):** "I am a senior engineer who has spent the last few years on production AI in regulated environments. At ANZ Plus I owned the search APIs inside a generative-AI search platform on Vertex AI and Gemini, drove the AI integration strategy for the team, and put guardrails around generative AI in a context where a wrong answer has compliance consequences. Before that I architected a real-time asset platform at Macquarie. Alongside that I have built and shipped a multi-tenant SaaS solo, so I have full-stack and operational ownership end to end. What I care about is the gap between an AI demo and a production AI system, retrieval quality, evaluation, guardrails, observability, and I bring the testing and operational discipline that closes it."
+
+**Expansion beats (each 2-3 min, have a concrete scene ready):**
+1. The ANZ RAG/search platform: what it did, your piece, the model-selection and scaling decisions, the guardrails.
+2. Guardrails in a regulated context: a specific control you put in and why.
+3. Macquarie real-time platform: architecture decision, the event-driven design, the 50-hours-a-week saved.
+4. AccessBuddy: full-stack solo ownership, the operational side (observability, CI/CD), why it proves breadth not just a side project.
+5. Stakeholder/exec communication: the LIMSOC national strategy presented to executive leadership, seven-jurisdiction alignment.
+
+---
+
+## Questions to ask them (signals seniority and genuine interest)
+- "Where is the AI team on the build-vs-buy line, how much is building on foundation models and orchestration versus training/fine-tuning your own?"
+- "The flight-search app in ChatGPT is live, what is the architecture behind it, and what is the roadmap, partner airlines and international were mentioned publicly?" (shows you did the homework, ties to MCP)
+- "How mature is the eval and LLMOps tooling today, and where do you most want to lift it?" (signals you think about the production realities they emphasised)
+- "How is the AI team set up relative to Data Science and Platform Engineering, where are the boundaries?"
+- "What does the first six months look like for someone in this role, what would success be?"
+- For Tom (Head of AI) in round 2, keep questions technical, not strategic: "How mature is your eval and LLMOps tooling today, and where do you most want to lift it?"; "Where do the boundaries sit between the AI team, Data Science, and Platform Engineering?"; "What does the retrieval/guardrail stack behind the ChatGPT flight-search app look like in production?" (These signal you think about production realities, which is his lens.)
+
+---
+
+## Tone reminders (from your standing positioning rules)
+- Recommendation first, then reasoning. No sycophancy.
+- Australian English, no em dashes, direct.
+- AccessBuddy is supplementary proof, a personal full-stack build that proves breadth and operational ownership, never the headline. For this engineering AI role it is allowed as a genuine engineering example, but ANZ and Macquarie lead.
+- Do not volunteer GPA. Address only if asked.
+- Do not use "this is exactly the work I already do" constructions. State the capability directly.
+- It is fine and good to say "I have not used X" cleanly and pivot to the transferable concept. Honesty plus a strong bridge reads as senior. Bluffing reads as junior, and Jaimyn warned the questions are pointed enough to expose a bluff.

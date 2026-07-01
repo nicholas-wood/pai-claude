@@ -1,0 +1,177 @@
+[
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rclone lsl onedrive:00_Inbox 2>/dev/null | head -50; echo \"---LOCAL---\"; fd -i 'surf.risk|risk.rating' ~ 2>/dev/null | head; echo \"---INBOX DIRS---\"; ls -la ~/OneDrive*/00_Inbox 2>/dev/null; ls -d ~/OneDrive* 2>/dev/null",
+      "description": "Locate Surf Risk Rating brief in OneDrive Inbox"
+    },
+    "timestamp": "2026-07-01T09:20:37.662Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd \"$CLAUDE_JOB_DIR/tmp\"; cp ~/OneDrive/00_Inbox/LIMSOC-BRIEF-LSV-2026-005-SRR.docx srr.docx; mkdir -p srr && cd srr && unzip -o ../srr.docx >/dev/null 2>&1; echo \"=== FILES ===\"; ls -la word/ | grep -iE 'comment|document'; echo \"=== HAS COMMENTS FILE ===\"; ls word/comments*.xml 2>/dev/null",
+      "description": "Unzip docx and check for comments"
+    },
+    "timestamp": "2026-07-01T09:20:57.751Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd \"$CLAUDE_JOB_DIR/tmp\"; which pandoc && pandoc srr.docx -t markdown --track-changes=all 2>/dev/null | head -5 && echo \"PANDOC_OK\" || echo \"NO_PANDOC\"",
+      "description": "Check pandoc availability"
+    },
+    "timestamp": "2026-07-01T09:21:05.740Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd \"$CLAUDE_JOB_DIR/tmp\"/srr; python3 - <<'PY'\nimport re, xml.etree.ElementTree as ET\nns={'w':'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}\nW='{%s}'%ns['w']\n\n# --- Document body with comment anchors ---\ntree=ET.parse('word/document.xml'); root=tree.getroot()\nout=[]\ndef text_of_para(p):\n    # collect runs, note comment range starts/ends\n    buf=[]\n    for el in p.iter():\n        tag=el.tag\n        if tag==W+'t':\n            buf.append(el.text or '')\n        elif tag==W+'commentRangeStart':\n            buf.append('  ⟦C%s→ '%el.get(W+'id'))\n        elif tag==W+'commentRangeEnd':\n            buf.append(' →C%s⟧'%el.get(W+'id'))\n        elif tag==W+'tab':\n            buf.append('\\t')\n    return ''.join(buf)\n\nbody=root.find(W+'body')\nfor p in body.iter(W+'p'):\n    # style\n    pPr=p.find(W+'pPr')\n    style=''\n    if pPr is not None:\n        ps=pPr.find(W+'pStyle')\n        if ps is not None: style=ps.get(W+'val')\n    txt=text_of_para(p)\n    if txt.strip() or style:\n        prefix=('[%s] '%style) if style else ''\n        out.append(prefix+txt)\nprint('\\n'.join(out))\nPY",
+      "description": "Extract document body text with comment anchors"
+    },
+    "timestamp": "2026-07-01T09:21:14.360Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd \"$CLAUDE_JOB_DIR/tmp\"/srr; python3 - <<'PY'\nimport xml.etree.ElementTree as ET\nns={'w':'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}\nW='{%s}'%ns['w']\ntree=ET.parse('word/comments.xml'); root=tree.getroot()\nfor c in root.iter(W+'comment'):\n    cid=c.get(W+'id'); author=c.get(W+'author'); date=c.get(W+'date') or ''\n    txt=''.join(t.text or '' for t in c.iter(W+'t'))\n    print(f\"[C{cid}] ({author}) {txt.strip()}\")\n    print()\nPY",
+      "description": "Extract comment text mapped to IDs"
+    },
+    "timestamp": "2026-07-01T09:21:20.790Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/OneDrive/00_Inbox/Screenshot 2026-07-01 at 13.52.38.png"
+    },
+    "timestamp": "2026-07-01T09:21:26.863Z"
+  },
+  {
+    "name": "AskUserQuestion",
+    "input": {
+      "questions": [
+        {
+          "question": "Where should the MVP (first-pass) line sit? You flagged maps/notifications/prediction as 'is this first pass?' repeatedly — I need the committed v1 boundary so Primary/Secondary/Tertiary become real phases.",
+          "header": "MVP scope",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Lean capture MVP",
+              "description": "v1 = capture form + calculated score + patrol link (many-to-one) + score on end-of-day patrol email. Maps display, notifications, averaging, prediction all deferred to named later phases."
+            },
+            {
+              "label": "MVP + live visibility",
+              "description": "Lean MVP plus live score display on unit modals/maps and notifications on elevated risk. Averaging, population impact and prediction deferred."
+            },
+            {
+              "label": "MVP + aggregate intel",
+              "description": "The above plus zone/region/state averaging and historical trend reporting in v1. Only prediction deferred."
+            },
+            {
+              "label": "Full scope in v1",
+              "description": "Everything in the current brief (all three tiers) committed to first pass."
+            }
+          ]
+        },
+        {
+          "question": "How faithful should the scoring model be to SLSA's existing SRR tool (the one with the research backing you referenced)?",
+          "header": "SRR model",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Replicate exactly",
+              "description": "Reuse SLSA's existing SRR questions, weightings and scoring unchanged. We rebuild only the UX and LIMSOC integration. (I'll need the source framework.)"
+            },
+            {
+              "label": "Replicate then extend",
+              "description": "Start from SLSA's model unchanged, then add LIMSOC-specific automated environmental inputs as a clearly-labelled augmentation layer on top."
+            },
+            {
+              "label": "Redesign",
+              "description": "Define a new LIMSOC-native scoring model, using the SLSA tool only as reference."
+            }
+          ]
+        },
+        {
+          "question": "How should the aggregate-intelligence ambitions (zone/region/state averaging, population-based impact, predictive modelling) be treated? You were sceptical these belong.",
+          "header": "Intelligence",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Future phase, documented",
+              "description": "Named as explicit future direction, not committed, no methodology claimed yet. Keeps the vision without overpromising."
+            },
+            {
+              "label": "Cut entirely",
+              "description": "Remove from this brief; too speculative to belong in a feature brief at all."
+            },
+            {
+              "label": "Commit with methodology",
+              "description": "Include now as real requirements — but I'll need the data sources and the methodology for averaging and population impact from you."
+            }
+          ]
+        },
+        {
+          "question": "How should the performance targets (the 'under 60 seconds' completion, 'minimise input') be framed? You challenged the 60s benchmark's source.",
+          "header": "Perf targets",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Design principle",
+              "description": "Frame as a design goal ('path of least resistance', fewest taps) with no hard numeric SLA. Removes the unsourced 60s requirement."
+            },
+            {
+              "label": "Keep, but sourced",
+              "description": "Keep a measurable target, but I'll cite/justify the basis you give me. Needs a source or rationale for the number."
+            },
+            {
+              "label": "Drop entirely",
+              "description": "Remove speed/input targets from requirements altogether."
+            }
+          ]
+        }
+      ]
+    },
+    "timestamp": "2026-07-01T09:23:28.482Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "fd -t d -i 'lsv|comms|srr|surf.risk' ~/Documents/workspace 2>/dev/null | head; echo \"---\"; ls ~/Documents/workspace/projects 2>/dev/null",
+      "description": "Find LSV comms workspace folder"
+    },
+    "timestamp": "2026-07-01T09:31:20.381Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "mkdir -p ~/Documents/workspace/projects/lsv-comms/srr-feature-brief; echo created",
+      "description": "Create LSV comms SRR project folder"
+    },
+    "timestamp": "2026-07-01T09:32:27.855Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/lsv-comms/srr-feature-brief/LIMSOC-BRIEF-LSV-2026-005-SRR.md",
+      "content": "# LIMSOC FEATURE BRIEF\n\n## Surf Risk Rating in LIMSOC\n\n| Field | Detail |\n|---|---|\n| **Brief number** | LIMSOC-BRIEF-LSV-2026-005 |\n| **Version** | 2.0 (redraft) |\n| **Author** | Flynn Young |\n| **Revised by** | Nicholas Wood (State Lifesaving Communications Officer) |\n| **Date** | 01/07/2026 |\n\n---\n\n## Sign off\n\n**Feature category** (recommended: 3 - Moderate Business Impact. The SRR model itself is unaffected if the LIMSOC feature is unavailable, so this is high-value but not critical-path.)\n\n- 1 - Critical Operational Risk\n- 2 - High Impact, Recoverable\n- **3 - Moderate Business Impact** *(recommended)*\n- 4 - Low Operational Risk\n- 5 - No Operational Dependency\n\n| Role | Name | Date |\n|---|---|---|\n| Feature owner | _____________________ | |\n| Senior Manager - Capability | David Potter | |\n| State Lifesaving Communications Officer | Nicholas Wood | |\n\n---\n\n## Overview\n\n*High-level statement outlining the feature and any relevant background information.*\n\nThe Surf Risk Rating (SRR) feature brings SLSA's established Surf Risk Rating assessment into LIMSOC as a native experience. SLSA already provides an SRR model with research behind its questions and weightings, and members already use it. What is missing is a native LIMSOC experience that captures each assessment against a patrol, retains it, surfaces it to the roles that need it, and feeds it into reporting.\n\nThis feature rebuilds the SRR *experience* inside LIMSOC and connects it to core patrol workflows. It does not build a new risk model. The scoring model, question set and mitigators are replicated from the existing SLSA tool exactly, so the research backing is preserved.\n\n## Problem Statement\n\n*What problem are we solving?*\n\nMembers currently complete the Surf Risk Rating in [**confirm current tool: SLSA Ops app?**], separate from LIMSOC. That leaves three gaps:\n\n- **No persistence or feedback.** Assessments are entered but not retained against a patrol, so there is no record to review, compare against later conditions, or learn from.\n- **Limited visibility and traceability.** Operational roles off the beach (field, dispatch, duty officers) cannot see whether an assessment has been completed for a unit, or what it found.\n- **No connection to workflow.** The assessment sits outside patrol records and reporting, so it does not inform the operational picture or the end-of-day record.\n\nIn short, we have no way to capture the SRR against a patrol, retain it, surface it to the people who need it, and report on it.\n\n## Impact\n\n*Impact of solving the problem, including the impact if left unaddressed.*\n\n- **Drive adoption and integration.** A native, low-friction experience embedded in existing patrol workflows increases uptake of the SRR and makes it part of how patrols already work, rather than a separate step.\n- **Give off-beach roles visibility.** Field, dispatch and duty roles gain sight of local risk and of whether an assessment has been completed for each unit. This is the primary situational-awareness win, and it lands with members who are not on the beach.\n- **Make risk assessment traceable and documented.** The feature does not change how we operate, but it makes the assessment persistent, reviewable and auditable rather than transient. In practice it will also mean many more people use the SRR.\n- **Build the data foundation.** A retained, structured record is the prerequisite for the later reporting, trend analysis and predictive capability described in Future Improvements.\n\n## Proposed Solution\n\n*How are we going to do it?*\n\nRebuild the SLSA Surf Risk Rating experience natively within LIMSOC, replicating SLSA's existing SRR question set, weightings and scoring model exactly [**cite: SLSA SRR framework source**], and connecting it to patrol workflows. We are recreating the experience of a research-backed tool inside LIMSOC, not designing a new risk model.\n\nThe first pass (v1) will:\n\n- Capture locally observed environmental hazards through the existing SLSA SRR question set.\n- Prefill and augment the assessment with automated weather data from the Bureau of Meteorology (BOM) for the location nearest the unit.\n- Calculate the Surf Risk Rating using the SLSA scoring model.\n- Link each assessment (many-to-one) to a patrol/unit.\n- Make each assessment reviewable from patrol, field and dispatch views.\n- Include the SRR in the patrol report and allow export of an individual SRR.\n\nNotifications, aggregation, map display and predictive modelling are deferred to later phases (see Future Improvements).\n\n## Functional Requirements\n\n*What the system does. Primary = first pass (v1). Secondary = phase 2. Tertiary = future.*\n\n### Primary (v1 - first pass)\n\n- Provide a capture form built on the SLSA SRR question set. Minimise friction: automate wherever possible, prefill from data already captured, and use engagement/gamification to encourage completion.\n- Prefill and augment the assessment with BOM weather data for the location nearest the unit.\n- Calculate the SRR score using the SLSA scoring model.\n- Give each assessment a geospatial position.\n- Link each assessment (many-to-one) to a patrol/unit.\n- Make each assessment reviewable from **patrol, field and dispatch** views.\n- Show members the mitigators associated with the score, sourced from the SLSA SRR framework [**cite source**] and presented like the Stinger Log. *(Confirm: keep in v1 as part of replicating the experience?)*\n- Include the SRR in the patrol report.\n- Export an individual SRR.\n- **Feature flag:** a general on/off flag for the feature (see Configuration).\n- **Per-unit and per-patrol-type enablement** (see Configuration). *(Confirm granularity: per unit, per patrol type, or both?)*\n- Where enabled and not yet completed, show the unit in an alert colour until an assessment has been logged for that unit for the patrol period.\n\n### Secondary (phase 2)\n\n- Augment observed data with additional internal LIMSOC data (for example Stinger Logs and similar), beyond BOM.\n- Generate notifications when a score is elevated or falls outside defined parameters. *(Parameters and \"abnormal\" to be defined in the phase 2 brief.)*\n- Average scores across zone, then region, then state. *(To be defined against a clear, useful metric and outcome before committing.)*\n- Display scores on unit modals, maps and summaries.\n- Report on historic data and trends.\n\n### Tertiary (future)\n\n- Use forecast data to extrapolate future scores in a predictive nature.\n- Weight impact using current and previous population trends for a location. *(Requires a data source and an agreed methodology.)*\n- Present the data in a form that is meaningful to patrols and end users.\n\n## Non-functional Requirements\n\n*How well the system does it.*\n\n- **Low friction.** The assessment should be as low-friction as possible: automate wherever possible, prefill from data already captured, and use engagement/gamification to drive completion. (No hard completion-time SLA; the intent is minimum friction, not a stopwatch target.)\n- **Model fidelity.** Replicate the SLSA SRR scoring model faithfully. Hold the question set and weightings as configuration so changes to the SLSA model can be reflected without a code change.\n- **Integration.** Integrate with the existing LIMSOC patrol, unit and reporting data model, and with the mapping data model to support later map display.\n- **Reliable data.** Reliable BOM API integration, with graceful fallback to manual entry and override when data is unavailable or wrong.\n- **Statewide use.** Operate for all units across the state under the feature-flag rollout, so the feature can move from pilot to statewide without rework.\n\n## Timeline\n\n*Required timeline, considering each stage of the process. (Dates to be set with the feature owner.)*\n\n| Stage | Description | Target |\n|---|---|---|\n| 1. Confirm SRR model | Obtain and map the SLSA SRR question set, weightings, scoring and mitigators | TBC |\n| 2. Build v1 | Capture form, BOM prefill, scoring, patrol/unit link, review views, patrol report, export | TBC |\n| 3. Pilot | Enable per unit / patrol type via feature flag; validate adoption and data quality | TBC |\n| 4. Statewide | Roll out under the feature flag across the state | TBC |\n\n## Configuration requirements\n\n*What configuration is required prior to deployment, and how significant is the workload?*\n\nThis feature does require configuration. A direct connection to the SLSA/BOM API is necessary but not sufficient, and \"no configuration\" would contradict the feature-flag and per-type requirements above.\n\n- General feature flag to enable/disable the feature.\n- Per-unit and per-patrol-type enablement.\n- The SLSA SRR question set, weightings and scoring held as configuration, so SLSA model changes can be reflected without code changes.\n- BOM data source configuration, including the location mapping for each unit.\n\nWorkload is expected to be modest. The scoring model is inherited from SLSA rather than designed from scratch, and the BOM connection is a standard API integration.\n\n## Risks\n\n*Any risks that may come with implementing this feature.*\n\n| # | Risk | Impact | Mitigation | Outcome |\n|---|---|---|---|---|\n| 1 | Added friction reduces adoption | Members skip the assessment | Automate and prefill, keep to the SLSA question set, use gamification | High completion rates |\n| 2 | BOM data inaccurate or unavailable | Incorrect or missing scores | Validate API data, allow manual override, graceful fallback to manual entry | Reliable scores |\n| 3 | Divergence from the SLSA model over time | Loss of research backing / inconsistency | Hold model as configuration, govern against the SLSA source | Stays aligned with the research-backed model |\n| 4 | Feature-flag / per-type config complexity | Difficult or uneven rollout | Clear config model, pilot per unit/patrol type before statewide | Controlled, staged rollout |\n| 5 | Scope creep from deferred intelligence features | Delivery slips | This brief scopes v1 only; later capability is explicitly phased | Focused first pass |\n\n## Future Improvements\n\n*Anything we could consider in future to build on this feature.*\n\n- Notifications on elevated or out-of-parameter scores.\n- Aggregation and averaging across zone, region and state, once a useful metric and outcome are defined.\n- Display on maps, unit modals and summaries.\n- Population-based impact weighting, subject to a data source and agreed methodology.\n- Forecast-based predictive scoring using historical assessment data.\n- Broader augmentation from internal LIMSOC data (Stinger Logs and similar).\n"
+    },
+    "timestamp": "2026-07-01T09:33:14.618Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace; fd -t d -i 'lifesaving|lsv' . 2>/dev/null | head -20; echo \"---projects---\"; ls projects 2>/dev/null; echo \"---top level---\"; ls -d */ 2>/dev/null",
+      "description": "Find existing lifesaving/lsv structure"
+    },
+    "timestamp": "2026-07-01T09:46:06.590Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving; echo \"=== lifesaving/ ===\"; ls -la; echo \"=== lifesaving/lsv (if exists) ===\"; ls -la lsv 2>/dev/null || echo \"no lsv dir yet\"; echo \"=== find comms ===\"; fd -i 'comms|srr' . 2>/dev/null | head",
+      "description": "Inspect lifesaving folder structure"
+    },
+    "timestamp": "2026-07-01T09:46:11.765Z"
+  }
+]

@@ -1,0 +1,72 @@
+/**
+ * Income envelope detail (ISC-65, ISC-101). GET /api/envelopes/detail must
+ * resolve an income envelope id (prefix `inc-`), returning the income figures
+ * plus the transactions whose category maps to that income envelope.
+ */
+
+import { describe, test, expect } from "bun:test";
+import { MemoryStore } from "./penny-memory-store.ts";
+import { EnvelopeService } from "../src/envelope/service.ts";
+import { tx, USER, CONFIG } from "./penny-fixtures.ts";
+
+const JUN = { year: 2026, month: 6 };
+
+async function seedIncome() {
+  const store = new MemoryStore();
+  await store.upsertIncomeEnvelope(USER, {
+    id: "inc-salary",
+    userId: USER,
+    name: "Salary",
+    source: "Salary",
+    budgetedCents: 745460,
+    actualCents: 0,
+    targetCents: 745460,
+  });
+  // Baseline anchored at the display month so the carryover fold is a no-op here.
+  await store.setIncomeCarryover(USER, "inc-salary", -960864, "2026-06-01");
+  store.addCategory(USER, { id: "cat-salary", name: "Salary" });
+  await store.upsertMapping(USER, {
+    id: "m-sal",
+    userId: USER,
+    categoryId: "cat-salary",
+    envelopeId: "inc-salary",
+    effectiveFrom: "1970-01-01",
+    effectiveTo: null,
+  });
+  await store.upsertTransactions(USER, [
+    tx({ id: "pay1", date: "2026-06-15", amountCents: 500000, categoryId: "cat-salary", payee: "Employer" }),
+    tx({ id: "spend", date: "2026-06-16", amountCents: -2000, categoryId: "cat-other", payee: "Shop" }),
+  ]);
+  return { store, svc: new EnvelopeService(store, CONFIG) };
+}
+
+describe("income envelope detail (ISC-65, ISC-101)", () => {
+  test("an income id resolves to its income figures, not a 404", async () => {
+    const { svc } = await seedIncome();
+    const detail = await svc.getDetail(USER, "inc-salary", JUN);
+    expect(detail).not.toBeNull();
+    expect(detail!.envelope.type).toBe("income");
+    expect(detail!.envelope.name).toBe("Salary");
+    expect(detail!.income).toBeDefined();
+    expect(detail!.income!.budgetedCents).toBe(745460);
+    expect(detail!.income!.receivedCents).toBe(500000);
+    expect(detail!.envelope.carryoverCents).toBe(-960864);
+    // left = carryover + received (the carry already reflects the budget draw-down).
+    expect(detail!.envelope.leftCents).toBe(-960864 + 500000);
+    // total = carryover + received.
+    expect(detail!.envelope.totalCents).toBe(-960864 + 500000);
+  });
+
+  test("only the income envelope's contributing transactions are returned", async () => {
+    const { svc } = await seedIncome();
+    const detail = await svc.getDetail(USER, "inc-salary", JUN);
+    const ids = detail!.transactions.map((t) => t.id);
+    expect(ids).toContain("pay1");
+    expect(ids).not.toContain("spend");
+  });
+
+  test("an unknown income id is still a 404 (null)", async () => {
+    const { svc } = await seedIncome();
+    expect(await svc.getDetail(USER, "inc-nope", JUN)).toBeNull();
+  });
+});

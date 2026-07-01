@@ -1,0 +1,385 @@
+# LIMSOC FEATURE BRIEF
+
+## Surf Risk Rating in LIMSOC
+
+| Field | Detail |
+|---|---|
+| **Brief number** | LIMSOC-BRIEF-LSV-2026-005 |
+| **Version** | 2.1 (redraft) |
+| **Author** | Flynn Young |
+| **Revised by** | Nicholas Wood (State Lifesaving Communications Officer) |
+| **Date** | 01/07/2026 |
+
+---
+
+## Sign off
+
+**Feature category: 3 - Moderate Business Impact.**
+
+- 1 - Critical Operational Risk
+- 2 - High Impact, Recoverable
+- **3 - Moderate Business Impact** *(selected)*
+- 4 - Low Operational Risk
+- 5 - No Operational Dependency
+
+| Role | Name | Date |
+|---|---|---|
+| Feature owner | _____________________ | |
+| Senior Manager - Capability | David Potter | |
+| State Lifesaving Communications Officer | Nicholas Wood | |
+
+---
+
+## Overview
+
+*High-level statement outlining the feature and any relevant background information.*
+
+The Surf Risk Rating (SRR) is an established, research-backed SLSA assessment that members already use. Today it lives in the SLSA Operations App, and that solution no longer meets our operational needs. It is not native to LIMSOC, it is unreliable, and the result cannot flow into our operational workflows and data.
+
+SLSA has recently released an SRR API. This project uses that newly released API to build a native SRR experience within LIMSOC, giving members a cohesive experience and integrating the assessment into operational workflows.
+
+## Problem Statement
+
+*What problem are we solving?*
+
+Members currently complete the Surf Risk Rating in the SLSA Operations App, separate from LIMSOC. That leaves four problems:
+
+- **Not native to LIMSOC.** The assessment lives in a separate app, degrading the user experience and keeping it outside the workflows members already use.
+- **The Operations App is unreliable.** Members cannot depend on the current tool being available or working when they need it.
+- **Data is not traceable.** The data is not persisted in an accessible way. It is not retained against a patrol, and off-beach roles (field, dispatch, duty officers) cannot see whether an assessment was completed or what it found.
+- **The score is not accessible to operational workflows.** The result cannot flow into LIMSOC operational workflows, reporting or data.
+
+In short, we cannot capture the SRR natively, rely on it, or use the score in our operational workflows and data.
+
+## Impact
+
+*Impact of solving the problem, including the impact if left unaddressed.*
+
+- **Integrate risk assessment into operational workflows.** Bringing the SRR into LIMSOC lets the score plug into operational workflows. This makes the assessment easier for the member while better facilitating risk-management SOPs, so it has a direct impact on how we manage operational risk.
+- **Drive adoption and integration.** A native, low-friction experience embedded in existing patrol workflows increases uptake of the SRR and makes it part of how patrols already work, rather than a separate step.
+- **Give off-beach roles visibility.** Field and dispatch users gain sight of local risk and of whether an assessment has been completed for each unit. This is the primary situational-awareness win, and it lands with members who are not on the beach.
+- **Make risk assessment traceable and consistent.** We should already be using the SRR, so this feature does not introduce a new obligation. It makes the assessment persistent, reviewable and auditable rather than transient, embeds it in our existing flows, and drives more consistent use across units.
+- **Build the data foundation.** A retained, structured record is the prerequisite for the later reporting, trend analysis and predictive capability described in Future Improvements.
+
+## Success Metrics
+
+*How we will know the first pass has succeeded.*
+
+- **Coverage: 100% of required-type activities have a valid SRR.** Every activity of a required activity type has a valid SRR (completed through to submission) linked to it.
+- **Linkage: 80% of SRRs are linked to an activity or an incident.** The remainder may legitimately be unit-only, completed outside an activity or incident.
+- **User satisfaction: an average experience score of at least 4 out of 5.** Measured from the experience score members give on completing an SRR (FR-1.1.22).
+
+## Proposed Solution
+
+*How are we going to do it?*
+
+Build a native SRR experience in LIMSOC on top of the SLSA API. LIMSOC provides the form, the workflow and the record. The SLSA API provides the score, rating and mitigation list. Access to the SLSA API and its contract is a delivery dependency (see Assumptions and Configuration requirements).
+
+The first pass (v1) will:
+
+- Capture the inputs required by the SLSA SRR API, including locally observed environmental hazards.
+- Determine the location from the user's GPS (falling back to the unit location), and prefill and augment the inputs with automated weather data from the Bureau of Meteorology (BOM) for that location.
+- Submit the inputs to the SLSA API and return the score, rating and mitigation list it provides.
+- Persist the completed assessment in LIMSOC and link it (many-to-one) to a patrol/activity.
+- Make each assessment reviewable from patrol, field and comms views.
+- Include the SRR in the patrol report and allow export of an individual SRR.
+- Block the form when the SLSA API is not healthy (see Assumptions).
+
+Aggregation, map display, the Dangerous Conditions Incident trigger and predictive modelling are deferred to later phases. Notifications are out of scope (see Functional Requirements).
+
+## Assumptions
+
+*What must hold true for this feature to work as described. Several centre on the SLSA API, which is the scoring engine.*
+
+- **SLSA owns the scoring engine, and LIMSOC owns the form and the record.** LIMSOC collects the inputs, sends them to the SLSA API, and the API returns the score, rating and mitigation list. LIMSOC owns persistence of that result and the link to a patrol/activity.
+- **The SLSA API returns the score, rating and mitigation list.**
+- **The SLSA API is performant and reliable.** SLSA has a history of APIs that are neither, so this is assumed, not proven.
+- **A health-check endpoint is available on the SLSA API.**
+- **The location set used for incidents is available to reuse for SRR.**
+
+## Personas and User Stories
+
+*Personas are drafted from current understanding.*
+
+**Personas**
+
+- **Patrol Member** - completes SRRs from patrol view, on a mobile device on the beach.
+- **Duty Officer (Field view)** - oversees units in the field and needs visibility of current risk.
+- **Comms Operator (Comms view)** - coordinates from the operations centre with statewide visibility, and can complete an SRR on a patrol's behalf.
+- **Administrator (Reporting)** - uses the admin portal for reporting and data management, and is the only role that can delete an SRR.
+
+**User stories**
+
+Patrol Member
+
+- As a patrol member, I want to complete an SRR quickly from my patrol view, so that I can record current risk without leaving my workflow.
+- As a patrol member, I want the location and weather prefilled, so that I do the least possible manual entry.
+- As a patrol member, I want to complete the SRR before or during sign-on and link it to my activity, so that the assessment is tied to the right activity.
+- As a patrol member, I want to be able to link a completed SRR to an activity or an incident currently active for my unit.
+- As a patrol member on a required activity type, I want to be told I must complete an SRR before I can sign on, so that the assessment is a clear prerequisite.
+- As a patrol member, I want to give a quick experience rating after completing an SRR, so that I can flag how easy or hard it was to use.
+- **Phase 2:** As a patrol member, I want to link the SRRs several of us complete at the same time into one agreed score, so that we have a single consolidated assessment while keeping visibility of each contributor.
+
+Duty Officer (Field view)
+
+- As a duty officer, I want to see the latest SRR score and rating for each unit, so that I have situational awareness of local risk without being on the beach.
+- As a duty officer, I want to see the day's trend for a unit, so that I can tell whether conditions are worsening.
+
+Comms Operator (Comms view)
+
+- As a comms operator, I want to complete an SRR on a patrol's behalf, so that a unit without LIMSOC access is still covered.
+- As a comms operator, I want statewide visibility of SRR scores, so that I can monitor risk across the state.
+- As a comms operator, I want to see the day's SRRs for a unit as documentation, so that I can review what was assessed.
+- As a comms operator, I want to tag an SRR to an incident, including retrospectively within the same day, so that the incident record carries the risk context that applies to it.
+- As a comms operator, I want to see the SRR rating updates and trend on an incident, so that I can track how conditions changed over the incident.
+
+Administrator (Reporting)
+
+- As an administrator, I want to report on SRR completion and linkage, so that I can measure adoption against our targets.
+- As an administrator, I want to report on the user experience score, so that I can track satisfaction against our target.
+- As an administrator, I want to delete an erroneous SRR from the admin portal, so that bad data can be removed, noting there is no delete in the app UI.
+- As an administrator, I want historic SRR data retained, so that reporting and later analysis are possible.
+- As an administrator, I want SRR data included in patrol and incident report exports, so that risk context travels with operational reporting.
+- As an administrator, I want to export an SRR report for a given entry, so that I can share or file an individual assessment.
+
+## Use Cases
+
+*Worked scenarios for the flows that prose alone leaves ambiguous. Acceptance criteria use Given / When / Then.*
+
+**UC-1: Complete an SRR during a signed-on activity**
+
+- Actor: Patrol Member (patrol view). Preconditions: signed on to an activity, holds the SRR Online Modules qualification, SLSA API healthy.
+- AC1: Given a signed-on activity and a healthy SLSA API, when the member submits the form, then the SRR is scored, persisted, and linked to that activity and its unit.
+- AC2: Given the SLSA API is not healthy, when the member opens the form, then the form is blocked and an unavailable state is shown, and no SRR is recorded.
+- AC3: Given the member leaves the page before submitting, then no SRR is saved.
+
+**UC-2: Complete an SRR before sign-on, then link it on sign-on**
+
+- Actor: Patrol Member.
+- AC1: Given an SRR completed earlier today for the unit with no activity, when the member signs on to an activity, then that SRR is offered for linking, filtered to the same unit and the same day.
+- AC2: Given the member links it, then the SRR is associated with the activity and its unit, and it remains linked to at most one activity.
+
+**UC-3: Complete an SRR with nothing signed on**
+
+- Actor: Patrol Member.
+- AC1: Given nothing is signed on, when the member completes an SRR, then the member is prompted to sign on.
+- AC2: Given nothing is signed on and the member declines to link, then the SRR is logged against the unit they are signed in as, and the comm log entry shows the SRR is against a unit only.
+
+**UC-4: Sign on to an activity where SRR is required**
+
+- Actor: Patrol Member.
+- AC1: Given an activity type configured SRR-required, when a member attempts to sign on without a completed or linked SRR, then sign-on is blocked until a valid SRR is completed or an existing valid SRR is linked.
+- AC2: Given an activity type configured SRR-optional, when a member signs on without an SRR, then sign-on proceeds and the SRR remains available but non-blocking.
+
+**UC-5: Duty officer reviews unit risk in Field view**
+
+- Actor: Duty Officer (Field view).
+- AC1: Given a unit with a same-day SRR, when the duty officer opens Field view, then the latest score shows as key data with a link to the SRR, regardless of whether they hold the SRR Online Modules qualification.
+- AC2: Given a past date is selected in the date picker, then that day's SRRs appear in the documentation list, not as key data.
+
+**Phase 2 - UC-6: SRR crosses the Dangerous Conditions threshold**
+
+- Actor: system, on submission of an SRR.
+- AC1: Given an SRR score at or above the configured threshold and no open Dangerous Conditions Incident for the unit, when it is submitted, then a Dangerous Conditions Incident is opened per the existing incident workflow.
+- AC2: Given the unit is already attached to an open Dangerous Conditions Incident, when a qualifying SRR is submitted, then no new incident is opened and a log note is added to the existing incident.
+
+**UC-7: Tag an SRR to an incident (retrospective, same day)**
+
+- Actor: Comms Operator or member.
+- AC1: Given an SRR completed earlier the same day, when a user tags it to an incident, then the SRR is linked to that incident and its rating updates appear in the incident's log.
+- AC2: Given an SRR from a previous day, when a user tries to link it to an incident, then it is not offered, because only same-day SRRs can be linked.
+- AC3: Given more than one SRR is attached to an incident, when a user views the incident, then a trend of those SRR scores is shown, with time on the x-axis and score on the y-axis.
+
+**Phase 2 - UC-8: Link multiple concurrent SRRs into one consolidated score**
+
+- Actor: member or Comms Operator. Context: several members complete an SRR at the same time, a practice taught in training.
+- AC1: Given several SRRs completed at the same time, when a user links them, then they form one consolidated assessment.
+- AC2: Given SRRs are being linked, when the consolidated assessment is created, then a final score is required and defaults to the average of the linked scores, rounded to the nearest whole number.
+- AC3: Given a consolidated assessment, when it is created, then a justification note may be added to the link and its final score.
+- AC4: Given a consolidated assessment, when it is viewed in any other view, then it appears as a single score, with the ability to drill in to see every contributing form and who completed it.
+
+## Functional Requirements
+
+*Requirements are atomic and numbered (FR-x.y.z). Modal strength follows the phase: Phase 1 requirements are MUST, Phase 2 are SHOULD, Phase 3 are COULD.*
+
+### 1. First pass (v1) - MUST
+
+#### 1.1 Completing and reviewing the form (patrol view)
+
+- **FR-1.1.1** Provide a form that captures the inputs required by the SLSA SRR API, including locally observed environmental hazards.
+- **FR-1.1.2** Prefill and automate any input LIMSOC already holds, to minimise manual entry.
+- **FR-1.1.3** Default the assessment location to the user's GPS location, and fall back to the unit's location when GPS is not available.
+- **FR-1.1.4** Present the five closest beaches to the resolved location, each showing its straight-line distance from that location.
+- **FR-1.1.5** Allow a location to be found by typing a search.
+- **FR-1.1.6** Draw all locations from the same location set used for incidents.
+- **FR-1.1.7** Allow autofill of weather fields with BOM weather data for the selected location.
+- **FR-1.1.8** Submit the collected inputs to the SLSA API and retrieve the score, rating and mitigation list it returns. LIMSOC does not compute the score (see NFR Scoring authority).
+- **FR-1.1.9** Check SLSA API health, via its health-check endpoint, before an assessment can be started.
+- **FR-1.1.10** Block the form and prevent completion if a healthy SLSA response is not available.
+- **FR-1.1.11** Surface a clear unavailable state to the member when the form is blocked.
+- **FR-1.1.12** Record a geospatial position on each assessment.
+- **FR-1.1.13** Present the mitigants the SLSA API returns for the resulting rating, listed at the end of the assessment, presented like the Stinger Log.
+- **FR-1.1.14** Do not autosave the form. Progress is held only in the browser and is lost if the member leaves the page.
+- **FR-1.1.15** Save the assessment only on submit.
+- *Note: the no-autosave behaviour (FR-1.1.14 and FR-1.1.15) is deliberate and must be built as specified. The SRR depends on all inputs being current at the moment of submission, so save-and-return is not supported. This differs from the first aid form, and the difference must not be "corrected" to match it.*
+- **FR-1.1.16** Run the form logic client-side so the form remains usable through intermittent connectivity. A connection is required only to submit, in order to score via the SLSA API and to persist.
+- **FR-1.1.17** In patrol view, only members holding the Surf Risk Rating (Online Modules) qualification may see the SRR.
+- **FR-1.1.18** In the activity menu, present the SRR alongside the other options for the activity (for example roster, powercraft).
+- **FR-1.1.19** Show the latest SRR score from that day in the activity menu. If no SRR has been done for that activity, show "no SRR completed".
+- **FR-1.1.20** Provide an SRR menu that lists all SRR entries for the unit, making clear which activity each SRR is linked to.
+- **FR-1.1.21** When viewing SRR entries for a unit or activity, show a trend graph when there is more than one SRR entry for a given day. Plot time on the x-axis and score on the y-axis.
+- **FR-1.1.22** On completing an SRR, invite the member to give a brief experience score (a lightweight satisfaction rating). Keep it quick and optional so it adds no friction, and collate the scores for reporting.
+
+#### 1.2 Integrating into workflows
+
+- **FR-1.2.1** Persist the completed assessment (inputs, and the returned score, rating and mitigants) in LIMSOC.
+- **FR-1.2.2** Allow an SRR to be linked to an activity, an incident, or both. Every SRR is also associated with a unit.
+- **FR-1.2.3** Link an SRR completed as part of an activity to that activity and its unit. The unit is implied by the activity.
+- **FR-1.2.4** Associate an SRR not completed as part of an activity with the unit only. Every SRR has at least a unit, because a member reaches the SRR through a unit.
+- **FR-1.2.5** On completing an SRR with no activity signed on, offer to link it to a signed-on activity.
+- **FR-1.2.6** If nothing is signed on when an SRR is completed, prompt the member to sign on.
+- **FR-1.2.7** If the member declines to link, log the SRR against the unit they are signed in as.
+- **FR-1.2.8** When signing on to an activity, offer to link an existing SRR completed before sign-on or complete a new one.
+- **FR-1.2.9** Restrict that link choice to SRR completions for the same unit, the same day.
+- **FR-1.2.10** Link an SRR to at most one activity. (Factors such as participant numbers are an input to the rating and differ between activities, and other inputs may differ too, so one SRR cannot be valid for more than one activity.)
+- **FR-1.2.11** Allow an SRR to be tagged to an incident, including retrospectively for an SRR completed earlier the same day.
+- **FR-1.2.12** Link an SRR to at most one incident.
+- **FR-1.2.13** Reflect the linking in the comm log entry, showing whether the SRR is against a unit only, an activity, an incident, or a combination.
+- **FR-1.2.14** When a new full SRR is submitted for a unit (an updated score), add a log entry to the general log from the unit.
+- **FR-1.2.15** Where an SRR is linked to an incident, show its rating updates in that incident's log.
+- **FR-1.2.16** Show a trend of SRR scores for the records attached to an incident. Plot time on the x-axis and score on the y-axis.
+- **FR-1.2.17** Provide a general on/off feature flag that governs whether the feature is available.
+- **FR-1.2.18** Allow each activity type (patrol type) to be configured as SRR-required or SRR-optional.
+- **FR-1.2.19** Where SRR is required for an activity type, block sign-on to an activity of that type until a valid SRR is completed or an existing valid SRR is linked. Sign-on is a blocking step and cannot proceed without it.
+- **FR-1.2.20** Where SRR is optional, present the SRR but do not block sign-on.
+- **FR-1.2.21** Include the SRR in the patrol report.
+- **FR-1.2.22** Include the SRR in the incident report.
+- **FR-1.2.23** Allow export of an individual SRR.
+- **FR-1.2.24** Retain every submitted SRR. There is no delete in the app UI.
+- **FR-1.2.25** Allow only admin portal members to delete an SRR. To supersede a score, a member submits a new SRR, which makes the previous one redundant.
+
+#### 1.3 Notifications and escalation
+
+*Notifications are out of scope for this feature. In our methodology, notifications are driven off an incident, not off an event that feeds an incident. If a condition is important enough to notify people about, it is important enough to be an incident. The escalation this area provides is opening a Dangerous Conditions Incident, which is Phase 2 (see section 2). Any notifications then flow from that incident through the existing incident workflow, not from the SRR itself. There are no first-pass requirements in this area.*
+
+#### 1.4 Discoverability (outside patrol view)
+
+- **FR-1.4.1** Support a fully assisted SRR workflow that can be completed from the Comms view, so a comms operator can complete an SRR on behalf of a patrol.
+- **FR-1.4.2** Show the latest SRR score as key data alongside the key details of the activity, with a link to the latest SRR, in Comms and Field view.
+- **FR-1.4.3** Make all SRRs for a given day available in the same way as other documentation (for example First Aids), in Comms and Field view.
+- **FR-1.4.4** Show an SRR as key data only if it is from the same day. (No stale data)
+- **FR-1.4.5** When a past date is selected in the LSV Comms date picker, show that day's SRRs in the documentation list, but not as key information.
+- **FR-1.4.6** Provide a show-trend button next to the latest score in the key unit information. It shows a trend of that day's scores only (time on the x-axis, score on the y-axis), rendered as a mouse-anchored pop-up that appears while hovering over the button, in Comms and Field view.
+- **FR-1.4.7** Allow Field and Comms view users to see the SRR regardless of the Surf Risk Rating (Online Modules) qualification (in contrast to the patrol-view gate in FR-1.1.18).
+
+### 2. Phase 2 - SHOULD
+
+- **FR-2.1** When an SRR score is at or above a configurable threshold, open a Dangerous Conditions Incident that complies with the existing, externally created incident workflow.
+- **FR-2.2** Make the trigger score configurable, so the score that opens an incident can be set without code changes.
+- **FR-2.3** If the unit is already attached to an open Dangerous Conditions Incident, do not open another. Add a log note to that incident instead.
+- **FR-2.4** Display scores on the mapping interface for a given location.
+- **FR-2.5** Show the SRR score as a heatmap layer, using the geoinformation from each entry.
+- **FR-2.6** Use only the latest score for a location in the heatmap. Never use old scores or aggregate scores.
+- **FR-2.7** Make the heatmap reflect the level of the rating, not how many SRRs have been completed for a location.
+- **FR-2.8** Show no colour on the heatmap where there is no SRR, and make that visually distinct from a low rating.
+- **FR-2.9** Report the SRR scores for an activity, a unit or an incident, and include this with the relevant report.
+- **FR-2.10** Include SRR trends in those reports over the period relevant to the record:
+    - for an incident, between its start and close
+    - for an activity, while it is signed on
+    - for a unit, across a season
+- **FR-2.11** Allow multiple SRRs completed at the same time (a practice taught in our training) to be linked together into one consolidated assessment. There may be many contributing SRRs.
+- **FR-2.12** When SRRs are linked, require a final score for the consolidated assessment, defaulting to the average of the linked scores rounded to the nearest whole number.
+- **FR-2.13** Allow a justification note to be added to the link and its final score.
+- **FR-2.14** Once linked, present the consolidated assessment as a single score in all other views, with the ability to drill in and see every contributing form and who completed it.
+
+### 3. Phase 3 - COULD
+
+- **FR-3.1** From an open incident, provide a "see closest SRR" option, considering only SRR entries from that day.
+
+## Non-functional Requirements
+
+*How well the system does it.*
+
+- **Low friction.** The assessment should be as low-friction as possible: automate wherever possible, prefill from data already captured, and use engagement techniques such as gamification to drive completion. There is no hard completion-time SLA. The intent is minimum friction, not a stopwatch target.
+- **Scoring authority.** LIMSOC does not compute the score. Scoring, rating and mitigants come from the SLSA API. LIMSOC only passes inputs and presents the response. This keeps LIMSOC always aligned with the current SLSA model.
+- **Connection resilience.** The web form runs its logic client-side and remains usable through intermittent connectivity. A connection is required only at submit, to score via the SLSA API and to persist. Progress is not saved before submit (see FR-1.1.14 to FR-1.1.16).
+- **Integration.** Integrate with the existing LIMSOC patrol, unit and reporting data model, and with the mapping data model to support later map display.
+- **External API dependence.** The feature depends on two external APIs: SLSA (scoring) and BOM (weather). For SLSA, check health before an assessment and block the form on an unhealthy response, so no assessment is completed without a live score. For BOM, fall back gracefully to manual entry and override when data is unavailable or wrong.
+- **Performance under a slow dependency.** Health checks, submissions and responses should handle SLSA API latency without hanging the member, with clear timeout and retry behaviour, given SLSA's history of variable performance and availability.
+- **Access control.** SRR visibility follows the view: patrol view is gated on the Surf Risk Rating (Online Modules) qualification (FR-1.1.18), while Field and Comms views are not (FR-1.4.7). Deletion is restricted to admin portal members (FR-1.2.25).
+- **Data sensitivity.** The SRR contains no sensitive information. Standard access controls apply, and no special handling for sensitive data is required.
+- **Statewide use.** Operate for all units across the state under the feature-flag rollout, so the feature can move from pilot to statewide without rework.
+
+## Timeline
+
+*Required timeline, considering each stage of the process. (Dates to be set with the feature owner.)*
+
+| Stage | Description | Target |
+|---|---|---|
+| 1. Secure SLSA API | Obtain SLSA API access, the request/response contract, the health-check endpoint, and a performance/availability commitment | TBC |
+| 2. Build v1 | The Phase 1 requirements (FR-1.1.x, FR-1.2.x, FR-1.4.x): capture form, location select, BOM prefill, SLSA submit/retrieve, health-check and block, connection-resilient no-autosave form, persistence, unit/activity linking, required/optional sign-on gating, patrol-view module gate, review and menus, assisted Comms workflow, patrol report, export | TBC |
+| 3. Pilot | Enable per activity type via feature flag, and validate adoption and data quality against the success metrics | TBC |
+| 4. Statewide | Roll out under the feature flag across the state | TBC |
+
+## Configuration requirements
+
+*What configuration is required prior to deployment, and how significant is the workload?*
+
+This feature does require configuration. "No configuration" would contradict the feature-flag and per-activity-type requirements above.
+
+- General feature flag to make the feature available or not.
+- Per activity type (patrol type): SRR required (blocks sign-on) or optional (presented, non-blocking).
+- **Phase 2:** The score threshold that triggers a Dangerous Conditions Incident.
+- SLSA API connection: endpoint, credentials, the scoring request/response contract, and the health-check endpoint.
+- BOM data source configuration, mapping the shared incident location set to BOM weather data.
+
+**Delivery dependency.** Access to the SLSA API and its documentation (the input contract, the score/rating/mitigant response, and a health-check endpoint) must be obtained from SLSA. We do not currently hold SLSA's API documentation, so this is a prerequisite for Stage 1. A commitment on SLSA API performance and availability should be sought at the same time, since the feature depends on it at runtime.
+
+Workload on the LIMSOC side is expected to be modest. The scoring engine is SLSA's, so LIMSOC builds the form, the persistence, the patrol link and two API integrations (SLSA and BOM).
+
+## Risks
+
+*Any risks that may come with implementing this feature.*
+
+| # | Risk | Impact | Mitigation | Outcome |
+|---|---|---|---|---|
+| 1 | Added friction reduces adoption | Members skip the assessment | Automate and prefill, keep the form minimal, use gamification | High completion rates |
+| 2 | SLSA API slow or unavailable (their history on both) | Members cannot complete an assessment | Health-check before starting, block the form on an unhealthy response, clear timeout/retry, seek a performance/availability commitment from SLSA | Controlled failure, no un-scored assessments |
+| 3 | SLSA API access and contract not yet available to us | Stage 1 blocked, cannot build the integration | Obtain SLSA API documentation and access early as a Stage 1 prerequisite | Build proceeds against a known contract |
+| 4 | BOM data inaccurate or unavailable | Missing or wrong prefill | Validate BOM data, allow manual override, graceful fallback to manual entry | Reliable inputs |
+| 5 | Poor beach connectivity blocks submission | Members cannot submit at the point of need | Client-side form logic, clear retry on reconnect, connection required only at submit | Usable through intermittent connectivity |
+| 6 | Feature-flag / per-activity-type config complexity | Difficult or uneven rollout | Clear config model, pilot per activity type before statewide | Controlled, staged rollout |
+| 7 | Scope creep from deferred intelligence features | Delivery slips | This brief scopes v1 only. Later capability is explicitly phased | Focused first pass |
+| 8 | Dangerous Conditions Incident diverges from or duplicates the incident workflow | Divergent or duplicate incidents | Reuse the existing incident workflow, and where an incident is already open for the unit add a log note instead of opening a second | Compliant, no duplicate incidents |
+
+## Future Improvements
+
+*Anything we could consider in future to build on this feature.*
+
+Phase 2 and Phase 3 scope is captured in Functional Requirements, sections 2 and 3. Beyond those, the following are directions we may build on in future. They depend on data or capabilities we do not yet have, so they are not scoped as phases.
+
+- **Predictive scoring.** Use forecast data to extrapolate future SRR scores.
+- **Population-based impact.** Weight impact using current and previous population trends for a location. Requires a data source and an agreed methodology.
+
+## Glossary and Domain Model
+
+*Defined so the brief reads the same to someone new to LIMSOC or to the domain.*
+
+- **Unit** - a lifesaving service. Members sign in through a unit. A unit has a one-to-many relationship to activities.
+- **Activity** - a unit's operational activity. An activity belongs to exactly one unit. In the LIMSOC data model the object is called `patrol`, a debt from patrol being the first activity type before the model grew. This brief writes "patrol/activity" where the object name (`patrol`) aids developers and system administrators. In plain terms, a patrol is an activity.
+- **Activity type (patrol type)** - the category of an activity. The SRR can be configured required or optional per activity type.
+- **Sign-on** - a member signing on to an activity for a unit.
+- **Patrol view** - the LIMSOC view used by patrol members. Only patrol members access this view.
+- **Field view** - the LIMSOC view used by duty officers. Only duty officers access this view.
+- **Comms view** - the LIMSOC view used by comms operators, with statewide visibility. Only comms operators access this view.
+- **SRR (Surf Risk Rating)** - the SLSA assessment that produces a score, rating and mitigation list.
+- **Score and rating** - the SLSA API returns a numerical score and a rating band running from low risk to extreme risk. Each band maps to a numbered score range, and a higher score means higher risk.
+- **Valid SRR** - an SRR that has been completed through to submission. Same-day is a visibility rule, not a validity rule, so an SRR remains valid on later days.
+- **Mitigants (mitigations)** - the mitigation actions the SLSA API returns for a rating, shown at the end of the assessment and presented like the Stinger Log.
+- **Stinger Log** - an existing LIMSOC log of actions completed following a stinger drag in tropical locations, used here as a UI precedent for presenting the mitigant list.
+- **Surf Risk Rating (Online Modules)** - the SLSA credential that gates SRR visibility in patrol view. It is available from SurfGuard (SG) and retrieved the same way as other member awards.
+- **Key data / key unit information** - the summary information shown prominently for a unit or activity, as distinct from the documentation list. This brief uses "key data" consistently.
+- **Documentation list** - the list where a unit's documents (for example First Aids) are shown. SRRs appear here as documentation.
+- **Incident** - an operational incident recorded in LIMSOC's existing incident workflow. An SRR can be linked to an incident.
+- **Dangerous Conditions Incident** - an incident type in the existing, externally created incident workflow, opened when conditions are dangerous.
+- **Phase 2 - Consolidated assessment** - a single SRR score formed by linking multiple SRRs completed at the same time. The final score defaults to the average of the linked scores, rounded to the nearest whole number.

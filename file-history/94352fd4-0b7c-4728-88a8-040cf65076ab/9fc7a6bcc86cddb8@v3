@@ -1,0 +1,253 @@
+/**
+ * Reconcile route handler (ISC-37, ISC-43): confirms the Credit Card Holding
+ * envelope matches the entered NAB statement balance as at the statement date,
+ * and reports the drift (the named euphoric tripwire). Scoped to the user.
+ */
+
+import { Hono } from "hono";
+import type { Container } from "../../composition.ts";
+import type { Services } from "../services.ts";
+import type {
+  ApiError,
+  LastReconcileResponse,
+  NetPositionResponse,
+  ReconcileBalanceLine,
+  ReconcileBalancesResponse,
+  ReconcileConfirmation,
+  ReconcileConfirmRequest,
+  ReconcileConfirmResponse,
+  ReconcileRequest,
+  ReconcileResponse,
+} from "../contract.ts";
+import type { ReconciliationRecord } from "../../budget/ports.ts";
+import { currentPeriod, resolveSession, UNAUTHENTICATED } from "../http.ts";
+import { PocketSmithClient } from "../../ingest/client.ts";
+import { buildBalanceLines, type ReconcileAccount } from "../../reconcile/balances.ts";
+
+export function registerReconcile(api: Hono, container: Container, services: Services): void {
+  api.post("/reconcile", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const req = (await c.req.json().catch(() => ({}))) as ReconcileRequest;
+    const asOf = req.statementDate;
+    const holdingCents = await services.envelopes.holdingBalance(
+      session.userId,
+      asOf || undefined,
+    );
+    const nabStatementCents = req.nabStatementCents ?? 0;
+    const driftCents = holdingCents - nabStatementCents;
+    const res: ReconcileResponse = {
+      holdingCents,
+      nabStatementCents,
+      driftCents,
+      matched: driftCents === 0,
+    };
+    return c.json(res);
+  });
+
+  /**
+   * Persist a reconciliation confirmation (Phase 4, ISC-37). The holding balance
+   * and drift are recomputed server-side from the engine — the client-sent NAB
+   * figure is the only input trusted — so a recorded confirmation reflects the
+   * system's own numbers, never a fabricated or client-forged figure (ISC-83).
+   */
+  const toRecordResponse = (rec: ReconciliationRecord): ReconcileConfirmation => ({
+    id: rec.id,
+    confirmedAt: rec.ts,
+    statementDate: rec.statementDate,
+    holdingCents: rec.holdingCents,
+    nabStatementCents: rec.nabStatementCents,
+    driftCents: rec.driftCents,
+    matched: rec.matched,
+  });
+
+  api.post("/reconcile/confirm", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const req = (await c.req.json().catch(() => ({}))) as Partial<ReconcileConfirmRequest>;
+    if (typeof req.nabStatementCents !== "number" || typeof req.statementDate !== "string") {
+      const err: ApiError = { error: "nabStatementCents and statementDate are required.", code: "bad_request" };
+      return c.json(err, 400);
+    }
+    const holdingCents = await services.envelopes.holdingBalance(
+      session.userId,
+      req.statementDate || undefined,
+    );
+    const driftCents = holdingCents - req.nabStatementCents;
+    const rec: ReconciliationRecord = {
+      id: crypto.randomUUID(),
+      ts: Date.now(),
+      statementDate: req.statementDate,
+      holdingCents,
+      nabStatementCents: req.nabStatementCents,
+      driftCents,
+      matched: driftCents === 0,
+    };
+    await container.store.appendReconciliation(session.userId, rec);
+    const res: ReconcileConfirmResponse = { ok: true, confirmation: toRecordResponse(rec) };
+    return c.json(res);
+  });
+
+  api.get("/reconcile/last", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const latest = await container.store.getLatestReconciliation(session.userId);
+    const res: LastReconcileResponse = { confirmation: latest ? toRecordResponse(latest) : null };
+    return c.json(res);
+  });
+
+  /**
+   * Penny vs PocketSmith balance reconciliation (P0 trust surface). Pulls the
+   * tenant's PocketSmith account balances live and compares each to Penny's
+   * computed per-account figure, anchored on the Credit Card Holding vs card
+   * tripwire (ISC-37, ISC-43) and generalised across every tracked account. On
+   * any failure (no key, network/auth) it returns ok:false with a key-free reason
+   * so the screen degrades to a clear "could not reach PocketSmith" state rather
+   * than erroring. The developer key is resolved through the SecretStore inside
+   * forUser and never reaches the response (ISC-56).
+   */
+  api.get("/reconcile/balances", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+
+    const fail = (message: string): ReconcileBalancesResponse => ({
+      ok: false,
+      lines: [],
+      cardDriftCents: 0,
+      asOf: Date.now(),
+      message,
+    });
+
+    try {
+      const client = await PocketSmithClient.forUser(container.secrets, session.userId);
+      const user = await client.getAuthenticatedUser();
+      if (user.id === undefined || user.id === null) {
+        return c.json(fail("PocketSmith did not return an account id."));
+      }
+      const [accounts, txs] = await Promise.all([
+        client.listTransactionAccounts(user.id),
+        container.store.listTransactions(session.userId),
+      ]);
+      const accIn: ReconcileAccount[] = accounts.map((a) => ({
+        id: String(a.id),
+        title: a.name ?? `Account ${a.id}`,
+        type: a.type ?? "",
+        currentBalance: a.current_balance,
+      }));
+      const lines: ReconcileBalanceLine[] = buildBalanceLines(
+        accIn,
+        txs.map((t) => ({ accountId: t.accountId, amountCents: t.amountCents, isPending: t.isPending })),
+        services.engineConfig.nabCardAccountIds,
+      );
+      const cardDriftCents = lines
+        .filter((l) => l.kind === "card")
+        .reduce((s, l) => s + l.driftCents, 0);
+      const res: ReconcileBalancesResponse = { ok: true, lines, cardDriftCents, asOf: Date.now() };
+      return c.json(res);
+    } catch {
+      // Never surface the underlying error verbatim: it could narrow the key.
+      return c.json(fail("Could not reach PocketSmith. Check the developer key in Settings."));
+    }
+  });
+
+  /**
+   * Net-position master reconciliation (the whole point of envelope budgeting).
+   * Pulls the tenant's live PocketSmith account balances and reconciles the real
+   * liquid position (cash on hand minus what is owed on credit cards) against the
+   * budget's total "left" (sum of leaf-envelope leftCents plus income leftCents).
+   *
+   * Account classification mirrors the balances surface but is coarser by design:
+   * any account whose type contains "credit" is a card (its balance is negative,
+   * so we report the owed amount as a positive magnitude); everything else
+   * (bank, cash) is cash on hand. Only LEAF envelopes are summed so the rolled-up
+   * parent rows are not double-counted.
+   *
+   * On any PocketSmith failure it returns ok:false with a key-free reason (ISC-56),
+   * mirroring the balances handler, so the widget degrades cleanly.
+   */
+  api.get("/net-position", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+
+    const fail = (message: string): NetPositionResponse => ({
+      ok: false,
+      cashOnHandCents: 0,
+      cardOwedCents: 0,
+      totalLeftCents: 0,
+      sectionLeftCents: { income: 0, saving: 0, expense: 0, envelope: 0, working: 0 },
+      reconciledDeltaCents: 0,
+      asOf: Date.now(),
+      message,
+    });
+
+    // Decimal-dollar PocketSmith balance to integer cents, rounding float dust.
+    const toCents = (amount: number | undefined | null): number =>
+      amount === undefined || amount === null || Number.isNaN(amount) ? 0 : Math.round(amount * 100);
+
+    try {
+      const client = await PocketSmithClient.forUser(container.secrets, session.userId);
+      const user = await client.getAuthenticatedUser();
+      if (user.id === undefined || user.id === null) {
+        return c.json(fail("PocketSmith did not return an account id."));
+      }
+      const accounts = await client.listTransactionAccounts(user.id);
+
+      let cashOnHandCents = 0;
+      let cardBalanceCents = 0; // signed; cards report a negative balance.
+      for (const a of accounts) {
+        const isCard = (a.type ?? "").toLowerCase().includes("credit");
+        const cents = toCents(a.current_balance);
+        if (isCard) cardBalanceCents += cents;
+        else cashOnHandCents += cents;
+      }
+      // Card balances are negative; owed is the magnitude reported positive.
+      const cardOwedCents = Math.abs(cardBalanceCents);
+
+      // Total "left": sum of LEAF expense/saving/envelope rows (a leaf is a row no
+      // other row names as its parentId) plus the income envelopes' contribution.
+      const grid = await services.envelopes.getGrid(session.userId, currentPeriod());
+      const parentIds = new Set(
+        grid.rows.map((r) => r.parentId).filter((p): p is string => p !== null),
+      );
+      // Working envelopes sit outside the ZERO-BASE budget but still move real cash,
+      // so they ARE part of the net-position reconciliation as their own section line
+      // (their balance begins at 0 today and accrues forward).
+      const leaves = grid.rows.filter((r) => !parentIds.has(r.id));
+      const leafLeftCents = leaves.reduce((s, r) => s + r.leftCents, 0);
+      // Income contributes carryover + surplus/deficit (variance), NOT carryover +
+      // received. The budgeted income is already represented in the expense envelopes'
+      // allocations (zero-base), so including the full received here would double-count
+      // the budget. carry + (received - budget) makes the budgets cancel and the sum
+      // reconcile to cash - card. The income row's own "left" stays carry + received.
+      const incomeLeftCents = grid.income.reduce((s, i) => s + i.carryoverCents + i.varianceCents, 0);
+      const totalLeftCents = leafLeftCents + incomeLeftCents;
+
+      // Per-section "left": income from the income envelopes, and each spending
+      // type from its leaf rows, so the four figures sum to totalLeftCents.
+      const leftByType = (type: string): number =>
+        leaves.filter((r) => r.type === type).reduce((s, r) => s + r.leftCents, 0);
+      const sectionLeftCents = {
+        income: incomeLeftCents,
+        saving: leftByType("saving"),
+        expense: leftByType("expense"),
+        envelope: leftByType("envelope"),
+        working: leftByType("working"),
+      };
+
+      const reconciledDeltaCents = cashOnHandCents - cardOwedCents - totalLeftCents;
+      const res: NetPositionResponse = {
+        ok: true,
+        cashOnHandCents,
+        cardOwedCents,
+        totalLeftCents,
+        sectionLeftCents,
+        reconciledDeltaCents,
+        asOf: Date.now(),
+      };
+      return c.json(res);
+    } catch {
+      // Never surface the underlying error verbatim: it could narrow the key.
+      return c.json(fail("Could not reach PocketSmith. Check the developer key in Settings."));
+    }
+  });
+}
