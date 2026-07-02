@@ -1,0 +1,82 @@
+# Go and Java Fundamentals, and How They Compare to Python
+
+Why this doc exists: your positioning is "deepest in Java and Go, fluent in Python, reasoning from a systems base." Tom drills wherever he suspects a limit, and the natural probe of that claim is "okay, how does X work in Go/Java, and how does Python differ?" This is revision for languages you already know: the goal is crisp out-loud articulation, especially of the exact territory Jaimyn flagged (memory management, thread management, async, garbage collection) across all three languages.
+
+---
+
+## 1. Go fundamentals
+
+### Concurrency: goroutines and the scheduler
+- A **goroutine** is a lightweight, runtime-managed thread: starts with a ~2KB growable stack, so hundreds of thousands are cheap. `go f()` launches one.
+- The **runtime scheduler** is M:N — it multiplexes many goroutines (G) onto a small set of OS threads (M) via per-thread run queues (P, one per `GOMAXPROCS`, default = CPU cores). Goroutines yield at function calls, channel ops, and blocking syscalls; since Go 1.14 they are also asynchronously preemptible, so a tight loop cannot starve the scheduler.
+- **Channels** are typed conduits for communication and synchronisation: "share memory by communicating." Unbuffered channels synchronise (send blocks until receive); buffered channels decouple up to capacity. `select` waits on multiple channels.
+- The mantra: goroutines give you real parallelism across cores *and* cheap concurrency, with the runtime handling the multiplexing.
+
+### Memory and GC
+- Go compiles to a **native binary, no VM**. The compiler does **escape analysis**: values that don't escape their function live on the stack (free to reclaim); values that escape go to the heap.
+- The GC is a **concurrent, tri-color mark-and-sweep** collector. It is **non-generational** and non-compacting, tuned for **low pause times** (sub-millisecond) rather than max throughput: it runs concurrently with the program, using write barriers to stay correct while the program mutates the heap.
+- Tuning surface is deliberately tiny: `GOGC` (heap-growth target) and `GOMEMLIMIT`. Contrast with the JVM's zoo of collectors and flags.
+
+### Types, interfaces, errors
+- **Statically typed, structurally satisfied interfaces**: a type implements an interface just by having the methods — no `implements` keyword. Small interfaces (`io.Reader`) compose.
+- **Errors are values**: functions return `(result, error)`, handled explicitly at each call site. No exceptions for normal control flow (`panic`/`recover` exists for the truly exceptional). This is the opposite philosophy to Java and Python exceptions, and it makes failure paths visible in the code.
+- `defer` schedules cleanup to run at function exit (LIFO), the analogue of try-with-resources / context managers.
+
+## 2. Java fundamentals
+
+### The JVM and JIT
+- Java compiles to **bytecode** which the **JVM** executes: interpreted at first, then the **JIT compiler** (C2/Graal) compiles hot paths to optimised native code at runtime, using live profiling data. That is why Java "warms up" — and why long-running Java services end up very fast.
+- The JVM is a managed runtime: class loading, bytecode verification, GC, and the memory model all live here. Write once, run anywhere follows from the bytecode + VM split.
+
+### Memory and GC
+- Heap is managed by a **generational garbage collector**, built on the **generational hypothesis**: most objects die young. New objects allocate in the **young generation** (Eden), survivors get promoted to the **old generation**; young collections are frequent and cheap, old/full collections rarer and dearer.
+- Modern collectors are pluggable by workload: **G1** (default, region-based, pause-target driven), **ZGC** and Shenandoah (concurrent, sub-millisecond pauses on huge heaps), Parallel (max throughput). Tri-color concurrent marking underlies the concurrent ones — the same core idea as Go's collector, but generational and compacting.
+- GC is reachability-based mark-and-sweep(-compact): no reference counting anywhere, so reference cycles are a non-issue by construction.
+
+### Threads and concurrency
+- Classic Java threads are **1:1 OS threads**: real parallelism across cores (no GIL), but each carries an OS-thread cost (~MB stack), so thousands are expensive — hence thread pools and `ExecutorService`.
+- **Virtual threads** (Java 21, Project Loom) are the game changer: JVM-managed lightweight threads multiplexed over a small carrier-thread pool — Java's arrival at Go's goroutine model. Millions of blocking-style threads become viable, mostly replacing reactive/async gymnastics for I/O-bound work.
+- The **Java Memory Model** defines visibility and ordering across threads: `synchronized`, `volatile`, and `java.util.concurrent` (locks, atomics, concurrent collections) are the tools. "Safe publication" and happens-before are the interview-grade vocabulary.
+
+### Types
+- Statically typed, **nominal** interfaces (`implements`, explicit), generics via **type erasure** (generic type info exists at compile time, erased at runtime — why you can't do `new T[]`).
+
+## 3. The three-way comparison (the money table)
+
+| Dimension | Go | Java | Python (CPython) |
+|---|---|---|---|
+| **Execution model** | Compiled to native binary, no VM | Bytecode on the JVM, JIT-compiled hot paths at runtime | Interpreted bytecode, no JIT in CPython (3.13 has an experimental one) |
+| **Typing** | Static, structural interfaces | Static, nominal interfaces, generics erased | Dynamic, duck typed; optional type hints checked by external tools (mypy), not enforced at runtime |
+| **Threads and parallelism** | Goroutines: M:N runtime scheduling over OS threads, true parallelism, hundreds of thousands cheap | OS threads 1:1 (true parallelism, expensive) + virtual threads since 21 (cheap, goroutine-like) | Threads are real OS threads **but the GIL means only one executes Python bytecode at a time** — no CPU parallelism from threads; use multiprocessing for CPU-bound |
+| **Async I/O model** | You don't need a separate model: goroutines block cheaply, the runtime multiplexes | Historically thread pools / CompletableFuture / reactive; virtual threads now let blocking style scale | `asyncio`: single-threaded cooperative event loop, `async`/`await`, tasks yield at await points |
+| **Memory management / GC** | Concurrent tri-color mark-and-sweep, **non-generational**, escape analysis puts non-escaping values on the stack, sub-ms pauses | **Generational** mark-sweep-compact (G1/ZGC etc.), JIT + GC tuned for long-running throughput | **Reference counting** as the primary mechanism (immediate reclaim at zero refs) **plus a generational cycle collector** for reference cycles that refcounting alone can't free |
+| **Error handling** | Errors as values, `(result, err)` returns, explicit at every call site | Exceptions (checked + unchecked), try/catch/finally, try-with-resources | Exceptions (all unchecked), try/except/finally, context managers (`with`) |
+| **Deployment** | Single static binary | JAR + JVM required | Interpreter + dependencies (venv, containers) |
+
+## 4. The spoken comparison answers (rehearse these aloud)
+
+**"You're deepest in Go and Java — how does Python's concurrency compare?"**
+> "The fundamental difference is the GIL. In Go, goroutines are scheduled M:N over OS threads and genuinely run in parallel across cores; in Java, threads are OS threads, also genuinely parallel, and virtual threads now make them cheap the way goroutines are. In CPython, threads are real OS threads but the global interpreter lock means only one can execute Python bytecode at a time, so threads buy you concurrency for I/O-bound work but zero parallelism for CPU-bound work. So in Python I pick by workload: asyncio for high-concurrency I/O, which is a single-threaded cooperative event loop, closest in spirit to a goroutine scheduler with one thread; multiprocessing for CPU-bound, which sidesteps the GIL with separate processes at the cost of serialising data between them. Coming from Go, the discipline transfer is that channels taught me to think in terms of message passing, which maps well to asyncio queues."
+
+**"Compare garbage collection across the three."**
+> "Three genuinely different designs. Python's primary mechanism is reference counting: every object carries a count, and when it hits zero the object is freed immediately, which gives prompt, deterministic-ish reclamation but can't handle cycles, so CPython adds a generational cycle collector on top. Java is the opposite: no refcounting at all, a generational tracing collector built on the observation that most objects die young — allocate in Eden, promote survivors, with pluggable collectors like G1 or ZGC depending on whether you're tuning for throughput or pause time. Go sits in a third spot: a concurrent tri-color mark-and-sweep that is deliberately non-generational, tuned almost entirely for low pause times with a tiny tuning surface, plus escape analysis so a lot of values never reach the heap at all. The practical consequence: in Python I think about breaking reference cycles and the cost of refcount churn; in Java about allocation rate and promotion; in Go mostly about not allocating in hot paths."
+
+**"Why doesn't Go or Java have a GIL?"**
+> "The GIL isn't a language necessity, it's a CPython implementation choice: reference counting on every object means the counts must be updated safely from multiple threads, and a single global lock was the simple way to make that and the rest of the interpreter's internals thread-safe. Go and Java don't use reference counting — they use tracing collectors designed from the start for concurrent mutation, with write barriers and safepoints — so there's no single interpreter-wide invariant that needs one big lock. Python is actively working on this: PEP 703, the free-threaded build, makes refcounting thread-safe with finer-grained techniques, at some single-thread cost."
+
+**"What did Java and Go teach you that you bring to Python?"**
+> "Three things. From Java: memory-model thinking — visibility, safe publication, what happens-before means — which makes me careful about shared state even where Python's GIL papers over it. From Go: explicit error paths and small composable interfaces, which in Python shows up as me handling failure cases explicitly rather than letting exceptions fly, and preferring small protocol-style abstractions. And from both: types as design — I use type hints and Pydantic heavily, because I've felt what enforced contracts buy you at API boundaries."
+
+## 5. Likely drill follow-ups (one-line answers to have ready)
+
+- **"What's a goroutine under the hood?"** A runtime-managed green thread with a small growable stack, multiplexed M:N onto OS threads by Go's scheduler; preemptible since 1.14.
+- **"Unbuffered vs buffered channel?"** Unbuffered synchronises (send blocks until a receiver is ready); buffered decouples up to capacity, then blocks.
+- **"Java generics vs Go generics?"** Java: erasure — compile-time only, no runtime type info. Go (since 1.18): compile-time instantiated with dictionaries/stenciling, no erasure but deliberately minimal.
+- **"Virtual threads vs goroutines?"** Same idea — cheap runtime-scheduled threads over carrier OS threads. Java's arrived twenty years later and has to interoperate with an ecosystem built on platform threads; pinning (e.g. inside `synchronized`) is the main gotcha.
+- **"Escape analysis?"** Compiler proof that a value doesn't outlive its function, so it can be stack-allocated; in Go this is a big reason allocation pressure stays low. The JIT does a version of this in Java too.
+- **"Why is Python slow relative to these?"** Dynamic typing means late binding on every operation, no ahead-of-time or (in mainstream CPython) JIT compilation, boxed everything, and interpreter dispatch overhead. The standard answer is: Python orchestrates, native code (numpy, C extensions, or a service in Go/Java) does the heavy lifting.
+- **"Where does Python beat Go/Java?"** Iteration speed, ecosystem for AI/ML and data (the entire modern AI stack is Python-first), expressiveness for glue and orchestration, and the interactive workflow. That's exactly why it's the right language for the AI layer even when the systems underneath are Go or Java.
+
+---
+
+*Companion flashcards: Prompt E in `10-notebooklm-flashcard-prompt.md`, sourced from this doc.*
