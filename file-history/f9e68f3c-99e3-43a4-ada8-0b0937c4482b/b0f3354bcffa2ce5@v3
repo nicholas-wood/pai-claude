@@ -1,0 +1,131 @@
+# Printable: Code Examples + Model Cost Summary
+
+Print this and keep it in front of you. Two minimal, correct examples (FastMCP hello world, FastAPI generator endpoint) with the talking points each one unlocks, plus the Claude model cost table.
+
+---
+
+## 1. Hello world MCP server (FastMCP)
+
+```python
+from fastmcp import FastMCP
+
+mcp = FastMCP("hello-server")
+
+@mcp.tool
+def hello(name: str) -> str:
+    """Say hello to someone by name."""
+    return f"Hello, {name}!"
+
+if __name__ == "__main__":
+    mcp.run()  # stdio transport by default (local client spawns this process)
+    # For a remote server (what a ChatGPT App is):
+    # mcp.run(transport="http", host="0.0.0.0", port=8000)
+```
+
+Notes to speak to:
+- **The decorator is the whole registration.** `@mcp.tool` turns a typed Python function into an MCP tool: the function name becomes the tool name, the type hints become the input schema, and the docstring becomes the description. The model selects and calls tools based on those names and descriptions, so writing them well is prompt engineering, not boilerplate.
+- **Transport follows topology.** Default is stdio (a local host app spawns this as a subprocess and pipes messages over stdin/stdout). A remote server, which is what Virgin's flight-search ChatGPT App is, runs over streamable HTTP and needs auth (OAuth) because it is exposed to the network.
+- **Deliberately FastAPI-shaped.** Same mental furniture: decorators register handlers, type hints drive validation and schema generation. (Import note: FastMCP 2.x is `from fastmcp import FastMCP`; the reference MCP SDK bundles an earlier version as `from mcp.server.fastmcp import FastMCP`.)
+
+## 2. FastAPI endpoint with a generator (streaming)
+
+```python
+import asyncio
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+
+app = FastAPI()
+
+class SearchRequest(BaseModel):
+    query: str
+    limit: int = 10
+
+@app.post("/search/stream")
+async def stream_results(req: SearchRequest):
+    async def generate():                      # an async generator
+        for i in range(req.limit):
+            yield f"data: result {i} for '{req.query}'\n\n"
+            await asyncio.sleep(0.1)           # stand-in for real async work
+    return StreamingResponse(generate(), media_type="text/event-stream")
+```
+
+Notes to speak to:
+- **`yield` makes it a generator**: values are produced lazily, one at a time, instead of building the whole response in memory. The `async` variant yields control back to the event loop at each `await`, so one worker can serve many concurrent streams. That is the whole case for async here: this is I/O-bound work.
+- **Pydantic model = validation + schema.** The `SearchRequest` type hint means FastAPI parses, validates, and rejects bad payloads before your code runs, and the OpenAPI schema is generated from it. Same philosophy as the strongly typed APIs I have built in Java and Go, just derived from annotations.
+- **Why streaming matters for AI systems:** LLM responses are token streams. Server-sent events over a long-lived HTTP connection is exactly how an AI answer, or an MCP server's response, reaches the client incrementally instead of after full generation. Streaming is also the production answer to request timeouts on long generations.
+- **Bridge line:** "A generator is Python's lazy iterator, like a Go channel being fed by a goroutine, or a Java Stream: produce on demand, constant memory, and in the async case the event loop interleaves thousands of them on one thread."
+
+---
+
+## 2a. The generator pattern, from first principles (how `next` drives it)
+
+A generator is a function that can **pause and resume**. Any function containing `yield` becomes a generator function: calling it runs *no code at all*, it just returns a **generator object**. Code only runs when a value is requested, and only up to the next `yield`, then the function freezes with all its local state intact.
+
+```python
+def countdown(n):
+    print("starting")          # nothing prints when you call countdown(3)
+    while n > 0:
+        yield n                # pause here, hand n to the caller
+        n -= 1                 # resumes HERE on the next request
+    print("done")              # runs on the final resume, then...
+                               # ...falling off the end raises StopIteration
+```
+
+`next(gen)` is the resume button:
+
+```python
+gen = countdown(3)     # nothing runs yet - you just get a generator object
+
+next(gen)              # prints "starting", runs to yield -> returns 3
+next(gen)              # resumes after the yield, loops -> returns 2
+next(gen)              # -> returns 1
+next(gen)              # resumes, loop ends, prints "done",
+                       # then raises StopIteration - the "I'm finished" signal
+```
+
+`StopIteration` is not an error, it is the protocol. A `for` loop is sugar over exactly this: `for x in countdown(3)` calls `iter()` once, then `next()` repeatedly, and swallows `StopIteration` to end cleanly. Generators implement the iterator protocol (`__iter__` + `__next__`) for you.
+
+**The everyday use - lazy sequences in constant memory:**
+
+```python
+def read_large_log(path):
+    with open(path) as f:
+        for line in f:
+            if "ERROR" in line:
+                yield line.strip()      # one line in memory at a time
+
+for error in read_large_log("app.log"):   # never loads the file into memory
+    print(error)
+```
+
+The list version (`return [line for line in f if "ERROR" in line]`) materialises every match before returning anything; the generator starts producing immediately and holds one line at a time, so it works identically on a 1 GB file. Generators also **compose into pipelines**: `errors = (parse(l) for l in read_large_log(p))` chains lazily - that `(...)` form is a **generator expression**, a lazy list comprehension.
+
+**The two lines that read as senior:**
+- *Memory framing:* "A list is computed eagerly and held fully in memory; a generator computes on demand and holds only its paused stack frame. For large or infinite sequences that's the difference between working and not."
+- *Bridge to async:* "`async/await` is built on the same suspend-and-resume machinery - a coroutine is essentially a generator the event loop drives, and `await` is the pause point the way `yield` is." Explaining generators well is most of explaining how asyncio schedules coroutines.
+
+**Your Go bridge:** a generator is like a goroutine feeding an unbuffered channel - the producer blocks until the consumer asks - except single-threaded: `next` is the "receive" that briefly hands control to the producer. Caveat if pushed: unlike a goroutine, a generator only runs *when* the consumer calls `next`; there is no independent execution.
+
+*(This is the machinery behind the `async def generate()` in example 2 above - same pause/resume idea, with the event loop as the caller of "next".)*
+
+---
+
+## 3. Claude model cost summary (per 1M tokens, current as of July 2026)
+
+| Model | Input $/1M | Output $/1M | Context | Tier positioning |
+|---|---|---|---|---|
+| Claude Fable 5 | $10.00 | $50.00 | 1M | New top tier above Opus, hardest reasoning and long-horizon agentic work |
+| Claude Opus 4.8 | $5.00 | $25.00 | 1M | Most capable Opus, the default high-end workhorse |
+| Claude Sonnet 5 | $3.00 ($2.00 intro to Aug 2026) | $15.00 ($10.00 intro) | 1M | Near-Opus quality on coding/agentic work at less cost |
+| Claude Haiku 4.5 | $1.00 | $5.00 | 200K | Fastest and cheapest, simple tasks at scale |
+
+The production cost levers to mention (this is cost engineering, which is productionisation):
+- **Model routing.** Not every call needs the big model. Classification, extraction, and guardrail checks route to Haiku or Sonnet; only hard reasoning goes to Opus or Fable. A 10x price spread between tiers means routing is often the single biggest cost lever. LLM-as-a-judge is commonly run on a cheaper model than the one being judged.
+- **Prompt caching.** Cache reads cost roughly 0.1x the input price (writes cost 1.25x for the 5-minute TTL). Keeping stable content, like the system prompt and tool definitions, as a cacheable prefix cuts input costs dramatically on multi-turn or agentic workloads.
+- **Batch processing.** Non-latency-sensitive work (offline evals, backfills, post-incident analysis) runs through the Batches API at 50% of standard price.
+- **Output tokens are ~5x input tokens.** Verbose outputs are expensive; concise-output prompting and effort controls are cost controls, not just style.
+
+---
+
+*Sanity note: prices are Anthropic list prices for the current model family (checked July 2026). If asked to compare with OpenAI/Google pricing, say you track Anthropic's closely and would look the others up rather than guess.*

@@ -1,7 +1,7 @@
 {
   "proto": 1,
-  "supervisorPid": 3927130,
-  "updatedAt": 1782985765012,
+  "supervisorPid": 1332151,
+  "updatedAt": 1783037066363,
   "workers": {
     "fbf081be": {
       "pid": 667289,
@@ -108,6 +108,60 @@
       "rvAuth": "5c8db63722930b48f0aa7e19649ef218",
       "ptyAuth": "bfb805d7a7915f7151eacf5f1b09399b"
     },
+    "ac48f178": {
+      "pid": 99446,
+      "procStart": "258600784",
+      "sessionId": "ac48f178-2c38-4375-b9c7-9c3174942cbd",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/ac48f178.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/0f966f62.pty.sock",
+      "cliVersion": "2.1.198",
+      "startedAt": 1782956631062,
+      "attempt": 1,
+      "cwd": "/home/nicholas-wood/.claude",
+      "dispatch": {
+        "proto": 1,
+        "short": "ac48f178",
+        "nonce": "02b665ca",
+        "sessionId": "ac48f178-2c38-4375-b9c7-9c3174942cbd",
+        "createdAt": 1782956631053,
+        "source": "fleet",
+        "cwd": "/home/nicholas-wood/.claude",
+        "launch": {
+          "mode": "prompt",
+          "args": [
+            "--session-id",
+            "ac48f178-2c38-4375-b9c7-9c3174942cbd",
+            "--agent",
+            "claude",
+            "--",
+            "I would like to do a review"
+          ]
+        },
+        "env": {},
+        "isolation": "none",
+        "respawnFlags": [
+          "--agent",
+          "claude"
+        ],
+        "agent": "claude",
+        "seed": {
+          "intent": "I would like to do a review"
+        },
+        "cols": 214,
+        "rows": 52
+      },
+      "decModes": [
+        1000,
+        1002,
+        1003,
+        1006,
+        2004,
+        1004,
+        2031
+      ],
+      "rvAuth": "be44518beedd1073a6cb59467bbc0984",
+      "ptyAuth": "00fcc560e46dba239430d1b17baf23f8"
+    },
     "f9e68f3c": {
       "pid": 3927159,
       "procStart": "256913634",
@@ -164,60 +218,6 @@
       ],
       "rvAuth": "96804b78cb304b2573132d9bbd74795c",
       "ptyAuth": "222e4976c34858d1bd93469230738a1c"
-    },
-    "ac48f178": {
-      "pid": 99446,
-      "procStart": "258600784",
-      "sessionId": "ac48f178-2c38-4375-b9c7-9c3174942cbd",
-      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/ac48f178.sock",
-      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/0f966f62.pty.sock",
-      "cliVersion": "2.1.198",
-      "startedAt": 1782956631062,
-      "attempt": 1,
-      "cwd": "/home/nicholas-wood/.claude",
-      "dispatch": {
-        "proto": 1,
-        "short": "ac48f178",
-        "nonce": "02b665ca",
-        "sessionId": "ac48f178-2c38-4375-b9c7-9c3174942cbd",
-        "createdAt": 1782956631053,
-        "source": "fleet",
-        "cwd": "/home/nicholas-wood/.claude",
-        "launch": {
-          "mode": "prompt",
-          "args": [
-            "--session-id",
-            "ac48f178-2c38-4375-b9c7-9c3174942cbd",
-            "--agent",
-            "claude",
-            "--",
-            "I would like to do a review"
-          ]
-        },
-        "env": {},
-        "isolation": "none",
-        "respawnFlags": [
-          "--agent",
-          "claude"
-        ],
-        "agent": "claude",
-        "seed": {
-          "intent": "I would like to do a review"
-        },
-        "cols": 214,
-        "rows": 52
-      },
-      "decModes": [
-        1000,
-        1002,
-        1003,
-        1006,
-        2004,
-        1004,
-        2031
-      ],
-      "rvAuth": "be44518beedd1073a6cb59467bbc0984",
-      "ptyAuth": "00fcc560e46dba239430d1b17baf23f8"
     },
     "91e67a6d": {
       "pid": 105978,

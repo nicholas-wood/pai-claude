@@ -1,0 +1,79 @@
+# The Final Two-Pager - Read Just Before You Walk In
+
+---
+
+## PAGE 1 - THE GAME AND YOUR STORIES
+
+### How this interview works (Tom's rules)
+- He **drills until he finds your limit. Reaching it is expected and fine. Bluffing past it is the only fail.**
+- The one named deal-breaker: **resume-reality mismatch.** Everything you claim, you can go three layers deep on.
+- **The limit move (rehearsed, not improvised):** "I'm not certain beyond this point - here's how I'd reason about it, and here's how I'd confirm it."
+- **The credibility move, every knowledge question:** answer the concept in two sentences, then "the way this showed up for me at ANZ Plus was..."
+
+### The opener (they ask first; it sets the whole interview) - ANZ Plus
+**AI-powered property search platform** (ANZ Plus home buying), Vertex AI + Gemini:
+- **Problem:** listing metadata is bad - agents skip fields, bury facts in prose and photos.
+- **AI at both ends, deterministic middle:** LLM extraction at ingestion (metadata + descriptions + **photos - the fireplace visible but never mentioned becomes searchable**); query decomposition into structured criteria at query time; deterministic search in between.
+- **Data path:** extracted attributes → BigQuery → reverse-ETL → Spanner → search served from Spanner. APIs returned **ranked listings**.
+- **Your slice, precisely:** the search/retrieval APIs + the team's AI integration strategy and guardrails. Not the whole platform.
+- **Two senior design calls:** (1) AI at ingestion, not query-time generation - the corpus was the problem; (2) **embeddings deliberately second** - hard constraints (bedrooms, price) need exact matching; vector earns its place on the semantic long tail ("cosy"). Hybrid retrieval was the roadmap; **project parked before embeddings shipped.**
+- **Guardrails (real, yours):** regex filtering first (cheap, fast, auditable) → LLM-as-a-judge for nuance (and you monitor the judge - it has its own error rate and biases) → Vertex's native safety thresholds tuned, not rebuilt.
+- **Evals split by stage:** extraction precision (is the attribute really there) separately from search relevance - "you can only fix what you can isolate."
+
+### The RAG boundary (say it proactively, own it)
+> "It wasn't RAG, and I'm precise about that - no generation step on the retrieval path, and embeddings were designed but not shipped. It was AI-powered search: generative AI at both ends, deterministic retrieval in the middle."
+
+Then bridge: **"I built the R of RAG without the G"** - and that's the half where RAG is won or lost. Query decomposition = query transformation. Extraction pipeline = RAG ingestion. Structured search = metadata filtering; hybrid was the designed end-state. If pushed: "Correct, I've not shipped production vector search - I know the design we had and how I'd evaluate it, recall@k against labelled queries."
+
+### LIMSOC (secondary) - label the boundary in sentence one
+> "My second example is deliberately a **design rather than something shipped**..."
+- **Platform framing:** not seven features - one substrate: structured incident state, extraction/grounding layer, RAG over SOPs + past incidents, one shared eval-and-guardrail framework. "AI assists, humans decide; everything grounded and cited; sensitive domains suggestion-only with audit trails."
+- **Showpiece = ETA prediction, because the decision was NOT to use an LLM:** physics baseline (distance/effective speed, conditions-adjusted) ships now, explainable; ML residual correction earned later by a transit-time data pipeline; ETA always a range, never false precision. *Same judgment as ANZ's embeddings-second call - knowing where each technique wins.*
+- **If he pushes to production texture:** "That's the design; it hasn't shipped, so I'd be speculating on operational specifics - but here's how I'd expect it to behave and how I'd validate it."
+
+### Fit answers (one breath each)
+- **"What are you doing now?"** Role made redundant earlier this year → took it deliberately → paid consulting (SLSA national strategy engagement) + building my own products → intentional about the right role. "This one got my attention not because I was looking - the role itself is exactly the work I want."
+- **"Why Virgin?"** (1) They ship - the ChatGPT flight search is live; (2) the role sits exactly at applied AI + production discipline; (3) safety-critical operational domain - the environment I've chosen repeatedly (banking, emergency ops).
+- **Brisbane:** unhedged. "Yes - I'm willing to relocate, and it's already thought through."
+
+---
+
+## PAGE 2 - TECHNICAL ANCHORS
+
+### The two scripted answers (Jaimyn literally named these)
+**useState:** state lives on the component's **fiber node**, keyed by **call order** (→ rules of hooks: unconditional, same order). The value is **captured in a closure per render**; the setter doesn't mutate - it **schedules a re-render**. Setters **batch** in handlers; updates replace, not merge; derive-from-old needs the **functional form** (stale-closure guard). Bail-out via **Object.is** → treat state as immutable.
+**Event loop:** single thread, one call stack. Async work goes to host APIs; completions **queue**. **Microtasks (promises, await-continuations) drain fully after each task; macrotasks (setTimeout, I/O) one per turn** → promise beats setTimeout(0). `await` = suspend, resume as microtask. Long sync work blocks everything.
+
+### Python (the named drill territory)
+- **GIL:** exists because CPython uses **reference counting** - one lock keeps counts safe. So threads = concurrency for I/O, **zero CPU parallelism** → multiprocessing for CPU-bound, asyncio for high-concurrency I/O. (PEP 703 free-threading is the active fix.)
+- **GC:** refcounting primary (immediate reclaim at zero) **+ generational cycle collector** for reference cycles.
+- **Generators:** function with `yield` → calling runs nothing; each `next()` runs to the next yield and pauses with state intact; falling off the end raises **StopIteration** - the protocol a for-loop consumes. Lazy, constant memory, composable pipelines.
+- **Why generators matter for AI (the tie-together):** "AI systems are streaming pipelines over I/O-bound calls with data bigger than memory - generators are Python's primitive for all three, and **async/await is generators grown up**, which is why FastAPI and FastMCP are built on it." LLM SDKs hand you the token stream as an async generator.
+
+### Language comparisons (your home turf - invite these)
+- **GC three ways:** Python = refcount + cycle collector (prompt, cycles need help). Java = **generational** tracing (most objects die young; Eden → promote; G1/ZGC). Go = **concurrent tri-color mark-sweep, non-generational**, tuned for sub-ms pauses + escape analysis keeps values off the heap.
+- **Why no GIL in Go/Java:** no refcounting - tracing collectors built for concurrent mutation (write barriers, safepoints). The GIL is a CPython implementation choice, not a language necessity.
+- **Concurrency:** goroutines M:N (true parallelism, cheap); Java OS threads + virtual threads since 21 (goroutines, twenty years later); Python threads real but GIL-bound.
+- **Why Python over Go (near-certain):** "The bottleneck in an LLM system is the **model call**, not the language - Go's edge buys little, while Python buys the whole AI ecosystem first-class, research-speed iteration on prompts and evals, and a shared language with data science. I'd reach for Go where its virtues bind - CPU-bound, high-throughput infrastructure. **Language per workload, not preference.**"
+
+### Agentic system design (the big synthesis question) - say the shape first
+> "Three parts. **Frame the problem** and decide whether it even needs an agent. Then the **architecture by layers**: interface, orchestration, tools, knowledge and memory, data. Then the **production layer, where the real engineering is: safety, evals, ops.**"
+- **Layer 0 gate:** does it need an agent? Agent = LLM in a loop choosing actions - only when the path varies per request. "I default to the most constrained design that solves it; autonomy adds latency, cost, and failure modes." (Travel planner: yes. Baggage FAQ: RAG, one retrieval.)
+- **Orchestration:** controllable **graph** (LangGraph-style state machine) over free-running loop wherever stakes are real - bounded, inspectable.
+- **Tools:** deterministic, authoritative layer under the probabilistic model - typed, validated; the model never invents a fare, it calls a tool. Descriptions are part of the interface.
+- **Knowledge:** the RAG-vs-live-tool split - slow-changing + citable (policy) = RAG; volatile + must-be-exact (fares, availability) = live tool. "Knowing which is which is most of the design."
+- **Safety:** input (injection - agents ingest untrusted tool/retrieved content), output (groundedness), **action** (the big one: state-changing tools need confirmation, idempotency, scoping - booking is the line). "The model is never the last line of defence on money or data."
+- **Evals:** right tool + right args, task success rate, component + end-to-end, must-pass safety cases, **in CI** - "changing a tool description changes behaviour; without evals in CI you ship blind. Evals are TDD for AI."
+
+### Quality scoring quick recall (if he drills evals)
+**RAG triad:** context relevance → groundedness → answer relevance. **Cosine ≠ relevance** (retriever's internal score, not a quality metric). Recall@k (is it in top k) / **MRR** (1/rank of first hit) / **NDCG** (graded, whole ranking). **Faithfulness** = claims decomposed and checked vs context (the hallucination metric). **Perplexity ≠ correctness** (confident hallucinations score low). LLM-judge 1-5: validate vs human labels (verbosity/position/self-preference biases). **Score stages separately** - one end-to-end number hides where it broke.
+
+### Cost + MCP cards
+- **Costs /1M tokens:** Fable 5 $10/$50 · Opus 4.8 $5/$25 · Sonnet 5 $3/$15 · Haiku 4.5 $1/$5. Levers: **model routing** (biggest, 10x spread; judge on a cheaper model), cache reads ~0.1x, batch 50%, outputs cost ~5x inputs.
+- **MCP:** a ChatGPT App **is a remote MCP server** - streamable HTTP + OAuth; stdio for local. Tools = typed functions, schema from type hints, description drives selection. Tool results return **complete**; "streaming" = transport + progress notifications; you consume the LLM's token stream server-side. **You built a FastMCP server this week - true, say it.**
+
+### Questions for Tom + logistics
+- "How mature is your eval and LLMOps tooling, and where do you most want to lift it?" · "Where do the boundaries sit between AI, Data Science, and Platform?" · "What does the production stack behind the ChatGPT flight search look like?"
+- **Seated 5 min early. Quiet, professional, camera tested.** Water. This sheet face-down once it starts.
+
+**Carry-in sentence:** *Open with the story that's true and yours, reason out loud from fundamentals, and when you hit the edge - name it and reason past it. That's what he's hiring.*
