@@ -1,0 +1,96 @@
+import * as React from "react";
+import type { NamedPeriod } from "@contract";
+import { cn, todayIso, rollingRange, calendarRange, NAMED_PERIODS, NAMED_PERIOD_LABELS } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+
+/** A named period or an explicit custom range (ISC-103). */
+export type PeriodSel = NamedPeriod | "custom";
+
+/**
+ * The shared period selector: named periods plus a custom range with quick
+ * options — a Today button (To = today) and Rolling / Calendar 3m/6m/12m, which
+ * set both bounds together so the consumer's query updates immediately. Used by
+ * the budget page and the envelope detail page so the two never drift apart.
+ */
+export function PeriodSelector({
+  value,
+  onChange,
+  customFrom,
+  customTo,
+  onCustomFrom,
+  onCustomTo,
+  disabled = false,
+  className,
+}: {
+  value: PeriodSel;
+  onChange: (v: PeriodSel) => void;
+  customFrom: string;
+  customTo: string;
+  onCustomFrom: (v: string) => void;
+  onCustomTo: (v: string) => void;
+  disabled?: boolean;
+  className?: string;
+}) {
+  const applyRange = (r: { from: string; to: string }) => {
+    onCustomFrom(r.from);
+    onCustomTo(r.to);
+  };
+  return (
+    <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
+      <Select value={value} onValueChange={(v) => onChange(v as PeriodSel)} disabled={disabled}>
+        <SelectTrigger className="h-8 w-48">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {NAMED_PERIODS.map((p) => (
+            <SelectItem key={p} value={p}>
+              {NAMED_PERIOD_LABELS[p]}
+            </SelectItem>
+          ))}
+          <SelectItem value="custom">Custom range…</SelectItem>
+        </SelectContent>
+      </Select>
+      {value === "custom" && (
+        <>
+          <Input
+            type="date"
+            aria-label="Custom range start"
+            value={customFrom}
+            max={customTo || todayIso()}
+            onChange={(e) => onCustomFrom(e.target.value)}
+            className="h-8 w-[8.5rem]"
+            disabled={disabled}
+          />
+          <span className="text-xs text-muted-foreground">to</span>
+          <Input
+            type="date"
+            aria-label="Custom range end"
+            value={customTo}
+            min={customFrom}
+            max={todayIso()}
+            onChange={(e) => onCustomTo(e.target.value)}
+            className="h-8 w-[8.5rem]"
+            disabled={disabled}
+          />
+          <Button type="button" variant="outline" size="sm" className="h-8 px-2" disabled={disabled} onClick={() => onCustomTo(todayIso())}>
+            Today
+          </Button>
+          <span className="ml-1 text-xs text-muted-foreground">Rolling</span>
+          {[3, 6, 12].map((m) => (
+            <Button key={`r${m}`} type="button" variant="outline" size="sm" className="h-8 px-2 tnum" disabled={disabled} onClick={() => applyRange(rollingRange(m))}>
+              {m}m
+            </Button>
+          ))}
+          <span className="ml-1 text-xs text-muted-foreground">Calendar</span>
+          {[3, 6, 12].map((m) => (
+            <Button key={`c${m}`} type="button" variant="outline" size="sm" className="h-8 px-2 tnum" disabled={disabled} onClick={() => applyRange(calendarRange(m))}>
+              {m}m
+            </Button>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}

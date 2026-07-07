@@ -1,0 +1,125 @@
+---
+task: Analyse Kenny exemplar and Australian Honours nomination against Chris Jacobson Life Membership draft
+slug: 20260707-jacobson-life-membership-analysis
+effort: E2
+phase: complete
+progress: 32/32
+mode: algorithm
+started: 2026-07-07T10:25:00Z
+updated: 2026-07-07T10:40:00Z
+---
+
+## Problem
+
+The Chris Jacobson SLSA Life Membership draft (built 17 June) was written before three new inputs existed: the official honours-site criteria text Nick has now supplied, a successful 2020 exemplar nomination (Jenny Kenny), and a colleagues' Australian Honours nomination for Chris containing his roles and dates of service. The draft also carries a factual error (Ulverstone shown ending 2016; actually until 2024) and an obsolete caveat (continuity of service, now confirmed). Without checking the new artefacts, the 18 July submission may miss material, carry wrong dates, or fall short of the standard a successful nomination demonstrates.
+
+## Goal
+
+Present Nick a decision-ready analysis that benchmarks our draft against the Kenny exemplar, harvests every new fact from the Australian Honours nomination, applies his corrections, and lists prioritised refinements mapped to draft sections. No files edited this run.
+
+## Criteria
+
+- [x] ISC-1: Jenny Kenny 2020 PDF read (all pages or 20-page cap noted)
+- [x] ISC-2: Christopher Jacobson roles-and-dates docx text extracted and read in full
+- [x] ISC-3: Ulverstone-until-2024 correction flagged with every affected draft section named
+- [x] ISC-4: Continuous-service caveat retired in the analysis (Nick confirmed continuity)
+- [x] ISC-5: Analysis draws at least 3 concrete comparisons from the Kenny exemplar to our draft
+- [x] ISC-6: New facts in the honours docx absent from our draft explicitly listed
+- [x] ISC-7: All 5 interpretive questions from Nick's pasted criteria answered against Chris's case
+- [x] ISC-8: Refinements presented as prioritised recommendations with draft-section references
+- [x] ISC-9: Date or fact conflicts between honours docx and our draft enumerated
+- [x] ISC-10: Analysis states whether the 20-year distinguished-service framing needs strengthening
+- [x] ISC-11: 18 July deadline restated in the analysis
+- [x] ISC-12: Anti: no edits to the nomination draft, workspace files, or OneDrive artefacts this run
+- [x] ISC-13: Anti: no em dashes in the presented analysis; Australian English throughout
+- [x] ISC-14: Analysis opens with the headline verdict (recommendation first)
+- [x] ISC-15: Exemplar-derived refinements distinguished from docx-derived new facts
+- [x] ISC-16: Closing needs-input line present per background-session doctrine
+
+## Test Strategy
+
+| isc | type | check | threshold | tool |
+|-----|------|-------|-----------|------|
+| ISC-1 | read | PDF pages rendered | all/20 | Read |
+| ISC-2 | read | docx text extracted | full body | Bash+Read |
+| ISC-3 | content | correction named with sections | S5, S7, checklist | final message |
+| ISC-4 | content | caveat marked retired | present | final message |
+| ISC-5 | content | Kenny comparisons | ≥3 | final message |
+| ISC-6 | content | new-fact list | explicit list | final message |
+| ISC-7 | content | interpretive Qs answered | 5/5 | final message |
+| ISC-8 | content | prioritised refinement list | present | final message |
+| ISC-9 | content | conflicts enumerated | list or "none" | final message |
+| ISC-10 | content | 20-year framing verdict | stated | final message |
+| ISC-11 | content | deadline line | present | final message |
+| ISC-12 | anti | git/fs untouched | no writes to draft/OneDrive | Bash check |
+| ISC-13 | anti | style scan | zero em dashes | self-scan |
+| ISC-14 | content | first paragraph is verdict | yes | final message |
+| ISC-15 | content | two labelled analysis parts | present | final message |
+| ISC-16 | format | needs input: line | last line | final message |
+
+## Decisions
+
+- 2026-07-07 delegation floor relaxed (show-your-math): the work is reading two local documents and synthesising against a draft already in context. A subagent would re-read the same three documents and return a lossy summary; direct reading is faster and higher fidelity. No delegation this run.
+- 2026-07-07 mode: classifier flipped NATIVE→ALGORITHM E2 mid-turn on the artefact-analysis ask; honoured the ALGORITHM E2 classification.
+
+## Verification
+
+- ISC-1: Read — 8/8 pages of Jenny Kenny 2020.pdf rendered
+- ISC-2: Bash+Read — docx body extracted to cj-honours.txt (71 lines), read in full
+- ISC-3..11,13..15: content — analysis message contains all required elements (verdict-first, 5 Kenny comparisons, new-fact list, 5/5 interpretive answers, prioritised refinements, conflicts, 20-year verdict, deadline)
+- ISC-12: Anti — stat: draft mtime 2026-06-17, OneDrive artefacts 2026-06-18/19; nothing written this run
+- ISC-16: format — needs-input closing line emitted
+
+### Iteration 2 criteria (approved updates, 2026-07-07)
+
+- [x] ISC-17: S1 club field shows Elouera current primary plus continuing Ulverstone membership
+- [x] ISC-18: S5/S7 club record shows Ulverstone 2004-present with concurrent Elouera; counts recomputed
+- [x] ISC-19: S8 event roles removed; S9 carries the two SLSNSW roles with honours-docx Emergency Management titles
+- [x] ISC-20: Committee renamed Lifesaving Members Advisory Committee in S4/S10 and TS
+- [x] ISC-21: L-CPR line uses canonical honours wording plus National Implementation Lead title
+- [x] ISC-22: Innovation Day Founder and Facilitator; Expanding Horizons Founder and Chair, in md and TS
+- [x] ISC-23: Youngest-ever and only-Tasmanian noted in S10 and S12 and TS supplementary
+- [x] ISC-24: S10 gains blended-learning national first and 2006 twenty-years-national-participation anchor
+- [x] ISC-25: Showcase rewritten with innovation-forward theme, wc -c verified ≤400
+- [x] ISC-26: National answer rewritten (status quo/innovation theme, triplet, typo fixed), wc -c verified ≤1000
+- [x] ISC-27: Checklist updated: resolved items closed, U19 flag kept, no life-membership ask added
+- [x] ISC-28: All docx regenerated via bun, pushed via rclone copy, verified via rclone lsl with today's timestamps
+- [x] ISC-29: Anti: no .md files written into OneDrive; exports only
+- [x] ISC-30: HoF file and README carry canonical L-CPR wording; their checklist items marked resolved
+- [x] ISC-31: generate-docs.ts mirrors every md content change (grep parity on key phrases)
+- [x] ISC-32: S13 gains note to reuse Australian Honours nomination endorsers for letters
+
+## Decisions (iteration 2)
+
+- 2026-07-07 delegation floor (E3 ≥2) relaxed, show-your-math: char-limited single-author document surgery across md+TS mirror; Forge/Anvil would re-establish full context and risk limit breaches; direct editing with wc -c probes is faster and safer. Forge auto-include waived: content work, not coding.
+- 2026-07-07 date conflict: Nick said first national participation 2007 (youth forum); both the draft and the colleagues' honours docx say 2006 Youth Development Forum. Using 2006 (source-backed; also exactly 20 years before 2026). Flagged to Nick.
+- 2026-07-07 NSW role titles standardised on honours-docx wording (Emergency Management) per Nick's direction; md previously said Event Management in S8, TS said SEMC/SEMO under state.
+
+## Verification (iteration 2)
+
+- ISC-17..27, 30, 32: Edit tool confirmations on 01/02/README md files; rg shows zero remaining "first community organisation in Australia to adopt" or "ctonributed" across all three files
+- ISC-25: wc -c showcase = 398 (≤400); ISC-26: wc -c national narrative = 993 (≤1000); state 889, club history 746
+- ISC-28: bun generate-docs.ts wrote 8 docx; rclone copy attempt 2 succeeded; rclone check: 8 matching files, 0 differences; rclone lsl shows all 8 stamped 2026-07-07 21:15
+- ISC-29: rclone lsl grep for .md on remote = 0 matches
+- ISC-31: docx-internal probes found all new phrases (youngest ever recipient, Emergency Management Coordinator/Officer, nationally coordinated CPR quality improvement, Founder and Chair Expanding Horizons, Members Advisory Committee, both triplet orderings, status-quo line, concurrent Ulverstone)
+
+## Decisions (iteration 3)
+
+- 2026-07-07 letters confirmed by Nick: Peter Agnew (SLSA President), Tony van den Enden (SLST CEO), Lyn Barratt (SLSA Life Member). S13 rewritten around them; noted Agnew-as-President can double as proposer. Classifier returned E3; folded into this ISA as a small iteration rather than a fresh ceremony run (budget discipline).
+- 2026-07-07 spelling: used "Tony van den Enden" (his published usage) vs Nick's "Van Den Enden"; flagged.
+
+## Verification (iteration 3)
+
+- ISC-33 (letters recorded + rendered): docx probe found Peter Agnew, van den Enden, Lyn Barratt in ApplicationQuestions docx; rclone check 8/8 matching, 0 differences
+
+## Decisions (iteration 4, Nick's Word-doc edits)
+
+- 2026-07-07 Nick hand-edited ApplicationQuestions-LifeMembership docx (21:30). Extracted via rclone fetch + XML parse. His removals (final, not to be re-added): "(2004-2026, continuous)" from years of service; "a command role, not an administrative one" and "rather than starting over as a participant" from branch answer; "and as State Duty Officer" from state answer.
+- 2026-07-07 style directives applied: no colons in form content (narratives, supplementary labels, uploads list, record subtitles, H2 headings); ILS sentence recast as "He was awarded..."; drama reduced ("Chris's name is synonymous with" → "Chris is known across SLSA for"; "on the world stage" → "overseas"; "taking our movement's drowning-prevention mission offshore" dropped).
+- 2026-07-07 freed space used: branch answer gained Regional Lifesaving Committee Secretary (2010-2012), a fact, not a removed line.
+- 2026-07-07 counts now: showcase 398, club history 655, club 741, branch 723, state 862, national 996, international 780, supplementary 663.
+- 2026-07-07 OneDrive lock hit on overwrite (nameAlreadyExists, per gotcha-onedrive-rclone-push); uploaded as -v2, background delete+moveto pending.
+
+## Verification (iteration 4)
+
+- Probes on regenerated docx: zero matches for removed statements; "was awarded the International Life Saving Federation Citation of Merit", "known across SLSA", "Regional Lifesaving Committee (2010-2012)", "conspicuous. His effort" all present; colon probe empty; State record carries Development Squad + U19, Club record clean of both; rclone check 7/8 matching, 8th blocked by lock (swap in progress).

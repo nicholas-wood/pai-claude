@@ -1,0 +1,356 @@
+// Generates the SLSA honours nomination documents (.docx) from finalised content.
+// Run: bun run generate-docs.ts
+// Output: ~/OneDrive/06_Lifesaving/SLSA/2026/Honours-Nominations/
+import {
+  Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType,
+  Table, TableRow, TableCell, WidthType, BorderStyle,
+} from "docx";
+import { writeFileSync } from "fs";
+import { homedir } from "os";
+
+const OUT = process.env.HONOURS_OUT || `${homedir()}/OneDrive/06_Lifesaving/SLSA/2026/Honours-Nominations`;
+
+// ---------- helpers ----------
+const H1 = (t: string) => new Paragraph({ text: t, heading: HeadingLevel.HEADING_1, spacing: { after: 120 } });
+const H2 = (t: string) => new Paragraph({ text: t, heading: HeadingLevel.HEADING_2, spacing: { before: 200, after: 80 } });
+const H3 = (t: string) => new Paragraph({ text: t, heading: HeadingLevel.HEADING_3, spacing: { before: 140, after: 60 } });
+const P = (t: string) => new Paragraph({ children: [new TextRun(t)], spacing: { after: 120 } });
+const Pi = (t: string) => new Paragraph({ children: [new TextRun({ text: t, italics: true, color: "595959" })], spacing: { after: 120 } });
+const subtitle = (t: string) => new Paragraph({ children: [new TextRun({ text: t, bold: true, color: "1F3864", size: 26 })], spacing: { after: 200 } });
+// bullet: bold lead (date/label) + rest
+const B = (lead: string, rest: string) =>
+  new Paragraph({
+    bullet: { level: 0 },
+    spacing: { after: 60 },
+    children: lead
+      ? [new TextRun({ text: `${lead}  `, bold: true }), new TextRun(rest)]
+      : [new TextRun(rest)],
+  });
+const plainBullet = (t: string) => new Paragraph({ bullet: { level: 0 }, spacing: { after: 60 }, children: [new TextRun(t)] });
+
+function twoColTable(rows: [string, string][]) {
+  const cell = (t: string, bold = false) =>
+    new TableCell({
+      width: { size: 32, type: WidthType.PERCENTAGE },
+      margins: { top: 40, bottom: 40, left: 80, right: 80 },
+      children: [new Paragraph({ children: [new TextRun({ text: t, bold })] })],
+    });
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: rows.map(([k, v]) => new TableRow({ children: [cell(k, true), cell(v)] })),
+  });
+}
+
+function rosterTable(rows: string[][]) {
+  const header = ["Member", "Member ID", "Club", "Role"];
+  const hcell = (t: string) =>
+    new TableCell({ shading: { fill: "1F3864" }, margins: { top: 40, bottom: 40, left: 80, right: 80 },
+      children: [new Paragraph({ children: [new TextRun({ text: t, bold: true, color: "FFFFFF" })] })] });
+  const cell = (t: string) =>
+    new TableCell({ margins: { top: 40, bottom: 40, left: 80, right: 80 },
+      children: [new Paragraph({ children: [new TextRun(t)] })] });
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      new TableRow({ tableHeader: true, children: header.map(hcell) }),
+      ...rows.map((r) => new TableRow({ children: r.map(cell) })),
+    ],
+  });
+}
+
+function buildDoc(children: any[]) {
+  return new Document({
+    styles: {
+      default: { document: { run: { font: "Calibri", size: 22 } } },
+      paragraphStyles: [
+        { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal",
+          run: { font: "Calibri", size: 32, bold: true, color: "1F3864" }, paragraph: { spacing: { after: 120 } } },
+        { id: "Heading2", name: "Heading 2", basedOn: "Normal", next: "Normal",
+          run: { font: "Calibri", size: 26, bold: true, color: "1F3864" } },
+        { id: "Heading3", name: "Heading 3", basedOn: "Normal", next: "Normal",
+          run: { font: "Calibri", size: 23, bold: true, color: "2E4A7A" } },
+      ],
+    },
+    sections: [{ properties: { page: { margin: { top: 1135, bottom: 1135, left: 1135, right: 1135 } } }, children }],
+  });
+}
+
+async function write(name: string, children: any[]) {
+  const buf = await Packer.toBuffer(buildDoc(children));
+  writeFileSync(`${OUT}/${name}`, buf);
+  console.log("wrote", name);
+}
+
+// ---------- shared header for Chris records ----------
+const recordHeader = (level: string) => [
+  H1("Chris Jacobson"),
+  subtitle(`Record of Service: ${level}`),
+  Pi("SLSA Life Membership Nomination"),
+];
+
+// ============================================================
+// 1-5. RECORDS OF SERVICE (Chris Jacobson)
+// ============================================================
+const club: [string, string][] = [
+  ["2004-present", "Member, Ulverstone SLSC (continuing); active patrolling member with continuous patrol service across 22 seasons."],
+  ["2005/06", "State Development Squad, Captain."],
+  ["2007-2016", "Patrol Captain, Ulverstone SLSC; led club patrols and on-beach supervision for around nine seasons."],
+  ["2007", "Under-19 Surf Life Saver of the Year."],
+  ["2010/11", "Club Person of the Year."],
+  ["2011", "Vice President (Lifesaving), Ulverstone SLSC."],
+  ["2011-2013", "Club Training Officer, Ulverstone SLSC; responsible for member education and award delivery."],
+  ["2011/12", "Club Person of the Year."],
+  ["2022-present", "Elouera SLSC, Sydney (current primary club); patrolling member, concurrent with his continuing Ulverstone membership."],
+  ["2007-present", "Trainer, Assessor and Facilitator, delivering award courses at club level, and at branch, state and national level since 2007."],
+];
+
+const branch: [string, string][] = [
+  ["2010-2012", "Regional Lifesaving Committee, Secretary."],
+  ["2020-present", "SLS Sydney Support Operations Team."],
+  ["2022-present", "SLS Sydney Senior Duty Officer; operational command of branch lifesaving response."],
+];
+
+const stateSLST: [string, string][] = [
+  ["2007-2020", "State Emergency Response Team member."],
+  ["2009-2016", "Awards of Excellence (AOE) Panel."],
+  ["2010-2016", "State Patrol Assessor."],
+  ["2010/11", "SLST Volunteer of the Year."],
+  ["2011/12", "SLST Lifesaver of the Year."],
+  ["2011/12", "SLST Trainer of the Year."],
+  ["2012-2016", "Chair, Lifesaving (SLST)."],
+  ["2014-2020", "State Duty Officer; developed the state's Duty Officer training and standards."],
+  ["2014-2020", "Coordinator, inaugural State Lifesaving Development Camp, which he ran for six years as SLST's most successful lifesaving development programme."],
+  ["2015", "Chair, SOPs Editorial Panel; produced SLST's inaugural Standard Operating Procedures."],
+  ["2018", "SLST Trainer of the Year."],
+  ["2025-present", "SLST Operations Executive; ongoing state service to Tasmania."],
+];
+const stateSLSQ: [string, string][] = [
+  ["2019", "Coordinator, inaugural SLSQ Lifesaving Development Camp."],
+];
+const stateSLSNSW: [string, string][] = [
+  ["2020", "Australian Institute of Training and Development Excellence Awards, highly commended (best blended-learning solution, SLS NSW; team award)."],
+  ["2021 & 2022", "Coordinator, inaugural SLSNSW Lifesaving Development Camp."],
+  ["2022/23", "SLSNSW Deputy State Emergency Management Coordinator (Age and Open Championships)."],
+  ["2023/24", "SLSNSW State Emergency Management Officer (Age Championships)."],
+];
+
+const national: [string, string][] = [
+  ["2006", "SLSA Youth Development Forum participant; the start of 20 years of continuous national participation."],
+  ["2007-present", "Trainer, Assessor and Facilitator, delivering nationally accredited award courses at all levels."],
+  ["2011", "SLSA Silver Medallion Aquatic Rescue pilot."],
+  ["2011/12", "SLSA Australian Surf Lifesaver of the Year (national award; youngest ever recipient and the only Tasmanian recipient)."],
+  ["2012", "National Leadership College participant."],
+  ["2012-2025", "SLSA Lifesaving Members Advisory Committee; 14 years of continuous national service."],
+  ["2013-2025", "SLSA Meritorious Committee."],
+  ["2013-2025", "SLSA Lifesaver of the Year Panel; in 2021 led the review of the criteria for all lifesaving awards and introduced the new Youth Surf Life Saver of the Year award."],
+  ["2016-2025", "Chair, Lifesaving (SLSA); held for nine years."],
+  ["2019", "Chair, National Lifesaving Curriculum Review; resulted in new and revised lifesaving awards and qualifications, and changes to the SRC and Bronze Medallion for better alignment."],
+  ["2019", "Chair, Public Safety Aquatic Rescue (PSAR) Manual rewrite (Editorial Committee); produced the first online, interactive edition of the manual; member, PSAR Course Design Working Group."],
+  ["2019", "Built the first nationally delivered blended learning model for Surf Rescue Certificate and Bronze Medallion training."],
+  ["2019-2022", "Chaired three national course redesigns: Bronze Medallion, Silver Medallion Aquatic Rescue, and Silver Medallion Patrol Captain (2022, as Chair of its Course Design Working Group); introduced online and blended delivery and scenario-based assessment."],
+  ["2020", "International award, best use of blended learning for the Bronze Medallion."],
+  ["2024", "Founder and Facilitator of the first National Innovation Day for lifesaving service delivery."],
+  ["2024", "National Implementation Lead, Lifesaving CPR (L-CPR); the first nationally coordinated CPR quality improvement initiative implemented by a community first aid organisation in Australia."],
+  ["2024", "Founder and Chair, Expanding Horizons Review, preparing SLSA for its next chapter."],
+];
+
+const international: [string, string][] = [
+  ["2012", "International Conference presenter, Brunei."],
+  ["2012", "International Life Saving Federation (ILS) Citation of Merit."],
+  ["2018 & 2019", "Water Safety Coordinator, Australian Survivor (Fiji); trained local communities in water-safety skills."],
+  ["2023", "Presenter, ILS Drowning Prevention Conference."],
+  ["2026", "Presenter, New Zealand Resuscitation Conference (May 2026); presented Lifesaving CPR."],
+];
+
+// ============================================================
+// 6. CONCLUSIVE HISTORY (Lifesaving CPR Team)
+// ============================================================
+const sixAims: [string, string][] = [
+  ["Reduce time to CPR:", "primary assessment in under 15 seconds for non-complex patients; assess danger and response simultaneously; if normal breathing is not detected within a few seconds, start CPR without delay."],
+  ["Improve quality of compressions:", "compressions over the lower half of the sternum, a hands-off technique for complete chest recoil, and a rate of 100 to 120 bpm."],
+  ["Target a Chest Compression Fraction of 80%:", "maximise the share of time spent actually compressing, allowing only 20% for breaths and AED analysis."],
+  ["A coordinated approach to CPR:", "standardised operator positions and disciplined operator rotation every two minutes for a seamless multi-rescuer response."],
+  ["Efficient and effective AED use:", "standardised AED positioning, hovering hands ready to restart, and immediate, safe resumption of compressions."],
+  ["Better integration of the ART operator:", "clear team-leader handover, the Rule of 3s for bag-valve-mask ventilation, and structured communication with SurfCom."],
+];
+
+const roster = [
+  ["Chris Jacobson", "[supply]", "[supply]", "Chair of Lifesaving, SLSA; L-CPR National Implementation Lead"],
+  ["Dr Ned Douglas", "[supply]", "[supply]", "National Medical Advisor, SLSA"],
+  ["Tracey Hare-Boyd", "[supply]", "[supply]", "Chair of Education, SLSA"],
+  ["Dr Katie Dixon", "[supply]", "[supply]", "Independent member, SLSA Lifesaving Advisory Committee"],
+  ["Dr David Reid", "[supply]", "[supply]", "SLSA Medical Advisory Committee"],
+  ["Dr Leesa Equid", "[supply]", "[supply]", "SLSA Medical Advisory Committee"],
+];
+
+// ---------- narratives (application questions) ----------
+const showcase =
+  "Across 14 years on SLSA's Lifesaving Members Advisory Committee, 9 as National Chair of Lifesaving, Chris did not just run the portfolio, he drove it forward. He chaired the National Lifesaving Curriculum Review, the PSAR manual rewrite and three course redesigns, founded National Innovation Day, led Lifesaving CPR's national implementation, and founded and chaired the Expanding Horizons Review.";
+const clubNarr =
+  "Chris's club service is distinguished by leadership and education, not tenure alone. As Patrol Captain for nine seasons he carried frontline rescue responsibility, and as Vice President, Lifesaving and Club Training Officer he built the club's lifesaving and education capability. These were the start of his journey in lifesaving leadership. He was named Club Person of the Year in two separate seasons (2010/11 and 2011/12), a peer recognition repeated across two years. His service is sustained across 22 unbroken seasons of patrolling, continuing today at Elouera SLSC in Sydney. Beyond his formal roles, Chris contributes at every level of the organisation, always taking a phone call to give advice or help with a project or a problem.";
+const branchNarr =
+  "At branch level Chris has held the roles that carry real operational accountability. As SLS Sydney Senior Duty Officer he is one of the people responsible for coordinating the branch's lifesaving response, a command role, not an administrative one, building on his earlier work setting up the Duty Officer role in Tasmania. He moved branches across states (Tasmania, then Sydney) and in each took on an operational leadership role rather than starting over as a participant. His branch service connects national policy to the beach. The duty-officer and support-operations standards he helps run are where the curriculum and CPR reforms he led nationally are actually delivered. It is sustained and current, continuing today.";
+const stateNarr =
+  "Chris's state service is distinguished by reach. What he built in one state, he went on to build in others. He ran SLST's most successful lifesaving development programme for six years (2014-2020), then started the same programme from scratch in Queensland (2019) and NSW (2021-22), carrying it personally into each state. As Chair of Lifesaving (SLST) before he stepped up to the national chair, and as State Duty Officer, he authored Tasmania's Duty Officer training and standards and authored SLSTs inaugural Standard Operating Procedures. He still serves Tasmania today on the SLST Operations Executive (2025-present), even after moving to NSW. Being named Volunteer, Lifesaver and Trainer of the Year at state level marks service peers judged the best in the state across multiple domains, distinguished, conspicuous and sustained across more than two decades and three member states.";
+const nationalNarr =
+  "Chris's name is synonymous with SLSA and with moving our organisation forward. He did not just run the Lifesaving portfolio, he pushed it into the future, driving innovation, challenging the status quo and lifting standards. His national contribution began 20 years ago at the 2006 Youth Development Forum and has not paused: 14 years on the Lifesaving Members Advisory Committee, 9 as National Chair. He chaired the National Lifesaving Curriculum Review, the PSAR manual rewrite and three course redesigns, reshaping how every Australian lifesaver is trained, and built the first nationally delivered blended learning model. He founded National Innovation Day, was National Implementation Lead for Lifesaving CPR, an Australian first, and founded and chaired the Expanding Horizons Review. His service is distinguished, sustained and conspicuous: his effort leads many to assume he is paid staff, yet he is a volunteer, and even those who have disagreed with him acknowledge his contribution.";
+const internationalNarr =
+  "Chris's contribution reaches beyond Australia. The ILS Citation of Merit (2012) is itself an international recognition that he contributed to the furtherance of lifesaving globally, and he has presented Australian lifesaving practice on the world stage three times, in Brunei (2012), at the ILS Drowning Prevention Conference (2023), and at the New Zealand Resuscitation Conference (May 2026), where he presented Lifesaving CPR. As Water Safety Coordinator for Australian Survivor in Fiji across two seasons he transferred lifesaving and water-safety skills to local communities, taking our movement's drowning-prevention mission offshore. This is significant because it takes the Australian methods Chris helped build, blended training and high-performance CPR, to the international lifesaving community, and it is sustained across more than a decade and continuing now.";
+const briefly =
+  "The Lifesaving CPR Team designed, built and nationally delivered Lifesaving CPR, an evidence-based, standardised and simplified approach to resuscitation, delivered as the first nationally coordinated CPR quality improvement initiative implemented by a community first aid organisation in Australia. Drawing on the team's long-running expertise in the SLSA Medical Advisory Group and CPR curriculum, it translates High Performance CPR and ANZCOR guidelines into six clear Aims, a national online learning package, a skills-maintenance programme and standardised multi-operator protocols, rolled out to every club across the country over a two-year period. Comparable organisations with fewer volunteers judged a rollout of this size, and a change this significant, to be a multi-year undertaking or impossible; SLSA delivered it, and the rollout feedback was highly positive on content, engagement and process. It is a genuine first, executed at national scale, that has placed Australian surf lifesaving on the global stage in resuscitation. This is legacy work, built by our movement's senior resuscitation advisors, designed to improve survival from cardiac arrest on and off the beach.";
+
+// ============================================================
+// BUILD AND WRITE
+// ============================================================
+await write("RecordOfService-Club-ChrisJacobson.docx", [
+  ...recordHeader("Club Level"),
+  ...club.map(([d, t]) => B(d, t)),
+]);
+
+await write("RecordOfService-Branch-ChrisJacobson.docx", [
+  ...recordHeader("Branch / Region Level"),
+  ...branch.map(([d, t]) => B(d, t)),
+]);
+
+await write("RecordOfService-State-ChrisJacobson.docx", [
+  ...recordHeader("State Level"),
+  Pi("Chris has given state-level service across three member states: Tasmania, Queensland and New South Wales."),
+  H3("Surf Life Saving Tasmania (SLST)"),
+  ...stateSLST.map(([d, t]) => B(d, t)),
+  H3("Surf Life Saving Queensland (SLSQ)"),
+  ...stateSLSQ.map(([d, t]) => B(d, t)),
+  H3("Surf Life Saving NSW (SLSNSW)"),
+  ...stateSLSNSW.map(([d, t]) => B(d, t)),
+]);
+
+await write("RecordOfService-National-ChrisJacobson.docx", [
+  ...recordHeader("National Level (SLSA)"),
+  ...national.map(([d, t]) => B(d, t)),
+]);
+
+await write("RecordOfService-International-ChrisJacobson.docx", [
+  ...recordHeader("International Level"),
+  ...international.map(([d, t]) => B(d, t)),
+]);
+
+await write("ConclusiveHistory-LifesavingCPR.docx", [
+  H1("Lifesaving CPR"),
+  subtitle("Conclusive History"),
+  Pi("SLSA Hall of Fame Nomination. Nominee: the Lifesaving CPR Team (a team of eligible members). Category: Surf Lifesaving."),
+  H2("A national, first-of-its-kind innovation in resuscitation"),
+  P("Lifesaving CPR (L CPR) is an evidence-based, standardised and simplified approach to cardiac-arrest resuscitation, designed to improve survival both on and off the beach. It is built on the principles of High Performance CPR and supported by research and ANZCOR guidelines, and its central philosophy is to do the basics exceptionally well while reducing variation in practice across our organisation. In 2024 Surf Life Saving adopted it nationally, making Lifesaving CPR the first nationally coordinated CPR quality improvement initiative implemented by a community first aid organisation in Australia. It is one of the biggest changes in recent history to how Surf Life Saving keeps Australians safe on the beach."),
+  H3("The team"),
+  P("Lifesaving CPR was created by a team of our movement's senior resuscitation and lifesaving advisors: Chris Jacobson (Chair of Lifesaving), Dr Ned Douglas (National Medical Advisor), Tracey Hare-Boyd (Chair of Education), Dr Katie Dixon (independent member of the Lifesaving Advisory Committee), and Dr David Reid and Dr Leesa Equid (Medical Advisory Committee). Between them they bring a long, sustained body of work across the SLSA national Lifesaving, Education and Medical advisory groups and in the development and delivery of CPR practice and curriculum for Surf Life Saving. Lifesaving CPR is the culmination of that collective expertise, not a standalone project, but years of clinical, educational and operational experience distilled into a single national standard."),
+  H3("Why it matters"),
+  P("Survival from cardiac arrest is determined by a small number of factors that frontline rescuers control: how fast CPR starts, the quality of compressions, and how little time is lost between them. Lifesaving CPR targets exactly these. By standardising practice across every club, it removes the variation that costs lives and makes the highest-evidence method the default everywhere, not only where a particularly well-trained operator happens to be on patrol."),
+  H3("The Six Aims"),
+  P("The team distilled complex resuscitation science into six clear, teachable Aims:"),
+  ...sixAims.map(([d, t]) => B(d, t)),
+  H3("How it was delivered"),
+  P("The team did not just write a policy; it built a complete national capability. Lifesaving CPR comprises mandatory online learning modules, a structured skills-maintenance session plan, a national PowerPoint and member flyer with QR-linked technique videos, a feedback-manikin coaching model, and a national Q&A support function. It was designed for blended delivery and consistent assessment across the country, so that a lifesaver in any state is trained to the same standard, and it was rolled out across our movement in vast numbers over a two-year period. The rollout feedback was highly positive on content, engagement and process. Comparable organisations with fewer volunteers had judged a rollout of this size, and a change this significant, to be a multi-year undertaking or impossible. SLSA achieved it in two years."),
+  H3("Why it meets the Hall of Fame standard"),
+  P("This is exceptional service in the Surf Lifesaving category, a major innovation in the area most directly tied to saving lives. It is an outstanding team accomplishment that sets the team apart. Lifesaving CPR is the first nationally coordinated CPR quality improvement initiative implemented by a community first aid organisation in Australia, a genuine first delivered at national scale in two years and recognised internationally. And it reflects sustained excellence over a long period. The team's enduring involvement in the SLSA Lifesaving, Education and Medical advisory groups and the CPR curriculum is the foundation the work is built on, and its impact is lasting. The standard the team has set will keep saving lives for years to come. It is legacy work, significant for what was done, how it was done, the scale at which it was rolled out, the fact that it was first, and the lives it will continue to save."),
+]);
+
+// ============================================================
+// 7. APPLICATION QUESTIONS (both applications)
+// ============================================================
+const charNote = (n: number, max: number) => Pi(`(${n} / ${max} characters)`);
+
+// ---------- APPLICATION A: LIFE MEMBERSHIP ----------
+await write("ApplicationQuestions-LifeMembership-ChrisJacobson.docx", [
+  H1("SLSA Life Membership Nomination"),
+  subtitle("Chris Jacobson: application questions and answers"),
+  Pi("Working document. Type these answers into the online Life Membership form (Jotform). Items in [square brackets] are data to supply or confirm before submission. The five Records of Service are provided as separate documents for upload."),
+  H2("Personal details"),
+  twoColTable([
+    ["First name", "Chris"],
+    ["Last name", "Jacobson"],
+    ["Member ID", "[supply, from Surfguard]"],
+    ["Club", "Elouera SLSC"],
+    ["Year joined SLSA", "2004"],
+    ["Years of service", "22 (2004-2026, continuous)"],
+    ["Date of birth", "[supply]"],
+    ["Address (Town / State)", "[supply]"],
+    ["Phone (mobile)", "[supply]"],
+    ["Email", "[supply]"],
+  ]),
+  P(""),
+  H2("Proposer, seconder and nominating party"),
+  Pi("Candidates must be nominated by the President, or by two (2) members of SLSA."),
+  twoColTable([
+    ["Proposer (name / position)", "[supply]"],
+    ["Seconder (name / position)", "[supply]"],
+    ["Nominating party (name / org / contact)", "[supply]"],
+  ]),
+  P(""),
+  H2("Showcase the nominee"),
+  charNote(398, 400),
+  P(showcase),
+  H2("Nominee's club history"),
+  charNote(746, 1000),
+  ...club.map(([d, t]) => B(d, t)),
+  H2("Record of Service (Club): how distinguished / significant / sustained"),
+  charNote(741, 1000),
+  P(clubNarr),
+  H2("Record of Service (Branch): how distinguished / significant / sustained"),
+  charNote(725, 1000),
+  P(branchNarr),
+  H2("Record of Service (State): how distinguished / significant / sustained"),
+  charNote(889, 1000),
+  P(stateNarr),
+  H2("Record of Service (National): how distinguished / significant / sustained"),
+  charNote(993, 1000),
+  P(nationalNarr),
+  H2("Record of Service (International): how distinguished / significant / sustained"),
+  charNote(873, 1000),
+  P(internationalNarr),
+  H2("Supplementary information"),
+  Pi("Australian Honours, civil, sporting, community or other honours."),
+  P("Surf lifesaving honours and recognitions:"),
+  plainBullet("SLSA Australian Surf Lifesaver of the Year, 2011/12 (youngest ever recipient and the only Tasmanian recipient)."),
+  plainBullet("ILS International Citation of Merit, 2012."),
+  plainBullet("SLSA Finalist: Volunteer of the Year (2010/11) and Trainer of the Year (2011/12 and 2018)."),
+  plainBullet("International award for best use of blended learning, Bronze Medallion, 2020."),
+  plainBullet("Australian Institute of Training and Development Excellence Awards, highly commended, 2020."),
+  plainBullet("Multiple State Awards of the Year (Volunteer, Lifesaver, Trainer) across 2010/11-2018."),
+  P("Community recognition:"),
+  plainBullet("Young Citizen of the Year, Central Coast Council (Tasmania), 2012."),
+  H2("Uploads required for this application"),
+  plainBullet("Photo of the nominee."),
+  plainBullet("Surfguard award / history printout."),
+  plainBullet("Records of Service: Club, Branch, State, National, International (five separate documents, provided)."),
+  plainBullet("Letters of recommendation: Peter Agnew (President, SLSA), Tony van den Enden (CEO, Surf Life Saving Tasmania), Lyn Barratt (SLSA Life Member)."),
+]);
+
+// ---------- APPLICATION B: HALL OF FAME ----------
+await write("ApplicationQuestions-HallOfFame-LifesavingCPR.docx", [
+  H1("SLSA Hall of Fame Nomination"),
+  subtitle("The Lifesaving CPR Team: application questions and answers"),
+  Pi("Working document for the Hall of Fame form (F38), emailed to honours@slsa.asn.au once club-endorsed. Items in [square brackets] are data to supply or confirm before submission. The conclusive history (max 2 pages) is provided as a separate document to attach."),
+  Pi("Nominee: the Lifesaving CPR Team (a team of eligible members). Category: Surf Lifesaving. Period: 2011-Current."),
+  H2("Nominee details and team roster"),
+  twoColTable([
+    ["Nominee", "The Lifesaving CPR Team (team of eligible members)"],
+    ["Point of contact", "Chris Jacobson [confirm, or nominate another lead]"],
+    ["Member ID / club / email / phone", "[supply for point of contact]"],
+    ["Deceased", "No"],
+    ["Category (circle)", "Surf Lifesaving"],
+    ["Period (circle)", "2011-Current"],
+    ["Photo attached", "Yes [attach team photo or initiative imagery]"],
+    ["Conclusive history attached", "Yes (provided as a separate document)"],
+  ]),
+  P(""),
+  rosterTable(roster),
+  Pi("For each member, attach a short note on their length of service in the relevant SLSA advisory group and CPR curriculum work, with years where possible. This is the evidence base for the sustained-excellence criterion."),
+  H2("Briefly describe the achievements of the nominee"),
+  P(briefly),
+  H2("Attachments and submission"),
+  plainBullet("Photo of the team or the initiative."),
+  plainBullet("Conclusive history (max 2 pages), provided as a separate document."),
+  plainBullet("Club endorsement: Club Name; representative Name, Position, Signature; Date. For a multi-club team, confirm whose club endorses, or whether SLSA will accept a national endorsement."),
+  plainBullet("Supporting letters of recommendation, if available."),
+  plainBullet("Once endorsed, forward the form, photo and conclusive history to honours@slsa.asn.au. Considered twice each year."),
+]);
+
+console.log("done");

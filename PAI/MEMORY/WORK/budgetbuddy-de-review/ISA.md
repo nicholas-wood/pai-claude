@@ -2,8 +2,8 @@
 task: Four-lens Distinguished Engineer review of BudgetBuddy (envelope-os)
 slug: budgetbuddy-de-review
 effort: E4
-phase: execute
-progress: 28/46
+phase: complete
+progress: 46/46
 mode: standard
 started: 2026-07-02T00:00:00+10:00
 updated: 2026-07-02T00:05:00+10:00
@@ -59,15 +59,15 @@ Deliver a four-lens Distinguished Engineer review of BudgetBuddy — frontend, b
 - [x] ISC-10: Frontend review ends with a verdict grade and top-5 ranked recommendations
 
 ### Backend lens
-- [ ] ISC-11: Backend review covers HTTP layer — Hono routing, handlers, middleware, contract (src/server/)
-- [ ] ISC-12: Backend review covers domain logic correctness — envelope balance/period/rollup/spend and budget zerobased/distribute/move
-- [ ] ISC-13: Backend review covers the store layer — sqlite/postgres dual implementation parity and schema
-- [ ] ISC-14: Backend review covers the ingest/sync pipeline — client, map, sync, backfill, alerting
-- [ ] ISC-15: Backend review covers input validation (zod usage) and error handling paths
-- [ ] ISC-16: Backend review covers idempotency/concurrency behaviour of sync and mutations
-- [ ] ISC-17: Backend review covers test coverage quality of test/ (what's tested vs what matters)
-- [ ] ISC-18: Backend review covers scripts/ (migrate, backfill, backup) operational quality
-- [ ] ISC-19: Backend review ends with a verdict grade and top-5 ranked recommendations
+- [x] ISC-11: Backend review covers HTTP layer — Hono routing, handlers, middleware, contract (src/server/)
+- [x] ISC-12: Backend review covers domain logic correctness — envelope balance/period/rollup/spend and budget zerobased/distribute/move
+- [x] ISC-13: Backend review covers the store layer — sqlite/postgres dual implementation parity and schema
+- [x] ISC-14: Backend review covers the ingest/sync pipeline — client, map, sync, backfill, alerting
+- [x] ISC-15: Backend review covers input validation (zod usage) and error handling paths
+- [x] ISC-16: Backend review covers idempotency/concurrency behaviour of sync and mutations
+- [x] ISC-17: Backend review covers test coverage quality of test/ (what's tested vs what matters)
+- [x] ISC-18: Backend review covers scripts/ (migrate, backfill, backup) operational quality
+- [x] ISC-19: Backend review ends with a verdict grade and top-5 ranked recommendations
 
 ### Architecture lens
 - [x] ISC-20: Architecture review assesses hexagonal boundaries — ports/adapters discipline, dependency direction, composition root
@@ -92,17 +92,17 @@ Deliver a four-lens Distinguished Engineer review of BudgetBuddy — frontend, b
 - [x] ISC-37: Security review ends with a severity-rated findings table (Critical/High/Med/Low) and top-5 recommendations
 
 ### Synthesis & deliverable
-- [ ] ISC-38: Full report written to envelope-os/docs/reviews/ with all four lens reports plus synthesis
-- [ ] ISC-39: Synthesis identifies cross-lens themes appearing in ≥2 reviews
-- [ ] ISC-40: Unified recommendation list is prioritised P0/P1/P2 with effort estimates
-- [ ] ISC-41: Chat summary delivers per-lens verdicts plus the P0 list in the closing message
-- [ ] ISC-42: Every finding referenced in synthesis carries file:line or file-level evidence
+- [x] ISC-38: Full report written to envelope-os/docs/reviews/ with all four lens reports plus synthesis
+- [x] ISC-39: Synthesis identifies cross-lens themes appearing in ≥2 reviews
+- [x] ISC-40: Unified recommendation list is prioritised P0/P1/P2 with effort estimates
+- [x] ISC-41: Chat summary delivers per-lens verdicts plus the P0 list in the closing message
+- [x] ISC-42: Every finding referenced in synthesis carries file:line or file-level evidence
 
 ### Anti-criteria
-- [ ] ISC-43: Anti: no file under envelope-os/src, web, test, scripts is modified (git status clean outside docs/reviews/)
-- [ ] ISC-44: Anti: no finding merely restates an already-remediated 2026-07-01 staff-review item without noting remediation state
-- [ ] ISC-45: Anti: no fabricated file path — every cited path exists in the repo
-- [ ] ISC-46: Anti: no recommendation without a stated why (rationale tied to Nick's trajectory or a concrete defect)
+- [x] ISC-43: Anti: no file under envelope-os/src, web, test, scripts is modified (git status clean outside docs/reviews/)
+- [x] ISC-44: Anti: no finding merely restates an already-remediated 2026-07-01 staff-review item without noting remediation state
+- [x] ISC-45: Anti: no fabricated file path — every cited path exists in the repo
+- [x] ISC-46: Anti: no recommendation without a stated why (rationale tied to Nick's trajectory or a concrete defect)
 
 ## Test Strategy
 
@@ -143,4 +143,16 @@ Deliver a four-lens Distinguished Engineer review of BudgetBuddy — frontend, b
 
 ## Verification
 
-(populated at VERIFY)
+- ISC-1..37 (four lenses): each agent report covers all its dimensions with file:line evidence and a verdict + top-5. Frontend B+, Backend C+, Architecture B (Basiq 7/10, multi-user 5/10), Security C+.
+- Critical PRIMARY VERIFICATION: `rg "api\.(get|post)\(" src/server` — router has `/envelopes/move` + `/budget/edit` only; NO `/move`, `/envelopes/edit`, `/movements`. UI calls confirmed at MoveMoneyModal.tsx:68, EditBudgetPage.tsx:216, AddBudgetModal.tsx:162. Backend Critical finding is TRUE.
+- zod verification: `rg -c zod src/` → zero; only web/src imports zod. Backend/Security validation finding TRUE.
+- ISC-38: report at docs/reviews/DISTINGUISHED_ENGINEER_REVIEW_2026-07-02.md — 4 lens sections + synthesis + fifth-lens + 3 trajectory buckets. Read-confirmed.
+- ISC-39: cross-lens themes section lists 5 themes each found by ≥2 reviewers.
+- ISC-40: consolidated list in 3 trajectory buckets with S/M/L effort per item.
+- ISC-42: synthesis findings carry file:line (7 cited paths spot-checked, all exist).
+- ISC-43 (Anti): `git status --porcelain -- src web test scripts` under envelope-os = CLEAN; only new file docs/reviews/. PASS.
+- ISC-44 (Anti): remediation section verifies 2026-07-01 items landed rather than repeating. PASS.
+- ISC-45 (Anti): 7/7 spot-checked cited paths exist. PASS.
+- ISC-46 (Anti): every bucket item carries a why clause. PASS.
+- Advisor gate (Rule 2): fired — added three-step parallel-run, balance-semantics risk, fifth-lens framing, severity-calibration caution.
+- Cato gate (Rule 2a, E4): verdict=concerns. Confirmed Critical + all spot-checks TRUE. Two same-family under-calls folded into report: (1) Pulse read is deterministic always-zero bug not "can diverge" — upgraded to High; (2) UNIQUE constraint needs a de-dup migration precondition. Sequencing nit (engine→contract refactor mis-bucketed) noted. Provenance/version-drift caveat added.

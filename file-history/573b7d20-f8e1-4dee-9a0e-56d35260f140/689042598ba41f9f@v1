@@ -1,0 +1,169 @@
+# Incident Categorisation, Model Design
+
+**v0.1, proposed architecture for review (2026-06-05).** Working document for the categorisation model. This is where the real design happens before anything is written up for distribution.
+
+## Design goals
+
+- Simplification and clarity above all.
+- One incident, one type. No situation should fit two types reasonably.
+- Fewer types overall. Specificity comes from a guided question flow, not a long list.
+- Full backwards compatibility. Every current category and type maps cleanly to a new home, so historical data stays comparable. National is expected to follow LSV's lead.
+- Tags and refined types are one effort. This unifies with priorities project 1.8 (labels).
+
+## The backbone, separation of concerns
+
+The current model forces several different questions into the single type field, which is why one incident can fit two types. Split them. Every value attached to an incident answers exactly one of these.
+
+| Question | Mechanism | Cardinality | Example |
+|----------|-----------|-------------|---------|
+| What is it, fundamentally | Type (inheritance tree) | one | SAR, Missing Person, Water |
+| What qualifies or characterises it | Tags (the 1.8 labels) | many | accidental, SUP involved, extrication, off-duty responder |
+| Where is it in the lifecycle | Status (agency status) | one at a time | Responding, On Scene, Under Control |
+| How did it end | Disposition (closure reason) | one | Resolved, False Alarm, Unfounded, Fatality |
+| Clinical detail | Linked IRL / first-aid record | as needed | resus, fracture, marine sting |
+| Part of a bigger event | Event | one | Wye River Floods |
+
+**Governing rule.** A value only earns its place as a type if it changes what the incident fundamentally is. Otherwise it is a tag, a status, a disposition, or clinical detail. This rule is the simplification engine.
+
+## Guided questions are navigation, not data
+
+A type may carry key questions, ProQA style. Each answer does one of two things.
+
+1. Drills to a child type.
+2. Sets a controlled tag.
+
+No per-incident custom fields are created. The questions populate the existing primitives (type and tags). The benefit is that the specificity moves out of a long scrollable type list and into a short guided flow, so fewer types feels better, not worse. Reporting is indifferent because the underlying data is the same.
+
+**Governance.** Questions are centrally defined per type. An answer maps to a child type or a controlled tag, never to free text that fragments data. Keep a deliberately small set of true structured fields only where a value is quantitative and reporting critical (for example, number of people involved). Default everything else to tags.
+
+## Status, the agency status
+
+Active lifecycle, one at a time.
+
+Collecting Information, then Responding, then On Scene, then Under Control, then Returning, then Finalising.
+
+Non-active.
+
+Monitoring, that is, aware but no active response.
+
+Note on the word advisory. It was doing two jobs. Recommendation, Advisory is a top-level type for purely informational items, and Monitoring is the status for an active-type incident we are only watching. This keeps the term unambiguous.
+
+Status replaces the habit of encoding outcome as a type. Where an incident ends (recovered, fatality, false alarm) is a disposition captured at Finalising, not a change of type.
+
+## Disposition, the closure reason
+
+Captured as a required selection when moving to Finalising. Controlled and mutually exclusive, which is exactly why it is a small field and not a tag.
+
+Draft list. Resolved, Stood Down, False Alarm, Unfounded, Referred to Agency, Fatality, Located, No Action Required.
+
+This is why False Alarm and Fatality are not types. Folding disposition into the Finalising step means it is part of the status workflow rather than a free-floating custom field.
+
+## One type, enforced by precedence
+
+- Type captures the primary operational nature.
+- Clinical detail always rides in the linked IRL, never as a competing type. A rescue that becomes a resuscitation is one Rescue incident with a resus IRL.
+- Where two operational natures genuinely co-occur, a defined precedence selects one. **Draft precedence (confirm):** a save occurred, so Search and Rescue or Rescue wins the type, ahead of Vessel or Marine, ahead of Medical, ahead of Hazard or Advisory.
+- Multiple separate responses to one situation group under an Event. They are not merged into one incident. This is the Wye River Floods pattern.
+
+> This precedence rule is the least settled part of the model. Pressure-test it against real season examples before locking.
+
+## Proposed top-level types (draft)
+
+Operational, active response.
+
+- Search and Rescue
+- Rescue
+- Medical
+- Vessel or Marine Incident
+- Marine Animal or Shark
+- Environmental or Hazard (for example dangerous surf)
+- Duress or Equipment Activation
+
+Support or directed.
+
+- Tasking, where we are a resource on a directed deployment or another agency's job
+- Advisory, purely informational with no active response
+
+Out of scope for this project. Inactive types (excluded as agreed). Pure administrative items such as Test Incident and system or COVID advisories move out of the incident taxonomy entirely.
+
+## Tasking versus Incident, the disambiguation rule
+
+One question. Whose incident is it.
+
+- Ours, we manage or lead it, so it is an operational Incident type.
+- We are a resource on someone else's, requested or tasked, so it is a Tasking.
+
+Worked example. AV asks us to help carry their patient off the beach. We are a resource on AV's job, so Tasking, Assist External Agency, with tag extrication. If instead we are managing the patient and called AV, it is Medical, with tag extrication, and AV listed in responding services.
+
+Extrication is an action, so it is a tag, never a type. This retires Assist Extrication as a type.
+
+## Rescue versus Recovery, needs LSV's definition
+
+Recovered from Water is not its own type. It decomposes to type Search and Rescue or Rescue (water), disposition Fatality or Located, and a tag for recovered by bystander, other agency, or self-rescue where relevant.
+
+The rescue versus recovery boundary feeds national rescue statistics, so it must align to the SLSA definition rather than be invented here.
+
+> Open question for Nick. Confirm LSV's official line. Is a rescue a live assist by our service, and a recovery a deceased retrieval or a non-service retrieval. The model will encode whatever the national definition is.
+
+## Worked branch, Search and Rescue
+
+```
+Q1  What is missing or at risk?
+      Person  -> Q2  Where?
+                   Land   -> type: SAR / Missing Person / Land
+                   Water  -> type: SAR / Missing Person / Water
+      Vessel  -> type: SAR / Missing Vessel
+Closure: Located / Fatality / Not located  -> sets disposition
+Tags surfaced along the way: off-duty response, multi-agency, AMSA tasking, etc.
+```
+
+## Worked branch, Medical
+
+```
+Q1  Primary presenting problem?
+      Cardiac        -> Chest Pain / Resuscitation / ...
+      Respiratory    -> Breathing Problems / ...
+      Trauma         -> Q2  Fracture / Laceration / Head or Spinal / Burns / ...
+      Neurological   -> Seizure / Suspected Stroke / Unconscious / ...
+      Environmental  -> Heat or Cold / Marine Sting / ...
+      Other
+Clinical detail is captured in the IRL, not as extra types.
+Precedence note: if a rescue preceded the medical, the type is Rescue and the medical rides in the IRL.
+```
+
+## Backwards compatibility
+
+Every current category and type maps to exactly one new home, a type, a tag, a status, a disposition, or a linked-record concept. Nothing is lost.
+
+High-level fate of the 11 categories.
+
+- SAR, becomes top-level type Search and Rescue.
+- MED, becomes top-level type Medical, with a branched tree.
+- VINC, becomes Vessel or Marine Incident, with injury moving to IRL and disposition.
+- RESC, folds into Rescue, with injury or no injury moving out of the type.
+- SHARK, collapses to type Marine Animal or Shark, with confirmation and source as tags.
+- DUR, becomes Duress or Equipment Activation, with accidental as a tag.
+- TASK, becomes top-level Tasking.
+- BAU, splits across Advisory, Tasking, and out-of-scope admin.
+- FA, becomes a disposition, False Alarm, not a type.
+- INC, the generic catch-all, is decomposed into the proper branches above.
+- MR, Mass Rescue, becomes a scale tag on a Rescue or SAR, not a type.
+
+The full per-type mapping table (one row for each of the ~70 current types to its new home) is the next deliverable.
+
+## Open calls for Nick
+
+1. The separation-of-concerns backbone, type, tag, status, disposition, IRL, event. Agree.
+2. Disposition as a closure-step selection, acceptable, or do you want outcome handled differently.
+3. The precedence rule for single type, including whether a save always makes it a rescue-family type.
+4. Rescue versus Recovery official definition, aligned to national reporting.
+5. The proposed top-level type list and the out-of-scope admin items.
+6. Tasking versus Incident rule, whose incident is it.
+
+## Next steps
+
+- Resolve the open calls above.
+- Produce the full per-type migration mapping table.
+- Build out the full type tree per branch.
+- Draft the tag taxonomy, aligned with 1.8 labels (flags, event tags, notable attributes).
+- Circulate to the Incident Categorisation and Flow SME group for input.

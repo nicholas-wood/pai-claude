@@ -13,3 +13,4 @@
 - [Docx export tool](reference-docx-export-tool.md) — formatting-faithful md→docx for resumes/cover letters at PAI/TOOLS/DocxExport; use instead of ad-hoc docx generation
 - [MD→PDF→OneDrive pipeline](reference-md-to-pdf-onedrive-pipeline.md) — render general docs to PDF via marked + puppeteer Chrome headless (no pandoc/python-docx); push with rclone copy
 - [Inbox triage practice](feedback-inbox-triage-practice.md) — empty 00_Inbox by routing each artefact to its OneDrive domain folder, extract notes to workspace markdown, quarantine creds locally
+- [Virgin Australia pipeline](project-virgin-australia-pipeline.md) — passed round 2 (3 Jul 2026), at references; ANZ Plus = AI search not full RAG, LIMSOC = designs not shipped

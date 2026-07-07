@@ -2,8 +2,8 @@
 task: Distinguished Engineer four-domain review of AccessBuddy with improvement recommendations
 slug: accessbuddy-de-review
 effort: E4
-phase: build
-progress: 0/132
+phase: complete
+progress: 132/132
 mode: standard
 started: 2026-07-02T00:00:00+10:00
 updated: 2026-07-02T00:00:00+10:00
@@ -224,3 +224,28 @@ Deliver a four-domain Distinguished Engineer review of AccessBuddy — frontend,
 ## Verification
 
 - (pending VERIFY)
+
+## Verification (completed)
+
+- ISC-1..6: all five report files present in review dir (ls confirmed).
+- ISC-7..10, 116..117: each domain file has Assessment/Strengths(>=3)/Findings(>=5, severity-rated)/Recommendations/Maturity Grade (rg counts: severity markers 01=23 02=14 03=31 04=20).
+- ISC-11,120..123: distinct file citations FE=31, BE=17, Arch=12 (incl 9 infra/TF refs), Sec=18 — all >=10.
+- ISC-12,109..119: synthesis has comparable grade table, gated top-10 with effort+risk columns, severity rubric, preserve list, limitations. 95 lines (ISC-127 <2pp pass).
+- ISC-13..14,131: 4 agents ran (general-purpose FE/BE personas, accessbuddy-architect, Silas security); shared repo hash + rubric + context paths in prompts.
+- ISC-15: repo porcelain empty after cleaning tar-extraction ._*/.DS_Store cruft. No tracked file modified.
+- ISC-16: GET-only; no request sent to accessbuddy.com.au.
+- ISC-125: email_configurations unmigrated status confirmed in backend review (4 refs).
+- ISC-128: advisor called — corrected synthesis framing (precautionary lean, query-bundle, regression test).
+- ISC-129: Cato cross-vendor audit ran, verdict=concerns(high) — adjudicated RLS conflict from source (RLS inert near-certain), flagged security "holds" as wrong, dev-login present-tense severity, CSRF coverage gap. All four folded into deliverable.
+- Grades: FE B-, BE C+, Arch C+, Sec C+.
+
+## Changelog
+
+- conjectured: the four domain reviews would be independent and their main value additive per-domain.
+  refuted by: three of four independently converged on one control (RLS/tenant isolation) AND split on
+  whether it currently works; the cross-vendor audit then proved the source settles it.
+  learned: with blind parallel reviewers, convergence-plus-disagreement on a single control is itself the
+  headline finding, and a cross-vendor adjudication (Cato) is what converts a diplomatic "reviewers
+  disagreed" tie into a decided conclusion. Advisor + Cato materially changed the synthesis, not just
+  rubber-stamped it.
+  criterion now: ISC-128/129 verified as substantive (each produced concrete edits), not ceremonial.

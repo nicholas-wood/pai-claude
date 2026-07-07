@@ -1,0 +1,51 @@
+# State (current working state)
+
+What is in progress, the backlog, next-session intent, and active blockers. The volatile layer —
+agents read this to know where things stand right now.
+
+## Shipped / current
+- **v1.10.2 LIVE in production**, post cost-optimisation (2026-05-05). Production at
+  accessbuddy.com.au; Cloud Run URL `accessbuddy-production-599233895935.australia-southeast1.run.app`.
+- SMLSC tenant live: ~192 members, 354 credentials migrated; Stripe webhook configured; sendEmails
+  enabled; KYB complete.
+- Cutover Phases A–E complete (app live, infra + data migrated). See `docs/PATH_TO_PRODUCTION.md`.
+- Feature history (through v1.4.x): mobile nav bottom-sheet drawers; email audit preview (rendered
+  HTML in audit_log, sandboxed iframe viewer); email template admin (block editor, per-tenant
+  overrides, variable pills, live preview); daily-summary dedup/fingerprint fix; audit-trail display
+  fixes; PWA (manifest, service worker, icons); WebAuthn passkey register + auth; OTP sign-in for
+  PWA; weekly pickup reminders; tenant branding on all email templates incl. magic link + OTP;
+  editable member email; login audit trail + `/admin/logins`; changelog page.
+- Cost optimisation (2026-05-05): prod GCP cut from ~$170-190/mo to ~$60-75/mo, zero downtime.
+
+## Backlog / next-session
+1. **Run `email_configurations` migration** — schema exists in code but DB migration not yet applied;
+   template admin won't work in prod until done (`drizzle-kit push` or generate a migration).
+2. **Recipient override UI** — `email_configurations` supports per-event recipient overrides; admin
+   UI doesn't expose it yet.
+3. **Server-side infinite scroll on requests queue** — deferred; admin page is a server component
+   with grouped status sections; needs refactor to client-side fetching.
+4. **Request requester email editing** — member email is editable; request detail page is not.
+5. **Orphaned request details in admin UI** — `orphanEmail`/`orphanFirstName`/`orphanLastName` exist
+   in DB but aren't displayed/editable.
+6. **Verify Face ID end-to-end on prod** — migration 0008 should run via auto-migration; needs manual
+   testing on a real device.
+
+## Cost-opt follow-ups
+- Rotate `STRIPE_PLATFORM_WEBHOOK_SECRET` (was visible in a terraform plan 2026-05-05) and move it to
+  Secret Manager (still a plain env var).
+- Set up BigQuery billing export — current cost figures are list-price estimates.
+- Re-check the actual GCP bill ~7 days after cost-opt to confirm the saving landed.
+- Add `workflow_dispatch` to `deploy.yml` so non-release commits can ship without an empty `fix:`
+  trigger commit.
+
+## Cutover remaining (PATH_TO_PRODUCTION.md)
+- Phase F (pre-cutover end-to-end validation) — not yet done.
+- Phase G (cutover day), Phase H (post-cutover first 7 days).
+- Open §10 questions: backup retention, member-comms author.
+
+## Blockers
+- (none currently recorded)
+
+## Note on versions
+Older migrated memory references v1.4.1; the current live version is **v1.10.2** (post cost-opt is the
+latest state).

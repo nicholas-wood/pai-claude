@@ -1,0 +1,95 @@
+[
+  {
+    "name": "Skill",
+    "input": {
+      "skill": "ContextSearch",
+      "args": "Chris Jacobson life membership application SMLSC criteria"
+    },
+    "timestamp": "2026-07-07T10:18:05.370Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/STATE/work.json"
+    },
+    "timestamp": "2026-07-07T10:18:11.837Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -il \"jacobson|life member\" /home/nicholas-wood/.claude/PAI/MEMORY/STATE/session-names.json; fd -t d -i \"jacobson\" /home/nicholas-wood/.claude/PAI/MEMORY/WORK/ --max-depth 1; fd -t d -i \"life-member\" /home/nicholas-wood/.claude/PAI/MEMORY/WORK/ --max-depth 1",
+      "description": "Scan session names and work dirs for Jacobson / life membership"
+    },
+    "timestamp": "2026-07-07T10:18:13.712Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -il \"jacobson\" /home/nicholas-wood/.claude/PAI/MEMORY/WORK/ -g \"ISA.md\" | head -5",
+      "description": "Grep ISAs for Jacobson"
+    },
+    "timestamp": "2026-07-07T10:18:14.797Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -i \"jacobson|life member\" /home/nicholas-wood/.claude/PAI/MEMORY/STATE/session-names.json | head -20",
+      "description": "Find matching session names"
+    },
+    "timestamp": "2026-07-07T10:18:24.171Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -ril \"jacobson\" /home/nicholas-wood/.claude/PAI/MEMORY/ 2>/dev/null | head -20; echo ---; git -C ~/.claude log --oneline --all -i --grep=\"jacobson\" -10; git -C ~/.claude log --oneline --all -i --grep=\"life member\" -10",
+      "description": "Search PAI memory and git history for Jacobson / life membership"
+    },
+    "timestamp": "2026-07-07T10:18:25.475Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -ril \"jacobson\" /home/nicholas-wood/.claude/projects/ 2>/dev/null | head; echo ---; rg -ril \"life membership\" /home/nicholas-wood/.claude/projects/ 2>/dev/null | head; echo ---; rg -ril \"life membership|jacobson\" /home/nicholas-wood/Documents/workspace/ 2>/dev/null | head",
+      "description": "Search transcripts and workspace for Jacobson / life membership"
+    },
+    "timestamp": "2026-07-07T10:18:35.462Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls -la /home/nicholas-wood/Documents/workspace/lifesaving/slsa/slsa-honours-2026/",
+      "description": "List slsa-honours-2026 directory"
+    },
+    "timestamp": "2026-07-07T10:18:41.967Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/slsa/slsa-honours-2026/00-README.md"
+    },
+    "timestamp": "2026-07-07T10:18:47.608Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/slsa/slsa-honours-2026/01-life-membership-chris-jacobson.md"
+    },
+    "timestamp": "2026-07-07T10:18:48.313Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls -la ~/OneDrive/06_Lifesaving/SLSA/2026/Honours-Nominations/ 2>/dev/null; ls /home/nicholas-wood/Documents/workspace/lifesaving/slsa/slsa-honours-2026/docx-output/",
+      "description": "Check OneDrive honours folder and docx output"
+    },
+    "timestamp": "2026-07-07T10:18:56.545Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -sk -m 3 -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Executing using PAI native mode\", \"voice_id\": \"{{SECONDARY_VOICE_ID}}\", \"voice_enabled\": true}' >/dev/null 2>&1; echo '{\"ts\":\"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'\",\"skill\":\"ContextSearch\",\"workflow\":\"Phase1+Phase2\",\"input\":\"Chris Jacobson life membership prior work recall\",\"status\":\"ok\",\"duration_s\":60}' >> ~/.claude/PAI/MEMORY/SKILLS/execution.jsonl",
+      "description": "Fire native-mode voice notification and log ContextSearch execution"
+    },
+    "timestamp": "2026-07-07T10:19:18.735Z"
+  }
+]

@@ -1,0 +1,84 @@
+What is an Incident?
+A response by Life Saving Victoria members that either:
+- Requires a response from multiple lifesaving services
+    - Requires assistance from other Emergency Services including all situations where there is a danger to human life.
+- Is otherwise serious or complex in nature such that members would like support, assistance, and visibility for LSV Command.
+
+What is an Event?
+An event is a major occurrence that result in, or has the potential to result in, multiple Incidents. An event is a way to associate multiple different incidents.
+
+What is an Incident Type?
+The nature of the situation that assets are responding to. An incident type should reflect the primary driver of a situation. E.g. A rescue followed by a First Aid would still be categorized as a rescue. A member presenting on the beach with a major first aid would be a medical incident. 
+
+When should an Incident Type be updated?
+- Further information has clarified what the primary situation is. I.e. The incident was miscategorised initially.
+- The incident type should not be updated if the incident evolves over time. The incident type should still capture what we responded to.  (CONFIRM HOW AV DO THIS)
+
+How do we capture evolving information for an Incident?
+- Key information should be recorded in the incident log. 
+- There are other key fields on an incident to capture data:
+    - Agency Status
+    - Incident Outcome (Dependent on Incident Type)
+    - Incident Tags - Including but not limited to:
+        - Resuscitation (FA Required)
+        - Member Injury (FA Required)
+        - Penthrane Administered (FA Required)
+        - External Request
+        - Major First Aid (FA Required)
+        - Oxygen Administered (FA Required)
+        - Rescue Completed (Rescue Form Required - need to check the rescue form captures method and we can pull this back through to the incident, including Heli rescue techniques)
+
+How do we capture the detail of an incident
+- Incident Name
+- Incident Brief
+- Incident Fields and Tags
+- Incident Log
+
+Dev Note: I should be able to set rules for documentation that is required for an incident based on :
+- Against an incident type. Using People as an input. 
+- Against incident tags
+- I should also be able to specify that whether it is just a form submission, or if a particular section is required.
+
+Dev Note: 
+- Should be able to make tags only appear for certain incident types.
+- Should be able to do this either through inclusion or exclusion
+
+Dev Note:
+- For an incident type that has children, I should be able to select whether it can be a standalone incident, or whether it has to be one of the children (Abstract or not)
+- An incident type can be 
+    - Abstract (Can’t be standalone)
+    - Not Final (Can be opened as this type, cannot be closed as this type, must be made more specific, e.g. a Rescue )
+    - Final
+
+Tags:
+- Marine Incident: Injury or Not
+- Dangerous Animal: Confirmed or Not and Who By.
+
+Incident Types
+
+- Search And Rescue
+    - Search
+        - Person
+        - Vessel
+    - Rescue
+        - Person
+        - Vessel
+    - Emergency
+        - Rescue Equipment Activation
+        - Duress Activation
+- Medical
+    - 
+- External Agency
+    - Tasking
+    - Request for Assistance
+- Marine Incident
+    - Vessel Incident
+        - Assist
+        - Report
+    - Dangerous Animal
+        - Shark
+        - Other
+- Advisory Information
+    - Dangerous Conditions
+    - Equipment Fault
+    - Medication Discrepency

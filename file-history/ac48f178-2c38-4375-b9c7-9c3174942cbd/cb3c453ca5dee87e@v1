@@ -1,0 +1,138 @@
+# AccessBuddy Security Review
+
+Static, code-level assessment. HEAD `7becae0`. Read-only. No live requests were sent against production. Authorised by the product owner (Nick) for his own SaaS.
+
+Scope: 84 API route handlers, the auth and tenant-isolation primitives (`lib/auth.ts`, `lib/with-tenant.ts`, `lib/permissions.ts`, `packages/db/src/rls.ts`), the Drizzle RLS migration, Stripe payment flow, Terraform, and CI. Every citation is `path:line` against the tree above.
+
+## Assessment
+
+The architecture is better than most single-founder SaaS I see. Tenant isolation is enforced at the database with Postgres row-level security, the app connects as a non-superuser role, and Cloud SQL has no public IP. Authorisation follows one disciplined pattern across nearly every route: authenticate, resolve tenant from slug, check permission against the resolved tenant id. I could not find an unguarded mutating tenant route. Input is validated with Zod almost everywhere. Payment webhooks verify signatures before acting.
+
+The weaknesses are concentrated in one place: the bespoke authentication layer that sits beside Firebase. AccessBuddy issues its own self-signed HMAC session cookies for the OTP and WebAuthn flows, keys them on a secret that is reused for cron auth, carries a hardcoded fallback secret, and makes signature verification conditional on an unrelated environment variable. Several security decisions hang off the client-controlled `Host` header. There is no rate limiting on any authentication endpoint, and the OTP store is plaintext, non-single-use, and brute-forceable. None of these is a clean remote unauthenticated breach on its own in a correctly configured production, but they are fragile controls that fail toward "authenticated as any user, including global admin" under conditions that are one misconfiguration or one leaked secret away. That is the gap to close before a second tenant shares the same instance and the same secrets.
+
+Cross-tenant isolation: holds, but on a single load-bearing control (RLS). Dev-login in prod: the route ships and is gated only by the `Host` header, not `NODE_ENV`.
+
+Security maturity grade: C+. Sound bones, immature auth and secret handling. Clearing the five must-fix items below moves this to a defensible B+.
+
+## Strengths
+
+1. Tenant isolation is real, not decorative. `0001_rls_policies.sql` enables RLS on all twelve tenant-scoped tables and, critically, issues `FORCE ROW LEVEL SECURITY` so the policy applies even to the table owner. The app connects as the non-superuser role `accessbuddy` (`infra/terraform/main.tf:167`), and superuser is the only thing that bypasses forced RLS. `withTenant` wraps every scoped query in a transaction that runs `SELECT set_config('app.current_tenant_id', ...)` via `SET LOCAL` semantics (`packages/db/src/rls.ts:16`, `lib/with-tenant.ts:20`). Object routes that look up by id alone (for example `credentials/[id]/route.ts:100`) are therefore still tenant-safe: a foreign row is simply invisible and returns 404. Cloud SQL is private-IP only (`main.tf:128 ipv4_enabled = false`).
+
+2. Authorisation is uniform and hard to skip. The factories `createWorkflowAction` (`lib/workflow-action.ts:29-70`) and `createConfigEndpoints` (`lib/config-crud.ts:26-60`) bake `getAuthUser` then `checkPermission` into every generated handler, and the hand-written routes follow the same order (`members/[id]/route.ts:17-25`, `credentials/[id]/route.ts:63-86`). The global-admin surface re-checks `isGlobalAdmin` on both GET and POST (`v1/platform/global-admins/route.ts:12,45`). I found no mutating tenant route that reaches the database without a permission check.
+
+3. Payment integrity is sound. The Stripe webhook verifies the signature with `stripe.webhooks.constructEvent` before any state change and only acts on `requestId`/`tenantId` read from Stripe-signed metadata, never from the caller (`api/webhooks/stripe/route.ts:45-83`). The payment amount is never trusted from the client. Firebase session cookies are verified with revocation checking enabled (`lib/auth.ts:89`, `checkRevoked=true`). Tokens for attestations and magic links use `randomBytes(32)` hex, 256 bits of entropy (`members/[id]/renew/route.ts`, `resend-attestation/route.ts`). Enumeration is resisted: `members/lookup` and `send-otp` return uniform responses whether or not the email exists (`members/lookup/route.ts:44`, `send-otp/route.ts:33`). The cron endpoint fails closed and uses `timingSafeEqual` (`api/cron/daily/route.ts:16-31`).
+
+## Findings
+
+### F1. Session-cookie forgery via reused, fallback, conditionally-verified signing secret (High)
+
+`lib/auth.ts:74-84` verifies WebAuthn/OTP session cookies like this:
+
+- The HMAC secret is `process.env.CRON_SECRET ?? "webauthn-session-secret"` (`auth.ts:76`, and identically at `verify-otp/route.ts:55` and `webauthn/login/route.ts:146`). The session signing key is the same secret used to authenticate the daily cron, and that secret is transmitted as the `x-cron-secret` header on every scheduler call (`main.tf:459`). Reusing an authentication secret across two purposes, one of which travels in a header, widens the blast radius of any single leak.
+- Verification is gated on `if (hasServiceAccount)` (`auth.ts:74`). If `FIREBASE_SERVICE_ACCOUNT_KEY` is ever absent, the WebAuthn branch decodes the cookie payload and trusts `uid`/`email` with no signature check at all (`auth.ts:82-84`).
+- The hardcoded fallback `"webauthn-session-secret"` is a public constant in the repo. If `CRON_SECRET` is unset, session cookies are signable by anyone reading this file.
+
+Exploit scenario: an attacker who obtains `CRON_SECRET` (see F5 for how such secrets already leak here) computes `sig = HMAC-SHA256(CRON_SECRET, payload)` where `payload` names a known global-admin email and uid, sets `session=webauthn.<base64url(payload)>.<sig>`, and is authenticated as that global admin. `getAuthUser` accepts it (`auth.ts:67-84`) and `checkPermission` grants everything (`permissions.ts:30`). These self-signed cookies also bypass Firebase revocation entirely, so the admin cannot log the attacker out.
+
+Remediation: generate a dedicated `SESSION_SIGNING_KEY` in Secret Manager, distinct from `CRON_SECRET`. Remove the string fallback and fail closed if the key is missing. Make signature and expiry verification unconditional, never contingent on `hasServiceAccount`. Reject any cookie whose signature does not verify.
+
+### F2. Localhost auth bypass driven by the client-controlled Host header (High)
+
+Multiple security decisions trust `request.headers.get("host")`:
+
+- `getDevLoginEmail` (`auth.ts:238-244`) returns the `dev_login_email` cookie as an authenticated identity whenever the Host contains `localhost` or `127.0.0.1`, and it is checked first in `getAuthUser` before any real auth (`auth.ts:46-48`).
+- The `dev-login` route ships to production and is gated only by the same Host check, not by `NODE_ENV` (`api/dev-login/route.ts:13-14`). It sets `dev_login_email` for any email that exists in the users table.
+- `verify-otp` skips the OTP code comparison entirely when the Host looks local: `if (!isDev && storedCode !== code)` (`verify-otp/route.ts:31-37`). `send-otp` returns the code in the response body under the same condition (`send-otp/route.ts:39-45`).
+
+Cloud Run is fully public: `allUsers` holds `roles/run.invoker` and ingress is `INGRESS_TRAFFIC_ALL` (`main.tf` public IAM member and `main.tf:248`). Exploitability turns on whether the edge (the run.app frontend or the HTTPS load balancer fronting the custom domain) forwards a spoofed `Host: localhost` to the container. A load balancer backend without host rewrite does exactly that. If it reaches the app, an attacker POSTs a known global-admin email to `/api/dev-login` with `Host: localhost`, receives the cookie, and is that admin in one request, no secret required.
+
+Remediation: gate all dev-only behaviour on `process.env.NODE_ENV !== "production"` (or an explicit server-side `ENABLE_DEV_LOGIN` flag), never on the Host header. Do not compile the dev-login route into the production build. Delete the `isDev` code-skip in `verify-otp`.
+
+### F3. No rate limiting on any auth endpoint; brute-forceable, reusable OTP (High)
+
+`lib/rate-limit.ts` exists and is competent, but it is applied to zero authentication routes (no `checkRateLimit` import in `api/auth/*` or `v1/t/*/auth/*`). The OTP store is an in-memory `Map` holding the code in plaintext, and `getOtp` does not delete the entry on a successful read, so a valid 6-digit code stays usable for its whole 5-minute window (`lib/otp-store.ts:8-16`). `verify-otp` has no attempt counter and no rate limit (`verify-otp/route.ts`).
+
+Exploit scenario: an attacker requests an OTP for a target email, then submits guesses to `verify-otp`. The keyspace is 10^6 and the window is 5 minutes with no per-IP or per-account ceiling. A single instance will happily process the traffic; the code is also not invalidated on first correct guess, so a race is not even required. Success yields a full session cookie for the target (`verify-otp/route.ts:70-77`).
+
+Remediation: wrap `send-otp`, `verify-otp`, `webauthn/login`, `send-magic-link`, and the tenant `auth/*` routes in `checkRateLimit` keyed on IP and on email. Make OTPs single-use (delete on verify), lock the account after N failed attempts, and store only a hash of the code.
+
+### F4. Fail-open to unauthenticated global admin when Firebase env is absent (High)
+
+`getAuthUser` computes `firebaseEnabled = !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY` (`auth.ts:39`) and, when false, returns `getDevUser()` with no credential check at all (`auth.ts:52`). `getDevUser` creates a user and grants it `GLOBAL_ADMIN` in every tenant (`auth.ts:281-296`). `NEXT_PUBLIC_*` variables are inlined at build time, so a build that omits this one silently turns every anonymous request into a global admin across all tenants.
+
+Exploit scenario: a botched deploy or a misconfigured build pipeline ships without the public Firebase key. From that moment any visitor is a global admin with full cross-tenant read and write. There is no runtime signal that this has happened.
+
+Remediation: in production, fail closed. Guard the dev-user path on `NODE_ENV !== "production"` and, if a required auth env var is missing at runtime in production, refuse all requests rather than defaulting to an admin identity.
+
+### F5. Secret hygiene: platform webhook secret in plaintext, cron secret reused (Medium)
+
+`STRIPE_PLATFORM_WEBHOOK_SECRET` is injected as a plaintext Cloud Run environment value, not via `secret_key_ref` (`main.tf:388-393`), and its Terraform variable is not marked `sensitive`, with a standing TODO to move it to Secret Manager (`variables.tf:118-119`). Unmarked variables render in `terraform plan` and persist in state, which is the exact exposure that was flagged. Separately, `CRON_SECRET` doubles as the session signing key (see F1), and `.env` with real-shaped secret values is present in the working tree (confirm it is gitignored and was never committed).
+
+Exploit scenario: anyone who can read a `terraform plan` output, the state backend, or CI logs recovers the platform webhook secret (forge platform webhook events) and, because of the reuse in F1, potentially the session signing key (forge admin sessions).
+
+Remediation: move `STRIPE_PLATFORM_WEBHOOK_SECRET` into Secret Manager with a `secret_key_ref` like the other secrets (`main.tf:340-381` is the template). Mark all secret variables `sensitive = true`. Rotate any secret that has appeared in a plan or log. Split the session key from the cron key.
+
+### F6. Vulnerable xlsx (SheetJS 0.18.5) parsing admin-uploaded files (Medium)
+
+`xlsx@^0.18.5` is pinned (`apps/web/package.json:40`, `bun.lock:2193`). This npm-published line carries prototype-pollution (CVE-2023-30533) and ReDoS (CVE-2024-22363); the fixes exist only on the vendor CDN build, not on npm. It is used to parse uploaded spreadsheets in reconciliation (`lib/services/reconciliation.ts`, `XLSX.read` then `sheet_to_json`).
+
+Exploit scenario: an authenticated admin (or anyone who reaches that upload path) submits a crafted workbook that triggers prototype pollution or a catastrophic-backtracking regex, corrupting object prototypes in the Node process or hanging the instance. Precondition is upload access, which limits blast radius, but a second tenant's admins are now in that trust set.
+
+Remediation: migrate to the maintained SheetJS CDN build or replace it with a smaller, actively maintained parser (for example `exceljs`). Validate file size and sheet dimensions before parsing.
+
+### F7. No security response headers (Medium)
+
+`next.config.ts` defines no `headers()` block, and `middleware.ts` adds none. There is no Content-Security-Policy, HSTS, X-Frame-Options, X-Content-Type-Options, or Referrer-Policy. For a product that renders member PII and hosts admin dashboards, the absence of CSP and anti-framing is a meaningful defence-in-depth gap even though I found no reflected-XSS sink (the two `dangerouslySetInnerHTML` uses are static JSON-LD in `layout.tsx` and `page.tsx`).
+
+Remediation: add a `headers()` block with a strict CSP, `Strict-Transport-Security`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: strict-origin-when-cross-origin`.
+
+### F8. Stripe webhook lacks event-id idempotency / replay guard (Low)
+
+The webhook verifies the signature but does not record processed `event.id`s (`api/webhooks/stripe/route.ts:45-87`). Signature verification bounds replay to Stripe's timestamp tolerance, and the request state machine is the only thing preventing a duplicate `PAYMENT_RECEIVED` from acting twice. That is thin. Persist processed event ids and short-circuit duplicates.
+
+### F9. PII in logs and unfiltered error tracking (Low)
+
+Sentry is initialised with no `beforeSend` scrubbing and no explicit PII policy (`sentry.server.config.ts`), so exceptions carrying request context can capture member emails. Emails are also written to stdout in the dev OTP path (`send-otp/route.ts:43`) and into Cloud Logging via audit metadata. For a PII-holding product, add a `beforeSend` that strips emails, names, and phone numbers, and confirm `sendDefaultPii` stays false.
+
+## Attack Chain
+
+The single most plausible full-compromise path, lowest effort first:
+
+1. Reconnaissance. AccessBuddy is public on Cloud Run (`allUsers`, `INGRESS_TRAFFIC_ALL`). The attacker learns a global-admin email, which is trivial: it is a club officer, listed publicly or guessable, and `send-otp`/`members/lookup` confirm existence indirectly.
+2. Primary path (no secret needed). The attacker sends `POST /api/dev-login` with header `Host: localhost` and body `{"email":"<admin>"}`. If the edge forwards the spoofed Host to the container, the app treats the request as local (F2), sets `dev_login_email`, and every subsequent request with that cookie is authenticated as the global admin via `getAuthUser` (`auth.ts:46-48`).
+3. Fallback path (if the edge strips Host). The attacker brute-forces the target's 6-digit OTP against the unrated, non-single-use `verify-otp` (F3), obtaining a real session cookie. Or, if `CRON_SECRET` has leaked through the plaintext/Terraform-plan secret handling (F5), the attacker forges a WebAuthn session cookie directly (F1), skipping the login flow entirely.
+4. Impact. As global admin, `checkPermission` grants all permissions in all tenants (`permissions.ts:30`). The attacker reads and exports every member's PII, reassigns or revokes credentials, adds themselves as a global admin (`platform/global-admins` POST), and issues fraudulent fob requests. RLS does not help here because the identity is legitimately global-admin; isolation protects tenants from each other, not from a compromised platform admin.
+
+The chokepoint that collapses this whole chain is the authentication layer. RLS is doing its job; the custom session/OTP code is the seam.
+
+## OWASP Top 10 Mapping
+
+| Category | Status | Evidence |
+|---|---|---|
+| A01 Broken Access Control | Partial | Authz pattern is consistent and RLS is forced (strength); but F2 Host-header bypass and F4 fail-open are access-control breaks. |
+| A02 Cryptographic Failures | Fail | F1 reused/fallback/conditional session-signing secret; F5 plaintext platform webhook secret. |
+| A03 Injection | Pass | Drizzle parameterises all queries; Zod validates input; no raw string SQL found. Email templates render structured blocks, not raw user HTML. |
+| A04 Insecure Design | Partial | Bespoke session tokens beside Firebase and localhost-as-trust-boundary are design smells (F1, F2). |
+| A05 Security Misconfiguration | Fail | F7 no security headers; F2 dev-login shipped to prod; Cloud Run fully public. |
+| A06 Vulnerable Components | Fail | F6 xlsx 0.18.5 with known CVEs. |
+| A07 Identification & Auth Failures | Fail | F3 no auth rate limiting, brute-forceable reusable OTP; F1 forgeable sessions. |
+| A08 Software & Data Integrity | Partial | Stripe signature verification is a strength; F8 no webhook idempotency. |
+| A09 Logging & Monitoring | Partial | Audit trail is rich (strength); F9 PII in logs and unscrubbed Sentry. |
+| A10 SSRF | Pass | No user-controlled outbound URL fetch found in the reviewed routes. |
+
+## Recommendations
+
+Ranked by risk-reduction per unit effort.
+
+1. Remove Host-header trust. Gate dev-login, the `verify-otp` code-skip, and `send-otp` code disclosure on `NODE_ENV`/an explicit flag, and exclude the dev-login route from the production build. Before tenant #2: yes. Effort: S.
+2. Rate-limit and harden OTP. Apply `checkRateLimit` to all auth routes; make OTPs single-use, hashed, and attempt-locked. Before tenant #2: yes. Effort: S.
+3. Fix session-token crypto. Dedicated `SESSION_SIGNING_KEY` in Secret Manager, no string fallback, unconditional signature and expiry verification. Before tenant #2: yes. Effort: M.
+4. Fail closed on missing auth env. Never default to `getDevUser`/global admin in production; refuse requests if required auth config is absent. Before tenant #2: yes. Effort: S.
+5. Fix secret hygiene. Move `STRIPE_PLATFORM_WEBHOOK_SECRET` to Secret Manager, mark all secret variables `sensitive`, rotate anything that has hit a plan or log, and split the cron and session secrets. Before tenant #2: yes. Effort: S.
+6. Replace or upgrade xlsx and validate uploads (size, dimensions) before parsing. Before tenant #2: no (admin-only precondition), but do it this quarter. Effort: M.
+7. Add the security-headers block (CSP, HSTS, framing, nosniff, referrer). Before tenant #2: no. Effort: S.
+8. Add Stripe webhook event-id idempotency. Before tenant #2: no. Effort: S.
+9. Add a Sentry `beforeSend` PII scrubber and remove email logging. Before tenant #2: no. Effort: S.
+10. Add a startup assertion and an integration test proving the DB connection role cannot bypass RLS, so the single load-bearing isolation control cannot silently regress (for example if someone points the app at the `postgres` superuser). Before tenant #2: no, but high value. Effort: M.
+
+The gate is items 1 to 5. They are mostly small, they all live in the auth layer, and together they close the attack chain above before a second tenant shares the instance, the secrets, and the blast radius.
