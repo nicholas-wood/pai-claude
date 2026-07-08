@@ -1,0 +1,338 @@
+# Incident Categorisation - Model Design
+
+**v0.5, restructured per SLCO edits (2026-07-08).** Working document for the categorisation model. Where the real design happens before anything is written up for distribution. v0.5 applies the SLCO editorial direction throughout: plain headings, enumerations as lists, operative sections state the model without design narration (rationale lives in Explicit design assumptions and the Decision Log), and outcome gating extended to Rescue Equipment Activation (rescue outcomes plus False Alarm). The full migration map from the current 72 LIMSOC types lives in Migration-Map.md.
+
+## Definitions
+
+**Incident.** A response by Life Saving Victoria members that either:
+
+- Requires a response from multiple lifesaving services, or
+- Requires assistance from other emergency services, including all situations where there is a danger to human life, or
+- Is otherwise serious or complex such that members would like support, assistance, and visibility from LSV Command.
+
+**Event.** A major occurrence that results in, or has the potential to result in, multiple Incidents. An Event is the vehicle for associating multiple different Incidents that share a common cause or context. Example, Wye River Floods.
+
+**Incident Type.** The nature of the situation assets are responding to. The Incident Type reflects the **primary driver** of the situation, not everything that happens during it. A rescue followed by first aid is still a Rescue. A member presenting on the beach with a major first aid is a Medical Incident.
+
+**When to update an Incident Type.** Only when new information clarifies that the initial classification was wrong. The Type is not updated because the incident evolves over time. The Type captures what we responded to, not what unfolded. Evolution is captured in the Agency Status, Incident Outcome, Tags, and Incident Log. This aligns with Ambulance Victoria's practice, which does not recategorise unless the incident was misreported.
+
+## Explicit design assumptions
+
+These are deliberate positions, not defaults. Called out so they are visible when the model is reviewed and are not relitigated by accident.
+
+1. **Human first, vessel second.** Where a situation involves both people and a vessel, the Type follows the people. A capsize with two people retrieved is a Rescue. The vessel dimension survives as Tags and the log, not as the Type.
+2. **No priority codes.** MPDS surfaces ProQA determinant codes (Delta, Charlie, Bravo, Alpha, Omega). We do not adopt them. For lifesaving, we are either responding or it is advisory. That distinction is already carried by the Type (Advisory Information for advisory-only items) and the Agency Status (for active response). A priority field would duplicate information the model already holds.
+3. **The Type is what we responded to.** Not what unfolded afterwards. Updates only correct miscategorisation. This matches Ambulance Victoria practice, which does not recategorise unless the incident was misreported.
+4. **A save wins the Type.** Where operational drivers co-occur, SAR or Rescue family takes the Type ahead of Marine Incident, ahead of Medical, ahead of Advisory Information.
+5. **Specificity comes from the tree walk, not the type count.** Guided questions drill to a child or set a Tag. No per-incident custom fields.
+
+## Design goals
+
+- Simplification and clarity above all.
+- One incident, one type. No situation should fit two types reasonably.
+- Fewer types overall. Specificity comes from a guided question flow, not a long list.
+- Full backwards compatibility. Every current category and type maps cleanly to a new home, so historical data stays comparable. National is expected to follow LSV's lead.
+- Tags and refined types are one effort. Unifies with priorities project 1.8 (labels).
+- Type tree supports Abstract, Not Final, and Final states so the tree can be opened wide and closed narrow.
+
+## Separation of concerns
+
+Every value attached to an incident answers exactly one of these questions.
+
+| Question | Mechanism | Cardinality | Example |
+|----------|-----------|-------------|---------|
+| What is it, fundamentally | Type (inheritance tree) | one | SAR, Rescue, Person |
+| What qualifies or characterises it | Tags (the 1.8 labels) | many | Resuscitation, Rescue Completed, External Request |
+| Where is it in the lifecycle | Agency Status | one at a time | Responding, On Scene, Under Control |
+| How did it end | Incident Outcome | one, gated by Type | Resolved, False Alarm, Fatality, Located |
+| Clinical detail | Linked IRL / first-aid record | as needed | resus, fracture, marine sting |
+| Part of a bigger event | Event | one | Wye River Floods |
+| Free-form situational context | Incident Log | append-only | narrative entries with author and time |
+| Free-form summary | Incident Name and Incident Brief | one each | short human-readable identifiers |
+
+**Governing rule.** A value only earns its place as a Type if it changes what the incident fundamentally is. Otherwise it is a Tag, a Status, an Outcome, or clinical detail.
+
+## Type states
+
+A type in the tree carries a state that governs when it can be used.
+
+| State | Can open as this? | Can close as this? | Purpose |
+|-------|-------------------|--------------------|---------|
+| **Abstract** | No | No | Grouping node in the tree only. Structure, not selection. |
+| **Not Final** | Yes | No | Can be opened when the specific nature is not yet known. Must be refined to a Final child before closure. |
+| **Final** | Yes | Yes | Fully specific. Terminal in the tree. |
+
+For example:
+
+- **Medical** is Not Final. An incident can be opened as Medical while the primary presenting problem is still being assessed. Before closure it must be refined to Chest Pain, Drowning, Breathing Problems, and so on.
+- **Search and Rescue** is Abstract. A bare SAR cannot be opened. One of its children must be selected.
+- **Chest Pain** is Final.
+
+## Guided questions
+
+A type may carry key questions, ProQA style. Each answer does one of two things:
+
+1. Drills to a child type.
+2. Sets a controlled tag.
+
+No per-incident custom fields are created. The questions populate the existing primitives (Type and Tags).
+
+**Governance.** Questions are centrally defined per Type. An answer maps to a child Type or a controlled Tag, never to free text that fragments data. Keep a deliberately small set of true structured fields only where the value is quantitative and reporting critical (for example, number of people involved). Default everything else to Tags.
+
+## Agency Status - Incident lifecycle
+
+Captures our overall status as an agency. These will include:
+
+1. Collecting Information
+2. Responding
+3. On Scene
+4. Under Control
+5. Returning
+6. Finalising
+7. Information Only - Monitoring, aware but no active response
+
+## Incident Outcome
+
+Captured as a required selection when closing an incident. Controlled and mutually exclusive per Type.
+
+For example, a Search Type surfaces:
+
+- Located
+- Fatality
+- Stood Down
+
+A Medical Type surfaces:
+
+- Resolved
+- Referred to Agency
+- Fatality
+
+A Rescue Equipment Activation surfaces the same outcomes as a Rescue, with the additional outcome of False Alarm.
+
+## One Type per incident
+
+- Type captures the primary operational driver.
+- Clinical detail always rides in the linked IRL, never as a competing Type. A rescue that becomes a resuscitation is one Rescue incident with a resus IRL.
+- Multiple separate responses to one situation group under an Event. They are not merged into one incident.
+
+Where two operational drivers genuinely co-occur, precedence selects the Type (locked 2026-07-08):
+
+1. Search and Rescue or Rescue (a save wins)
+2. Marine Incident
+3. Medical
+4. Advisory Information
+
+**Locked against worked scenarios (SLCO confirmed, 2026-07-08).**
+
+1. **Rescue then major medical.** Swimmer pulled from a rip, arrests on the beach. Type is Rescue. Resuscitation rides as Tag (FA form required) and IRL. Confirmed.
+2. **Vessel incident producing a rescue.** Capsized vessel, people retrieved. Type is Rescue. Human first, vessel second. The vessel dimension is Tags and log. Confirmed.
+3. **Shark sighting forcing water clearance.** Type stays Marine Incident > Dangerous Animal > Shark. The active response is carried by Agency Status, not a Type change. Confirmed.
+4. **Medical during an External Agency Tasking.** Severity decides. A severe injury becomes its own linked incident. A minor one stays on the Tasking incident with a Member Injury Tag.
+5. **Activation that becomes a rescue.** Stays one incident, typed as the activation (for example Duress Activation). No reclassification and no second incident. The response that follows is carried in Agency Status, Tags, Outcome, and the log.
+
+## Tasking versus Incident
+
+One question. Whose incident is it?
+
+- Ours, we manage or lead it, so it is an operational Incident type.
+- We are a resource on someone else's, requested or tasked, so it is External Agency > Tasking.
+
+Worked example. AV asks us to help carry their patient off the beach. We are a resource on AV's job, so **External Agency > Tasking**, with tag Extrication. If instead we are managing the patient and called AV, it is **Medical**, with tag Extrication, and AV listed in responding services.
+
+Extrication is an action, so it is a Tag, never a Type. This retires Assist Extrication as a Type.
+
+## Rescue versus Recovery
+
+Recovered from Water is not its own Type. It decomposes to Type Search and Rescue > Rescue > Person, Incident Outcome Fatality or Located, and a Tag for recovered by bystander, other agency, or self-rescue where relevant.
+
+The rescue-versus-recovery boundary feeds national rescue statistics, so it must align to the SLSA definition rather than be invented here.
+
+> Open question for Nick. Confirm LSV's official line. Is a rescue a live assist by our service, and a recovery a deceased retrieval or a non-service retrieval. The model will encode whatever the national definition is.
+
+## Top-level Type tree
+
+Revised in v0.2 to match the SLCO structure.
+
+- **Search And Rescue** [Abstract]
+    - **Search** [Abstract]
+        - Person [Final]
+        - Vessel [Final]
+    - **Rescue** [Abstract]
+        - Person [Final]
+        - Vessel [Final]
+    - **Emergency** [Abstract]
+        - Rescue Equipment Activation [Final]
+        - Duress Activation [Final]
+- **Medical** [Not Final]
+    - See Medical branch below. MPDS-aligned, lifesaving-filtered.
+- **External Agency** [Abstract]
+    - Tasking [Final]
+    - Request for Assistance [Final]
+- **Marine Incident** [Abstract]
+    - **Vessel Incident** [Abstract]
+        - Assist [Final]
+        - Report [Final]
+    - **Dangerous Animal** [Abstract]
+        - Shark [Final]
+        - Other [Final]
+- **Advisory Information** [Abstract]
+    - Dangerous Conditions [Final]
+    - Equipment Fault [Final]
+    - Medication Discrepancy [Final]. Recorded when the count of controlled medication in the system differs from what is physically present. Inventory reconciliation, not patient care.
+
+**Out of scope for the incident taxonomy.** Administrative items (Test Incident, system status advisories, COVID-era system messaging) do not belong here. They move out of the incident taxonomy entirely.
+
+**Activation handling (revised v0.4, SLCO confirmed).** When a Rescue Equipment Activation or Duress Activation leads to a real rescue, the incident stays as the activation Type it was opened as. One incident, no reclassification, no second incident. The Type captures what we responded to, which was the activation. The rescue that follows is carried in Agency Status, Tags (for example Rescue Completed), Incident Outcome, and the log. This supersedes the v0.3 two-linked-incidents treatment.
+
+## Medical branch (MPDS-aligned)
+
+Medical children align to the Medical Priority Dispatch System (MPDS) chief complaints, as used by Ambulance Victoria. MPDS is maintained by the International Academies of Emergency Dispatch (IAED). It is used here as a naming taxonomy for interagency alignment, not as a dispatch triage tool.
+
+**State.** Medical is **Not Final**. Every closed Medical incident must be refined to a Final child.
+
+**Medical children (Final), MPDS-aligned per SLCO direction.**
+
+- Abdominal Pain / Problems
+- Allergies (Reactions) / Envenomations (Stings, Bites). Marine envenomation rides here, animal identity as Tag
+- Animal Bites / Attacks
+- Assault / Sexual Assault
+- Back Pain (Non-Traumatic / Non-Recent)
+- Breathing Problems
+- Burns (Scalds) / Explosions
+- Carbon Monoxide / Inhalation / HAZMAT / CBRN
+- Cardiac or Respiratory Arrest / Death
+- Chest Pain
+- Choking
+- Convulsions / Seizures
+- Diabetic Problems
+- Drowning / Diving / SCUBA Accident
+- Electrocution / Lightning
+- Eye Problems / Injuries
+- Falls
+- Headache
+- Heart Problems / AICD
+- Heat / Cold Exposure
+- Hemorrhage / Lacerations
+- Inaccessible Incident / Entrapments
+- Overdose / Poisoning (Ingestion)
+- Pregnancy / Childbirth / Miscarriage
+- Psychiatric / Suicide Attempt
+- Sick Person
+- Stab / Gunshot / Penetrating Trauma
+- Stroke (CVA) / Transient Ischemic Attack (TIA)
+- Traffic / Transportation Incidents
+- Traumatic Injuries
+- Unconscious / Fainting (Near)
+- Unknown Problem (Collapse, 3rd Party)
+- Automatic Crash Notification (ACN)
+- HCP (Health-Care Practitioner) Referral (jurisdictional, UK-origin, retained for interagency alignment)
+
+**Cut from the MPDS list, with reason.**
+
+- Stun Gun component of the Assault compound. Not our operating context.
+- Pandemic / Epidemic / Outbreak (Surveillance or Triage). Not the incident taxonomy. Sits in Advisory Information or system-level messaging if it ever needs a home.
+- Inter-Facility Transfer / Palliative Care and Inter-Facility Transfer for medically trained callers. Patient transfer is not our operating context.
+
+**Priority codes.** Not adopted. See Explicit design assumptions.
+
+**Marine envenomation, worked.** A bluebottle sting is Type = Medical > Allergies (Reactions) / Envenomations (Stings, Bites), Tag = Marine Envenomation, Tag = Bluebottle. Animal identity is a Tag because it does not change what the incident fundamentally is. Two different marine stings that trigger identical care pathways should not be two different Types.
+
+## Tags
+
+Tags characterise. They never classify. Draft groups:
+
+**Care and clinical, first-aid-form triggers (per SLCO notes).**
+
+- Resuscitation → FA form required
+- Member Injury → FA form required
+- Penthrane Administered → FA form required
+- Major First Aid → FA form required
+- Oxygen Administered → FA form required
+- Rescue Completed → Rescue form required. Rescue form must capture method (including Heli rescue technique) and that data must flow back to the incident record. Requirement on the platform.
+
+**Operational context.**
+
+- External Request
+- Off-duty response
+- Multi-agency
+- AMSA tasking
+- Extrication
+- Mass Rescue (scale tag on a Rescue or SAR)
+
+**Marine Incident modifiers.**
+
+- Injury (Vessel Incident: Injury / No Injury)
+
+**Dangerous Animal modifiers.**
+
+- Confirmed / Reported
+- Confirmation source (Lifeguard, Aerial, Member of public, External agency)
+
+## Platform dev notes
+
+Captured for the SLCO team and downstream builders. Design constraints the platform must support.
+
+**Required documentation rules.**
+
+- Set required documents against an Incident Type. Inputs can include People (for example, patient count).
+- Set required documents against Incident Tags.
+- Distinguish between "form submission required" and "specific section within a form required".
+
+**Tag scoping.**
+
+- Constrain Tags to specific Incident Types by inclusion or exclusion. A Tag that only makes sense for Medical should not appear on a Marine Incident.
+
+**Type states, platform behaviour.**
+
+- Types are Abstract, Not Final, or Final. See Type states above.
+- Abstract Types cannot be selected on open or close.
+- Not Final Types can be opened but not closed. The user is prompted to refine before Finalising.
+- Final Types can be opened and closed.
+
+## Backwards compatibility
+
+Every current category and type maps to exactly one new home: a Type, a Tag, an Agency Status, an Incident Outcome, or a linked-record concept. Nothing is lost.
+
+Category-level map, revised for v0.2.
+
+- SAR → Search And Rescue > Search or Rescue, refined to Final child.
+- MED → Medical (Not Final), refined to MPDS-aligned Final child before closure.
+- VINC → Marine Incident > Vessel Incident > Assist or Report. Injury moves to Outcome and Tag.
+- RESC → Search And Rescue > Rescue. Injury or no injury moves out of the Type onto the linked IRL.
+- SHARK → Marine Incident > Dangerous Animal > Shark. Confirmation and source as Tags.
+- DUR → Search And Rescue > Emergency > Duress Activation. Accidental as Tag.
+- Rescue Equipment Activation → Search And Rescue > Emergency > Rescue Equipment Activation.
+- TASK → External Agency > Tasking.
+- BAU → splits across Advisory Information, External Agency, and out-of-scope admin.
+- FA → Incident Outcome False Alarm, not a Type.
+- INC → decomposes into the proper branches above.
+- MR (Mass Rescue) → scale Tag on a Rescue or SAR.
+
+The full per-type mapping table (one row for each of the ~70 current types to its new home) is the next deliverable.
+
+## Settled
+
+- MPDS naming used verbatim as the Medical children. Categories come from the SLCO list, minus the three explicit cuts (stun gun, pandemic, patient transfer).
+- No priority codes. Response-vs-advisory captured by Type and Agency Status. See Explicit design assumptions.
+- Marine envenomation. Animal identity is a Tag, not a Type. Envenomations is the Type.
+- Medication Discrepancy meaning. Inventory reconciliation on controlled medication, not patient care.
+- Precedence rule locked against five worked scenarios (2026-07-08). Save-family wins. Human first, vessel second.
+- Activation handling. An activation that becomes a rescue stays one incident, typed as the activation. Supersedes the v0.3 two-linked-incidents treatment.
+- Member injury during a Tasking. Severity decides. Severe injury is its own linked incident, minor stays on the Tasking with a Member Injury Tag.
+- AV recategorisation rule confirmed. AV do not recategorise unless the incident was misreported. LSV's miscategorisation-only rule aligns.
+- Rescue form must capture method (including Heli rescue technique) and that data must pull back through to the incident. Platform requirement.
+
+## Still open
+
+1. Confirm the top-level tree structure (SAR / Medical / External Agency / Marine Incident / Advisory Information).
+2. Confirm the Abstract / Not Final / Final assignment on each node. Medical as Not Final in particular, and whether SAR and Marine Incident should also be Not Final for the fog-of-war window.
+3. Rescue versus Recovery national definition, still open from v0.1. The model will encode whatever SLSA nominates.
+4. Migration map contentious rows. Migration-Map.md flags the rows where the mapping needs an SLCO call. Review the flagged rows only.
+
+## Next steps
+
+- Resolve the still-open items, at minimum items 1 and 2 before circulating to SME.
+- Review the flagged rows in Migration-Map.md.
+- Build out the Search and Rescue branch worked flow to match Medical's depth.
+- Draft the tag taxonomy in full, aligned with 1.8 labels.
+- Circulate to the Incident Categorisation and Flow SME group for input, gated on the SME EOI shipping.

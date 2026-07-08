@@ -144,16 +144,3 @@ Present Nick a decision-ready analysis that benchmarks our draft against the Ken
 ## Verification (iteration 6, final)
 
 - 2026-07-08 lock released overnight; persistent watcher pushed V3 and deleted stale -v2. Remote holds exactly one LifeMembership file under the original name; rclone check 8/8 matching, 0 differences; downloaded remote copy contains the V3 showcase sentence ("Chris has spent twenty years advancing lifesaving nationally"). Pack fully consistent md = generator = local render = OneDrive.
-
-## Decisions (iteration 7)
-
-- 2026-07-08 Nick de-fluffed S5 by hand (terse date, role, club); applied the pattern to all record lists (S7-S11) in md and generator. Rule derived: record bullets carry facts only, argument lives in the narratives. Kept load-bearing distinctions (canonical L-CPR phrasing, youngest recipient, first online PSAR edition, blended-learning first). S5 count 471/1000. Narratives untouched.
-
-## Decisions (iteration 8)
-
-- 2026-07-08 triplet integrated per Nick: "distinguished, sustained and conspicuous" removed from state and national answers; conspicuous banned, replaced with natural phrasing (visibility/commitment woven into sentences). National closing rebuilt on Nick's suggested wording ("earned the praise of even his harshest critics... often mistake him for paid staff, yet he remains a volunteer"), 999/1000. Kept his live md edits (breadth-and-depth state opening, state closing sentence, "lead" not "run", "continues to grow"); fixed one typo ("work as through" → "work through"). TS aligned to md exactly (& vs and, comma vs semicolon).
-- 2026-07-08 automated parity check added to workflow: bun script diffs every md narrative and bullet against generate-docs.ts; all 68 bullets and all narratives verified mirrored before render.
-
-## Verification (iteration 8)
-
-- Parity script: narratives OK, bullets OK (68); only non-rendered working-note header flagged. Rendered app doc: zero matches for "conspicuous"/"distinguished, sustained"; Nick's phrasings all present. rclone check 8/8 matching, 0 differences.

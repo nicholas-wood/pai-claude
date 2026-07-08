@@ -1,0 +1,16 @@
+# Incident Categorisation, Decision Log
+
+Material design decisions, with the reasoning, so the rationale is not lost and we do not relitigate settled points.
+
+| Date | Decision | Rationale | Decided by |
+|------|----------|-----------|------------|
+| 2026-07-07 | Medical children align to MPDS chief-complaint names verbatim, minus stun gun, pandemic, and patient transfer | Interagency terminology alignment with AV, who use MPDS. The three cuts are outside the lifesaving operating context | Nick Wood |
+| 2026-07-07 | No priority codes (Delta/Charlie/Bravo/Alpha/Omega) | For lifesaving we are either responding or it is advisory. That distinction is already carried by Type and Agency Status. A priority field duplicates it | Nick Wood |
+| 2026-07-07 | Marine envenomation: animal identity is a Tag, not a Type | Two stings with identical care pathways should not be two Types. Identity does not change what the incident fundamentally is | Nick Wood |
+| 2026-07-07 | Medication Discrepancy defined as controlled-medication inventory reconciliation | Not patient care. System count differs from physical count | Nick Wood |
+| 2026-07-07 | Incident Type updates only on miscategorisation, never on evolution | Type captures what we responded to. Aligns with AV practice, who do not recategorise unless misreported | Nick Wood |
+| 2026-07-08 | Precedence locked: save-family wins the Type, ahead of Marine Incident, Medical, Advisory | Confirmed against five worked scenarios. Human first, vessel second | Nick Wood |
+| 2026-07-08 | An activation that becomes a rescue stays one incident, typed as the activation | No reclassification, no second incident. The response is carried by Status, Tags, Outcome, and log. Supersedes the v0.3 two-linked-incidents treatment | Nick Wood |
+| 2026-07-08 | Member injury during a Tasking: severity decides | Severe injury becomes its own linked incident, minor stays on the Tasking with a Member Injury Tag | Nick Wood |
+| 2026-07-08 | Rescue form must capture method (incl. Heli technique) and flow back to the incident | Elevated from open question to platform requirement | Nick Wood |
+| 2026-07-08 | Catch-all types (E99, D99, B99) retire in favour of the Not Final mechanism | Open at the most specific known node, refine before closure | Model design (pending SME) |
