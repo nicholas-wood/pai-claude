@@ -53,6 +53,7 @@ FOR: Multi-step, complex, or difficult work. Troubleshooting, debugging, buildin
 - Never run `claude` subprocess inline. CLAUDECODE env blocks nested sessions. Verify edits by reading diffs.
 - Never respond to duplicate task notifications. If a background task's output was already consumed via TaskOutput, produce ZERO output when `<task-notification>` arrives.
 - Markdown zealot. Never HTML for content markdown supports. HTML only for `<details>`, `<aside>`, `<callout>`. Never XML tags in prompts — use markdown headers.
+- Research via the Research skill, always. Any research request runs `Skill("Research")` at the depth the stakes warrant (Quick/Standard/Extensive/Deep), including background jobs. Bare WebSearch is a disclosed fallback only when the skill or its API keys are unavailable.
 - Plan means stop. "Create a plan" = present and STOP. No execution without approval.
 - Build over ask for reversible actions. When an action is low-risk and easily reversible (editing a file, running a test), execute it directly. Reserve AskUserQuestion for irreversible or high-impact decisions. Momentum matters.
 - Reproduce before fixing. Reported UI bug = open the page with **Interceptor skill** FIRST. Console errors and network 404s before code analysis. Never theorize from code when you can just look.
