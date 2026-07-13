@@ -1,0 +1,95 @@
+# AccessBuddy — Distinguished Engineer Review: Executive Synthesis
+
+- Scope: four independent Distinguished-Engineer reviews (frontend, backend, architecture, security) of AccessBuddy at HEAD `7becae0` (v1.10.2, live).
+- Method: static, code-level review of the repo recovered from the Mac to `~/Documents/workspace/projects/accessbuddy/code`. No production mutation, no live penetration testing. Findings cite `path:line`.
+- Reviewers worked blind to each other. Where they converged, the signal is strong; where they conflicted, that is called out explicitly below.
+
+## The verdict
+
+AccessBuddy is a genuinely good single-tenant product that is not yet second-tenant-ready. The engineering instincts are well above what "solo-built with AI" usually implies: a centralised, tested authorisation chokepoint; a real xstate request lifecycle instead of ad-hoc status writes; codified infrastructure with Workload Identity Federation and no long-lived keys; a disciplined, audited email pipeline; and thoughtful device-tested PWA work. None of that is luck, and none of it should be touched.
+
+What holds it back is that the last mile of multi-tenant hardening is missing in exactly the places a second tenant exposes first. The reviews converged, independently, on one dominant theme and a cluster of scaling-and-secrets issues underneath it.
+
+**Domain maturity grades (comparable rubric, A best):**
+
+| Domain | Grade | One-line |
+|--------|-------|----------|
+| Frontend | B- | Strong bones; no error boundaries, single-brand theming, config-fragile WebAuthn |
+| Backend | C+ | Excellent domain core; tenant-filter and secret-handling gaps |
+| Architecture | C+ | Disciplined infra; isolation guarantee unproven, DR and observability thin |
+| Security | C+ | Sound architecture, immature auth layer; five must-fixes before tenant #2 |
+
+Severity rubric used throughout: **Critical** = data loss/breach/outage or blocks second-tenant onboarding; **High** = serious defect likely to bite soon; **Medium** = real problem with workaround; **Low** = polish/tech-debt.
+
+## The one finding that matters most (and the conflict inside it)
+
+**Tenant isolation currently rests on a single control whose runtime behaviour the reviewers could not agree on.** The intended design is defence-in-depth: Postgres row-level security (RLS, `FORCE`d in migration `0001_rls_policies.sql`) underneath an application authorisation layer (`withTenantAuth`, `checkPermission`).
+
+- The **backend** and **architecture** reviewers concluded RLS is effectively **inert** in production. Their evidence: the login path (`apps/web/src/lib/auth.ts:154-202`) and the daily cron (`api/cron/daily/route.ts:49-65`) read `FORCE`-RLS tables on the raw pooled connection with no tenant context set. Under enforced FORCE RLS that returns zero rows and login would be impossible. Login works, therefore the `accessbuddy` DB role must be bypassing RLS, therefore isolation rests entirely on app-layer filters, several of which are missing (e.g. `config-crud.ts:36-38` selects with no `where`; `members/route.ts:93-101` filters by `ownerId` only). Rated **Critical**.
+- The **security** reviewer concluded isolation **holds**, precisely because RLS is `FORCE`d and the app connects as a non-superuser. Object-by-id routes are therefore tenant-safe even without an explicit filter.
+
+Both cannot be true, and the source settles it: **RLS is almost certainly inert, and the "holds" conclusion is the one that does not survive the evidence.** A cross-vendor audit (a non-Claude model) adjudicated this against the source and reached the same verdict. The reasoning is a clean modus tollens: `tenant_memberships` carries `FORCE ROW LEVEL SECURITY` (`0001_rls_policies.sql:78`), and `buildAuthContext` reads it on the raw pooled connection with no tenant context (`auth.ts:188-202`). If FORCE RLS were actually binding on that connection, the query would return zero rows and no admin could ever see their members. The product works in production for all 192 real members. Therefore the `accessbuddy` DB role is bypassing RLS, and the object-by-id routes that trust it are IDOR-exposed the moment a second tenant exists. The security reviewer's "holds" rests on a correct-sounding but incomplete premise (it treats "non-superuser" as sufficient, but the `BYPASSRLS` role attribute also defeats FORCE and is not implied by non-superuser status) and never reconciled with this disproving evidence.
+
+So this is not a neutral 2-2 tie; it is three sound analyses against one that reasoned from the reassuring theory and skipped the empirical cross-check. Treat isolation as broken. The production queries below are confirmation and the basis for the fix, not a coin-flip arbiter, and the cost asymmetry only reinforces the lean: confirming costs minutes; being wrong is an existential cross-tenant breach.
+
+Deeper than the on/off question: **tenant isolation is single-layered and currently unverifiable.** Four experts could not settle from source whether it works. That tells you two things a Distinguished Engineer would put in the headline. First, there is no defence in depth: if RLS is the sole guard and it is off, nothing sits behind it, because a meaningful slice of queries omit the app-layer `tenant_id` filter that would otherwise cover them. Second, the property is not legible or tested, so it can drift silently. The fix is not one query; it is making isolation provable and keeping it that way.
+
+**Do this before anything else, as a bundle (a single query proves "off" but never proves "on"):**
+```sql
+-- 1. Does the app role silently defeat all policies?
+SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'accessbuddy';
+-- 2. Does the app role OWN the tables? Owners bypass RLS unless FORCE is set.
+SELECT tablename, tableowner, rowsecurity, forcerowsecurity
+  FROM pg_tables WHERE schemaname = 'public';
+-- 3. Is a policy defined on EVERY tenant-scoped table, or only some?
+SELECT tablename, COUNT(*) AS policies FROM pg_policies
+  WHERE schemaname = 'public' GROUP BY tablename;
+```
+Then a two-tenant read test: seed a second tenant, confirm a query with no context set returns zero cross-tenant rows. Independent of the result, do all three of: (a) add explicit `eq(table.tenantId, tenant.id)` predicates to the queries that currently trust RLS; (b) run the app under a dedicated `NOBYPASSRLS`, non-owning DB role so RLS is a real backstop; and (c) commit a **cross-tenant isolation regression test** (assert tenant A cannot read tenant B's members/credentials/requests/config) to CI, so this can never silently regress again. (c) is what fixes the class rather than the instance, and it is the item that stops this review being needed a second time.
+
+## Systemic themes (each appears in two or more domains)
+
+1. **In-memory state assumes one warm container.** OTP store and rate-limiter are module-level Maps (`lib/otp-store.ts`, `lib/rate-limit.ts`). On Cloud Run scale-out or cold start, OTP codes vanish (intermittent "invalid code" on the PWA's only sign-in path) and rate limits multiply by instance count. Flagged by frontend, backend and security.
+2. **Auth send-endpoints are unthrottled.** `send-otp` / `send-magic-link` and the tenant `auth/*` routes send email per POST with no limiter, enabling inbox flooding and 6-digit OTP brute force. Frontend, backend, security.
+3. **Session-signing secret is fragile.** WebAuthn/OTP session cookies are HMAC-signed with `CRON_SECRET ?? "webauthn-session-secret"` (`auth.ts:76`). Given this project's history of `gcloud --set-env-vars` wiping the environment, an unset var silently turns the signing key into a public constant from source. Backend and security both rate this High (account takeover).
+4. **Secrets stored as plain env vars.** `STRIPE_PLATFORM_WEBHOOK_SECRET` (known to have appeared in a `terraform plan`) and the inline `DATABASE_URL` password sit in Cloud Run env and Terraform state rather than Secret Manager. Architecture and backend.
+5. **Operational blindness.** Observability is Sentry error-capture only: no uptime check, no 5xx/cron-failure alerting, no SLO, budget alert left as a manual console task. The system cannot detect the very failures the other findings describe. Architecture (High); compounds everything.
+
+## Top 10 actions, ranked by risk reduction per unit effort
+
+Effort: S = under a day, M = a few days, L = a week-plus. "Gate" = must be done before onboarding tenant #2.
+
+| # | Action | Effort | Gate | Risk if not done |
+|---|--------|--------|------|------------------|
+| 1 | Resolve the RLS-enforcement question (probe bundle above), add explicit `tenant_id` filters, run under a `NOBYPASSRLS` role, and land a cross-tenant isolation regression test in CI | S probe / M fix | Yes | Cross-tenant data breach the moment tenant #2 exists; and no test to stop it recurring |
+| 2 | Kill Host-header trust: gate `dev-login` and the `verify-otp` code-skip on `NODE_ENV`, exclude dev-login from the prod build | S | Yes | Present-tense exposure (not future-gated): one request as any global admin, no secret needed, if the ALB forwards a spoofed `Host: localhost` to the container. Rank alongside #1, not below it |
+| 3 | Dedicated fail-closed `SESSION_SIGNING_SECRET` in Secret Manager; remove the hardcoded fallback | S | Yes | Account takeover if `CRON_SECRET` is ever unset (has happened before) |
+| 4 | Move OTP store + rate-limiter to Postgres; add attempt limits; rate-limit all auth send routes | M | Yes | Broken PWA sign-in at scale; OTP brute force; email flooding |
+| 5 | Generate and apply the missing `email_configurations` migration; add a schema-vs-migration drift gate to CI | S + M | Yes | Template-admin feature 500s in prod today; silent drift recurs |
+| 6 | Fail closed on missing auth config (do not default to unauthenticated global admin when `NEXT_PUBLIC_FIREBASE_API_KEY` is absent) | S | Yes | Fail-open to admin on a bad build |
+| 7 | Move tenant logo storage to GCS and drop SVG uploads | M | Yes | Tenant #2's logo evaporates on next deploy; stored-XSS via SVG |
+| 8 | Add error boundaries (`global-error.tsx`, segment `error.tsx`, `not-found.tsx`) with Sentry capture | S | No | Raw stack-trace pages to 192 real members; render crashes unobserved |
+| 9 | Stand up minimal observability: `/api/health` uptime check, 5xx + cron-failure alerts, codified budget alert, BigQuery billing export | M | No | Outages and failed payment webhooks found by members, not you; pricing set with no per-tenant cost data |
+| 10 | Cap the DB pool / add a pooler and add the missing `fob_requests` / `credentials` indexes; move Resend + Stripe calls out of the DB transaction; re-enable PITR and rehearse one restore | M | No | Connection exhaustion and slow queries at multi-tenant load; up to 24h data loss with an untested restore |
+
+Items 1-7 are the second-tenant gate: roughly one to two focused weeks. Do them before the sales conversation, not after.
+
+## What to preserve (do not touch)
+
+- The `withTenantAuth` / `checkPermission` chokepoint with independent layout re-checks and a real permission test suite.
+- The xstate request lifecycle and single `transitionRequest` service — it is why the historical double-submit bug class is structurally fixed.
+- The audited, branded, fail-safe email pipeline (subject in metadata, dedup fingerprinting).
+- The restraint: four-line service worker, plain `useState`, per-connected-account `loadStripe` caching. These are senior decisions.
+- Codified infrastructure with WIF and honest, documented drift management.
+
+## Coverage note: CSRF
+
+One item in the coverage contract (CSRF / cookie `SameSite` posture) was under-examined in the domain reports and is closed here. The auth cookies (`session`, `dev_login_email`, WebAuthn) are set `SameSite=Lax` (`verify-otp:74`, `session:35`, `dev-login:45`, `webauthn/login:169`), which blocks the cross-site POST needed for classic CSRF on the cookie-authenticated mutating routes. Residual CSRF risk is therefore low. This does not soften finding #2: the dev-login Host-header bypass is an authentication defect, not a CSRF one, and `SameSite=Lax` does not mitigate it.
+
+## Limitations of this review
+
+Static code review only. No live penetration testing, no load testing, no production database inspection. The single highest-value follow-up — the RLS probe in section three — requires running one query against production and is the one thing this review could not settle from source alone. Grades are calibrated for what AccessBuddy must become (a multi-tenant SaaS), judged fairly for a solo-built product at first-tenant scale.
+
+## Provenance
+
+Repo recovered from Mac (`nested gitignored sub-repo did not migrate`), extracted via tar-over-ssh to `~/Documents/workspace/projects/accessbuddy/code`, HEAD `7becae0` matching the Mac working tree. Per-domain detail: `01-frontend-review.md`, `02-backend-review.md`, `03-architecture-review.md`, `04-security-review.md`.

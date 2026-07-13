@@ -1,0 +1,113 @@
+# St Kilda Property Management Comparison (2026-07-09)
+
+> **Updated 2026-07-09 (evening): actual proposals analysed.** Belle Property (Brodie McPhie) and Gary Peer (Harry Lustig) proposals for 101/40-44 Pakington Street extracted from OneDrive `05_Property/Lease Options/` and the Belle Engage link. See "The two proposals, head to head" below. Both quote identical 6.6% incl GST management, both unsharpened against the market target of 5.5% + GST.
+
+## The two proposals, head to head (101/40-44 Pakington St, 2BR/2bath/1car, 75 sqm)
+
+**Appraised rent:** Belle $680-750/wk (advertise at top, adjust down). Gary Peer $700-750/wk (their letter pasted another property's address, "1/37 Hotham Street", into the appraisal sentence, but their PropTrack CMA confirms $700-750 for the correct address). Comps support it: 101/22-24 Pakington leased $700 (Dec 2025), 403A/33 Inkerman $740 (Apr 2026), 306a/33 Inkerman $720 (Feb 2026); ground-floor G18 in the same building listed $650 (Dec 2025). 2BR St Kilda median $650/wk, 20 days on market, +8.3% growth (PropTrack). Advertise at $750, budget on $700-720. Unit last leased at $440/wk in April 2022, so either agency roughly +60% on the old rent.
+
+**Fees at $725/wk midpoint ($37,700/yr), all incl GST:**
+
+| Line | Belle Property | Gary Peer |
+|---|---|---|
+| Management fee | 6.6% of rent = $2,488/yr | 6% + GST = 6.6% = $2,488/yr |
+| Letting fee | 1.5 weeks = $1,088 | 3% of annual + GST = $1,244 (about 1.7 weeks) |
+| Internet advertising | $450 (8 sites) | $495 (4 sites) |
+| Photography | $240 (8 photos + 2D/3D floorplan) | $195 (7 images) |
+| Monthly admin | FREE | $5.50/mo = $66/yr |
+| EOFY statement | $35 | $55 |
+| Lease renewal | $220 flat | 1% + GST, WAIVED |
+| End-of-tenancy inspection | $150 per vacate | not listed |
+| Compliance checks (gas/elec/smoke) | $420 yr1, $75 yr2 (Complete Rental Care) | at cost, unquoted |
+| VCAT | application $110, warrant $180, execution $220, prep + attendance $500 | attendance $330/visit, rest at cost |
+| Insurance claim handling | $300/claim to $5k, 10% of claim above | not listed |
+| Project management on works >$5k | 10% of project value | not listed |
+| Penalty clause | 0.5 weeks rent if property not vacant/ready 5 business days before tenancy | none |
+| Routine inspections | included | included (6-monthly) |
+
+**Year-1 totals (new tenancy):** Belle about $4,720 (12.5% of annual rent); Gary Peer about $4,920 plus compliance (13%). **Stable-year totals:** Belle about $2,820 (7.5%, includes $220 renewal); Gary Peer about $2,680 (7.1%, renewal waived). Effectively identical money. Both sit exactly on the market benchmark, neither sharpened despite knowing they compete.
+
+**Structural differences that matter more than the money:**
+- **Gary Peer gives you a named senior PM up front:** Harry Lustig, Team Leader and Senior Property Manager, direct mobile 0412 320 302. This is precisely the research criterion (the assigned PM, not the brand, predicts the experience).
+- **Belle's proposal is fronted by the BDM** (Brodie McPhie); the actual PM is unnamed ("one of our dedicated Property Managers") and all nine testimonials in the proposal praise the BDM, not a PM. Classic bait-and-switch surface per the research; make them name the PM.
+- **Belle's platform is stronger:** Ailo app, rent disbursed within minutes of payment (offset benefit), office claims 604 homes rented/12mo, 22 average days on market, 1,745 managements.
+- **Belle's fee traps:** $220 renewal, $300/10% insurance-claim fee, 10% project management on >$5k works (a maintenance markup by another name, at the research red-flag threshold), and the 0.5-week condition-report penalty clause.
+- **Gary Peer's letter contained another client's address** in the appraisal sentence: cosmetic, but sloppy documentation from the person who would manage compliance paperwork.
+
+**Counter-offer for both (identical, in writing):** 6% incl GST management all-inclusive of admin/statement/EOFY, letting fee 1 week incl GST, renewal fee waived, marketing at the quoted caps, no insurance-claim or project-management percentages (Belle), no condition-report penalty (Belle), maintenance at cost with any markup disclosed, 30-day no-fault termination, no exit fee. That lands stable-year cost near $2,400 (6.4%) and turnover-year near $4,200 (11%).
+
+**Decision rule:** if Belle names a specific PM with tenure >2 years and portfolio <150 and matches the counter-offer, their platform and letting economics edge it. If not, Gary Peer with Harry Lustig confirmed as day-to-day PM is the safer interstate-owner choice. Wilson Agents third appraisal remains available as leverage.
+
+
+Decision-grade research for leasing the St Kilda apartment (Brisbane move). Nine-agent extensive research run: 7 explorers, 2 independent verifiers. Confidence tags [HIGH/MED/LOW] carried from verified sources.
+
+## Recommendation
+
+Shortlist, in order:
+
+1. **Gary Peer & Associates** (appraising today). The evidence-backed standout for the PM arm specifically: ProductReview 3.9/5 (65 reviews) vs 1.6-1.9 for every other major brand, a dedicated ~22-person St Kilda rental office at 55 Inkerman St, confirmed 3182 leasing volume, and named long-tenure PMs repeatedly praised (Tracey F., Deb Anassis, Nicole Symeonidis). Caveat: quality is manager-dependent, and some reviews cite PM turnover (one case: four PMs in a year). Condition any signing on knowing exactly who your PM is, their tenure and their portfolio load.
+2. **Wilson Agents (Port Phillip)** - worth a third appraisal. 30+ years in St Kilda, "one of the largest rent rolls in the inner suburbs" with a long-tenured PM team (low churn is the single best predictor of landlord experience), rigorous tenant screening reputation, and no ProductReview complaint listing at all.
+3. **Belle Property St Kilda** (appraisal in hand). Dominant sales office (4.9/5, ~900 RateMyAgent reviews, largest local leasing volume ~620-680/yr) but the PM arm is near-invisible in independent reviews, and tenant reviews cite PM churn and inconsistent accountability. The 1.6/5 ProductReview score is the NATIONAL franchise pool, not this office, so don't over-weight it, but the absence of PM-specific evidence is itself a yellow flag for a sales-led office.
+
+**The core insight: brand and star ratings are near-worthless signals for PM.** RateMyAgent ~4.9s are agent-solicited and sales-dominated; ProductReview 1.6-1.9s are complaint-driven national pools. PM quality is set by the individual manager assigned, their tenure, and their caseload. Select on operational metrics: average days vacant, arrears rate, portfolio per PM, PM turnover, named day-to-day manager.
+
+**Interstate-owner factor (you'll be in Brisbane):** this raises the value of an established, financially boring local agency with a real office, owner portal and photographic inspection reports, and lowers the case for cheap/novel operators. When a PM fails, you find out by email 1,700 km away.
+
+## Agency comparison
+
+| Agency | PM review signal | Strengths | Risks |
+|---|---|---|---|
+| **Gary Peer** (55 Inkerman St) | ProductReview 3.9/5 (65) - best of any major | Dedicated 22-person St Kilda rental team; named praised PMs; 7-office SE network since 1986; 125 leased in 3182 last 12mo | Manager-dependent; documented PM turnover cases; fee anecdote of 2.5% unverified [LOW], expect ~6% quote |
+| **Wilson Agents** (50 Fitzroy St) | No complaint listing; qualitative reviews strong | Long-tenured PM team, huge inner-suburb rent roll, screening rigour | Widely-cited 4.9/415 RateMyAgent belongs to their Glen Eira office, not Port Phillip |
+| **Belle Property St Kilda** (6 Alma Rd, ex-hockingstuart) | No leasing reviews on RateMyAgent; brand ProductReview 1.6/5 (national pool, not office) | Biggest local leasing volume (~620-680/yr), 40+ staff, deep St Kilda tenure, premium marketing | PM arm unproven publicly; tenant complaints cite PM churn, admin-fast/service-slow pattern |
+| Buxton (15 Carlisle St) | Brand ProductReview 1.8/5 (106) | ~500 rental listings locally, strong sales office | PM quality varies by individual; missed-rent/vacancy complaints |
+| Chisholm & Gamon \| Jellis Craig (Elwood) | No ProductReview listing; historically good boutique PM | Bayside boutique reputation, named PM praise | Merged into Jellis Craig 2024-25: continuity risk; JC brand carries a distinctive financial-admin complaint cluster (unpaid rates from rent, late-fee leakage) 1.7/5 (158) |
+| McGrath St Kilda (168 Carlisle St) | Brand 1.9/5 (384); local leasing 5.0/5 but only ~5 reviews | National systems, ~410 rented/yr | Severe brand-level PM complaints (maintenance, communication) |
+| Biggin & Scott St Kilda/Elwood | Polarised; VCAT bond dispute complaints | One of biggest bayside PM divisions | Highest-variance reputation of the local majors |
+| Marshall White Port Phillip | Premium positioning | Low-vacancy premium service | St Kilda 3182 is periphery of their patch; top-of-range fees |
+| Hodges | Insufficient recent data | - | Only substantive review found is from 2014 |
+
+**Flat-fee/tech options: avoid for your situation.** :Different collapsed into administration June 2023 (relaunched smaller under new owners, Melbourne coverage unconfirmed); Yabonza liquidated 2022; Certainty Property ($35/wk) carries offshore-operations and review-manipulation red flags (Trustpilot 2.7/5). DIY platforms (Cubbi 2%, RentBetter $36/mo) leave YOU as the manager, handling VCAT and tenants from Brisbane. LongView is the one credible boutique full-service alternative (quote-based, ~market %) if you want a non-franchise option.
+
+## Fees: benchmarks and negotiation targets
+
+All fees are unregulated and negotiable in Victoria; the agent must disclose this and every fee before signing, and can only charge what is written in the authority (Consumer Affairs Victoria).
+
+| Fee line | Market (inner Melb) | Your target |
+|---|---|---|
+| Management fee | ~5.5-7% + GST, avg ~6% (a "6%" quote = 6.6% effective with GST) | 5.5% + GST all-inclusive; anchor at 5% |
+| Letting fee | 1-2 weeks rent + GST | 1 week, new tenant placements only |
+| Lease renewal | $100-500 or 0.5-1 week | Waived (retention is not new work) |
+| Marketing/advertising | $200-800 per vacancy | At cost, itemised, capped ~$300-500 |
+| Routine inspections | Often included; else $50-150 each | Included in management fee |
+| Admin/statement/EOFY | $0-6.60/mo + ~$30-55 EOFY | Folded into the % |
+| Maintenance markup | 10-15% on trade invoices is common | 0-10%, disclosed in writing; >15% is a red flag |
+| Termination | Notice commonly 30-90 days | 30 days, no exit fee, no lock-in beyond initial letting |
+
+**Honest all-in cost: 8-11% of annual rent in a stable year** (spikes to ~15%+ in a tenant-turnover year). On ~$600/wk ($31,200/yr) that is roughly $2,500-3,400/yr. The savings come from killing stacked fees and letting-fee frequency, not shaving 0.5% off the headline. Ask both agencies for ONE all-inclusive percentage in writing and compare like for like.
+
+**Leverage:** you have two competing appraisals and Melbourne is the most competitive (cheapest) PM market in the country, with agencies fighting for rent-roll growth amid a real investor exodus. Tell each you're comparing written fee schedules.
+
+**Contrarian check (from the verification pass):** don't over-optimise the fee. As an interstate owner, one badly handled maintenance issue, one bad tenant placement, or two extra weeks of vacancy (~$1,200) outweighs a year of fee savings. Pay for a senior PM with a sane caseload.
+
+## Questions for today's Gary Peer appraisal
+
+1. Who exactly will manage my property day to day (the appraiser is usually a BDM, not your PM), and how long have they been at this office?
+2. How many properties does that PM carry? (>150 without support structure is a red flag; average industry PM tenure is ~11 months, so tenure matters.)
+3. What is your portfolio arrears rate and average days-vacant for St Kilda apartments?
+4. Give me every fee that could ever appear on my statement, in writing, as one all-inclusive percentage. Do you mark up trade invoices?
+5. What is the termination notice period, and is there any end-of-management fee?
+6. Who attends VCAT if needed, and what is your track record?
+7. How do you service an interstate owner: owner portal, photographic inspection reports, after-hours maintenance, decision thresholds before you call me?
+8. How are you handling the 25 Nov 2025 compliance regime (all 15 minimum standards met BEFORE advertising, $12k fines) and the 2026-27 energy-efficiency standards for my property specifically?
+
+## Market context (St Kilda 3182, mid-2026)
+
+- 2BR apartments lease around $580-650/wk (the $550 "unit median" includes 1BRs); units take ~37 days to lease; vacancy ~1.8%, sub-2% across the market [HIGH]
+- Rent growth has cooled sharply: St Kilda units +1.9% over 12 months; Melbourne is the weakest mainland capital (+4.4%) [HIGH]
+- Regulatory load is rising: 25 Nov 2025 (minimum standards pre-advertising, no-fault evictions gone, 90-day notices, bidding ban), 31 Mar 2026 (prescribed application form), 13 Oct 2026 (compliance record-keeping, stricter bond-claim evidence), 2027 (cooling, insulation, draught-proofing capex) [HIGH]
+- Land tax threshold now $50k; investor sell-off is real, which is exactly why agencies are competing for landlords [MED]
+
+## Source quality notes
+
+Fee benchmarks cross-verified by 2 independent verifier agents against Consumer Affairs Victoria, whichrealestateagent.com.au, LocalAgentFinder and portal data. ProductReview scores curl-verified exact (Gary Peer 3.9/65, Belle brand 1.6/180, Buxton 1.8/106, Jellis Craig 1.7/158, McGrath 1.9/384). RateMyAgent leasing sub-scores and Google Maps ratings are bot-blocked and unverified: check those two manually in a browser. The "13.9% true all-in" figure circulating online is from a guaranteed-rent vendor, directionally useful, numerically soft. A Gary Peer "2.5% fee" review anecdote is unverified and below any market benchmark; expect a ~6% quote. Gary Peer PM praised-by-name reported as both "Tracey Furber" and "Tracey Freestone" across sources; confirm the name at the appraisal.

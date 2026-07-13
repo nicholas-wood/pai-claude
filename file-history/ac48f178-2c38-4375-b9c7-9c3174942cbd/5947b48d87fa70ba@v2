@@ -1,0 +1,125 @@
+# AccessBuddy As-Built Architecture Review
+
+- Reviewer: Distinguished Systems Architect (read-only, no production mutation)
+- Repo: `/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code` @ HEAD `7becae0`
+- Product state: live v1.10.2, one tenant (SMLSC, 192 members), about to onboard tenant #2 and introduce SaaS pricing
+- Date: 2026-07-02
+
+## Assessment
+
+AccessBuddy is a single-service, multi-tenant Next.js 15 application on GCP Cloud Run (`australia-southeast1`), backed by one Cloud SQL Postgres 16 instance (`db-f1-micro`), with Firebase Auth, Stripe Connect Express, Resend and Sentry. Tenancy is a shared schema keyed by a `tenant_id` FK on every tenant table, intended to be enforced at two layers: Postgres row level security (RLS) and a membership-scoped application authorisation wrapper. For a solo founder this is a disciplined build: infrastructure is almost entirely in Terraform, deploy auth uses Workload Identity Federation with no long-lived keys, most secrets are in Secret Manager, and the decision history is unusually well documented.
+
+The review changes one headline claim the codebase makes about itself. The RLS layer is well designed but, on the evidence, inert in production: the application connects with a database role that bypasses RLS, so tenant isolation currently rests entirely on the application layer. That is the pivotal finding for the 1-to-N jump and is detailed as F1.
+
+### As-built topology
+
+```mermaid
+flowchart TD
+  User[Member / Admin browser + PWA] -->|HTTPS| LB[Global External ALB<br/>static IP 136.110.185.146<br/>cert accessbuddy-ssl / NEG accessbuddy-neg<br/>NOT in Terraform]
+  LB --> CR[Cloud Run: accessbuddy-production<br/>Next.js 15 + 84 API routes<br/>min 0 / max 10, 1 vCPU / 1Gi]
+  Sched[Cloud Scheduler daily 02:00<br/>x-cron-secret] --> CR
+  CR -->|Direct VPC egress| SQL[(Cloud SQL Postgres 16<br/>db-f1-micro, private IP<br/>daily backup, PITR OFF, role bypasses RLS)]
+  CR --> SM[Secret Manager: stripe / resend / firebase-admin / cron]
+  CR --> GCS[Cloud Storage assets]
+  CR --> FB[Firebase Auth]
+  CR --> Stripe[Stripe Connect Express, dual webhooks]
+  CR --> Resend[Resend, 27 events]
+  CR --> Sentry[Sentry errors only]
+  Integriti[Integriti Inner Range<br/>MANUAL CSV boundary] -.upload.-> CR
+  GH[GitHub Actions: release-please -> ci -> deploy] -->|gcloud run update --image| CR
+  GH --> AR[Artifact Registry]
+```
+
+Request path: `accessbuddy.com.au` resolves through a hand-built Global External ALB (Cloud Run custom-domain mapping is unavailable in `australia-southeast1`). Tenant routing is path based under `apps/web/src/app/api/v1/t/[slug]/...`. Every tenant route is wrapped by `withTenantAuth` (`apps/web/src/lib/api.ts:55`), which authenticates via Firebase, resolves the tenant by slug (`apps/web/src/lib/tenant.ts:19`), and checks membership or a required permission (`apps/web/src/lib/permissions.ts:21`). Data access is meant to run inside `withTenant` (`apps/web/src/lib/with-tenant.ts:16`), which opens a transaction and calls `set_config('app.current_tenant_id', ...)` (`packages/db/src/rls.ts:16`).
+
+Mandatory areas passing without a material finding: monorepo package boundaries (2), single-service fitness (4), domain data-model soundness (6), integration architecture (7). All others map to findings below.
+
+## Strengths
+
+1. **A coherent, membership-scoped application authorisation layer.** `withTenantAuth` (`apps/web/src/lib/api.ts:55-113`) enforces authentication, tenant resolution, and per-tenant permission or membership before any handler runs. `checkPermission` (`permissions.ts:21-67`) scopes strictly to the caller's membership in the requested `tenantId`, with a clean global-admin path via null-`tenant_id` admin assignments. This is the isolation control actually operating in production and it is well structured and consistently applied across the 55-plus tenant routes.
+
+2. **Clean package boundaries and a well-factored data client.** `apps/web` depends on `@accessbuddy/db` and `@accessbuddy/shared` as packages and never reaches into raw schema files. The RLS primitive is correctly split: `setTenantContext` plus an `RLS_TABLES` allowlist in the db package (`packages/db/src/rls.ts`), ergonomic `withTenant` in the web app. The client is a proxied singleton cached on `globalThis` to survive HMR (`packages/db/src/client.ts:20-44`).
+
+3. **Infrastructure is codified with honest drift management and no long-lived deploy keys.** `infra/terraform/main.tf` covers VPC, Cloud SQL, Artifact Registry with cleanup policies, Cloud Run, Cloud Scheduler, Cloud DNS (SPF/DKIM/DMARC), Secret Manager and the assets bucket. Deploy auth is WIF (`deploy.yml:46-51`), so there are no SA JSON keys in CI. The known CI-versus-Terraform image drift is managed deliberately via `lifecycle.ignore_changes` (`main.tf:421-428`), and cost cuts are documented in-code with restoration pointers rather than silently deleted.
+
+## Findings
+
+### F1. RLS is well designed but inert in production; tenant isolation is application-layer only (Critical)
+
+- Evidence, design: `0001_rls_policies.sql:78-89` runs both `ENABLE` and `FORCE ROW LEVEL SECURITY` on all twelve original tenant tables, with fail-closed policies using `current_setting('app.current_tenant_id', true)::uuid`. On paper this is defence in depth.
+- Evidence, runtime bypass: the application connects as the table-owning `accessbuddy` user (`main.tf:167-172`; migrations run as the same `DATABASE_URL` user, `packages/db/src/migrate.ts`). The live authentication path performs raw-`db` reads and writes against FORCE-RLS tables with no tenant context set: `getAuthUser` reads `users`, then updates `fob_requests` for orphan linking (`apps/web/src/lib/auth.ts:154-163`) and builds memberships from `tenant_memberships` / `admin_assignments`, all via the raw `db` client (it imports only `@accessbuddy/db`, never `with-tenant`, so it cannot be setting context). The daily cron likewise sweeps `tenant_memberships` across all tenants via raw `db` (`apps/web/src/app/api/cron/daily/route.ts:49-65`). Under enforced FORCE RLS with no context, every one of these would match zero rows and login would be impossible. The app authenticates users and links orphans in production, so the production role is bypassing RLS (Cloud SQL created users carry `cloudsqlsuperuser`; verify the exact attribute). The team explicitly recorded skipping the Cloud SQL RLS smoke test as "not required" (`PATH_TO_PRODUCTION.md:47`), so this was never caught. ISC-18 (fail-closed verified) remains unchecked in the ISA.
+- Compounding: `0009_reconciliations.sql:15-52` adds `ENABLE` but not `FORCE`, and omits the two tables from `RLS_TABLES`. Some queries lean on RLS alone for scoping, for example the member fob-count query filters only by `ownerId` with no `tenant_id` predicate (`apps/web/src/app/api/v1/t/[slug]/members/route.ts:93-101`). Because `users` are global and one person can be a member of two clubs, that query becomes a live cross-tenant leak vector the moment a second tenant exists.
+- Impact: the architecture's headline isolation guarantee does not operate at runtime. Isolation depends on every one of the 84 handlers applying correct app-layer scoping, with no database backstop. This is a genuine breach risk that activates at the 1-to-N transition, which is why it rates Critical.
+- Remediation: create a dedicated application DB role that is NOT superuser and NOT `BYPASSRLS`, run Cloud Run under it, and keep migrations under the owner. Verify with `SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'accessbuddy';` and a two-tenant `SELECT` test proving cross-tenant reads return zero rows. Add `FORCE` to the reconciliation tables and add them to `RLS_TABLES`. Add explicit `tenant_id` predicates to queries that currently rely on RLS alone (belt and braces). Add a CI invariant asserting every `RLS_TABLES` entry has `relrowsecurity` and `relforcerowsecurity`, plus a runtime startup probe.
+
+### F2. Database connection ceiling is far below the app's own pool math (High)
+
+- Evidence: each instance opens `max: 10` connections (`packages/db/src/client.ts:29`); Cloud Run allows `max_instance_count = 10` (`main.tf:255`); that is up to 100 connections against a `db-f1-micro` (`main.tf:121`) whose `max_connections` is on the order of 25 to 50. Every tenant request holds a pooled connection for a full transaction via `withTenant`.
+- Impact: under multi-instance concurrency the app will exhaust Postgres connections and return intermittent 500s, hard to diagnose without the F4 alerting. It will not bite at two low-volume clubs but is the first hard technical wall as traffic grows.
+- Remediation: cap the pool to `max_connections / max_instances` with headroom, or add a pooler (PgBouncer / Cloud SQL connection pooling). Reassess `db-f1-micro`, a single shared-core instance serving all tenants, before the second paying tenant.
+
+### F3. Disaster-recovery posture is weak and untested (High)
+
+- Evidence: PITR is disabled (`main.tf:138`), leaving daily backups only, 7-day retention (`main.tf:140-143`), so worst-case RPO is up to 24 hours. No tested restore is recorded anywhere; `PATH_TO_PRODUCTION.md` Section 10 still lists backup retention as open. No cross-region or off-project copy. Deletion protection is on (`main.tf:118`), which mitigates accidental deletion but not corruption or a bad migration.
+- Impact: a 24-hour data-loss window plus a never-rehearsed restore is a serious risk for a paid product.
+- Remediation: re-enable PITR (roughly $3 to $5 per month per the cost-opt doc) or sign off a documented RPO per tenant; run one real restore into a scratch instance and record the runbook and timing; export periodic backups off-instance.
+
+### F4. No metrics, alerting or SLOs; the system is blind to outages and failed jobs (High)
+
+- Evidence: observability is Sentry error capture only (`main.tf:396-398`). No uptime checks, log-based alerts, dashboards or SLOs. The budget alert is not even codified, it is commented out and left as a manual console task (`main.tf:706-723`). The daily cron has retry config but no alert on repeated failure (`main.tf:445-470`); it drives permission and credential expiry. Stripe webhook failures are written to the audit trail but page nobody.
+- Impact: outages, stalled crons and failed payment webhooks would be found by a member complaining, not by the operator. It removes the ability to detect the very failures F1 to F3 describe.
+- Remediation: add a Cloud Monitoring uptime check on `/api/health`, alert policies for 5xx rate and cron non-200, and a codified budget alert (fix the ADC quota-project issue at `main.tf:706`). Set a basic availability SLO. Enable BigQuery billing export (ISC-16) so per-tenant cost can be measured before pricing is set.
+
+### F5. Platform webhook secret and database URL are plain environment variables (Medium)
+
+- Evidence: `STRIPE_PLATFORM_WEBHOOK_SECRET` is a plain env value from a Terraform variable (`main.tf:390-393`, `variables.tf:118-123`), unlike the other Stripe secrets which use Secret Manager `value_source` (`main.tf:357-365`). It is known to have appeared in `terraform plan` output and is pending rotation (ISC-13). Separately `DATABASE_URL` is assembled with the DB password inline and passed as a plain env var (`main.tf:55`, `289-291`), so the password sits in the Cloud Run env and in Terraform state.
+- Impact: secrets exposed to anyone with console, revision-describe or state access; a compromised platform webhook secret allows forged platform-level Stripe events.
+- Remediation: move both into Secret Manager with `value_source`, rotate the platform webhook secret, mark the constructed URL variable `sensitive`.
+
+### F6. Tenant onboarding is a manual, part-clickops runbook with no provisioning path (Medium)
+
+- Evidence: onboarding is a hand-run sequence in `PATH_TO_PRODUCTION.md` Sections 5 to 6 ("Manually create the SMLSC tenant row in prod or seed via a tiny script"), then a manual Stripe Connect flow and config seed. There is no platform-admin create-tenant UI. The apex DNS A-record in Terraform is a `0.0.0.0` placeholder (`main.tf:496-501`), and the real Global External ALB (static IP, cert, URL map, NEG) is clickops and absent from Terraform.
+- Impact: tenant #2 is achievable but slow, error-prone and dependent on one person's memory; the public entry point cannot be reproduced from code.
+- Remediation: script idempotent tenant provisioning (tenant row, default config, credential types, access levels, pickup location) as one command, and bring the load balancer into Terraform. A minimal create-tenant screen removes the SQL-by-hand step.
+
+### F7. Single release pipeline couples all tenants, with a commit-type deploy trap and no automated rollback (Medium)
+
+- Evidence: `release-please.yml:28` only deploys on `release_created == 'true'`, so `chore`/`docs`/`refactor` never ship while `feat`/`fix` do. `deploy.yml` is `workflow_call` only (lines 8-13), no `workflow_dispatch`, so a non-release change needs an empty trigger commit (ISC-17). Rollback is a manual image redeploy. Branch protection is off (GitHub Pro limitation).
+- Impact: one production pipeline serves all tenants, so one club's hotfix contends with another's release; the commit-type trap is a recorded friction; manual rollback lengthens recovery during the F4 blind spot.
+- Remediation: add `workflow_dispatch`; document a one-command traffic-shift rollback (`gcloud run services update-traffic --to-revisions`, faster than a rebuild since prior revisions are retained); add a post-deploy smoke check.
+
+### F8. Local and CI environments carry Redis and diverge from production (Low)
+
+- Evidence: Memorystore was removed from prod (`main.tf:175-180`) and `REDIS_URL` is optional, yet `docker-compose.yml:18-26` still runs Redis, `ci.yml:58-70` still provisions it and sets `REDIS_URL`, and local uses `Dockerfile.dev` while prod uses `Dockerfile`. Production migrations run at container start (`scripts/entrypoint.sh:6`) behind a startup probe with `failure_threshold = 5` (`main.tf:404-412`).
+- Impact: dev and CI validate a dependency prod lacks; auto-migrate-on-boot means a bad migration can fail the startup probe and block a deploy.
+- Remediation: drop Redis from compose and CI (or reintroduce it deliberately in prod); add a migration dry-run gate in CI.
+
+Smaller notes: `resolveTenant` documents returning null for deleted tenants but does not filter `deletedAt` (`tenant.ts:19-39`), so soft-deleted tenants still resolve (Low). `withoutTenant` sets context to an empty string (`with-tenant.ts:36-38`) which would error on the `::uuid` cast under enforced RLS; confirm its call sites only touch non-RLS tables (Low). The `transitionRequest` orchestration in `services/requests.ts` showed change-amplification (one email-audit signature change broke five call sites per `PATH_TO_PRODUCTION.md` Section 0) (Low to Medium coupling note).
+
+## Recommendations
+
+Ranked. Effort S/M/L. Each states the risk if not done.
+
+1. **Run the app under a non-superuser, non-BYPASSRLS DB role so the forced RLS policies actually take effect; verify with the `pg_roles` query and a two-tenant SELECT test; add `FORCE` to the reconciliation tables and explicit `tenant_id` predicates where queries rely on RLS alone.** Effort S to M. Risk if not done: cross-tenant data exposure the moment tenant #2 exists, because the database backstop is inert and isolation rests solely on flawless app-layer scoping. (F1.)
+
+2. **Fix the connection ceiling before tenant #2 takes real traffic: cap the per-instance pool and/or add a pooler, and reassess `db-f1-micro`.** Effort S to M. Risk if not done: random transaction failures and 500s under multi-instance concurrency, undiagnosable without alerting. (F2.)
+
+3. **Restore DR to a defensible posture: re-enable PITR (or sign off a documented RPO) and run one real restore.** Effort S to M. Risk if not done: up to 24 hours of paid-tenant data loss with an unproven recovery procedure. (F3.)
+
+4. **Stand up minimal observability: uptime check on `/api/health`, 5xx and cron-failure alerts, codified budget alert, BigQuery billing export.** Effort M. Risk if not done: outages, stalled expiry jobs and failed payment webhooks are found by members, and pricing is set with no measured per-tenant cost. (F4.)
+
+5. **Move the platform webhook secret and DB credential into Secret Manager and rotate the leaked platform secret.** Effort S. Risk if not done: forgeable platform Stripe events and credentials exposed in env and state. (F5.)
+
+6. **Script idempotent tenant provisioning and bring the load balancer into Terraform.** Effort M. Risk if not done: slow, error-prone one-person onboarding and a public entry point that cannot be rebuilt from code. (F6.)
+
+7. **Add `workflow_dispatch`, a documented traffic-shift rollback, and a post-deploy smoke check.** Effort S. Risk if not done: cannot ship non-release changes cleanly, and incident recovery is slow. (F7.)
+
+8. **Reduce bus factor: capture onboarding, deploy, rollback and restore as code or checklists, and record formal ADRs.** Effort M. Risk if not done: operability lives in one person's head; the rich decision logs are drifting from reality (Cloudflare/Standard/512Mi references in `PATH_TO_PRODUCTION` are superseded; ISC-9 migration still shows unapplied). (Dependency risk, area 17.)
+
+## Maturity Grade
+
+**Grade: C+.**
+
+Critical findings: 1 (F1). High findings: 3 (F2, F3, F4).
+
+Justification: the engineering discipline here is genuinely strong and, on infrastructure alone, would grade around B+: codified infrastructure, WIF with no static keys, Secret Manager for most secrets, a coherent application authorisation layer, and exemplary decision history for a solo build. The grade is pulled to C+ by a single but decisive problem. The system's headline tenant-isolation control, forced RLS, is well designed in migrations but inert in production because the application runs under a database role that bypasses it, proven by the live authentication and cron paths reading and writing forced-RLS tables with no tenant context and still functioning. Isolation therefore has no database backstop at the exact moment a second tenant arrives, and there are live queries that lean on RLS alone. Combined with a 24-hour untested-restore DR posture and zero alerting, the readiness gap for commercial multi-tenancy is real. Close F1 (run under a non-bypassing role and verify) and clear the three High findings, and this moves to B+.

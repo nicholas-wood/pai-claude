@@ -2,12 +2,11 @@
 task: Four-lens Distinguished Engineer review of BudgetBuddy (envelope-os)
 slug: budgetbuddy-de-review
 effort: E4
-phase: build
-progress: 46/72
+phase: complete
+progress: 46/46
 mode: standard
 started: 2026-07-02T00:00:00+10:00
-updated: 2026-07-07T12:00:00+10:00
-iteration: 2
+updated: 2026-07-02T00:05:00+10:00
 ---
 
 ## Problem
@@ -100,38 +99,10 @@ Deliver a four-lens Distinguished Engineer review of BudgetBuddy — frontend, b
 - [x] ISC-42: Every finding referenced in synthesis carries file:line or file-level evidence
 
 ### Anti-criteria
-- [x] ISC-43: Anti: no file under envelope-os/src, web, test, scripts is modified (git status clean outside docs/reviews/) [SUPERSEDED by remediation round — see Decisions 2026-07-07]
+- [x] ISC-43: Anti: no file under envelope-os/src, web, test, scripts is modified (git status clean outside docs/reviews/)
 - [x] ISC-44: Anti: no finding merely restates an already-remediated 2026-07-01 staff-review item without noting remediation state
 - [x] ISC-45: Anti: no fabricated file path — every cited path exists in the repo
 - [x] ISC-46: Anti: no recommendation without a stated why (rationale tied to Nick's trajectory or a concrete defect)
-
-### Remediation round (2026-07-07, iteration 2)
-- [ ] ISC-47: POST /api/move registered; returns non-404 and moves money (parity with /envelopes/move)
-- [ ] ISC-48: POST /api/envelopes/edit implemented; EditBudgetPage/AddBudgetModal flow functional
-- [ ] ISC-49: GET /api/movements registered (or removed from contract with UI audit)
-- [ ] ISC-50: contract↔router parity test exists and passes (every ApiContract key has a registered route)
-- [ ] ISC-51: allocations UNIQUE(user_id, envelope_id, period) index added with prior de-dup migration
-- [ ] ISC-52: allocation writes upsert keyed on (user, envelope, period) — ensureMonth race dead
-- [ ] ISC-53: store port exposes withTransaction; sqlite, postgres, memory store implement it
-- [ ] ISC-54: moveMoney/distribute/editBudget/ensureMonth/envelope-create wrapped atomic
-- [ ] ISC-55: zod schemas validate every mutation body; non-integer cents → 400 (never NaN into fold)
-- [ ] ISC-56: period/"today" derive from configured timezone (default Australia/Melbourne); no getUTC* in the period path
-- [ ] ISC-57: PIN sign-in + change-pin throttled: persisted attempts, exponential backoff, lockout
-- [ ] ISC-58: idle-timer no longer re-renders the app per keystroke/click
-- [ ] ISC-59: web call() throws on every non-OK response; no error body rendered as success state
-- [ ] ISC-60: PocketSmith key save surfaces failure (no unconditional success message)
-- [ ] ISC-61: fire-and-forget mutations (carryover save, archive, CarryoverPopover) gain busy/error handling
-- [ ] ISC-62: MoveMoneyModal seeds from/to defaults when rows arrive (detail-page regression fixed)
-- [ ] ISC-63: Pulse spend derived via envelope engine rollup (not the always-null Tx.envelopeId)
-- [ ] ISC-64: writeSnapshot wired into the daily pulse cron
-- [ ] ISC-65: backup-db.ts refuses non-crypt rclone remote loudly; failure visible in backup status
-- [ ] ISC-66: installLogRedaction called at server and sync entrypoints
-- [ ] ISC-67: ~/.penny secret/db files written 0600 (dir 0700)
-- [ ] ISC-68: BASIQ_MIGRATION_SPEC amended: balance re-anchor + parallel-run window + provider-prefixed ids + tombstones
-- [ ] ISC-69: bun test, typecheck, lint all green after the round
-- [ ] ISC-70: remediation doc in docs/reviews/ mapping findings → fixes → evidence
-- [ ] ISC-71: Anti: pre-existing tests pass unmodified except where behaviour was intentionally corrected (each documented)
-- [ ] ISC-72: changes committed with a descriptive message
 
 ## Test Strategy
 

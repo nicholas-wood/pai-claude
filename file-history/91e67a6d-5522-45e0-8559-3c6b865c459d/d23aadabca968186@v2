@@ -1,0 +1,209 @@
+# BudgetBuddy — Four-Lens Distinguished Engineer Review
+
+**Date:** 2026-07-02
+**Reviewed at:** commit `20fe2f3` (2026-07-01), v1.3.0, ~21.5k LOC TypeScript
+**Method:** Four independent Distinguished-Engineer reviews (frontend, backend, architecture, security) run as parallel agents against the live repo, read-only, each required to cite `file:line` evidence. Synthesis by the primary. No source modified (this document is the only artefact added).
+**Prior context honoured:** the 2026-07-01 frontend staff review and its five remediation phases; the app's own `ISA.md` (128 criteria); `docs/BASIQ_MIGRATION_SPEC.md`.
+**Provenance:** four lens reports synthesised, then the load-bearing claims re-verified against the repo directly, then a cross-vendor audit (Opus-family, read-only) re-checked the Critical finding and four cited `file:line` claims — all TRUE. The audit's two catches (Pulse always-zero, the UNIQUE de-dup precondition) are folded in below. Base commit `20fe2f3` (v1.3.0); re-verified still current at HEAD `92e0bb6` (v1.3.1). One evidence caveat: the systemd `penny-backup.service` unit that wires the unsafe backup script lives outside the repo tree, so F1's "the timer runs the plaintext script" rests on the deployment config, not a repo file — confirm it on the box.
+
+---
+
+## Verdicts at a glance
+
+| Lens | Grade | One-line |
+|------|-------|----------|
+| **Frontend** | **B+** | Remediation genuinely landed; a whole-app render storm and a typed-lie API path are the new headline issues. |
+| **Backend** | **C+** | Excellent money-correct domain core, undermined by a broken HTTP seam: two live routes 404, no validation layer, non-atomic writes. |
+| **Architecture** | **B** | Genuinely well-seamed hexagon; the Postgres leg is untested, engines depend on the HTTP contract, and a derived read model reads a null column. |
+| **Security** | **C+** | Security-literate design, two "safe version written then not wired in" operational failures: plaintext backup to cloud, unthrottled PIN. |
+
+**Overall: B−.** The bones are the work of someone who understood the domain — integer-cents discipline, a real ports/adapters hexagon, conservation-checked money movement, session-only identity, parameterised SQL. The grade is pulled down by a consistent pattern the four lenses each found independently: **the safe/correct version was written, then not connected.** The backup crypt-gate exists but isn't the script the timer runs; the money-movement audit table exists end-to-end but has no caller; the snapshot writer exists but no cron calls it; log redaction is written and tested but never installed; `zod` is a dependency with (effectively) zero imports. This is a coherent, fixable failure mode, and every fix is small precisely because the architecture underneath is sound.
+
+---
+
+## The single most important finding
+
+**Two money-mutation routes are dead in production.** The typed contract declares `POST /api/move` and `POST /api/envelopes/edit` (`src/server/contract.ts:799-800`); the live UI calls both (`web/src/components/MoveMoneyModal.tsx:68`, `web/src/pages/EditBudgetPage.tsx:216`, `web/src/components/AddBudgetModal.tsx:162`); **no handler registers them** (the router only has `/api/envelopes/move` and `/api/budget/edit` — verified directly: `rg "api\.(get|post)\(" src/server` lists every route, and neither `/move` nor `/envelopes/edit` appears). Those POSTs fall through to the static-file layer and 404. The Move Money modal and the envelope-edit flow cannot work today.
+
+The contract file claims "a contract drift is a type error, not a runtime surprise" (`contract.ts:768-770`) — but nothing type-checks that every contract key has a registered route, and **there are zero HTTP-layer tests** (no test constructs the Hono app), which is exactly why this shipped unnoticed. `GET /api/movements` is likewise declared and unregistered. I verified this claim against the repo before writing it up; it is real.
+
+---
+
+## Cross-lens themes (found by ≥2 independent reviewers)
+
+These carry the most weight — separate reviewers with separate briefs converged on them.
+
+1. **"Written but never wired in."** Backend (money-movements audit dead code, `domain/types.ts:207` → `sqlite.ts:597` with no caller), Security (backup crypt-gate `scripts/backup.ts:100` exists but timer runs the unsafe `backup-db.ts`; `installLogRedaction` `security/redact.ts:51` never called), Architecture (`EnvelopeService.writeSnapshot` `envelope/service.ts:852` has no production caller), Frontend (5 remediated items verified landed — the *counter-example* that proves wiring can be done well). **The pattern is systemic, not incidental.**
+
+2. **The Postgres adapter is unverified.** Backend and Architecture independently flagged that `test/store.suite.ts` runs only against SQLite; `postgres.ts` (759 lines) has never executed its own mandated conformance suite (`store.ts:10-11` says "Both adapters MUST pass test/store.suite.ts identically"). Every cloud/multi-user claim rests on this.
+
+3. **No input validation despite `zod` being a dependency.** Backend (handlers `as`-cast bodies; NaN/float cents poison the fold) and Security (F8, same root) both found it. Verified: `zod` is imported in exactly one *frontend* file and nowhere in `src/`.
+
+4. **Derived state diverges from the grid — and in one case is deterministically wrong.** Architecture (Pulse reads `Tx.envelopeId`; snapshot table never populated) and a supporting SystemsThinking pass (write-once EOD snapshots rebuild PocketSmith's own drift failure mode in-house; the reconciliation tripwire loses its anchor at the Basiq cutover). **Correction on a cross-vendor re-check:** the Pulse case is not merely "can diverge" — it is an always-zero bug. `source.ts:96` skips every transaction where `envelopeId === null`, and `map.ts:44` sets `envelopeId: null` *unconditionally* for every ingested row, so Pulse's per-envelope spend map is **structurally always empty**, not occasionally stale. This is a live wrong-number (High), not a latent risk. The snapshot-divergence half remains a genuine future risk; the Pulse half is broken today.
+
+5. **Trust surfaces that fail silently or lie.** Frontend (PocketSmith key save claims "Key stored" on failure, `SettingsPage.tsx:29`; API error bodies render as a fabricated "No budget set up yet" empty state, `api.ts:82`) and Backend (all mutation failures collapse to 400 with raw internal messages). In an app whose first principle is "figures are never invented," these are principle violations, not cosmetic bugs.
+
+---
+
+## The fifth lens — what four static reviews structurally cannot see
+
+Frontend, backend, architecture, and security are all **static, single-artifact, point-in-time** lenses. There is a class of correctness property none of them owns because it isn't localised in any file — it's emergent from two ledgers interacting *over time and across the cutover*:
+
+- **Accounting invariants** — double-counting, rounding accumulation, sign errors, pending-vs-posted, day-boundary bucketing. "Is the money math right across the system" is nobody's file to review.
+- **Migration-time correctness** — idempotency of the re-anchoring backfill, historical reconciliation continuity, and the tripwire dying *during* the window.
+- **Operational economics** — Basiq call costs, rate limits, refresh cadence. No code lens owns spend.
+
+The tell: **the single highest-severity insight in this whole review — the reconciliation tripwire dying at cutover — was produced by the cross-lens synthesis and a SystemsThinking pass, not by any of the four lenses.** That's not a gap in the reviews; it's confirmation that the four are necessary but not sufficient. Before the Basiq build, this fifth lens deserves its own explicit pass: a written set of money-invariant tests and a migration-correctness checklist that no per-file review would ever generate.
+
+## The sequencing question (the part that actually matters for Nick)
+
+The four reviews produced ~45 findings. Severity (P0/P1/P2) is the right axis for triage but the **wrong axis for a solo builder about to pivot the ingest layer to Basiq**. The better question: *does the Basiq build inherit this fixed, or broken?* Three buckets.
+
+Two cautions on the re-bucketing itself: (1) severity isn't calibrated across lenses — a security "high" and a frontend "high" ran on different rulers, so treat the buckets below as trajectory-ordered, not severity-sorted; (2) the "fold-into-Basiq" bucket is where blockers hide — I audited it for findings Basiq *amplifies* rather than obsoletes (the id-space and deletion-propagation items are amplified, hence they're design-decisions not deferrals).
+
+### Bucket A — Fix BEFORE the Basiq build starts
+Foundations the pivot rests on, or cheap bugs you don't want to debug tangled up in a new ingest layer.
+
+- **Register the dead routes + add a contract↔router parity test** (S). Cheap, and the parity test makes this whole bug class structurally impossible — which you want *in place* before Basiq adds new routes.
+- **`UNIQUE(user_id, envelope_id, period)` on allocations** (S). One-line schema change that kills the budget-doubling `ensureMonth` race permanently. Basiq's higher sync frequency makes the race more likely, not less. **Precondition:** if the race has already written duplicate allocation rows to the live DB, the `CREATE UNIQUE` will *fail to apply* until existing duplicates are collapsed — ship a one-shot de-dup migration (merge duplicate rows by summing, keep one id) *before* adding the constraint, not after.
+- **Store-port `withTransaction` + wrap move/distribute/editBudget/ensureMonth** (M). The Basiq ingest pipeline will do multi-write upserts; a ledger that can be half-written on a crash must be fixed before you add a faster, more frequent writer.
+- **`zod` validation with an integer-cents refinement at every mutation boundary** (M). Basiq multiplies the ingest surface; validate *before* that, not after. NaN/float cents silently poison every derived figure today.
+- **Melbourne-timezone period model** (M). The app renders the wrong month for the first ~11 hours of every month (UTC boundaries, `http.ts:19`). Basiq's CDR timestamps make this worse, not better; fix the single source now.
+- **Re-wire the nightly backup to the crypt remote** (S). Mostly config — the safe script already exists. **Do this immediately regardless of Basiq**; it's the only data-exposure path that leaves the trust boundary today.
+- **PIN brute-force throttling** (M). Bumped forward from "multi-user" because **real bank credentials (CDR consent/refresh tokens) arrive WITH Basiq** — the security bar rises at the pivot, not at multi-user.
+- **Idle-timer render storm** (S, frontend). Independent of Basiq, but a one-line-ish fix that restores the value of all existing memoisation; do it while you're in there.
+
+### Bucket B — Fold INTO the Basiq build (design decisions, not post-hoc patches)
+These must be *designed as part of* the migration or they become expensive reconciliation later.
+
+- **Reconciliation must re-anchor to Basiq account balances — as a three-step, not a swap.** Today `reconcile/balances.ts` compares against PocketSmith's `current_balance`. `docs/BASIQ_MIGRATION_SPEC.md` fetches *transactions only* — no step fetches Basiq account balances. **If you decommission PocketSmith without this, the holding-vs-bank drift tripwire — your flagship "euphoric surprise" — dies silently, exactly when the provider that fed it is removed.** But the safe sequence is three steps, not two: (1) re-anchor to Basiq balances *while PocketSmith is still live*; (2) **parallel-run window** — assert Basiq-anchored drift equals PocketSmith-anchored drift over N reconciliation cycles; (3) only then decommission. The real risk isn't the ordering, it's **balance-semantics equivalence**: Basiq exposes *available* vs *posted/current* balance, and envelope reconciliation needs cleared/posted (pending authorisations, day-boundary bucketing, sign conventions all differ). If the tripwire silently re-anchors to `available`, it doesn't die loudly — it drifts quietly, which is worse. **Make the parallel-run diff the deliverable, not the re-anchor.** And confirm the drift alert has a live recipient during the cutover — a tripwire nobody is watching is already dead. Basiq's `retrieve-accounts` job step already provides the data.
+- **Provider-prefixed transaction ids + a mapping-migration plan.** `Tx.id` is currently the PocketSmith id (`map.ts:38`); every `mappings` row and `transaction_overrides.pocketsmith_id` references PocketSmith's id-space. Post-swap the ledger straddles two id-spaces and historical mappings resolve nothing for new rows. Design `ps:`/`basiq:` prefixes and a one-shot migration as first-class ISCs. The spec underweights this.
+- **Transaction deletion / tombstones.** Sync is upsert-only (`sync.ts:77`); a transaction deleted at the provider lives in Penny forever, corrupting balances until reconcile catches it. The Basiq pipeline should design tombstones in from day one rather than inherit the gap.
+- **Fix the Pulse read model + wire `writeSnapshot`** (S). Route Pulse through the envelope engine's rollup (not `Tx.envelopeId`), and call `writeSnapshot` from the daily cron. Optionally add a periodic snapshot-vs-recompute self-check surfaced like the holding-vs-NAB tripwire. **Note:** the `Tx.envelopeId` read is broken *today* (per-envelope spend always zero — see cross-lens theme 4), so this is really a fix-now item that also serves the migration, not a pure fold-in. *(Also: "break the engine→server-contract dependency", recommendation 13 below, is orthogonal refactor churn — do it as a Bucket-A cleanup before Basiq, or defer to C; don't entangle it with the migration.)*
+
+### Bucket C — Defer to the multi-user milestone
+Genuinely not needed until a second person's data arrives; don't let them slow the Basiq build.
+
+- Per-user `EngineConfig` (holding envelope, NAB account ids) into a settings table — today they're process-global env (`services.ts:28`), so user 2's reconciliation computes against Nick's accounts. **First silent-wrong-numbers failure at 2 users.**
+- Run the store suite against Postgres in CI (env-gated docker-compose PG).
+- Session/auth hardening beyond PIN throttling: require a strong `PENNY_SESSION_KEY`, persist hashed magic-link tokens with TTL, full-digest `userId`, security headers, cache-control on `/api/*`.
+- Per-tenant cron orchestrator (today `scripts/sync.ts` / `pulse.ts` process one tenant per invocation).
+- Move local AES master key out of the vault directory (`secrets/local.ts:78` writes it plaintext beside the ciphertext) — bump to Bucket A if you consider the local box itself untrusted.
+- Frontend: page-level trust-surface tests, query-cache clear on sign-out/lock (cross-user leak the day it's multi-user), remaining fire-and-forget mutations.
+
+---
+
+## Lens reports
+
+### Frontend — B+
+
+**What's built:** a complete envelope-budgeting SPA — 9 pages, a shadcn-style `ui/` kit, TanStack Query v5 data layer with centralised keys, PIN session context, lazy-loaded Recharts, GitHub Actions CI. `tsc` clean, `lint` clean, 20 frontend tests pass.
+
+**Remediation verification (2026-07-01 staff review): all spot-checks PASS.** Quality gate + CI (`package.json:13`, `.github/workflows/ci.yml`); PIN auth-bypass deleted with a regression test (`lib/session.tsx:117`, `lib/session.test.tsx`); Settings de-faked and wired to five real endpoints (`SettingsPage.tsx:89`); TanStack Query migration with tested prefix invalidation (`lib/queries.ts:157`); search debounce + race guard (`TransactionsPage.tsx:60`). The remediation was executed with unusual fidelity.
+
+**Top findings:**
+1. **[High]** Idle-timer writes React state on every `pointerdown`/`keydown` (`session.tsx:48-53`, `:92-102`), and the context value is a fresh object each render (`:126-135`) → the entire route tree re-renders on every keystroke and click, defeating the Phase-3 memoisation everywhere except `SectionRow`. The prior review's claim that the session context "does not over-render" was wrong. Fix: keep the deadline in a ref, update state at most ~once/30s, or isolate `idleExpiresAt` into its own context. **(S, large payoff.)**
+2. **[Medium]** `call()` returns server error bodies under success types (`api.ts:82-87`); a 400 from the grid endpoint renders the fabricated "No budget set up yet" empty state (`BudgetPage.tsx:141`) — violating the ISC-83 "never invent figures" principle. Fix: throw on every non-OK response.
+3. **[Medium]** PocketSmith key save swallows failure and unconditionally claims success (`SettingsPage.tsx:29-36, 69-73`).
+4. **[Medium]** Move Money modal on the detail page seeds `fromId`/`toId` from empty rows (lazy `useEnvelopes`, `EnvelopeDetailPage.tsx:141` + `MoveMoneyModal.tsx:41`) — a remediation-introduced regression.
+5. **[Medium]** Budget grid rows are invalid ARIA: interactive buttons nested inside `role="button"` rows (`BudgetSection.tsx:234`, inner buttons `:160-208`); `aria-sort` on a `<button>` not a `columnheader`.
+
+Plus: fire-and-forget mutations with no busy/error state (`EnvelopeDetailPage.tsx:89, 226`); page-level tests absent (plumbing tested, screens not); query cache not cleared on sign-out/lock (`session.tsx:39`); `keepPreviousData` shows prior-period figures under an updated heading.
+
+### Backend — C+
+
+**What's built:** Bun + Hono JSON API, ~30 routes, container-composed store/auth/secrets, pure-function domain engines (`envelope/`, `budget/`), pull-only PocketSmith ingest with incremental sync + backfill + failure alerting, ops scripts. **187 tests pass, typecheck clean** — but the tests are all service/pure-core level; **zero HTTP routes are exercised.**
+
+**Strengths are real:** integer-cents everywhere with one documented float boundary (`ingest/map.ts:22`); deficit-preserving carryover fold (`envelope/rules.ts:48`) with real numeric tests; conservation-checked move/distribute (`budget/move.ts:38`); transfer/pending semantics nailed and tested (`spend.ts:46`, `transfer-correctness.test.ts`); tenant-scoped SQL throughout.
+
+**Top findings:**
+1. **[Critical]** Dead routes — `/api/move`, `/api/envelopes/edit`, `/api/movements` declared but unregistered; UI calls the first two. **(Verified against repo.)** Fix: register + contract↔router parity test.
+2. **[High]** No handler-boundary validation; `zod` unused in `src/`. Float/NaN cents flow into the fold and poison every derived balance (`handlers/budget.ts:23`).
+3. **[High]** Multi-write money mutations are not atomic despite "all-or-nothing" comments (`budget/service.ts:174-209, 258-277`). No `withTransaction` primitive exposed to services.
+4. **[High]** `ensureMonth` read-then-insert race with no `UNIQUE(user_id, envelope_id, period)` (`schema.ts:140`) — concurrent grid+trend loads on the first visit of a month double every budget (duplicate rows are summed).
+5. **[High]** UTC month/day boundaries for a Melbourne user (`http.ts:19`, `handlers/envelopes.ts:166`) — wrong month for the first ~11 hours of every month.
+
+Plus: ongoing move/distribute silently resets template `period` to monthly (`service.ts:188`); `POST /api/envelopes` rejects contract-valid `saving` type (`envelopes.ts:133`); money-movements audit trail is dead code; sync bookmark uses completion time (skew-skips) and never propagates deletions; unbounded period ranges can materialise 120k months; PostgresStore untested; O(full history) reads.
+
+### Architecture — B
+
+**What's built:** a genuine hexagon — one composition root reading `DEPLOY_MODE` exactly once (`composition.ts:2-6`), layered store ports (`Store` → `EnvelopeStore` → `BudgetStore`), one portable DDL for both engines, pure engine cores, money invariants in types. Tenancy is structural: composite `(user_id, id)` PKs on all 15 tenant tables. **Doc/code drift:** README says "not yet built" and "64 ISCs" while the build plainly exists with 128 ISCs; domain header and all env vars still say `Penny`.
+
+**Top findings:**
+1. **[High]** Engines import HTTP wire types from `server/contract.ts` (`envelope/service.ts:17`, `budget/service.ts:17`) — the one inward-pointing arrow violation in an otherwise clean hexagon. Every future consumer (CLI, agent, Pulse, API v2) multiplies its cost.
+2. **[High]** PostgresStore (759 lines) never runs the conformance suite its own docstring mandates. "Cloud is a wiring change, not a rewrite" is half-proven.
+3. **[High]** Pulse reads `Tx.envelopeId` which ingest permanently nulls (`pulse/source.ts:94` vs `map.ts:44`); `writeSnapshot` has no production caller. Two derived read models can silently diverge from the grid.
+4. **[Medium]** Per-tenant facts (`EngineConfig`) live in process-global env (`services.ts:28`); Pulse identifies the holding envelope by name heuristic. First silent-wrong-numbers failure at 2 users.
+5. **[Medium]** PocketSmith leaks past the ingest boundary three ways: two handlers import `PocketSmithClient` directly; secrets vocabulary names the provider; the schema itself keys on PocketSmith ids.
+
+Plus: single-user cron scripts; dual domain vocabularies (`domain/types.ts` vs `store.ts` enums bridged by `normaliseRolloverRule`); speculative/dead schema (`transaction_overrides` never read/written); "event log is source of truth" oversells an audit log that's never replayed.
+
+**Basiq migration readiness: 7/10** — spec is honest and picks the right seam, but zero code exists (`rg "IngestProvider|Basiq" src/` → nothing) and the identifier-continuity cost (straddled id-spaces, historical mapping migration, cutover dedupe) is underpriced.
+
+**Multi-user readiness: 5/10** — data layer genuinely ready (composite PKs, userId-first methods, per-user secrets, cloud auth written + tested). Breaks first, in order: process-env `EngineConfig` (wrong numbers), single-tenant cron (user 2 never syncs), PocketSmith per-user key onboarding (solved by Basiq), untested Postgres.
+
+### Security — C+
+
+**Threat model:** Bun/Hono on `127.0.0.1:8787`, exposed only via `tailscale serve` on a private tailnet, single user, real bank data, Basiq CDR credentials incoming. Tailnet-only exposure is doing a lot of load-bearing work to keep the grade this high.
+
+**Strengths:** identity resolved from a signed httpOnly SameSite=Strict cookie, never the request body (`http.ts:5-9`), uniform `WHERE user_id = ?` scoping; parameterised SQL in both adapters (only DDL interpolates, over a hardcoded constant); correct AES-256-GCM with fresh per-encryption IV (`crypto.ts:56`); constant-time PIN and session-HMAC compares; PocketSmith key held in a `#private` field, never logged.
+
+**Findings table:**
+
+| # | Severity | Title | Location | Exploitable today? |
+|---|----------|-------|----------|-------------------|
+| F1 | **High** | Nightly backup ships plaintext ledger to non-crypt OneDrive | `scripts/backup-db.ts:17,41`; `penny-backup.service:9` | **Yes** |
+| F2 | **High** | PIN sign-in has no brute-force resistance (10^4 keyspace, no lockout) | `auth/local.ts:40-49`; `handlers/auth.ts:18` | Yes (tailnet) |
+| F3 | Medium | Log redaction defined + tested, never installed | `security/redact.ts:51` (no caller) | Yes (leak) |
+| F4 | Medium | Local AES master key stored plaintext beside the vault | `secrets/local.ts:78-81` | Yes (local process) |
+| F5 | Medium | Session HMAC secret ephemeral/random by default | `auth/session.ts:50-52` | Partial |
+| F6 | Medium | Egress guard bypassable (`.ts.net`/`.local` suffix, cloud-permissive, fetch-only) | `security/egress.ts:56-78,112` | Design gap |
+| F7 | Medium | Magic-link store in-memory; `deriveUserId` 64-bit truncation | `auth/cloud.ts:48,111` | Multi-user |
+| F8 | Low | Request bodies cast, not zod-validated | `handlers/*` | Low |
+| F9 | Low | `~/.penny` files world-readable (0644) | `secrets/local.ts:79,97` | Local |
+| F10-F12 | Low/Info | Cloud idle check asymmetry; no security headers; PIN-change shares unthrottled path | see detail | Low |
+
+**F1 detail:** the systemd timer runs `backup-db.ts` (`ExecStart=... bun run scripts/backup-db.ts`), which `rclone copyto`s a full `VACUUM INTO` snapshot of the 443 MB plaintext ledger to a plain `onedrive:` remote (not `crypt`). The sibling `scripts/backup.ts` hard-refuses non-crypt remotes (`:100-105`) — but it's not the one wired to the timer. A compromised Microsoft account yields the complete financial ledger in cleartext. This is the one finding exploitable today *outside* the tailnet.
+
+**F2 detail:** `beginSignIn` does a constant-time compare then returns; no counter, delay, or lockout anywhere (`rg "rate|throttle|attempt|lockout"` → comments only). Minimum PIN is `\d{4,}`. Anything on the tailnet can walk the whole PIN space in seconds, then read the ledger and overwrite the PocketSmith key.
+
+---
+
+## Consolidated recommendation list
+
+Ordered by the trajectory buckets above (the sequencing that actually serves the Basiq pivot), with severity in brackets.
+
+**Bucket A — before Basiq (or immediately):**
+1. Re-wire backup to the crypt remote + purge existing plaintext OneDrive snapshots. **(S, Security High, do first)**
+2. Register `/api/move`, `/api/envelopes/edit`, `/api/movements`; add a contract↔router parity test. **(S, Backend Critical)**
+3. `UNIQUE(user_id, envelope_id, period)` + keyed upsert. **(S, Backend High)**
+4. Idle-timer render fix. **(S, Frontend High)**
+5. PIN brute-force throttling (persisted backoff + lockout). **(M, Security High — CDR tokens arrive with Basiq)**
+6. `withTransaction` on the store port; wrap all multi-write mutations. **(M, Backend High)**
+7. `zod` validation + integer-cents refinement at every mutation boundary. **(M, Backend/Security High)**
+8. Melbourne-timezone period model, single-sourced. **(M, Backend High)**
+
+**Bucket B — fold into the Basiq build:**
+9. Add an ISC: BasiqProvider fetches account balances; reconciler re-anchors to them before the PocketSmith-decommission ISC. **(Architecture/SystemsThinking — the drift tripwire dies otherwise)**
+10. Provider-prefixed transaction ids + one-shot mapping/override migration + cutover dedupe. **(L, Architecture)**
+11. Transaction tombstones / deletion propagation designed in. **(M, Backend)**
+12. Pulse via engine rollup + wire `writeSnapshot` into the cron; optional snapshot-vs-recompute self-tripwire. **(S, Architecture High)**
+13. Break the engine→server-contract dependency (relocate shared types, contract re-exports). **(S/M, Architecture High)**
+
+**Bucket C — defer to multi-user:**
+14. Per-user `EngineConfig` in a settings table. **(M, Architecture Medium — first wrong-numbers failure at 2 users)**
+15. Store suite against Postgres in CI. **(M, Backend/Architecture Medium)**
+16. Auth/session hardening: strong `PENNY_SESSION_KEY`, persisted hashed magic-link tokens, full-digest userId, security headers, `Cache-Control: no-store`. **(M, Security Medium)**
+17. Move local master key out of the vault dir; `chmod 600` the `~/.penny` files; install log redaction. **(M, Security Medium — bump to A if the local box is untrusted)**
+18. Frontend: page-level trust-surface tests; clear query cache on sign-out/lock; sweep remaining fire-and-forget mutations. **(M, Frontend)**
+
+---
+
+## What's genuinely good (so the review isn't all red ink)
+
+- **Money correctness is a solved problem here.** Integer cents, one float boundary, conservation checks, deficit-preserving rollover, transfer semantics — all tested with real numbers. This is the hard part of a budgeting app and it's done well.
+- **The hexagon is real.** One composition root, one portable schema, a store contract with a shared suite, pure engine cores. Most solo projects fake this; this one didn't.
+- **The 2026-07-01 remediation was executed with fidelity** — every claim spot-checked landed, several backed by purpose-built regression tests. It's the counter-example to the "written but not wired" pattern and proves the author *can* close that gap when focused on it.
+- **Security intent is well above typical personal-project level** — session-only identity, uniform scoping, correct crypto, constant-time compares, a real (if incomplete) test suite.
+
+The through-line: this is a strong codebase with a discipline gap between *writing* the safe/correct thing and *connecting* it. Close that gap on the Bucket A items, design Bucket B into the migration, and BudgetBuddy goes into the Basiq pivot as a B+/A− system rather than a B− one.

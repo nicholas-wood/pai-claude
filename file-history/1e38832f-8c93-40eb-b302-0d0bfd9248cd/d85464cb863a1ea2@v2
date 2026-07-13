@@ -1,0 +1,5 @@
+import { LocalSecretStore } from "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/platform/secrets/local.ts";
+
+const store = new LocalSecretStore();
+const pin = await store.get("local", "auth_pin");
+console.log(pin === null ? "NO_PIN_SET" : `PIN=${pin}`);
