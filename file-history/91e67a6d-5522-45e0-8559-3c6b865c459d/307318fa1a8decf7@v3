@@ -3,7 +3,7 @@ task: Four-lens Distinguished Engineer review of BudgetBuddy (envelope-os)
 slug: budgetbuddy-de-review
 effort: E4
 phase: build
-progress: 68/88
+progress: 46/72
 mode: standard
 started: 2026-07-02T00:00:00+10:00
 updated: 2026-07-07T12:00:00+10:00
@@ -106,50 +106,32 @@ Deliver a four-lens Distinguished Engineer review of BudgetBuddy — frontend, b
 - [x] ISC-46: Anti: no recommendation without a stated why (rationale tied to Nick's trajectory or a concrete defect)
 
 ### Remediation round (2026-07-07, iteration 2)
-- [x] ISC-47: POST /api/move registered; returns non-404 and moves money (parity with /envelopes/move)
-- [x] ISC-48: POST /api/envelopes/edit implemented; EditBudgetPage/AddBudgetModal flow functional
-- [x] ISC-49: GET /api/movements registered (or removed from contract with UI audit)
-- [x] ISC-50: contract↔router parity test exists and passes (every ApiContract key has a registered route)
-- [x] ISC-51: allocations UNIQUE(user_id, envelope_id, period) index added with prior de-dup migration
-- [x] ISC-52: allocation writes upsert keyed on (user, envelope, period) — ensureMonth race dead
-- [x] ISC-53: store port exposes withTransaction; sqlite, postgres, memory store implement it
-- [x] ISC-54: moveMoney/distribute/editBudget/ensureMonth/envelope-create wrapped atomic
-- [x] ISC-55: zod schemas validate every mutation body; non-integer cents → 400 (never NaN into fold)
-- [x] ISC-56: period/"today" derive from configured timezone (default Australia/Melbourne); no getUTC* in the period path
-- [x] ISC-57: PIN sign-in + change-pin throttled: persisted attempts, exponential backoff, lockout
-- [x] ISC-58: idle-timer no longer re-renders the app per keystroke/click
-- [x] ISC-59: web call() throws on every non-OK response; no error body rendered as success state
-- [x] ISC-60: PocketSmith key save surfaces failure (no unconditional success message)
-- [x] ISC-61: fire-and-forget mutations (carryover save, archive, CarryoverPopover) gain busy/error handling
-- [x] ISC-62: MoveMoneyModal seeds from/to defaults when rows arrive (detail-page regression fixed)
-- [x] ISC-63: Pulse spend derived via envelope engine rollup (not the always-null Tx.envelopeId)
-- [x] ISC-64: writeSnapshot wired into the daily pulse cron
-- [x] ISC-65: backup-db.ts refuses non-crypt rclone remote loudly; failure visible in backup status
-- [x] ISC-66: installLogRedaction called at server and sync entrypoints
-- [x] ISC-67: ~/.penny secret/db files written 0600 (dir 0700)
-- [x] ISC-68: BASIQ_MIGRATION_SPEC amended: balance re-anchor + parallel-run window + provider-prefixed ids + tombstones
+- [ ] ISC-47: POST /api/move registered; returns non-404 and moves money (parity with /envelopes/move)
+- [ ] ISC-48: POST /api/envelopes/edit implemented; EditBudgetPage/AddBudgetModal flow functional
+- [ ] ISC-49: GET /api/movements registered (or removed from contract with UI audit)
+- [ ] ISC-50: contract↔router parity test exists and passes (every ApiContract key has a registered route)
+- [ ] ISC-51: allocations UNIQUE(user_id, envelope_id, period) index added with prior de-dup migration
+- [ ] ISC-52: allocation writes upsert keyed on (user, envelope, period) — ensureMonth race dead
+- [ ] ISC-53: store port exposes withTransaction; sqlite, postgres, memory store implement it
+- [ ] ISC-54: moveMoney/distribute/editBudget/ensureMonth/envelope-create wrapped atomic
+- [ ] ISC-55: zod schemas validate every mutation body; non-integer cents → 400 (never NaN into fold)
+- [ ] ISC-56: period/"today" derive from configured timezone (default Australia/Melbourne); no getUTC* in the period path
+- [ ] ISC-57: PIN sign-in + change-pin throttled: persisted attempts, exponential backoff, lockout
+- [ ] ISC-58: idle-timer no longer re-renders the app per keystroke/click
+- [ ] ISC-59: web call() throws on every non-OK response; no error body rendered as success state
+- [ ] ISC-60: PocketSmith key save surfaces failure (no unconditional success message)
+- [ ] ISC-61: fire-and-forget mutations (carryover save, archive, CarryoverPopover) gain busy/error handling
+- [ ] ISC-62: MoveMoneyModal seeds from/to defaults when rows arrive (detail-page regression fixed)
+- [ ] ISC-63: Pulse spend derived via envelope engine rollup (not the always-null Tx.envelopeId)
+- [ ] ISC-64: writeSnapshot wired into the daily pulse cron
+- [ ] ISC-65: backup-db.ts refuses non-crypt rclone remote loudly; failure visible in backup status
+- [ ] ISC-66: installLogRedaction called at server and sync entrypoints
+- [ ] ISC-67: ~/.penny secret/db files written 0600 (dir 0700)
+- [ ] ISC-68: BASIQ_MIGRATION_SPEC amended: balance re-anchor + parallel-run window + provider-prefixed ids + tombstones
 - [ ] ISC-69: bun test, typecheck, lint all green after the round
 - [ ] ISC-70: remediation doc in docs/reviews/ mapping findings → fixes → evidence
 - [ ] ISC-71: Anti: pre-existing tests pass unmodified except where behaviour was intentionally corrected (each documented)
 - [ ] ISC-72: changes committed with a descriptive message
-
-### Budget chronology feature (2026-07-14, iteration 3 — Wave 3)
-- [ ] ISC-73: budget lines carry effectiveFrom (date) and optional effectiveTo; existing lines migrate as open-ended (effectiveTo null)
-- [ ] ISC-74: a month's budget for an envelope = SUM of all lines active in that month (overlapping budgets combine)
-- [ ] ISC-75: creating a new budget with completePrevious=true ends the previous open line the day before the new one starts
-- [ ] ISC-76: create/new-budget UI has a "Complete the previous budget" checkbox, checked by default
-- [ ] ISC-77: future-dated budgets apply from their start month — income set to change as of 1 Aug shows old target in Jul, new in Aug
-- [ ] ISC-78: EditBudgetPage shows a chronology per envelope: date range, amount, status (completed | active | scheduled)
-- [ ] ISC-79: previous (completed) budgets remain visible when editing
-- [ ] ISC-80: ensureMonth materialises allocations from date-resolved lines; already-materialised past months unchanged
-- [ ] ISC-81: contract types + zod schemas extended for the new fields/endpoints; contract↔router parity test green
-- [ ] ISC-82: sqlite, postgres, and memory store implement versioned lines identically (store suite extended)
-- [ ] ISC-83: tests cover overlap summing, completion default, future-dated start, and open-ended back-compat
-- [ ] ISC-84: Anti: creating a new budget version does not silently rewrite historical materialised months
-- [ ] ISC-85: all gates green after the feature (bun test, typecheck, lint)
-- [ ] ISC-86: feature committed with a descriptive message
-- [ ] ISC-87: AppShell menu has a force-sync button — POSTs /api/sync, busy state while running, honest failure surface, invalidates budget queries on success (background cadence stays the hourly penny-sync.timer)
-- [ ] ISC-88: budget grid rows with pending activity show a muted pending indicator (amount), pending rows visible in the row popover; Spent/Left maths unchanged (ISC-23 exclusion preserved) — resolves the "synced but budget looks stale" report of 2026-07-14
 
 ## Test Strategy
 
@@ -183,8 +165,6 @@ Deliver a four-lens Distinguished Engineer review of BudgetBuddy — frontend, b
 - 2026-07-02: Prior reviews (FRONTEND_STAFF_REVIEW_2026-07-01 + remediation commits, ARCHITECT_REVIEW, PRODUCT_REVIEW, UX_REVIEW) are provided to agents as context so findings assess the *post-remediation* state.
 - 2026-07-02: First architecture agent stalled at the 600s watchdog; relaunched with a tightened prompt (prioritised read list, briskness instruction). No work lost — reviews are independent.
 - 2026-07-02: SystemsThinking capability invoked (forked skill run) produced three structural findings for synthesis: (1) Basiq migration severs the reconciliation anchor — no ISC fetches Basiq account balances, so the holding-vs-bank tripwire dies at PocketSmith decommission; (2) write-once EOD snapshots rebuild PocketSmith's derived-state divergence failure mode in-house (no snapshot-vs-recompute invalidation path); (3) running-balance series is pinned to the grid "by construction", removing an independent verification sensor. Leverage-ordered interventions recorded for the report.
-
-- 2026-07-14: Budget-chronology design assumptions (Nick's spec, my resolution rules): (1) effective dates are stored as dates but budget resolution buckets by MONTH — a line contributes its amount to every month from month(effectiveFrom) through month(effectiveTo), open-ended if null; (2) overlap within a month sums (Nick: "the total should be combined"); (3) completePrevious sets the previous open line's effectiveTo to the day before the new line's effectiveFrom — so a clean 1-Aug transition gives Jul=old, Aug=new, while unticking the box gives Aug=old+new; (4) template lines become append-only versions rather than overwrite-in-place, which also makes budget chronology auditable; (5) past materialised months are never rewritten by version creation. Sequencing: Wave 3 runs after Wave 2 because both touch budget/service and the store layer.
 
 ## Changelog
 

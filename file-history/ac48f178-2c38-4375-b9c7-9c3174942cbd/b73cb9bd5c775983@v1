@@ -1,0 +1,209 @@
+-- ══════════════════════════════════════════════════════════════════════════
+-- STAGED, NOT SEQUENCED. This file lives outside packages/db/drizzle/*.sql
+-- and is NOT picked up by drizzle-kit or migrate.ts on its own. It is a
+-- staging draft: the migration owner renumbers it into the real sequence
+-- (drizzle/00NN_*.sql + a _journal.json entry) before it runs anywhere.
+-- Do not point deploy tooling at this path directly.
+--
+-- Purpose: make Postgres row-level security actually bind for the app.
+-- See artifacts/reviews/2026-07-02-distinguished-review/ (00, 02 finding
+-- F1/B-1, 03 finding F1). Summary of the defect this fixes:
+--
+--   FORCE ROW LEVEL SECURITY is set on the tenant tables (0001_rls_policies.sql),
+--   but the app connects to Postgres as the `accessbuddy` role, which also
+--   OWNS every table (migrations run as it) and, per the cross-vendor audit,
+--   almost certainly carries BYPASSRLS (Cloud SQL's default non-IAM user
+--   creation path grants membership that behaves this way in practice —
+--   verify with query 1 below before trusting this comment). FORCE RLS does
+--   not bind for a role with BYPASSRLS regardless of ownership. Proof this is
+--   happening today: buildAuthContext (apps/web/src/lib/auth.ts:188-202)
+--   reads the FORCE-RLS table tenant_memberships on the raw pooled
+--   connection with no tenant context set, and login works in production for
+--   192 real members. Under genuinely enforced FORCE RLS that query returns
+--   zero rows and nobody could log in. So the role must be bypassing it.
+--
+-- ══════════════════════════════════════════════════════════════════════════
+-- VERIFICATION BUNDLE — run this against prod BEFORE and AFTER applying
+-- this migration. A single query proves "off" but never proves "on"; run
+-- all three every time.
+-- ══════════════════════════════════════════════════════════════════════════
+
+-- 1. Does the CURRENT app role silently defeat all RLS policies?
+--    Expect (today, pre-fix): accessbuddy | rolsuper=f | rolbypassrls=t (or
+--    ownership below explains it). Expect (post-fix, app running as the new
+--    role): accessbuddy_app | rolsuper=f | rolbypassrls=f.
+-- SELECT rolname, rolsuper, rolbypassrls FROM pg_roles
+--   WHERE rolname IN ('accessbuddy', 'accessbuddy_app');
+
+-- 2. Does the app role OWN the tables? Owners bypass RLS unless FORCE is
+--    set, and even FORCE does not help if the owner also has BYPASSRLS.
+--    Expect (post-fix): tableowner stays 'accessbuddy' (the migration
+--    owner) for every row; rowsecurity=t and forcerowsecurity=t for every
+--    tenant-scoped table listed in packages/db/src/rls.ts RLS_TABLES.
+-- SELECT tablename, tableowner, rowsecurity, forcerowsecurity
+--   FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;
+
+-- 3. Is a policy defined on EVERY tenant-scoped table, or only some?
+--    Expect: every table from RLS_TABLES appears with policycount >= 2
+--    (one SELECT/USING policy, one INSERT/WITH CHECK policy).
+-- SELECT tablename, COUNT(*) AS policycount FROM pg_policies
+--   WHERE schemaname = 'public' GROUP BY tablename ORDER BY tablename;
+
+-- 4. The two-tenant proof that actually matters: as the NEW role, with NO
+--    tenant context set, confirm a query against a FORCE-RLS table with two
+--    real tenants' data returns ZERO rows (not "only tenant A's rows" —
+--    zero, because no context is set at all).
+-- SET ROLE accessbuddy_app;
+-- SELECT count(*) FROM tenant_memberships; -- expect 0
+-- RESET ROLE;
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- PART 1 — dedicated, non-bypassing application role
+-- ══════════════════════════════════════════════════════════════════════════
+-- Deliberately does NOT set a password here. Secrets do not belong in a
+-- file committed to git. The operator sets/rotates the password out of
+-- band (Secret Manager, then `ALTER ROLE accessbuddy_app WITH PASSWORD
+-- '...'`), exactly as the other Stripe/Resend secrets already are.
+--
+-- infra-ops follow-up: this role should also be codified in
+-- infra/terraform/main.tf (a second google_sql_user resource) so it is not
+-- a clickops-only artefact — out of scope for this file (I own
+-- packages/db/src/rls.ts and this migration, not infra/terraform/*).
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'accessbuddy_app') THEN
+    CREATE ROLE accessbuddy_app WITH
+      LOGIN
+      NOSUPERUSER
+      NOCREATEDB
+      NOCREATEROLE
+      NOREPLICATION
+      NOBYPASSRLS;
+  ELSE
+    -- Idempotent: if the role already exists (e.g. re-running this staged
+    -- file after renumbering), make sure its attributes are still correct
+    -- rather than assuming they were set right the first time.
+    ALTER ROLE accessbuddy_app WITH
+      NOSUPERUSER
+      NOCREATEDB
+      NOCREATEROLE
+      NOREPLICATION
+      NOBYPASSRLS;
+  END IF;
+END
+$$;
+
+-- Cloud SQL grants every non-IAM user CREATEROLE and membership behaviour
+-- that has, in practice, been observed to bypass RLS (see the header
+-- comment and the audit in 03-architecture-review.md F1). If this role was
+-- ever granted `cloudsqlsuperuser` (directly or by being created through
+-- the Cloud SQL API/Terraform `google_sql_user` resource rather than this
+-- SQL file), revoke it explicitly. This is safe to run even if the role
+-- was never a member.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cloudsqlsuperuser') THEN
+    EXECUTE 'REVOKE cloudsqlsuperuser FROM accessbuddy_app';
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Not fatal to the rest of this migration if the revoke target doesn't
+  -- apply on this instance; surface it for the operator instead of
+  -- aborting a migration that also needs to land the FORCE RLS fixes below.
+  RAISE NOTICE 'Could not revoke cloudsqlsuperuser from accessbuddy_app: %', SQLERRM;
+END
+$$;
+
+-- Connection + schema usage. Table ownership stays with `accessbuddy` (the
+-- existing role); migrations keep running as the owner. This role only
+-- gets the DML it needs to serve requests.
+GRANT CONNECT ON DATABASE accessbuddy TO accessbuddy_app;
+GRANT USAGE ON SCHEMA public TO accessbuddy_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO accessbuddy_app;
+
+-- Cover tables created by future migrations (still run as the `accessbuddy`
+-- owner) without needing to re-run this GRANT every time.
+ALTER DEFAULT PRIVILEGES FOR ROLE accessbuddy IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO accessbuddy_app;
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- PART 2 — RLS coverage drift: reconciliation tables were ENABLE-only
+-- ══════════════════════════════════════════════════════════════════════════
+-- 0009_reconciliations.sql set ENABLE ROW LEVEL SECURITY but not FORCE, and
+-- never added these tables to RLS_TABLES in rls.ts (fixed in this branch).
+-- Without FORCE, the table owner (`accessbuddy`, which also runs the app
+-- today) is exempt from its own policies regardless of context — ENABLE
+-- alone was never going to isolate anything for the current connection
+-- role, only for other, non-owning roles. FORCE closes that gap; the role
+-- switch in Part 1 closes the rest.
+
+ALTER TABLE "reconciliations" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "reconciliation_discrepancies" FORCE ROW LEVEL SECURITY;
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- PART 3 — attestation_requests has NO row-level security at all
+-- ══════════════════════════════════════════════════════════════════════════
+-- Created in migration 0002_feature_batch_20260331.sql with a NOT NULL
+-- tenant_id column, but no ENABLE/FORCE/policy statements were ever written
+-- for it, and it was missing from RLS_TABLES. This table was completely
+-- unprotected by RLS from day one — the app-layer tenant_id filter has been
+-- the ONLY control on it. Add the same tenant-isolation shape used for
+-- every other tenant table.
+
+ALTER TABLE "attestation_requests" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "tenant_isolation_attestation_requests" ON "attestation_requests"
+  USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+CREATE POLICY "tenant_insert_attestation_requests" ON "attestation_requests"
+  FOR INSERT WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+ALTER TABLE "attestation_requests" FORCE ROW LEVEL SECURITY;
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- NOT DONE HERE: email_configurations (ISC-9)
+-- ══════════════════════════════════════════════════════════════════════════
+-- packages/db/src/schema/email-config.ts declares this table and it is
+-- already listed in RLS_TABLES (packages/db/src/rls.ts) in anticipation,
+-- but no migration creates it yet in this repo (that migration is a
+-- separate, already-tracked backlog item — ISC-9 — and not part of this
+-- tenant-isolation slice; I do not own packages/db/drizzle/*.sql outside
+-- this manual/ staging file). Whoever writes that CREATE TABLE migration
+-- MUST also add, in the same migration:
+--   ALTER TABLE "email_configurations" ENABLE ROW LEVEL SECURITY;
+--   CREATE POLICY "tenant_isolation_email_configurations" ON "email_configurations"
+--     USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+--   CREATE POLICY "tenant_insert_email_configurations" ON "email_configurations"
+--     FOR INSERT WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+--   ALTER TABLE "email_configurations" FORCE ROW LEVEL SECURITY;
+-- Otherwise it repeats exactly the attestation_requests gap fixed above.
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- OPERATIONAL CUTOVER — coordinated change, NOT executed by this migration
+-- ══════════════════════════════════════════════════════════════════════════
+-- Creating accessbuddy_app here does nothing on its own; the app still
+-- connects as `accessbuddy` until DATABASE_URL is switched. That switch is
+-- a separate, coordinated production change with its own blast radius and
+-- is deliberately NOT done by this file or by this agent. It requires, in
+-- this order:
+--
+--   1. Set a password for accessbuddy_app and store it in Secret Manager
+--      (same pattern as the other DB/Stripe/Resend secrets).
+--   2. Run this migration (renumbered into the real sequence) against prod
+--      AS THE EXISTING OWNER ROLE, so table ownership is untouched.
+--   3. Run the verification bundle above and confirm all three checks pass
+--      for accessbuddy_app (rolbypassrls=f, tableowner unchanged,
+--      forcerowsecurity=t everywhere) BEFORE flipping traffic.
+--   4. Update Cloud Run's DATABASE_URL secret/env var to use
+--      accessbuddy_app's credentials instead of accessbuddy's, deployed
+--      with `gcloud run services update --update-env-vars` (NEVER
+--      `--set-env-vars` — see the ISA constraint; that wipes every other
+--      env var and has caused a prod outage before).
+--   5. Watch error rates immediately after rollout: if any query was
+--      relying on RLS-bypass behaviour that the app-layer filters in this
+--      branch do not already cover, it will start returning empty results
+--      or permission errors under the new role, not silently succeed.
+--   6. Migrations continue to run as `accessbuddy` (the owner) — do not
+--      point db:migrate at accessbuddy_app, it has no DDL rights and none
+--      of CREATEROLE/ownership, by design.
+--
+-- This agent explicitly does not run gcloud/psql against production and
+-- does not attempt to connect to the production database. Steps 1-6 are
+-- for a human operator (or infra-ops) to execute and verify.

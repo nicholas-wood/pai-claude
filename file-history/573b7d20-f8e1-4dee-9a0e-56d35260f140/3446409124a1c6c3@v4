@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+"""Compile the incident-categorisation markdown artefacts into one Word doc."""
+import re, sys, os
+from docx import Document
+from docx.shared import Pt, Inches, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+SRC = sys.argv[1]          # directory holding the .md files
+OUT = sys.argv[2]          # output .docx path
+
+FILES = [
+    ("Pack-Overview.md", "About This Pack"),
+    ("LIMSOC-BRIEF-LSV-2026-001-Incident-Categorisation.md", "Project Brief"),
+    ("Model-Design.md", "Model Design"),
+    ("Migration-Map.md", "Migration Map"),
+    ("Decision-Log.md", "Decision Log"),
+    ("SME-Feedback.md", "SME Feedback"),
+]
+
+doc = Document()
+
+# Base style: Arial 10, per LSV template convention
+style = doc.styles["Normal"]
+style.font.name = "Arial"
+style.font.size = Pt(10)
+
+def add_runs(par, text):
+    """Handle **bold** and `code` inline."""
+    pos = 0
+    for m in re.finditer(r"\*\*(.+?)\*\*|`(.+?)`", text):
+        if m.start() > pos:
+            par.add_run(text[pos:m.start()])
+        if m.group(1) is not None:
+            r = par.add_run(m.group(1)); r.bold = True
+        else:
+            r = par.add_run(m.group(2)); r.font.name = "Courier New"
+        pos = m.end()
+    if pos < len(text):
+        par.add_run(text[pos:])
+
+def add_table(rows):
+    """rows: list of lists of cell strings; first row is header."""
+    if not rows:
+        return
+    ncols = max(len(r) for r in rows)
+    t = doc.add_table(rows=len(rows), cols=ncols)
+    t.style = "Table Grid"
+    for i, row in enumerate(rows):
+        for j in range(ncols):
+            cell = t.cell(i, j)
+            cell.text = ""
+            p = cell.paragraphs[0]
+            txt = row[j] if j < len(row) else ""
+            add_runs(p, txt)
+            for r in p.runs:
+                r.font.name = "Arial"; r.font.size = Pt(9)
+                if i == 0:
+                    r.bold = True
+    doc.add_paragraph()
+
+def parse_cells(line):
+    return [c.strip() for c in line.strip().strip("|").split("|")]
+
+def emit(md, section_title):
+    doc.add_heading(section_title, level=1)
+    lines = md.splitlines()
+    i = 0
+    # strip YAML frontmatter -> metadata table
+    if lines and lines[0].strip() == "---":
+        j = 1
+        while j < len(lines) and lines[j].strip() != "---":
+            j += 1
+        meta = [l for l in lines[1:j] if ":" in l]
+        rows = [["Field", "Value"]] + [[l.split(":",1)[0].strip(), l.split(":",1)[1].strip().strip('"')] for l in meta]
+        add_table(rows)
+        i = j + 1
+    in_code = False
+    code_buf = []
+    table_buf = []
+    def flush_table():
+        nonlocal table_buf
+        if table_buf:
+            rows = [parse_cells(l) for l in table_buf if not re.match(r"^\s*\|[\s\-|:]+\|\s*$", l)]
+            add_table(rows)
+            table_buf = []
+    while i < len(lines):
+        line = lines[i]; i += 1
+        if line.strip().startswith("```"):
+            if in_code:
+                p = doc.add_paragraph()
+                r = p.add_run("\n".join(code_buf))
+                r.font.name = "Courier New"; r.font.size = Pt(8.5)
+                p.paragraph_format.left_indent = Inches(0.3)
+                code_buf = []
+            in_code = not in_code
+            continue
+        if in_code:
+            code_buf.append(line)
+            continue
+        if line.strip().startswith("|"):
+            table_buf.append(line)
+            continue
+        flush_table()
+        s = line.strip()
+        if not s:
+            continue
+        m = re.match(r"^(#{1,4})\s+(.*)$", s)
+        if m:
+            level = len(m.group(1))
+            if level == 1:
+                continue  # file H1 replaced by section heading
+            doc.add_heading(m.group(2), level=min(level, 4))
+            continue
+        if s.startswith(">"):
+            p = doc.add_paragraph()
+            p.paragraph_format.left_indent = Inches(0.3)
+            add_runs(p, s.lstrip("> ").strip())
+            for r in p.runs:
+                r.italic = True
+            continue
+        bm = re.match(r"^(\s*)[-*]\s+(.*)$", line)
+        if bm:
+            depth = min(len(bm.group(1)) // 4, 2)
+            styles = ["List Bullet", "List Bullet 2", "List Bullet 3"]
+            p = doc.add_paragraph(style=styles[depth])
+            add_runs(p, bm.group(2))
+            continue
+        nm = re.match(r"^\s*(\d+)\.\s+(.*)$", s)
+        if nm:
+            p = doc.add_paragraph(style="List Number")
+            add_runs(p, nm.group(2))
+            continue
+        p = doc.add_paragraph()
+        add_runs(p, s)
+    flush_table()
+
+# Title block
+t = doc.add_paragraph()
+r = t.add_run("LIMSOC Incident Categorisation")
+r.font.size = Pt(22); r.bold = True
+sub = doc.add_paragraph()
+r = sub.add_run("Design Pack, Model v0.6 and Migration Map, 8 July 2026")
+r.font.size = Pt(12); r.font.color.rgb = RGBColor(0x44, 0x44, 0x44)
+sub2 = doc.add_paragraph()
+r = sub2.add_run("LIMSOC-BRIEF-LSV-2026-001 | Season 2026-27 | Focus Area 1: Enhance Our Incident Management | Working draft, not yet SME-circulated")
+r.font.size = Pt(9); r.italic = True
+doc.add_paragraph()
+
+for fname, title in FILES:
+    path = os.path.join(SRC, fname)
+    with open(path, encoding="utf-8") as f:
+        emit(f.read(), title)
+    doc.add_page_break()
+
+# drop trailing page break's empty paragraph if any
+doc.save(OUT)
+print("saved:", OUT)

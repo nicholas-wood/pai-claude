@@ -1,0 +1,232 @@
+import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import {
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse,
+} from "@simplewebauthn/server";
+import { db, webauthnCredentials, users } from "@accessbuddy/db";
+import { eq } from "drizzle-orm";
+import {
+  rpID,
+  origin,
+  CHALLENGE_COOKIE,
+  CHALLENGE_MAX_AGE,
+} from "@/lib/webauthn";
+
+const SESSION_COOKIE_NAME = "session";
+const SESSION_MAX_AGE = 60 * 60 * 24 * 14; // 14 days
+
+/**
+ * GET - Generate authentication options (challenge).
+ * No session required - this is used on the sign-in page.
+ */
+export async function GET(): Promise<NextResponse> {
+  try {
+    const options = await generateAuthenticationOptions({
+      rpID,
+      userVerification: "preferred",
+      // Empty allowCredentials = let the authenticator show available passkeys
+    });
+
+    const cookieStore = await cookies();
+    cookieStore.set(CHALLENGE_COOKIE, options.challenge, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
+      maxAge: CHALLENGE_MAX_AGE,
+    });
+
+    return NextResponse.json(options);
+  } catch (err) {
+    console.error("WebAuthn login options error:", err);
+    return NextResponse.json({ error: "Failed to generate options" }, { status: 500 });
+  }
+}
+
+/**
+ * POST - Verify authentication response and create session.
+ * No session required - this replaces the magic link flow.
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const cookieStore = await cookies();
+    const challenge = cookieStore.get(CHALLENGE_COOKIE)?.value;
+
+    if (!challenge) {
+      return NextResponse.json({ error: "Challenge expired" }, { status: 400 });
+    }
+
+    cookieStore.delete(CHALLENGE_COOKIE);
+
+    // Look up the credential
+    const [storedCred] = await db
+      .select()
+      .from(webauthnCredentials)
+      .where(eq(webauthnCredentials.credentialId, body.id))
+      .limit(1);
+
+    if (!storedCred) {
+      return NextResponse.json({ error: "Credential not found" }, { status: 400 });
+    }
+
+    const verification = await verifyAuthenticationResponse({
+      response: body,
+      expectedChallenge: challenge,
+      expectedOrigin: origin,
+      expectedRPID: rpID,
+      credential: {
+        id: storedCred.credentialId,
+        publicKey: new Uint8Array(Buffer.from(storedCred.publicKey, "base64")),
+        counter: storedCred.counter,
+        transports: storedCred.transports?.split(",") as AuthenticatorTransport[] | undefined,
+      },
+    });
+
+    if (!verification.verified) {
+      return NextResponse.json({ error: "Verification failed" }, { status: 400 });
+    }
+
+    // Update counter
+    await db
+      .update(webauthnCredentials)
+      .set({ counter: verification.authenticationInfo.newCounter })
+      .where(eq(webauthnCredentials.id, storedCred.id));
+
+    // Look up the user
+    const [user] = await db
+      .select({ id: users.id, email: users.email })
+      .from(users)
+      .where(eq(users.id, storedCred.userId))
+      .limit(1);
+
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 400 });
+    }
+
+    // Create session - for WebAuthn, we use a signed token approach.
+    // In production with Firebase, we create a custom token and exchange it.
+    // In dev, we use the email directly.
+    const hasServiceAccount = !!process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+    let sessionValue: string;
+
+    if (hasServiceAccount) {
+      const { getAdminAuth } = await import("@/lib/firebase-admin");
+      const adminAuth = getAdminAuth();
+      // Look up Firebase UID for this user
+      const [dbUser] = await db
+        .select({ firebaseUid: users.firebaseUid })
+        .from(users)
+        .where(eq(users.id, user.id))
+        .limit(1);
+
+      if (!dbUser) {
+        return NextResponse.json({ error: "User not found" }, { status: 400 });
+      }
+
+      // Create a custom token, then exchange for a session cookie
+      const customToken = await adminAuth.createCustomToken(dbUser.firebaseUid);
+      // Use the custom token to create a session cookie directly
+      // Firebase Admin can create session cookies from custom tokens
+      // but we need an ID token first. Instead, use createSessionCookie
+      // with a short-lived workaround: sign a simple JWT ourselves.
+      //
+      // Simpler approach: create a session cookie using the Firebase UID directly.
+      // This works because verifySessionCookie in auth.ts extracts the UID.
+      // We'll use createCustomToken and then sign a minimal session.
+      //
+      // Actually, the cleanest approach: Firebase Admin doesn't support
+      // creating session cookies from custom tokens. Instead, store a
+      // signed session identifier that getAuthUser can verify.
+      //
+      // For now: use the same session cookie pattern but with a marker
+      // that tells getAuthUser this is a WebAuthn session.
+      const { createHmac } = await import("node:crypto");
+      const secret = process.env.CRON_SECRET ?? "webauthn-session-secret";
+      const payload = JSON.stringify({
+        uid: dbUser.firebaseUid,
+        email: user.email,
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + SESSION_MAX_AGE,
+        webauthn: true,
+      });
+      const sig = createHmac("sha256", secret).update(payload).digest("base64url");
+      sessionValue = `webauthn.${Buffer.from(payload).toString("base64url")}.${sig}`;
+    } else {
+      // Dev mode: simple JWT-like structure
+      const payload = JSON.stringify({
+        email: user.email,
+        sub: user.id,
+        webauthn: true,
+      });
+      sessionValue = `webauthn.${Buffer.from(payload).toString("base64url")}.dev`;
+    }
+
+    cookieStore.set(SESSION_COOKIE_NAME, sessionValue, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: SESSION_MAX_AGE,
+    });
+
+    // Return routing hints (same pattern as session/route.ts)
+    const { adminAssignments, tenants, tenantMemberships } = await import("@accessbuddy/db");
+
+    let isAdmin = false;
+    let tenantSlug: string | null = null;
+    let membershipCount = 0;
+
+    const [admin] = await db
+      .select({ tenantId: adminAssignments.tenantId })
+      .from(adminAssignments)
+      .where(eq(adminAssignments.userId, user.id))
+      .limit(1);
+
+    if (admin?.tenantId) {
+      const [t] = await db.select({ slug: tenants.slug }).from(tenants).where(eq(tenants.id, admin.tenantId)).limit(1);
+      if (t) { isAdmin = true; tenantSlug = t.slug; }
+    } else if (admin && !admin.tenantId) {
+      const [t] = await db.select({ slug: tenants.slug }).from(tenants).limit(1);
+      if (t) { isAdmin = true; tenantSlug = t.slug; }
+    }
+
+    const memberships = await db
+      .select({ tenantId: tenantMemberships.tenantId })
+      .from(tenantMemberships)
+      .where(eq(tenantMemberships.userId, user.id));
+    membershipCount = memberships.length;
+
+    if (!isAdmin && membershipCount > 0) {
+      const [t] = await db
+        .select({ slug: tenants.slug })
+        .from(tenants)
+        .where(eq(tenants.id, memberships[0].tenantId))
+        .limit(1);
+      if (t) tenantSlug = t.slug;
+    }
+
+    // Audit login
+    const { AuditEntityType, AuditAction } = await import("@accessbuddy/shared");
+    const { createAuditEntry } = await import("@/lib/services/audit");
+    const { getClientIp } = await import("@/lib/rate-limit");
+    const ip = getClientIp(request);
+    const loginTenantId = admin?.tenantId ?? memberships[0]?.tenantId ?? null;
+    createAuditEntry(db, {
+      tenantId: loginTenantId,
+      entityType: AuditEntityType.MEMBER,
+      entityId: user.id,
+      action: AuditAction.LOGIN,
+      actorId: user.id,
+      actorType: "user",
+      metadata: { email: user.email, method: "webauthn" },
+      ipAddress: ip === "unknown" ? null : ip,
+    }).catch(() => {});
+
+    return NextResponse.json({ success: true, isAdmin, tenantSlug, membershipCount });
+  } catch (err) {
+    console.error("WebAuthn login verify error:", err);
+    return NextResponse.json({ error: "Authentication failed" }, { status: 500 });
+  }
+}

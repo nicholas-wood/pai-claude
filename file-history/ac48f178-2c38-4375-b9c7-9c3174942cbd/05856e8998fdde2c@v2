@@ -1,0 +1,104 @@
+-- Tenant-#2 readiness, part 1 of 2: new tables + missing indexes.
+-- See artifacts/reviews/2026-07-02-distinguished-review/.
+--
+-- HAND-WRITTEN, NOT drizzle-kit generated. `drizzle-kit generate` cannot be
+-- used on this repo today: the meta/ directory only contains 0000_snapshot.json
+-- (snapshots 0001..0009 were never committed), and the 0000 baseline still
+-- declares users.clerk_user_id while the schema declares users.firebase_uid
+-- NOT NULL. Generate therefore wants to "create" firebase_uid, a column
+-- production demonstrably already has. Repairing that baseline is tracked
+-- separately (see MIGRATION_BASELINE_DRIFT in the branch summary) and must not
+-- be conflated with this additive migration. Every statement below creates a
+-- NEW object, so it is safe against the live schema regardless of the drift.
+
+-- ── otp_codes ────────────────────────────────────────────────────────────────
+-- Replaces the module-level in-memory Map in apps/web/src/lib/otp-store.ts,
+-- which lost codes on every Cloud Run scale-out and cold start (OTP is the
+-- PWA's only sign-in path). Codes are stored as a salted scrypt hash, are
+-- single-use (consumed_at), and are attempt-capped (attempts).
+-- NOT tenant-scoped: keyed on email, issued pre-auth before any tenant context
+-- exists. Deliberately NOT added to RLS_TABLES.
+CREATE TABLE IF NOT EXISTS "otp_codes" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"email" text NOT NULL,
+	"code_hash" text NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL,
+	"attempts" integer DEFAULT 0 NOT NULL,
+	"consumed_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "otp_codes_email_idx" ON "otp_codes" ("email");
+--> statement-breakpoint
+
+-- ── rate_limit_buckets ───────────────────────────────────────────────────────
+-- Shared, cross-instance fixed-window buckets. The previous limiter was a
+-- per-instance in-memory Map, so the effective ceiling was N x limit across
+-- Cloud Run instances, and it was only ever applied to requests/submit.
+-- NOT tenant-scoped (keyed on IP/email pre-auth). Not in RLS_TABLES.
+CREATE TABLE IF NOT EXISTS "rate_limit_buckets" (
+	"key" text PRIMARY KEY NOT NULL,
+	"count" integer DEFAULT 1 NOT NULL,
+	"reset_at" timestamp with time zone NOT NULL
+);
+--> statement-breakpoint
+
+-- ── email_configurations ─────────────────────────────────────────────────────
+-- Backend finding B-3: this table is declared in packages/db/src/schema/
+-- email-config.ts and read/written by the email-template admin route, but NO
+-- migration ever created it. The journal ends at 0009. The feature therefore
+-- 500s in production today with "relation does not exist". Creating it here,
+-- WITH its RLS policies in the same migration (the attestation_requests table
+-- was created without them in 0002 and went unprotected for months — see 0011).
+CREATE TABLE IF NOT EXISTS "email_configurations" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"tenant_id" uuid NOT NULL,
+	"event_id" text NOT NULL,
+	"enabled" boolean DEFAULT true NOT NULL,
+	"subject_override" text,
+	"blocks" jsonb,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_by" uuid,
+	CONSTRAINT "email_configurations_tenant_id_tenants_id_fk"
+		FOREIGN KEY ("tenant_id") REFERENCES "tenants"("id"),
+	CONSTRAINT "email_configurations_updated_by_users_id_fk"
+		FOREIGN KEY ("updated_by") REFERENCES "users"("id"),
+	CONSTRAINT "email_config_tenant_event_unique"
+		UNIQUE("tenant_id","event_id")
+);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "email_configurations_tenant_idx" ON "email_configurations" ("tenant_id");
+--> statement-breakpoint
+ALTER TABLE "email_configurations" ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
+CREATE POLICY "tenant_isolation_email_configurations" ON "email_configurations"
+	USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+--> statement-breakpoint
+CREATE POLICY "tenant_insert_email_configurations" ON "email_configurations"
+	FOR INSERT WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+--> statement-breakpoint
+ALTER TABLE "email_configurations" FORCE ROW LEVEL SECURITY;
+--> statement-breakpoint
+
+-- ── Missing indexes (backend finding B-6) ────────────────────────────────────
+-- fob_requests and credentials carried a primary key and one unique constraint
+-- and nothing else. Foreign keys do NOT create indexes in Postgres, so the
+-- hottest paths in the product were sequential scans: the admin request queue
+-- filters fob_requests by (tenant_id, status); transitionRequest and the daily
+-- cron look credentials up by owner_id / request_id / serial_number / status;
+-- the Stripe dispute webhook looks fob_requests up by stripe_payment_intent_id.
+-- Fine at 354 credentials in one tenant; a scan that grows with total rows
+-- ACROSS ALL TENANTS is not fine at N tenants.
+CREATE INDEX IF NOT EXISTS "fob_requests_tenant_status_idx" ON "fob_requests" ("tenant_id","status");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "fob_requests_stripe_payment_intent_idx" ON "fob_requests" ("stripe_payment_intent_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "fob_requests_requester_idx" ON "fob_requests" ("requester_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "credentials_tenant_status_idx" ON "credentials" ("tenant_id","status");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "credentials_owner_idx" ON "credentials" ("owner_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "credentials_request_idx" ON "credentials" ("request_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "credentials_serial_number_idx" ON "credentials" ("serial_number");

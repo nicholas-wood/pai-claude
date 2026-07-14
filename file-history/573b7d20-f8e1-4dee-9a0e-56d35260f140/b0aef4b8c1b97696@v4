@@ -1,0 +1,131 @@
+# Incident Categorisation - Migration Map
+
+**v0.2 (2026-07-08).** Every current LIMSOC incident type mapped to its new home in the proposed model (see Model Design). Source: `IncidentTypes-2026-07-08.xlsx` (72 types, exported from LIMSOC 2026-07-08). Rows marked **FLAG** need a decision before the map is final. Everything else follows mechanically from the locked rules.
+
+Legend for the New Home column. `Type:` a node in the new tree. `Tag:` a controlled tag. `Outcome:` an Incident Outcome value. `Status:` carried by Agency Status. `Out:` leaves the incident taxonomy.
+
+## SAR (4 types)
+
+| Code | Current type | New home | Notes |
+|------|--------------|----------|-------|
+| A01 | Missing Person - Land | Type: SAR > Search > Person, Tag: Land | Land/water becomes a Tag. Tree has one Person node |
+| A02 | Missing Person - Water | Type: SAR > Search > Person, Tag: Water | As above |
+| A03 | Missing Vessel | Type: SAR > Search > Vessel | Direct |
+| A04 | AMSA Tasking | **FLAG** Type: External Agency > Tasking, Tag: AMSA | Whose-incident rule says Tasking (AMSA's job, we are a resource). But these are SAR jobs and moving them out of the SAR family changes SAR statistics. Confirm the stats treatment before locking |
+
+## RESC (5 types)
+
+| Code | Current type | New home | Notes |
+|------|--------------|----------|-------|
+| C01 | Injury (inactive) | Type: SAR > Rescue > Person | Injury moves to IRL and Outcome |
+| C02 | No Injury (inactive) | Type: SAR > Rescue > Person | As above |
+| C03 | Rescue (In Water) - Condition Unknown | Type: SAR > Rescue > Person | Condition rides in IRL and log |
+| C04 | Helicopter Rescue | Type: SAR > Rescue > Person, Tag: Rescue Completed | Method (Heli) captured by the Rescue form, which must flow back to the incident. Platform requirement already logged |
+| MR | Mass Rescue (category) | Tag: Mass Rescue on a Rescue or SAR | Scale is a Tag, not a Type |
+
+## MED (20 types)
+
+| Code | Current type | New home | Notes |
+|------|--------------|----------|-------|
+| D01 | Resuscitation | Type: Medical > Cardiac or Respiratory Arrest / Death, Tag: Resuscitation | Tag drives the FA form requirement |
+| D02 | Chest Pain | Type: Medical > Chest Pain | Direct MPDS match |
+| D03 | Breathing Problems | Type: Medical > Breathing Problems | Direct MPDS match |
+| D04 | Suspected Spinal Injury | Type: Medical > Traumatic Injuries, Tag: Spinal | Specific location captured as a Tag |
+| D05 | Suspected Drug Overdose | Type: Medical > Overdose / Poisoning (Ingestion) | Direct MPDS match |
+| D06 | Unconscious/Fainting | Type: Medical > Unconscious / Fainting (Near) | Direct MPDS match |
+| D07 | Fall | Type: Medical > Falls | Direct MPDS match |
+| D08 | Penetrating Trauma | Type: Medical > Stab / Gunshot / Penetrating Trauma | Direct MPDS match |
+| D09 | Serious Bleeding | Type: Medical > Hemorrhage / Lacerations | Direct MPDS match |
+| D10 | Laceration | Type: Medical > Hemorrhage / Lacerations | Merges with D09 |
+| D11 | Needle Stick Injury | **FLAG** Type: Medical > Stab / Gunshot / Penetrating Trauma, Tag: Needle Stick | Defensible under Hemorrhage / Lacerations too. Pick one and keep the Tag either way |
+| D12 | Burns | Type: Medical > Burns (Scalds) / Explosions | Direct MPDS match |
+| D13 | Fracture | Type: Medical > Traumatic Injuries, Tag: Fracture | Merges into Traumatic Injuries |
+| D14 | Dislocation | Type: Medical > Traumatic Injuries, Tag: Dislocation | As above |
+| D15 | Heat-Cold Exposure | Type: Medical > Heat / Cold Exposure | Direct MPDS match |
+| D16 | Sprain-Strain | Type: Medical > Traumatic Injuries, Tag: Soft Tissue | Merges into Traumatic Injuries |
+| D17 | Marine Sting | Type: Medical > Allergies (Reactions) / Envenomations (Stings, Bites), Tag: Marine Envenomation | Animal identity as a further Tag |
+| D18 | Allergic Reaction | Type: Medical > Allergies (Reactions) / Envenomations (Stings, Bites) | Direct MPDS match |
+| D19 | Seizure | Type: Medical > Convulsions / Seizures | Direct MPDS match |
+| D20 | Suspected Stroke | Type: Medical > Stroke (CVA) / Transient Ischemic Attack (TIA) | Direct MPDS match |
+| D21 | Welfare | **FLAG** Type: Medical > Sick Person, Tag: Welfare Check | Straddles Sick Person and Psychiatric / Suicide Attempt. Recommend Sick Person with a Welfare Check Tag, refine at response if psychiatric |
+| D99 | Other Medical Incident | Retired. Open as Medical (Not Final), refine before closure | The Not Final mechanism replaces the catch-all |
+
+## VINC (8 types)
+
+| Code | Current type | New home | Notes |
+|------|--------------|----------|-------|
+| B01 | Marine Incident - Injury | Type: Marine Incident > Vessel Incident > Assist, injury to IRL | Human first: if a person needed retrieval, precedence makes it a Rescue instead |
+| B02 | Marine Incident - No Injury | Type: Marine Incident > Vessel Incident > Assist or Report | Injury dimension leaves the Type |
+| B03 | Broken Down Vessel | Type: Marine Incident > Vessel Incident > Assist | Direct |
+| B04 | Problem Vessel | Type: Marine Incident > Vessel Incident > Report | Non-compliance is a report, not an assist |
+| B05 | Flare Sighting | **FLAG** Type: SAR > Search > Vessel or Marine Incident > Vessel Incident > Report | A flare is a distress signal, arguably opens as SAR. Recommend: opens as Marine Incident > Vessel Incident > Report, escalates to a SAR incident if a search response launches. Confirm |
+| B06 | Capsized Vessel | Type: Marine Incident > Vessel Incident > Assist | Human first: people in the water retrieved makes it SAR > Rescue > Person instead, per the precedence rule |
+| B99 | Other Vessel Incident | Retired. Open as Marine Incident (per state model), refine before closure | Catch-all replaced by tree walk |
+| E05/E04 | Confirmed / Unconfirmed Shark Sighting (both inactive) | Superseded by S-series below | Already inactive in LIMSOC |
+
+## SHARK (7 active types)
+
+| Code | Current type | New home | Notes |
+|------|--------------|----------|-------|
+| S01 | Unconfirmed Sighting - Reported to LSV | Type: Marine Incident > Dangerous Animal > Shark, Tags: Reported, Source: Public via LSV | Confirmation and source both Tags |
+| S02 | Unconfirmed Sighting - Reported to VicPol | As S01, Tag Source: Public via Victoria Police | |
+| S03 | Confirmed Sighting - by LSV | Type: Marine Incident > Dangerous Animal > Shark, Tags: Confirmed, Source: LSV | |
+| S04 | Confirmed Sighting - by Victoria Police | As S03, Source: Victoria Police | |
+| S05 | Confirmed Sighting - by Fisheries Victoria | As S03, Source: Fisheries Victoria | |
+| S06 | Confirmed Sighting - by other government agency | As S03, Source: Other Government Agency | |
+| S07 | Shark Attack - Reported | **FLAG** precedence-dependent | An attack has a patient. Locked precedence says a save wins: retrieval makes it SAR > Rescue > Person. Patient on beach makes it Medical > Animal Bites / Attacks. Both carry Tags Shark and source. Pure report with no patient contact stays Dangerous Animal > Shark, Tag Attack Reported. Confirm this three-way split is acceptable, it means "shark attack" is not one type in the new model |
+
+## DUR (3 types)
+
+| Code | Current type | New home | Notes |
+|------|--------------|----------|-------|
+| F01 | Duress Activation | Type: SAR > Emergency > Duress Activation | Stays through any subsequent rescue, per the activation rule |
+| F02 | Duress Activation - Accidental | Type: SAR > Emergency > Duress Activation, Tag: Accidental | Accidental is a Tag |
+| F03 | Rescue Equipment Activation | Type: SAR > Emergency > Rescue Equipment Activation | Same one-incident rule |
+
+## TASK (4 types)
+
+| Code | Current type | New home | Notes |
+|------|--------------|----------|-------|
+| T01 | EMLO Deployment | Type: External Agency > Tasking, Tag: EMLO | |
+| T02 | External Event Attendance | Type: External Agency > Tasking, Tag: Event Attendance | |
+| T03 | Assist External Agency | Type: External Agency > Tasking | The canonical Tasking |
+| E07 | Assist Extrication (INC category) | Type: External Agency > Tasking, Tag: Extrication | Retired as a Type. Worked example in Model Design, Tasking versus Incident |
+
+## BAU (8 types)
+
+| Code | Current type | New home | Notes |
+|------|--------------|----------|-------|
+| Z94 | Equipment Deployment | **FLAG** Out, or Advisory Information | "Information around large scale equipment deployment" is informational. Recommend Advisory Information with an Equipment Deployment Tag, or out-of-scope admin if it is purely logistics. Confirm |
+| Z95 | Test Incident | Out. Administrative, leaves the taxonomy | Settled, see Decision Log |
+| Z96 | COVID-19 Advisory Information | Out. COVID-era admin | Settled, see Decision Log |
+| Z97 | Advisory Information | Type: Advisory Information, refine to child | Direct ancestor of the new top-level node |
+| G01 | LSV Event / Carnival (inactive) | **FLAG** Out, or Advisory Information | Event awareness. Recommend out of the incident taxonomy. If command wants visibility, it is an Advisory Information child. Same call as G02 |
+| G02 | Local Event / Carnival | **FLAG** as G01 | |
+| L01 | LSV Equipment Fault | Type: Advisory Information > Equipment Fault | Direct |
+| Z99 (FA) | False Alarm | Outcome: False Alarm | Settled. Not a Type |
+
+## INC (13 active types)
+
+| Code | Current type | New home | Notes |
+|------|--------------|----------|-------|
+| E01 | Diving Accident | Type: Medical > Drowning / Diving / SCUBA Accident | Direct MPDS match |
+| E02 | Drowning Death | **FLAG** Type: SAR > Rescue or Search > Person, Outcome: Fatality | Depends on the Rescue versus Recovery definition (still open). If we responded and retrieved, it is Rescue with Outcome Fatality. If body search, Search with Outcome Fatality. Locks when call 3 locks |
+| E03 | Recovered from Water | Type: SAR > Rescue > Person, Outcome and IRL carry condition | Settled treatment in Model Design |
+| E06 | Request for Police | **FLAG** decompose | Us requesting police is not its own incident. It is the underlying incident (Medical, Rescue, Advisory) with Tag Multi-agency and police in responding services. If police request us, it is External Agency. Confirm the decompose |
+| E08 | External RPAS Operations (Non-LSV) | Type: Advisory Information, Tag: RPAS | Awareness item |
+| E09 | Dangerous Surf - Unpatrolled Location | Type: Advisory Information > Dangerous Conditions | Direct |
+| E10 | Beach Closure - COVID-19 | Out. COVID-era admin | A non-COVID closure would be Advisory Information > Dangerous Conditions |
+| E11 | Generic Animal Incident | **FLAG** no clean home | Distressed, deceased, or assistance-requiring animal is not a Dangerous Animal and not Medical. Options: (a) Advisory Information child, (b) new Marine Incident > Animal node covering dangerous and non-dangerous, (c) External Agency > Tasking when another agency owns wildlife response. Recommend (b), it keeps animal work in one place. Confirm |
+| E12 | Fatality | Outcome: Fatality | Not a Type. Settled |
+| E99 | Other Incident | Retired. The Not Final mechanism replaces the catch-all | Open at the most specific known node, refine before closure |
+| 176 | Medication Discrepancy | Type: Advisory Information > Medication Discrepancy | Direct. Meaning defined in Model Design, Top-level Type tree |
+| D-series in INC | (none) | | |
+| MR | Mass Rescue | Tag: Mass Rescue | Listed under RESC above |
+
+## Summary
+
+- 72 current types collapse into the new tree with 9 FLAG rows needing a decision: A04 AMSA stats treatment, D11 needle stick placement, D21 Welfare placement, B05 Flare Sighting opening type, S07 Shark Attack three-way split, Z94 Equipment Deployment, G01/G02 Event/Carnival, E06 Request for Police decompose, E11 Generic Animal home. E02 Drowning Death locks automatically when Rescue versus Recovery is settled.
+- Catch-alls (E99, D99, B99) retire in favour of the Not Final mechanism.
+- The shark S-series (6 sighting types) collapses to one Type plus two Tag dimensions, the biggest single simplification in the map.
+- Inactive types (C01, C02, E04, E05, G01) mapped for historical comparability only.

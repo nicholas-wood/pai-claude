@@ -1,0 +1,484 @@
+import { NextRequest, NextResponse } from "next/server";
+import { eq, and } from "drizzle-orm";
+import { db } from "@accessbuddy/db";
+import {
+  fobRequests,
+  users,
+  tenantMemberships,
+  credentialTypes,
+  credentials,
+  tenants,
+  auditLog,
+} from "@accessbuddy/db";
+import { resolveTenant } from "@/lib/tenant";
+import { withTenant } from "@/lib/with-tenant";
+import { determinePayment, shouldAutoApprove } from "@/lib/services/payment";
+import { transitionRequest } from "@/lib/services/requests";
+import { createAuditEntry } from "@/lib/services/audit";
+import { createPaymentIntent } from "@/lib/stripe";
+import { RequestStatus, CredentialStatus, AuditEntityType, AuditAction } from "@accessbuddy/shared";
+import type { TenantSettings } from "@accessbuddy/shared";
+import { sendTemplatedEmail, buildEmailConfig } from "@/lib/services/email";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { z } from "zod";
+
+const submitSchema = z.object({
+  requestType: z.string().min(1),
+  credentialTypeId: z.string().uuid().optional(),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  email: z.string().email(),
+  phone: z.string().optional(),
+  dateOfBirth: z.string().optional(),
+  membershipCategory: z.string().optional(),
+  replacesCredentialId: z.string().uuid().optional(),
+  selectedFobIds: z.array(z.string().uuid()).optional(),
+  lostFobType: z.string().optional(),
+  readerBeeps: z.enum(["beeps_no_access", "nothing_happens", "beeps_broken", "yes", "no"]).optional(),
+  physicalDamageDescription: z.string().min(10).max(1000).optional(),
+  accessUpdateReason: z.string().optional(),
+  isOrphaned: z.boolean().optional(),
+}).refine(
+  (d) => d.readerBeeps !== "beeps_no_access",
+  { message: "Your fob is working — please check your membership status rather than reporting damage.", path: ["readerBeeps"] },
+).refine(
+  (d) => d.readerBeeps !== "beeps_broken" || (d.physicalDamageDescription && d.physicalDamageDescription.trim().length >= 10),
+  { message: "Please describe how the fob broke (at least 10 characters).", path: ["physicalDamageDescription"] },
+);
+
+/**
+ * Public endpoint for request submission.
+ * Handles both authenticated members and orphaned (unlinked) submissions.
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  try {
+    const { slug } = await params;
+
+    // Per-IP rate limit on the public submission endpoint. 10 requests per
+    // 60 seconds. See apps/web/src/lib/rate-limit.ts for the threat model
+    // and the RATE_LIMIT_DISABLED kill switch.
+    const clientIp = getClientIp(request);
+    const rl = await checkRateLimit(`${clientIp}:${slug}`, {
+      namespace: "requests.submit",
+      windowSeconds: 60,
+      max: 10,
+    });
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "Too many requests, please wait a moment and try again." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rl.retryAfter) },
+        }
+      );
+    }
+
+    const tenant = await resolveTenant(slug);
+    if (!tenant) {
+      return NextResponse.json({ error: "Organisation not found" }, { status: 404 });
+    }
+
+    const body = await request.json();
+    const parsed = submitSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+
+    const data = parsed.data;
+    const email = data.email.toLowerCase().trim();
+    const settings = tenant.settings as TenantSettings;
+
+    // Try to find the member
+    const [existingUser] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    let membership = null;
+    if (existingUser) {
+      const [m] = await withTenant(tenant.id, async (tx) => {
+        return tx
+          .select()
+          .from(tenantMemberships)
+          .where(
+            and(
+              eq(tenantMemberships.userId, existingUser.id),
+              eq(tenantMemberships.tenantId, tenant.id)
+            )
+          )
+          .limit(1);
+      });
+      membership = m ?? null;
+    }
+
+    // Block new fob requests from emails that already have a membership
+    if (data.requestType === "new" && existingUser && membership) {
+      return NextResponse.json(
+        { error: "An account already exists with this email. Please sign in and use 'Request an additional fob' instead." },
+        { status: 409 }
+      );
+    }
+
+    // Backfill missing name on existing user record using the form-submitted values.
+    // Existing users can have empty first/last name if they were created as shell
+    // accounts during an earlier orphan flow. Without this, the admin queue shows a
+    // blank requester name even though the form captured it.
+    if (
+      existingUser &&
+      ((!existingUser.firstName && data.firstName) ||
+        (!existingUser.lastName && data.lastName))
+    ) {
+      await db
+        .update(users)
+        .set({
+          firstName: existingUser.firstName || data.firstName,
+          lastName: existingUser.lastName || data.lastName,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, existingUser.id));
+      existingUser.firstName = existingUser.firstName || data.firstName;
+      existingUser.lastName = existingUser.lastName || data.lastName;
+    }
+
+    const isOrphaned = data.requestType !== "new" && (!existingUser || !membership);
+
+    // Get credential type for pricing
+    let priceCents = 0;
+    if (data.credentialTypeId) {
+      const [ct] = await withTenant(tenant.id, async (tx) => {
+        return tx
+          .select()
+          .from(credentialTypes)
+          .where(eq(credentialTypes.id, data.credentialTypeId!))
+          .limit(1);
+      });
+      priceCents = ct?.priceCents ?? 0;
+    }
+
+    // Determine payment and status
+    const payment = determinePayment({
+      requestType: data.requestType,
+      membershipCategory: data.membershipCategory ?? membership?.membershipCategory ?? null,
+      tenantSettings: settings,
+      credentialPriceCents: priceCents,
+    });
+
+    let initialStatus: string = RequestStatus.SUBMITTED;
+    if (isOrphaned) {
+      initialStatus = RequestStatus.SUBMITTED; // Orphaned stays submitted until linked
+    } else if (payment.required) {
+      // Stay in SUBMITTED so the user can choose to pay or request exemption.
+      // The payment step on the client will handle the transition.
+      initialStatus = RequestStatus.SUBMITTED;
+    } else if (shouldAutoApprove(data.requestType)) {
+      initialStatus = RequestStatus.AWAITING_PROGRAMMING;
+    } else {
+      initialStatus = RequestStatus.AWAITING_APPROVAL;
+    }
+
+    // Check if this is a lost/damaged WITH replacement - needs two requests
+    const isLostDamagedWithReplacement =
+      (data.requestType === "replacement_lost" || data.requestType === "replacement_damaged") &&
+      data.credentialTypeId && !isOrphaned;
+
+    const result = await withTenant(tenant.id, async (tx) => {
+      let stripeClientSecret: string | null = null;
+      let stripeAccountId: string | null = null;
+
+      if (isLostDamagedWithReplacement) {
+        // Mark the old credential as lost/damaged immediately
+        if (data.replacesCredentialId) {
+          const credStatus = data.requestType === "replacement_lost"
+            ? CredentialStatus.LOST
+            : CredentialStatus.DAMAGED;
+          const now = new Date();
+
+          await tx
+            .update(credentials)
+            .set({
+              status: credStatus,
+              ...(credStatus === CredentialStatus.LOST ? { lostReportedAt: now } : {}),
+              updatedAt: now,
+            })
+            .where(
+              and(
+                eq(credentials.id, data.replacesCredentialId),
+                eq(credentials.tenantId, tenant.id)
+              )
+            );
+
+          await createAuditEntry(tx, {
+            tenantId: tenant.id,
+            entityType: AuditEntityType.CREDENTIAL,
+            entityId: data.replacesCredentialId,
+            action: AuditAction.STATUS_CHANGE,
+            fromState: CredentialStatus.ACTIVE,
+            toState: credStatus,
+            actorId: existingUser!.id,
+            metadata: { action: "reported_via_submit", requestType: data.requestType },
+          });
+        }
+
+        // REQUEST 1: Deactivation request - goes straight to programming queue
+        // Look up the credential serial number for the programming instruction
+        let replacesSerial: string | null = null;
+        let replacesCredTypeId: string | null = null;
+        if (data.replacesCredentialId) {
+          const [oldCred] = await tx
+            .select({ serialNumber: credentials.serialNumber, credentialTypeId: credentials.credentialTypeId })
+            .from(credentials)
+            .where(eq(credentials.id, data.replacesCredentialId))
+            .limit(1);
+          if (oldCred) {
+            replacesSerial = oldCred.serialNumber;
+            replacesCredTypeId = oldCred.credentialTypeId;
+          }
+        }
+
+        const deactivationType = data.requestType === "replacement_lost"
+          ? "replacement_lost" : "replacement_damaged";
+        const [deactivateReq] = await tx
+          .insert(fobRequests)
+          .values({
+            tenantId: tenant.id,
+            requesterId: existingUser!.id,
+            credentialTypeId: replacesCredTypeId,
+            requestType: deactivationType,
+            status: RequestStatus.AWAITING_PROGRAMMING,
+            paymentExempt: true,
+            replacesCredentialId: data.replacesCredentialId ?? null,
+            serialNumber: replacesSerial,
+            submittedAt: new Date(),
+          })
+          .returning();
+
+        await createAuditEntry(tx, {
+          tenantId: tenant.id,
+          entityType: AuditEntityType.FOB_REQUEST,
+          entityId: deactivateReq.id,
+          action: AuditAction.CREATE,
+          toState: RequestStatus.AWAITING_PROGRAMMING,
+          actorId: existingUser!.id,
+          actorType: "user",
+          metadata: { requestType: deactivationType, action: "deactivate_fob", replacesCredentialId: data.replacesCredentialId },
+        });
+
+        // Damaged fob replacements: auto-request exemption so admin reviews payment need
+        const isDamagedReplacement = data.requestType === "replacement_damaged";
+        const damagedAutoExempt = isDamagedReplacement && payment.required;
+        const readerBeepsLabel: Record<string, string> = {
+          nothing_happens: "Nothing happens when swiped (suspected faulty fob).",
+          beeps_broken: "Reader beeps, but the fob is physically broken.",
+          // Legacy values kept for compatibility with older clients
+          yes: "Reader beeps but does not unlock.",
+          no: "Nothing happens when swiped.",
+        };
+        const readerBeepsText = data.readerBeeps ? readerBeepsLabel[data.readerBeeps] ?? "" : "";
+        const physicalDamageText =
+          data.readerBeeps === "beeps_broken" && data.physicalDamageDescription
+            ? ` Member describes the damage as: "${data.physicalDamageDescription.trim()}"`
+            : "";
+        const autoExemptionReason = damagedAutoExempt
+          ? `Damaged fob replacement - payment pending admin review. ${readerBeepsText}${physicalDamageText}`.trim()
+          : undefined;
+
+        // REQUEST 2: Replacement request
+        const replacementStatus = damagedAutoExempt ? RequestStatus.SUBMITTED : initialStatus;
+        const [replacementReq] = await tx
+          .insert(fobRequests)
+          .values({
+            tenantId: tenant.id,
+            requesterId: existingUser!.id,
+            credentialTypeId: data.credentialTypeId!,
+            requestType: "new",
+            status: replacementStatus,
+            paymentExempt: damagedAutoExempt ? false : !payment.required,
+            paymentAmountCents: payment.required ? payment.amountCents : null,
+            relatedRequestId: deactivateReq.id,
+            exemptionRequested: damagedAutoExempt,
+            exemptionReason: autoExemptionReason ?? null,
+            submittedAt: new Date(),
+          })
+          .returning();
+
+        await createAuditEntry(tx, {
+          tenantId: tenant.id,
+          entityType: AuditEntityType.FOB_REQUEST,
+          entityId: replacementReq.id,
+          action: AuditAction.CREATE,
+          toState: replacementStatus,
+          actorId: existingUser!.id,
+          actorType: "user",
+          metadata: {
+            requestType: "replacement_new",
+            relatedDeactivationId: deactivateReq.id,
+            ...(isDamagedReplacement && data.readerBeeps ? { readerBeeps: data.readerBeeps } : {}),
+            ...(isDamagedReplacement && data.physicalDamageDescription
+              ? { physicalDamageDescription: data.physicalDamageDescription.trim() }
+              : {}),
+          },
+        });
+
+        // For damaged replacements requiring payment: transition to exemption review
+        if (damagedAutoExempt) {
+          await transitionRequest(tx, {
+            requestId: replacementReq.id,
+            tenantId: tenant.id,
+            event: "REQUEST_EXEMPTION",
+            actorId: existingUser!.id,
+            updates: {
+              exemptionRequested: true,
+              exemptionReason: autoExemptionReason!,
+            },
+            metadata: { reason: autoExemptionReason! },
+          });
+        }
+
+        // Stripe payment for non-damaged replacements if needed
+        if (payment.required && !damagedAutoExempt) {
+          const [tenantRow] = await tx
+            .select({ stripeAccountId: tenants.stripeAccountId })
+            .from(tenants)
+            .where(eq(tenants.id, tenant.id))
+            .limit(1);
+
+          stripeAccountId = tenantRow?.stripeAccountId ?? null;
+          const intent = await createPaymentIntent({
+            amountCents: payment.amountCents,
+            stripeAccountId,
+            metadata: { requestId: replacementReq.id, tenantId: tenant.id },
+          });
+
+          await tx
+            .update(fobRequests)
+            .set({ stripePaymentIntentId: intent.paymentIntentId })
+            .where(eq(fobRequests.id, replacementReq.id));
+
+          stripeClientSecret = intent.clientSecret;
+        }
+
+        return {
+          request: replacementReq,
+          deactivationRequest: deactivateReq,
+          isOrphaned: false,
+          paymentRequired: payment.required && !damagedAutoExempt,
+          stripeClientSecret,
+          stripeAccountId,
+          paymentAmount: damagedAutoExempt ? null : (payment.required ? payment.amountCents : null),
+        };
+      }
+
+      // Standard single-request flow (non-replacement or orphaned)
+      // Store email for all requests without a matched user so the member can
+      // see the request once they sign up and log in.
+      const storeEmailForLinking = isOrphaned || !existingUser;
+      const [req] = await tx
+        .insert(fobRequests)
+        .values({
+          tenantId: tenant.id,
+          requesterId: existingUser?.id ?? null as any,
+          credentialTypeId: data.credentialTypeId ?? null as any,
+          requestType: data.requestType,
+          status: initialStatus,
+          paymentExempt: !payment.required,
+          paymentAmountCents: payment.required ? payment.amountCents : null,
+          replacesCredentialId: data.replacesCredentialId ?? null,
+          membershipCategory: data.membershipCategory ?? membership?.membershipCategory ?? null,
+          accessUpdateReason: data.accessUpdateReason ?? null,
+          isOrphaned,
+          orphanEmail: storeEmailForLinking ? email : null,
+          orphanFirstName: storeEmailForLinking ? data.firstName : null,
+          orphanLastName: storeEmailForLinking ? data.lastName : null,
+          orphanDateOfBirth: storeEmailForLinking ? (data.dateOfBirth ?? null) : null,
+        })
+        .returning();
+
+      await createAuditEntry(tx, {
+        tenantId: tenant.id,
+        entityType: AuditEntityType.FOB_REQUEST,
+        entityId: req.id,
+        action: AuditAction.CREATE,
+        toState: initialStatus,
+        actorId: existingUser?.id ?? null,
+        actorType: isOrphaned ? "system" : "user",
+        metadata: {
+          requestType: data.requestType,
+          isOrphaned,
+          email,
+          name: `${data.firstName} ${data.lastName}`,
+          ...(data.accessUpdateReason ? { accessUpdateReason: data.accessUpdateReason } : {}),
+          ...(data.readerBeeps ? { readerBeeps: data.readerBeeps } : {}),
+        },
+      });
+
+      if (payment.required && !isOrphaned) {
+        const [tenantRow] = await tx
+          .select({ stripeAccountId: tenants.stripeAccountId })
+          .from(tenants)
+          .where(eq(tenants.id, tenant.id))
+          .limit(1);
+
+        stripeAccountId = tenantRow?.stripeAccountId ?? null;
+        const intent = await createPaymentIntent({
+          amountCents: payment.amountCents,
+          stripeAccountId,
+          metadata: { requestId: req.id, tenantId: tenant.id },
+        });
+
+        await tx
+          .update(fobRequests)
+          .set({ stripePaymentIntentId: intent.paymentIntentId })
+          .where(eq(fobRequests.id, req.id));
+
+        stripeClientSecret = intent.clientSecret;
+      }
+
+      return {
+        request: req,
+        isOrphaned,
+        paymentRequired: payment.required && !isOrphaned,
+        stripeClientSecret,
+        stripeAccountId,
+        paymentAmount: payment.required ? payment.amountCents : null,
+      };
+    });
+
+    // Only send confirmation email when no payment is required (request is immediately actionable).
+    // When payment is required, the email is sent after payment completes (via webhook)
+    // or after an exemption is submitted (via request-exemption endpoint).
+    if (!result.paymentRequired) {
+      try {
+        await withTenant(tenant.id, async (tx) => {
+          await sendTemplatedEmail(
+            data.email,
+            "requestSubmitted",
+            { memberName: `${data.firstName} ${data.lastName}`, requestType: data.requestType },
+            buildEmailConfig(tenant),
+            undefined,
+            {
+              tx,
+              tenantId: tenant.id,
+              entityType: AuditEntityType.FOB_REQUEST,
+              entityId: result.request.id,
+              actorId: existingUser?.id ?? null,
+            }
+          );
+        });
+      } catch (err) {
+        console.error("Failed to send submission email:", err);
+      }
+    }
+
+    return NextResponse.json(result, { status: 201 });
+  } catch (err) {
+    console.error("Submit error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
