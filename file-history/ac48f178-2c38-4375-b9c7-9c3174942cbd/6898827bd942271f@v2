@@ -1,0 +1,119 @@
+-- ══════════════════════════════════════════════════════════════════════════
+-- Tenant-#2 readiness, part 3: repair the migration baseline.
+--
+-- THIS IS THE MOST IMPORTANT MIGRATION IN THE BRANCH AND THE LEAST OBVIOUS.
+-- ══════════════════════════════════════════════════════════════════════════
+--
+-- THE DEFECT
+-- ----------
+-- The migration chain cannot rebuild production's schema. Nine columns that
+-- packages/db/src/schema/*.ts declares are created by NO migration in
+-- drizzle/*.sql. They reached production out of band (drizzle-kit push, or
+-- manual DDL) and were never captured as migrations:
+--
+--   users.firebase_uid          -- 0000 still declares users.clerk_user_id;
+--                                  the Clerk -> Firebase migration never got a
+--                                  migration file at all
+--   fob_requests.is_orphaned
+--   fob_requests.orphan_email
+--   fob_requests.orphan_first_name
+--   fob_requests.orphan_last_name
+--   fob_requests.related_request_id
+--   fob_requests.access_update_reason
+--   fob_requests.credential_expires_at
+--   fob_requests.hold_previous_status
+--
+-- Corroborating evidence: drizzle/meta/ contains ONLY 0000_snapshot.json.
+-- Snapshots 0001..0009 were never committed, so `drizzle-kit generate` has no
+-- accurate baseline to diff against and asks to "create" firebase_uid, a column
+-- production demonstrably already has (Firebase auth works in prod today).
+--
+-- WHY IT MATTERS (this is not cosmetic)
+-- -------------------------------------
+--  1. DISASTER RECOVERY IS BROKEN. Restoring into a fresh instance and running
+--     db:migrate produces a schema with users.clerk_user_id and none of the
+--     orphan/hold columns. The app cannot boot against it. The architecture
+--     review rated DR "weak and untested"; this is worse than untested, the
+--     documented rebuild path does not reproduce prod.
+--  2. CI TESTS AGAINST A FICTION. .github/workflows/ci.yml provisions Postgres
+--     16, runs `bun run db:migrate`, then `bun run test`. That migrated database
+--     does not match prod. It has never been caught because, until this branch,
+--     no test touched the database. The new cross-tenant isolation regression
+--     test DOES, and would fail on the missing columns.
+--  3. IT HIDES THE NEXT DRIFT. With no snapshots and no drift gate, this recurs
+--     silently (email_configurations, created in 0010 of this branch, is the
+--     same failure: declared in schema, shipped to code, never migrated, 500s in
+--     prod).
+--
+-- THE APPROACH
+-- ------------
+-- Every statement below is CONDITIONAL and IDEMPOTENT, so this migration is:
+--   * a NO-OP against production, where all nine columns already exist; and
+--   * corrective against a fresh database (CI, DR restore, a new environment),
+--     where it creates them.
+-- That is what makes it safe to ship without a separate prod/fresh code path.
+--
+-- FOLLOW-UP (not done here, deliberately)
+-- ---------------------------------------
+-- Repairing the baseline does not stop it recurring. Add a CI drift gate that
+-- fails the build when the schema and the migrations disagree, and start
+-- committing drizzle snapshots again. Tracked as a recommendation, not fixed in
+-- this migration, because the gate belongs in the workflow, not in SQL.
+-- ══════════════════════════════════════════════════════════════════════════
+
+-- ── users.clerk_user_id -> users.firebase_uid ────────────────────────────────
+-- Prod: firebase_uid already exists -> both branches skip, no-op.
+-- Fresh: 0000 created clerk_user_id -> rename it, preserving the unique index.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'clerk_user_id'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'firebase_uid'
+  ) THEN
+    ALTER TABLE "users" RENAME COLUMN "clerk_user_id" TO "firebase_uid";
+
+    -- The unique constraint carries the old name; rename it so a fresh DB and
+    -- prod converge on the same constraint identity rather than merely the same
+    -- columns. Guarded because prod may already carry the new name.
+    IF EXISTS (
+      SELECT 1 FROM pg_constraint WHERE conname = 'users_clerk_user_id_unique'
+    ) AND NOT EXISTS (
+      SELECT 1 FROM pg_constraint WHERE conname = 'users_firebase_uid_unique'
+    ) THEN
+      ALTER TABLE "users" RENAME CONSTRAINT "users_clerk_user_id_unique" TO "users_firebase_uid_unique";
+    END IF;
+  END IF;
+END
+$$;
+--> statement-breakpoint
+
+-- Belt and braces: if some environment has neither column (a partially-pushed
+-- database), create firebase_uid rather than leaving the app unable to boot.
+-- NOT NULL is deliberately NOT asserted here: on a table with existing rows and
+-- no source column there is no honest value to backfill, and a failed migration
+-- is a better outcome than silently inventing identity data. On a fresh DB the
+-- rename above runs and this is skipped.
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "firebase_uid" text;
+--> statement-breakpoint
+
+-- ── fob_requests: orphan-linking, replacement chain, hold, access-update ─────
+-- All eight shipped to prod via push and were never migrated. Types and
+-- nullability mirror packages/db/src/schema/requests.ts exactly.
+ALTER TABLE "fob_requests" ADD COLUMN IF NOT EXISTS "is_orphaned" boolean DEFAULT false NOT NULL;
+--> statement-breakpoint
+ALTER TABLE "fob_requests" ADD COLUMN IF NOT EXISTS "orphan_email" text;
+--> statement-breakpoint
+ALTER TABLE "fob_requests" ADD COLUMN IF NOT EXISTS "orphan_first_name" text;
+--> statement-breakpoint
+ALTER TABLE "fob_requests" ADD COLUMN IF NOT EXISTS "orphan_last_name" text;
+--> statement-breakpoint
+ALTER TABLE "fob_requests" ADD COLUMN IF NOT EXISTS "related_request_id" uuid;
+--> statement-breakpoint
+ALTER TABLE "fob_requests" ADD COLUMN IF NOT EXISTS "access_update_reason" text;
+--> statement-breakpoint
+ALTER TABLE "fob_requests" ADD COLUMN IF NOT EXISTS "credential_expires_at" timestamp with time zone;
+--> statement-breakpoint
+ALTER TABLE "fob_requests" ADD COLUMN IF NOT EXISTS "hold_previous_status" text;

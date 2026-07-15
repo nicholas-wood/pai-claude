@@ -1,0 +1,112 @@
+import { describe, it, expect, beforeAll } from "vitest";
+import { getTableConfig } from "drizzle-orm/pg-core";
+import type { PgTable } from "drizzle-orm/pg-core";
+import * as schema from "@accessbuddy/db";
+
+/**
+ * SCHEMA PARITY GATE
+ *
+ * Asserts that a database built by running the migrations from scratch actually
+ * matches the schema the ORM believes in.
+ *
+ * Why this exists: it did not, and the two had silently diverged. Nine columns
+ * that packages/db/src/schema/*.ts declares were created by NO migration --
+ * users.firebase_uid (0000 still declared users.clerk_user_id, so the entire
+ * Clerk -> Firebase move never got a migration) plus eight fob_requests columns
+ * for orphan-linking, the replacement chain, hold state and access-update
+ * reasons. They had reached production out of band via `drizzle-kit push`.
+ *
+ * The consequences were real, not theoretical:
+ *   - Disaster recovery was broken: restoring to a fresh instance and running
+ *     db:migrate produces a schema the application cannot boot against.
+ *   - CI was testing a fiction: ci.yml migrates a fresh Postgres and runs the
+ *     suite against it. Nothing caught the divergence because, before this
+ *     branch, no test touched the database.
+ *
+ * 0012_reconcile_migration_baseline.sql repairs the baseline. THIS TEST is what
+ * stops it happening again: it fixes the class, not the instance. If someone
+ * adds a column to a schema file and ships it with `push` instead of a
+ * migration, CI now fails here rather than in a restore, months later, during
+ * an incident.
+ *
+ * Runs only when DATABASE_URL is set. That is true in CI (.github/workflows/
+ * ci.yml provisions postgres:16 and runs `bun run db:migrate` before the
+ * suite), and false on a laptop with no database, where it skips rather than
+ * failing noisily.
+ */
+
+const DATABASE_URL = process.env.DATABASE_URL;
+const describeIfDb = DATABASE_URL ? describe : describe.skip;
+
+describeIfDb("schema parity: migrations must reproduce the ORM schema", () => {
+  // column name -> set of table names, as the migrated database actually has it
+  let liveColumns: Map<string, Set<string>>;
+
+  beforeAll(async () => {
+    const { db } = await import("@accessbuddy/db");
+    const { sql } = await import("drizzle-orm");
+
+    const rows = (await db.execute(
+      sql`SELECT table_name, column_name
+          FROM information_schema.columns
+          WHERE table_schema = 'public'`
+    )) as unknown as Array<{ table_name: string; column_name: string }>;
+
+    liveColumns = new Map();
+    for (const row of rows) {
+      const cols = liveColumns.get(row.table_name) ?? new Set<string>();
+      cols.add(row.column_name);
+      liveColumns.set(row.table_name, cols);
+    }
+  });
+
+  it("every table the ORM declares exists in the migrated database", () => {
+    const missing: string[] = [];
+
+    for (const value of Object.values(schema)) {
+      if (!isPgTable(value)) continue;
+      const { name } = getTableConfig(value);
+      if (!liveColumns.has(name)) missing.push(name);
+    }
+
+    expect(
+      missing,
+      `Tables declared in packages/db/src/schema but created by no migration: ${missing.join(", ")}. ` +
+        `Generate a migration -- do not use 'drizzle-kit push' against an environment you cannot rebuild.`
+    ).toEqual([]);
+  });
+
+  it("every column the ORM declares exists in the migrated database", () => {
+    // "table.column" for anything the schema declares but the migrations never create
+    const missing: string[] = [];
+
+    for (const value of Object.values(schema)) {
+      if (!isPgTable(value)) continue;
+      const { name: tableName, columns } = getTableConfig(value);
+      const live = liveColumns.get(tableName);
+      if (!live) continue; // reported by the table-level test above
+
+      for (const column of columns) {
+        if (!live.has(column.name)) missing.push(`${tableName}.${column.name}`);
+      }
+    }
+
+    expect(
+      missing,
+      `Columns declared in packages/db/src/schema but created by no migration: ${missing.join(", ")}. ` +
+        `This is exactly the drift that left users.firebase_uid unmigrated and disaster recovery broken. ` +
+        `Write a migration for these columns.`
+    ).toEqual([]);
+  });
+});
+
+function isPgTable(value: unknown): value is PgTable {
+  // Drizzle brands its table objects with a well-known symbol; checking for it
+  // is more robust than duck-typing, since the schema barrel also re-exports
+  // relations, enums and plain helpers.
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Symbol.for("drizzle:IsDrizzleTable") in value
+  );
+}

@@ -1,0 +1,74 @@
+---
+task: Determine required insurance for leasing out St Kilda strata apartment + best landlord insurance deals
+slug: landlord-insurance-st-kilda
+effort: E2
+phase: verify
+progress: 18/18
+mode: research
+started: 2026-07-15
+updated: 2026-07-15
+---
+
+## Problem
+
+Nick is leasing out Unit 101/40 Pakington St, St Kilda (Brisbane move) and the managing agent's insurance question asks about four categories — Building, Contents, Public Liability, Landlord Protection. The OC (728653T) holds building insurance, and Nick assumed landlord insurance covers his fixtures, but the exact boundary between the OC policy and what he must buy himself is unclear. He needs a decision-ready answer on what cover to hold and which insurer offers the best deal, researched with Perplexity among the agents.
+
+## Goal
+
+Nick knows exactly which of the four agent-form categories he must insure himself for a VIC strata lot, what a landlord policy must include (contents-of-landlord, in-lot liability, tenant protection), and has a shortlist of best-value Australian landlord insurers for strata units with indicative premiums — ready to buy, nothing purchased on his behalf.
+
+## Criteria
+
+- [x] ISC-1: All four agent-form categories (building/contents/public liability/landlord protection) each mapped to "OC covers" or "Nick must cover" with rationale
+- [x] ISC-2: OC strata policy scope stated (reinstatement + common-property liability) with authoritative VIC source (Consumer Affairs Victoria / OC Act 2006)
+- [x] ISC-3: OC common-property public liability benchmark figure stated ($20M) with source
+- [x] ISC-4: Fixture boundary resolved: wired-in/structural fixtures (OC side) vs carpets, blinds, curtains, light fittings, non-wired appliances (landlord-contents side), cited
+- [x] ISC-5: Confirmed whether landlord insurance includes legal liability for injury inside the lot, with typical limit
+- [x] ISC-6: Landlord protection covers enumerated: loss of rent, rent default, tenant malicious/accidental damage, legal expenses — with typical caps/weeks
+- [x] ISC-7: VIC bond-cap context (one month, $900/wk threshold) tied to why rent-default cover matters
+- [x] ISC-8: Answered whether contents-only landlord policies exist for strata units, with named providers
+- [x] ISC-9: ≥6 providers compared (EBM RentCover, Terri Scheer, Suncorp, Allianz, Budget Direct + others)
+- [x] ISC-10: Indicative annual premium range for a VIC strata unit landlord policy stated
+- [x] ISC-11: Rent-default inclusions/limits compared across ≥3 providers (weeks covered, excess, optional vs included)
+- [x] ISC-12: Claims reputation / awards noted for ≥2 providers
+- [x] ISC-13: Perplexity researcher findings incorporated in the synthesis (explicit user requirement)
+- [x] ISC-14: Cross-checked synthesis with confidence tags where sources conflict
+- [x] ISC-15: Tax note included: landlord insurance premiums deductible against rental income
+- [x] ISC-16: Recommendation leads the answer: what to tell the agent for each of the four boxes + which insurer(s) to quote
+- [x] ISC-17: Anti: no insurance purchased, bound, or quoted-for on Nick's behalf (financial_action = must ask)
+- [x] ISC-18: Anti: no unverified URLs or invented premium figures presented as fact in the final answer
+
+## Test Strategy
+
+| isc | type | check | threshold | tool |
+|-----|------|-------|-----------|------|
+| ISC-1 | content | final answer contains 4-row category mapping | all 4 rows present | Read/self-check |
+| ISC-2..7 | research | claim present with cited source from researcher output | [HIGH] confidence or flagged | agent results |
+| ISC-8..12 | research | provider comparison table present | ≥6 providers, ≥3 rent-default rows | agent results |
+| ISC-13 | process | Perplexity agent result received and cited in synthesis | result non-empty | task-notification |
+| ISC-14 | content | conflict areas carry confidence tags | tags present where agents disagree | self-check |
+| ISC-15 | content | deductibility line present | 1 line | self-check |
+| ISC-16 | content | recommendation is the first section of the answer | leads answer | self-check |
+| ISC-17 | anti | no purchase/bind action taken this session | zero such tool calls | transcript |
+| ISC-18 | anti | URLs in answer come from researcher-verified lists | no unverified URL | self-check |
+
+## Decisions
+
+- 2026-07-15: Voice TTS returns 402 (ElevenLabs free plan, library voices blocked). Notifications still post; skipping further voice curls this run rather than repeating a known-failing paid call each phase.
+- 2026-07-15: TaskList showed no tasks, initially suggesting the Research fork's agents died with the fork; Claude researcher's task-notification then arrived, proving the agents run as background tasks invisible to TaskList. Decision: do NOT relaunch researchers — wait for Gemini/Grok/Perplexity notifications. (All four subsequently reported.)
+- 2026-07-15: Delegation floor met by the Research skill's four background researchers; no additional delegation needed (single-domain synthesis task).
+- 2026-07-15: Rent-default duration conflict across agents (EBM 6 weeks per its own product page vs 15 weeks per secondary guide; Terri Scheer 15 vs 20 weeks by tier). Resolution: present as [CONFLICT], per-PDS confirmation required at quote time — insurer product pages outrank secondary guides.
+- 2026-07-15: No live premium quotes are publicly retrievable (quote engines require address/sum-insured). Presented Canstar's verified ~$432/yr unit median + $400-800 working range; per-insurer bands tagged [LOW]. Offered an Interceptor live-quote pull as follow-up rather than fabricating numbers.
+- 2026-07-15 (iteration, Nick approved quote pulls): Interceptor extension had been dropped from Chrome; rebuilt extension bundle (bun build into extension/dist) and Nick loaded it unpacked. EBM RentCover Ultra funnel completed to Summary: **$380.00/yr live quote** (anonymous — postcode/rent only, no PII). Building construction year verified externally: 2016 (Roost/Domain building profiles, "Leroy" by Artisan Architects).
+- 2026-07-15: Nick interrupted Terri Scheer funnel: "I don't want to submit forms, I want to collect information", and confirmed managing agent = **Belle Property** (not Gary Peer). Funnel abandoned before any quote; page-1 details (address via GNAF, year 2016, rent 720) had been sent for validation only, no contact details, no quote generated. Directive captured as feedback memory feedback-no-form-submission-collect-only. QBE funnel not attempted.
+- 2026-07-15: ISC-Anti compliance held: nothing purchased or bound; EBM saved-quote link preserved (qid=zrl67xdluwq) for Nick to retrieve.
+
+## Verification
+
+- ISC-1..7: Claude researcher — Consumer Affairs Victoria (OC Act 2006, $20M common-property liability, reinstatement cover, one-month bond cap), RentCover strata-vs-landlord page (fixture boundary), Allianz (loss of rent 12 months, rent default add-on). All URLs fetch-verified by the agent.
+- ISC-8..12: Gemini researcher — 14 providers compared, contents-only strata SKUs confirmed for EBM RentCover Ultra, Allianz (+$25k, 12-month loss of rent), QBE, AAMI, ANZ/CGU; awards QBE Canstar 2026 national, AAMI Canstar 2026 contents, Terri Scheer historical Canstar national. URLs load-verified by the agent; one dead Canstar link dropped and re-sourced via InsuranceNews.
+- ISC-13: Perplexity researcher (Ava) result received (task ad72c085ce0b2520b) — live 2026 snapshot, $400-800 working range, honest flags on unverifiable award pages; incorporated in synthesis.
+- ISC-14: Conflict tags applied in final answer (rent-default weeks, premium bands [LOW]).
+- ISC-15..16: Present in final answer (deductibility line; recommendation-first structure).
+- ISC-17: Anti — transcript contains zero purchase/bind actions; explicitly deferred to Nick.
+- ISC-18: Anti — every URL in the final answer comes from the researchers' verified-loading lists; bot-blocked (403) pages flagged as live-but-unfetchable, 404s excluded.

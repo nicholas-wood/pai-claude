@@ -1,0 +1,58 @@
+# Remediation Round 1 — branch `fix/tenant-2-readiness`
+
+Draft updates answering the Distinguished Engineer review. Branched off `main` (`288ac64`). Five commits, 45 files, +2719/-353. Nothing pushed, nothing deployed.
+
+Gates: `typecheck` 5/5 packages clean, `lint` 0 errors, `test` 141 passing / 16 skipped (the skips are the database-backed tests — see the honesty note below).
+
+## What shipped
+
+| # | Commit | Review finding |
+|---|--------|----------------|
+| 1 | `fix(auth)` remove Host-header trust, fail closed on session signing | Security F1, F2, F4 |
+| 2 | `fix(auth)` OTP store and rate limiting to Postgres | Security F3, Backend B-9 |
+| 3 | `fix(db)` enforce tenant isolation, make RLS bind | Backend B-1, Architecture F1 |
+| 4 | `fix(db)` repair migration baseline, gate it in CI | Backend B-3, B-4, B-6 |
+| 5 | `feat(web)` error boundaries, GCS logo storage, safe redirects | Frontend F-1, F-3, F-6, F-13 |
+
+Against the review's top-10, this closes gate items 1 through 8 in code. Items 9 (observability) and 10 (pooling, PITR, external calls in transactions) are untouched and remain open.
+
+## Three things the review did not find
+
+The remediation surfaced defects worse than the ones it was sent to fix.
+
+**1. WebAuthn login could mint an unsigned session cookie in production.** The review found the weak signing secret. It did not find that the signing branch was chosen on `FIREBASE_SERVICE_ACCOUNT_KEY` being present, and the `else` fell through to `webauthn.<payload>.dev` — a session token with a literal string where the signature belongs. With that one env var absent, in any environment, WebAuthn login handed out forgeable sessions. Given this project's history of `--set-env-vars` wiping the environment, "that env var is absent" is not hypothetical.
+
+**2. `attestation_requests` has never had row-level security.** Created in migration `0002` with a `tenant_id` column, and never given `ENABLE`, `FORCE`, or a policy. Missing from `RLS_TABLES` too. All four reviewers missed it. It has been protected by nothing but app-layer filters since the day it shipped.
+
+**3. The migration chain cannot rebuild production's schema.** This is the significant one. Nine columns the ORM declares are created by no migration — `users.firebase_uid` (the `0000` baseline still says `clerk_user_id`, so the entire Clerk-to-Firebase move never got a migration) plus eight `fob_requests` columns. They were pushed to prod out of band. `drizzle/meta/` holds only `0000_snapshot.json`.
+
+Consequences, which the review understated when it called disaster recovery merely "untested": restore to a fresh instance, run `db:migrate`, and **the app cannot boot against the result**. The documented rebuild path does not reproduce production. CI has been migrating a fresh Postgres and testing against a schema that is not the real one, and nothing caught it because until now no test touched the database.
+
+`0012` repairs the baseline with conditional, idempotent DDL — a no-op against prod, corrective against a fresh database. `schema-parity.test.ts` is the part that matters: it fails CI the moment the schema declares something the migrations do not create. That fixes the class, not the instance.
+
+## Honesty note: what is NOT verified
+
+**The cross-tenant isolation regression test is written but has never been run green.** There is no Postgres, Docker, or `psql` in the authoring environment, so all 16 database-backed tests are skipped, not passing. That includes the two-tenant test (with a user belonging to *both* clubs — the case that breaks the naive `owner_id` queries), the OTP and rate-limiter tests, and the new schema-parity gate.
+
+They should run on the first CI push: `ci.yml` already provisions `postgres:16`, runs `db:migrate`, then the suite. **Expect the first run to be informative rather than green** — that is the point. Do not treat this branch as proven until you have seen those 16 tests pass in CI.
+
+## What a human must do — code cannot do these
+
+1. **Run the RLS verification bundle against production.** The queries are in the header of `0011_rls_app_role.sql` (`pg_roles` for `rolsuper`/`rolbypassrls`, `pg_tables` for ownership and `forcerowsecurity`, `pg_policies` for coverage). This is what converts "almost certainly inert" into a fact. Do it before anything else.
+
+2. **Rotate `STRIPE_PLATFORM_WEBHOOK_SECRET`.** It appeared in a `terraform plan`. Commit 1 moves it into Secret Manager, which changes where it lives — it does **not** un-leak it. Moving a leaked secret is not rotating it.
+
+3. **Set the new secrets** before deploying, or the app will fail closed (by design): `SESSION_SIGNING_SECRET` (min 32 chars, Secret Manager) and `GCS_ASSETS_BUCKET` on Cloud Run. The bucket and its IAM grant already exist in Terraform; only the env var is missing.
+
+4. **The RLS role cutover is a separate, coordinated change.** `0011` *creates* the restricted `NOBYPASSRLS` role; it deliberately does **not** switch the app onto it. Switching `DATABASE_URL` to that role is the moment isolation actually starts being enforced, and it is also the moment any query still relying on bypass behaviour starts returning empty results instead of silently succeeding. Ordering, and the `--update-env-vars` warning (never `--set-env-vars`, which has caused an outage here before), are in the migration header.
+
+5. **Deploy with `feat:`/`fix:`, not `chore:`.** release-please skips chore, so a chore-typed change merges but never reaches production.
+
+## Still open
+
+- Observability: no uptime check, no 5xx or cron-failure alerting, no SLO (Architecture F4).
+- DB pool ceiling (up to 100 connections against a `db-f1-micro`), PITR disabled, restore never rehearsed (Architecture F2, F3).
+- Resend and Stripe calls still run inside the database transaction, holding a pooled connection across a network round trip (Backend B-5).
+- `xlsx@0.18.5` still parses admin-uploaded spreadsheets. The npm build is abandoned with unpatched prototype-pollution and ReDoS advisories; the maintained SheetJS build ships from the vendor CDN, not npm. Needs a deliberate swap in `services/reconciliation.ts`.
+- `set-pickup` and `approve` accept client-supplied `pickupLocationId` / `accessLevelId` with no tenant-ownership check — a further IDOR found during remediation, not yet fixed.
+- Add a CI drift gate for the *migration journal* itself, and start committing drizzle snapshots again.

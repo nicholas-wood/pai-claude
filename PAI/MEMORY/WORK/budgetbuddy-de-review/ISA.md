@@ -2,8 +2,8 @@
 task: Four-lens Distinguished Engineer review of BudgetBuddy (envelope-os)
 slug: budgetbuddy-de-review
 effort: E4
-phase: build
-progress: 68/88
+phase: complete
+progress: 88/88
 mode: standard
 started: 2026-07-02T00:00:00+10:00
 updated: 2026-07-07T12:00:00+10:00
@@ -128,28 +128,28 @@ Deliver a four-lens Distinguished Engineer review of BudgetBuddy — frontend, b
 - [x] ISC-66: installLogRedaction called at server and sync entrypoints
 - [x] ISC-67: ~/.penny secret/db files written 0600 (dir 0700)
 - [x] ISC-68: BASIQ_MIGRATION_SPEC amended: balance re-anchor + parallel-run window + provider-prefixed ids + tombstones
-- [ ] ISC-69: bun test, typecheck, lint all green after the round
-- [ ] ISC-70: remediation doc in docs/reviews/ mapping findings → fixes → evidence
-- [ ] ISC-71: Anti: pre-existing tests pass unmodified except where behaviour was intentionally corrected (each documented)
-- [ ] ISC-72: changes committed with a descriptive message
+- [x] ISC-69: bun test, typecheck, lint all green after the round
+- [x] ISC-70: remediation doc in docs/reviews/ mapping findings → fixes → evidence
+- [x] ISC-71: Anti: pre-existing tests pass unmodified except where behaviour was intentionally corrected (each documented)
+- [x] ISC-72: changes committed with a descriptive message
 
 ### Budget chronology feature (2026-07-14, iteration 3 — Wave 3)
-- [ ] ISC-73: budget lines carry effectiveFrom (date) and optional effectiveTo; existing lines migrate as open-ended (effectiveTo null)
-- [ ] ISC-74: a month's budget for an envelope = SUM of all lines active in that month (overlapping budgets combine)
-- [ ] ISC-75: creating a new budget with completePrevious=true ends the previous open line the day before the new one starts
-- [ ] ISC-76: create/new-budget UI has a "Complete the previous budget" checkbox, checked by default
-- [ ] ISC-77: future-dated budgets apply from their start month — income set to change as of 1 Aug shows old target in Jul, new in Aug
-- [ ] ISC-78: EditBudgetPage shows a chronology per envelope: date range, amount, status (completed | active | scheduled)
-- [ ] ISC-79: previous (completed) budgets remain visible when editing
-- [ ] ISC-80: ensureMonth materialises allocations from date-resolved lines; already-materialised past months unchanged
-- [ ] ISC-81: contract types + zod schemas extended for the new fields/endpoints; contract↔router parity test green
-- [ ] ISC-82: sqlite, postgres, and memory store implement versioned lines identically (store suite extended)
-- [ ] ISC-83: tests cover overlap summing, completion default, future-dated start, and open-ended back-compat
-- [ ] ISC-84: Anti: creating a new budget version does not silently rewrite historical materialised months
-- [ ] ISC-85: all gates green after the feature (bun test, typecheck, lint)
-- [ ] ISC-86: feature committed with a descriptive message
-- [ ] ISC-87: AppShell menu has a force-sync button — POSTs /api/sync, busy state while running, honest failure surface, invalidates budget queries on success (background cadence stays the hourly penny-sync.timer)
-- [ ] ISC-88: budget grid rows with pending activity show a muted pending indicator (amount), pending rows visible in the row popover; Spent/Left maths unchanged (ISC-23 exclusion preserved) — resolves the "synced but budget looks stale" report of 2026-07-14
+- [x] ISC-73: budget lines carry effectiveFrom (date) and optional effectiveTo; existing lines migrate as open-ended (effectiveTo null)
+- [x] ISC-74: a month's budget for an envelope = SUM of all lines active in that month (overlapping budgets combine)
+- [x] ISC-75: creating a new budget with completePrevious=true ends the previous open line the day before the new one starts
+- [x] ISC-76: create/new-budget UI has a "Complete the previous budget" checkbox, checked by default
+- [x] ISC-77: future-dated budgets apply from their start month — income set to change as of 1 Aug shows old target in Jul, new in Aug
+- [x] ISC-78: EditBudgetPage shows a chronology per envelope: date range, amount, status (completed | active | scheduled)
+- [x] ISC-79: previous (completed) budgets remain visible when editing
+- [x] ISC-80: ensureMonth materialises allocations from date-resolved lines; already-materialised past months unchanged
+- [x] ISC-81: contract types + zod schemas extended for the new fields/endpoints; contract↔router parity test green
+- [x] ISC-82: sqlite, postgres, and memory store implement versioned lines identically (store suite extended)
+- [x] ISC-83: tests cover overlap summing, completion default, future-dated start, and open-ended back-compat
+- [x] ISC-84: Anti: creating a new budget version does not silently rewrite historical materialised months
+- [x] ISC-85: all gates green after the feature (bun test, typecheck, lint)
+- [x] ISC-86: feature committed with a descriptive message
+- [x] ISC-87: AppShell menu has a force-sync button — POSTs /api/sync, busy state while running, honest failure surface, invalidates budget queries on success (background cadence stays the hourly penny-sync.timer)
+- [x] ISC-88: budget grid rows with pending activity show a muted pending indicator (amount), pending rows visible in the row popover; Spent/Left maths unchanged (ISC-23 exclusion preserved) — resolves the "synced but budget looks stale" report of 2026-07-14
 
 ## Test Strategy
 
@@ -205,3 +205,15 @@ Deliver a four-lens Distinguished Engineer review of BudgetBuddy — frontend, b
 - ISC-46 (Anti): every bucket item carries a why clause. PASS.
 - Advisor gate (Rule 2): fired — added three-step parallel-run, balance-semantics risk, fifth-lens framing, severity-calibration caution.
 - Cato gate (Rule 2a, E4): verdict=concerns. Confirmed Critical + all spot-checks TRUE. Two same-family under-calls folded into report: (1) Pulse read is deterministic always-zero bug not "can diverge" — upgraded to High; (2) UNIQUE constraint needs a de-dup migration precondition. Sequencing nit (engine→contract refactor mis-bucketed) noted. Provenance/version-drift caveat added.
+
+### Remediation round verification (iteration 2-3, 2026-07-14/15)
+- ISC-69/85 (gates): run by orchestrator post-merge — 312 pass / 60 files, tsc ×3 clean, eslint clean (quoted output in transcript).
+- ISC-70: docs/reviews/REMEDIATION_2026-07-14.md written + committed (findings→fixes map).
+- ISC-71 (Anti): all 260 pre-round tests pass; 5 intentional behaviour changes documented in agent reports + remediation doc.
+- ISC-72/86: commits "budgetbuddy v1.4.0" + closeout doc commit, path-scoped to envelope-os.
+- ISC-73..83: Wave 3 report (52 new tests) + live DB probe: budget_template has effective_from/effective_to; versions resolution probed directly (default first-of-month edit → clean Jul=$600; mid-month completePrevious → Jul=old+new by design).
+- ISC-84 (Anti): conservation diff pre-migration snapshot vs live — 0 drift across 35,083 allocation periods; template lines 41=41 (append-only holds); transaction delta (5 rows) = hourly sync, not migration.
+- ISC-87/88: implemented + tested (SyncButton.test 3, BudgetSection pending tests 2); deployed in rebuilt bundle.
+- DEPLOY: web bundle rebuilt (vite, 2026-07-14 21:04), penny.service restarted, /api/health ok, dead-route probe /api/move now 401 JSON (was SPA fallthrough), UNIQUE index live, 0 duplicate groups, auth live-probed (wrong PIN → 401, attempts file recording, throttle armed).
+- ROLLBACK PLAN: ~/.penny/pre-deploy-snapshots/penny-pre-v1.4.0.db (consistent VACUUM INTO, 457MB) + git revert of the two v1.4.0 commits + service restart. Post-deploy version rows won't fit the old shape — restore means accepting loss of post-deploy edits.
+- OWNER ACTIONS OPEN: create rclone crypt remote (nightly backup now refuses loudly until then — zero cloud backups going forward); purge plaintext snapshots already in OneDrive; decide mid-month completePrevious semantics (keep+UI warning vs transition-month=new-only).
