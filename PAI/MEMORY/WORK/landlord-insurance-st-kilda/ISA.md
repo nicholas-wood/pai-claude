@@ -2,7 +2,7 @@
 task: Determine required insurance for leasing out St Kilda strata apartment + best landlord insurance deals
 slug: landlord-insurance-st-kilda
 effort: E2
-phase: verify
+phase: complete
 progress: 18/18
 mode: research
 started: 2026-07-15
@@ -62,6 +62,9 @@ Nick knows exactly which of the four agent-form categories he must insure himsel
 - 2026-07-15 (iteration, Nick approved quote pulls): Interceptor extension had been dropped from Chrome; rebuilt extension bundle (bun build into extension/dist) and Nick loaded it unpacked. EBM RentCover Ultra funnel completed to Summary: **$380.00/yr live quote** (anonymous — postcode/rent only, no PII). Building construction year verified externally: 2016 (Roost/Domain building profiles, "Leroy" by Artisan Architects).
 - 2026-07-15: Nick interrupted Terri Scheer funnel: "I don't want to submit forms, I want to collect information", and confirmed managing agent = **Belle Property** (not Gary Peer). Funnel abandoned before any quote; page-1 details (address via GNAF, year 2016, rent 720) had been sent for validation only, no contact details, no quote generated. Directive captured as feedback memory feedback-no-form-submission-collect-only. QBE funnel not attempted.
 - 2026-07-15: ISC-Anti compliance held: nothing purchased or bound; EBM saved-quote link preserved (qid=zrl67xdluwq) for Nick to retrieve.
+- 2026-07-15: Nick's self-run quotes: Terri Scheer $384/yr vs EBM $380/yr (rent corrected to $750/wk). Decision rule fired: within $150 → Terri Scheer for 15–20wk rent default vs 6wk.
+- 2026-07-16: PIPlus (Belle's channel product) assessed from its live PDS: Lloyd's binder via Proplab, TPA claims (Insurx), one-week-rent extra excess on default/damage claims, undisclosed agent commission. Recommendation unchanged.
+- 2026-07-16: **DECISION (Nick): Terri Scheer at $384/yr. He purchases it himself.** Task marked complete on his explicit approval.
 
 ## Verification
 

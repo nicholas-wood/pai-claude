@@ -1,0 +1,242 @@
+/**
+ * Off-box backup of the local BudgetBuddy SQLite DB, so a dead Linux box does
+ * not mean lost data. VACUUM INTO produces a clean single-file snapshot (it
+ * folds the WAL and is safe while the service is running); rclone copyto
+ * uploads it under a date-stamped name; snapshots older than 30 days are pruned.
+ *
+ * SECURITY (ISC-46): this script REFUSES to upload unless the destination
+ * remote's type is `crypt` — the ledger is financial data and must be encrypted
+ * at rest before it leaves the machine (same gate as scripts/backup.ts). A
+ * refusal is recorded in ~/.penny/backup-status.json (the surface the app's
+ * /api/backup/status handler reads), so a blocked backup shows up as a failed
+ * backup with its reason, never silently.
+ *
+ * Run via the penny-backup.timer (daily) or by hand: bun run scripts/backup-db.ts
+ *
+ * Env:
+ *   PENNY_BACKUP_REMOTE  rclone destination dir (default "onedrive:Backups/BudgetBuddy",
+ *                        the historical value — which will now REFUSE unless that
+ *                        remote is reconfigured as type crypt)
+ */
+
+import { Database } from "bun:sqlite";
+import { statSync } from "node:fs";
+
+const HOME = process.env.HOME!;
+const DB = `${HOME}/.penny/penny.db`;
+export const BACKUP_STATUS_PATH = `${HOME}/.penny/backup-status.json`;
+const DEFAULT_REMOTE = "onedrive:Backups/BudgetBuddy";
+
+export interface RcloneResult {
+  readonly code: number;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+/** Injectable rclone runner so the crypt gate is testable without rclone. */
+export type RcloneRunner = (args: readonly string[]) => Promise<RcloneResult>;
+
+async function runRclone(args: readonly string[]): Promise<RcloneResult> {
+  const proc = Bun.spawn(["rclone", ...args], { stdout: "pipe", stderr: "pipe" });
+  const [stdout, stderr] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+  const code = await proc.exited;
+  return { code, stdout, stderr };
+}
+
+export interface DbBackupPlan {
+  /** rclone destination directory, e.g. "penny-crypt:Backups/BudgetBuddy". */
+  readonly destDir: string;
+  /** The remote name before the colon, e.g. "penny-crypt". */
+  readonly remoteName: string;
+  /** Full dated destination file. */
+  readonly dest: string;
+  /** YYYY-MM-DD stamp (one snapshot per day). */
+  readonly stamp: string;
+}
+
+/** Resolve the backup destination from env. Throws on a malformed remote. */
+export function resolveDbBackupPlan(
+  env: Record<string, string | undefined> = process.env,
+  now: Date = new Date(),
+): DbBackupPlan {
+  const destDir = env.PENNY_BACKUP_REMOTE?.trim() || DEFAULT_REMOTE;
+  if (!destDir.includes(":")) {
+    throw new Error(
+      `PENNY_BACKUP_REMOTE must be an rclone remote of the form name:path, got "${destDir}".`,
+    );
+  }
+  const remoteName = destDir.slice(0, destDir.indexOf(":"));
+  const stamp = now.toISOString().slice(0, 10);
+  return { destDir, remoteName, dest: `${destDir}/penny-${stamp}.db`, stamp };
+}
+
+/**
+ * The encryption gate: refuse to send financial data to a non-crypt remote.
+ * Resolves the remote's type from `rclone config dump` and throws a loud,
+ * actionable error naming the exact commands to fix it.
+ */
+export async function verifyCryptRemote(
+  remoteName: string,
+  run: RcloneRunner = runRclone,
+): Promise<void> {
+  const res = await run(["config", "dump"]);
+  if (res.code !== 0) {
+    throw new Error(
+      `Could not read rclone config to verify remote "${remoteName}" is encrypted (rclone exit ${res.code}).`,
+    );
+  }
+  let config: Record<string, { type?: string }>;
+  try {
+    config = JSON.parse(res.stdout) as Record<string, { type?: string }>;
+  } catch {
+    throw new Error("rclone config dump did not return valid JSON; cannot verify the remote is a crypt remote.");
+  }
+  const entry = config[remoteName];
+  const fixIt =
+    `Create an encrypted remote wrapping the current destination and point PENNY_BACKUP_REMOTE at it:\n` +
+    `  rclone config create penny-crypt crypt remote=onedrive:Backups/BudgetBuddy-encrypted\n` +
+    `  (rclone will prompt for the encryption password — store it in the PAI secret store)\n` +
+    `  then set PENNY_BACKUP_REMOTE="penny-crypt:" for this script.`;
+  if (!entry) {
+    throw new Error(`rclone remote "${remoteName}" is not configured. ${fixIt}`);
+  }
+  if (entry.type !== "crypt") {
+    throw new Error(
+      `REFUSING to back up the ledger: rclone remote "${remoteName}" is type "${entry.type}", not "crypt" — ` +
+        `the upload would store the plaintext financial database off-box. ${fixIt}`,
+    );
+  }
+}
+
+/** The status-file shape the app's backup handler reads (plus failure fields). */
+interface BackupStatusFile {
+  lastBackupAt?: string | null;
+  sizeBytes?: number | null;
+  dest?: string;
+  lastAttemptAt?: string;
+  lastError?: string;
+}
+
+async function readStatusFile(path: string): Promise<BackupStatusFile> {
+  try {
+    const file = Bun.file(path);
+    if (!(await file.exists())) return {};
+    return JSON.parse(await file.text()) as BackupStatusFile;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Record a FAILED backup attempt in the status surface the app reads
+ * (src/server/handlers/backup.ts). The last VERIFIED backup time is preserved —
+ * a failure never fabricates or erases a real backup record — and the reason is
+ * written so the app can surface it.
+ */
+export async function recordBackupFailure(
+  reason: string,
+  statusPath: string = BACKUP_STATUS_PATH,
+  now: Date = new Date(),
+): Promise<void> {
+  const prior = await readStatusFile(statusPath);
+  const next: BackupStatusFile = {
+    lastBackupAt: typeof prior.lastBackupAt === "string" ? prior.lastBackupAt : null,
+    sizeBytes: typeof prior.sizeBytes === "number" ? prior.sizeBytes : null,
+    ...(prior.dest !== undefined ? { dest: prior.dest } : {}),
+    lastAttemptAt: now.toISOString(),
+    lastError: reason,
+  };
+  await Bun.write(statusPath, JSON.stringify(next));
+}
+
+/** Record a verified successful backup (clears any prior failure). */
+export async function recordBackupSuccess(
+  sizeBytes: number,
+  dest: string,
+  statusPath: string = BACKUP_STATUS_PATH,
+  now: Date = new Date(),
+): Promise<void> {
+  await Bun.write(
+    statusPath,
+    JSON.stringify({
+      lastBackupAt: now.toISOString(),
+      sizeBytes,
+      dest,
+      lastAttemptAt: now.toISOString(),
+    }),
+  );
+}
+
+function rcloneSync(args: string[]): number {
+  const p = Bun.spawnSync(["rclone", ...args], { stdout: "inherit", stderr: "inherit" });
+  return p.exitCode ?? 1;
+}
+
+async function main(): Promise<void> {
+  const plan = resolveDbBackupPlan();
+
+  // 0. Encryption gate BEFORE any snapshot/upload work. A refusal is loud on
+  // stderr, recorded in the status surface, and a non-zero exit.
+  try {
+    await verifyCryptRemote(plan.remoteName);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    console.error(`[backup] ${reason}`);
+    await recordBackupFailure(reason);
+    process.exit(1);
+  }
+
+  const tmp = `${HOME}/.penny/backup-${plan.stamp}.db`;
+
+  // 1. Consistent snapshot (folds the WAL into one file). busy_timeout lets the
+  // snapshot wait out a concurrent writer (a reseed) instead of failing. VACUUM INTO
+  // will not bind a parameter and refuses an existing target, so clear any stale temp
+  // and inline the (controlled) path.
+  Bun.spawnSync(["rm", "-f", tmp]);
+  const db = new Database(DB);
+  db.run("PRAGMA busy_timeout = 60000");
+  db.run(`VACUUM INTO '${tmp.replace(/'/g, "''")}'`);
+  db.close();
+
+  const snapBytes = statSync(tmp).size;
+
+  // 2. Upload it (copyto, not a mount — mount uploads stall silently). rclone to
+  // OneDrive uploads the bytes reliably but can hang on exit cleaning up the idle
+  // connection, so we BOUND the call with `timeout` and judge success by the remote
+  // file size, not the exit code.
+  Bun.spawnSync(
+    // 30 min outer cap: the crypt-encrypted ledger is ~480MB and 300s proved too
+    // tight on home upload bandwidth (killed mid-multipart, 2026-07-16). The
+    // nightly window is not latency-sensitive; --timeout 45s still catches stalls.
+    ["timeout", "1800", "rclone", "copyto", tmp, plan.dest, "--timeout", "45s", "--retries", "2", "--low-level-retries", "3"],
+    { stdout: "inherit", stderr: "inherit" },
+  );
+
+  // 3. Verify the upload by comparing the remote size to the snapshot size.
+  const ls = Bun.spawnSync(["rclone", "lsl", plan.dest]);
+  const remoteBytes = Number((new TextDecoder().decode(ls.stdout).trim().match(/^\s*(\d+)\s/) ?? [])[1] ?? 0);
+  Bun.spawnSync(["rm", "-f", tmp]);
+  if (remoteBytes !== snapBytes || snapBytes === 0) {
+    const reason = `upload verify FAILED: local ${snapBytes}B vs remote ${remoteBytes}B`;
+    console.error(`[backup] ${reason}`);
+    await recordBackupFailure(reason);
+    process.exit(1);
+  }
+
+  // 4. Prune snapshots older than 30 days.
+  rcloneSync(["delete", plan.destDir, "--min-age", "30d"]);
+
+  // 5. Record verified-backup status so the app can surface a REAL last-backup
+  // time (ISC-46, ISC-83). Written only after the upload verifies, so the app
+  // never shows a time for a backup that did not actually land.
+  await recordBackupSuccess(snapBytes, plan.dest);
+
+  console.log(`[backup] snapshot uploaded + verified (${(snapBytes / 1e6).toFixed(1)}MB) -> ${plan.dest}`);
+}
+
+if (import.meta.main) {
+  await main();
+}

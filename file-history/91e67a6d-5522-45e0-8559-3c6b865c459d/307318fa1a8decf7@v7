@@ -3,7 +3,7 @@ task: Four-lens Distinguished Engineer review of BudgetBuddy (envelope-os)
 slug: budgetbuddy-de-review
 effort: E4
 phase: complete
-progress: 97/97
+progress: 88/88
 mode: standard
 started: 2026-07-02T00:00:00+10:00
 updated: 2026-07-07T12:00:00+10:00
@@ -150,23 +150,6 @@ Deliver a four-lens Distinguished Engineer review of BudgetBuddy — frontend, b
 - [x] ISC-86: feature committed with a descriptive message
 - [x] ISC-87: AppShell menu has a force-sync button — POSTs /api/sync, busy state while running, honest failure surface, invalidates budget queries on success (background cadence stays the hourly penny-sync.timer)
 - [x] ISC-88: budget grid rows with pending activity show a muted pending indicator (amount), pending rows visible in the row popover; Spent/Left maths unchanged (ISC-23 exclusion preserved) — resolves the "synced but budget looks stale" report of 2026-07-14
-
-### Wizard reconciliation + carryover visibility (2026-07-17, iteration 4)
-- [x] ISC-89: grid rows expose un-rolled ownAllocationCents; wizard header Allocated equals server zero-base allocated to the cent (Nick's data: $8,624.60 = $8,624.60)
-- [x] ISC-90: parent envelopes with own budget lines are editable in the wizard; pure-rollup parents stay excluded
-- [x] ISC-91: carryover.reset events surfaced in the History page (timestamp, envelope, before → after)
-- [x] ISC-92: manually-set Carryover figures carry a visible marker with tooltip "Manually set to $X on <date> — was $Y"
-- [x] ISC-93: CarryoverPopover offers one-click Undo restoring the recorded before value (undo itself writes an audited carryover.reset event)
-- [x] ISC-94: chart visualisations that render carryover/rollover (envelope trend cushion, balance waterfall) flag manually-adjusted months in their hover tooltips
-- [x] ISC-95: carryover history exposed via a contract endpoint (zod-validated, parity-test covered)
-- [x] ISC-96: Anti: undo never fabricates a value — it only restores a beforeCents recorded in the event log
-- [x] ISC-97: gates green; deployed; wizard header verified against Nick's live data
-
-### Follow-ups (2026-07-17, iteration 5)
-- [x] ISC-98: budget-page chart Suspense shows a skeleton fallback, not blank (done inline)
-- [ ] ISC-99: manual-adjustment marker shows on custom date ranges (range-aware, not exact-equality) — in flight
-- [ ] ISC-100: carryover adjustments interleave inline with transactions in the drill-down popover — in flight
-- [ ] ISC-101: each History-page carryover entry has its own Undo (restore-to-this-point) button, restoring that entry's beforeCents; audited; Anti: never fabricates a value
 
 ## Test Strategy
 

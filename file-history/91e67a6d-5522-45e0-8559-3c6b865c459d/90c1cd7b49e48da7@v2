@@ -1,0 +1,60 @@
+# Remediation Round — 2026-07-07 → 2026-07-14 (v1.4.0)
+
+Executes the before-Basiq bucket of `DISTINGUISHED_ENGINEER_REVIEW_2026-07-02.md`, plus
+three owner-requested features. Three waves, each by a dedicated agent against green
+gates, orchestrated with file-territory separation. **Final gates: 312 tests pass
+(60 files, was 187/37 pre-round), tsc ×3 clean, eslint clean.** Deployed 2026-07-14:
+web bundle rebuilt, `penny.service` restarted, migration verified against the live DB
+(UNIQUE index present, 0 duplicate allocation groups, effective-date columns live).
+Pre-migration snapshot: `~/.penny/pre-deploy-snapshots/penny-pre-v1.4.0.db`.
+
+## Review findings → fixes
+
+| Review finding | Fix | Wave |
+|---|---|---|
+| Backend Critical — dead routes `/api/move`, `/api/envelopes/edit`, `/api/movements` | Registered/implemented; `API_PATHS satisfies Record<ApiPath, true>` makes contract↔router drift a compile error; parity test sweeps every endpoint | 1 |
+| Backend High — no validation, zod unused | `src/server/validate.ts`: zod at all mutation boundaries, integer-cents refinement, strict dates | 1 |
+| Backend High — UTC month/day for a Melbourne user | `src/platform/time.ts` + `PENNY_TIMEZONE` (default Australia/Melbourne) threaded server → domain → pulse | 1+2 |
+| Security High — unthrottled 4-digit PIN | Persisted `FileAttemptTracker`: 5 failures → exponential backoff (cap 15 min), 429 + Retry-After, covers change-pin, survives restart | 1 |
+| Security Medium — log redaction never installed | Installed at both entrypoints via a SecretStore wrapper (lazy-safe) | 1 |
+| Frontend High — idle-timer render storm | Deadline in a ref, ≥30 s publish granularity, memoised context; lock semantics proven preserved | 1 |
+| Frontend Medium — `call()` returns error bodies as success | `ApiCallError` thrown on every non-OK; error states render honestly | 1 |
+| Frontend Medium — key-save claims success on failure; fire-and-forget mutations; modal seeding | All busy/error-guarded with double-submit protection; detail-page seeding fixed | 1 |
+| Backend High — non-atomic money mutations | `Store.withTransaction` (SQLite hand-rolled BEGIN IMMEDIATE, Postgres per-txn client, memory snapshot/rollback; ALS nesting) wraps move/distribute/editBudget/ensureMonth/create | 2 |
+| Backend High — `ensureMonth` budget-doubling race | De-dup migration (SUM-collapse, keeper = lowest id) then `UNIQUE(user_id, envelope_id, period)`; runtime upsert REPLACEs | 2 |
+| Architecture High — Pulse reads always-null `envelopeId`; snapshots never written | Pulse spend via engine `resolveEnvelopeId` (effective-dated mappings); `writeSnapshot` wired into the daily pulse run, idempotent per day | 2 |
+| Security High — plaintext backup to non-crypt OneDrive | `backup-db.ts` refuses non-crypt remotes loudly (`PENNY_BACKUP_REMOTE`), refusal recorded in backup status. **Owner action still open: create the rclone crypt remote and purge old plaintext snapshots from OneDrive** | 2 |
+| Security Low — world-readable `~/.penny` files | Secret writes 0600, `.penny` dir 0700 | 2 |
+| Backend Medium — `saving` type rejected at create | Full type enum accepted end-to-end + HTTP regression test (live-hit by the owner 2026-07-14 on the old build) | 1+3 |
+| SystemsThinking/Architecture — Basiq spec gaps | Spec §11: balance re-anchor + parallel-run window (ISC-129..131), provider-prefixed ids + mapping migration (132..134), tombstones (135), bookmark-at-issuance (136) | — |
+
+## Features (owner-requested, 2026-07-14)
+
+- **Budget chronology** — `budget_template` lines are effective-dated (`effective_from`/`effective_to`),
+  append-only versions; month-bucket resolution; overlapping versions SUM within a month;
+  "Complete the previous budget" checkbox (default on) ends the open version the day
+  before the new one starts; income targets version the same way (salary change as of
+  1 Aug: July shows old, August new); per-envelope History view with
+  completed/active/scheduled chips; `GET /api/envelopes/versions`.
+- **Menu force-sync** — sidebar + mobile sheet button on `POST /api/sync`; busy state,
+  honest failure, grid invalidation, synced-count flash. Background cadence remains the
+  hourly `penny-sync.timer`.
+- **Pending indicator** — grid rows show muted "· $X pending" (title-explained) for
+  bank-pending activity; ISC-23 maths (pending never counted) unchanged. Resolves the
+  "synced but budget looks stale" reports of 2026-07-14 (Jacqui Nolan case: the payment
+  was `is_pending=1`; the seven posted payments were already counted).
+
+## Intentional behaviour changes (documented by the implementing agents)
+
+Ongoing budget edits append version rows (previously overwrote in place) and now
+propagate to pre-materialised future months; income name edits no longer rewrite
+targets; move/distribute anchor brand-new template lines at the first of the current
+month; grid cadence labels come from the current version. All 260 pre-round tests still
+pass; behaviour changes are covered by the 52 new tests.
+
+## Deferred (unchanged from the review's Bucket C)
+
+Postgres store suite in CI, per-user `EngineConfig`, session/auth hardening
+(`PENNY_SESSION_KEY` floor, persisted magic links, full-digest userId, security
+headers), per-tenant cron orchestration, master key out of the vault dir, ARIA grid
+restructure, query-cache clear on lock, OneDrive plaintext purge (owner action).

@@ -1,0 +1,1075 @@
+[
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/ALGORITHM/LATEST"
+    },
+    "timestamp": "2026-07-02T01:45:45.751Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls /home/nicholas-wood/Documents/workspace/projects/envelope-os/ && echo \"---\" && cat /home/nicholas-wood/Documents/workspace/projects/envelope-os/package.json 2>/dev/null | head -50",
+      "description": "List envelope-os project and show package.json"
+    },
+    "timestamp": "2026-07-02T01:45:46.769Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/ALGORITHM/v6.3.0.md"
+    },
+    "timestamp": "2026-07-02T01:45:52.225Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -sk -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Algorithm\", \"voice_id\": \"fTtv3eikoepIosk8dTZ5\", \"voice_enabled\": true}' >/dev/null 2>&1; rg -il \"review|audit\" /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/ 2>/dev/null; echo \"---FEEDBACK---\"; rg -l \"feedback\" /home/nicholas-wood/.claude/PAI/MEMORY/LEARNING/ 2>/dev/null | head -5",
+      "description": "Fire Algorithm voice announcement and consult feedback memory"
+    },
+    "timestamp": "2026-07-02T01:47:05.161Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && find src web/src test scripts docs -type f \\( -name \"*.ts\" -o -name \"*.tsx\" -o -name \"*.md\" -o -name \"*.sql\" \\) 2>/dev/null | sort && echo \"===LOC===\" && find src web/src -name \"*.ts\" -o -name \"*.tsx\" | xargs wc -l 2>/dev/null | tail -1 && echo \"===GIT===\" && git log --oneline | head -15",
+      "description": "Map envelope-os file tree, line counts, recent git history"
+    },
+    "timestamp": "2026-07-02T01:47:06.989Z"
+  },
+  {
+    "name": "Skill",
+    "input": {
+      "skill": "ISA",
+      "args": "scaffold from prompt: four-lens Distinguished Engineer review of BudgetBuddy (envelope-os) — frontend, backend, architecture, security — at tier E4"
+    },
+    "timestamp": "2026-07-02T01:47:32.156Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Running the Scaffold workflow in the ISA skill\"}' > /dev/null 2>&1 &\nmkdir -p /home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review; echo ok",
+      "description": "Fire ISA skill voice notification and create work directory"
+    },
+    "timestamp": "2026-07-02T01:47:50.551Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review/ISA.md",
+      "content": "---\ntask: Four-lens Distinguished Engineer review of BudgetBuddy (envelope-os)\nslug: budgetbuddy-de-review\neffort: E4\nphase: observe\nprogress: 0/46\nmode: standard\nstarted: 2026-07-02T00:00:00+10:00\nupdated: 2026-07-02T00:00:00+10:00\n---\n\n## Problem\n\nBudgetBuddy (envelope-os, v1.3.0, ~21.5k LOC TS) has grown through rapid iteration — envelope engine, zero-based budgeting, PocketSmith ingest, local-first auth/secrets, React SPA — and is about to pivot its ingest layer from PocketSmith to Basiq (CDR bank feeds) and eventually to multi-user. No holistic, cross-domain expert review has assessed the whole system; only a frontend staff review (2026-07-01, remediated in 5 phases) and early product/UX/architect docs exist. Nick needs an evidence-based picture of what is actually built and where it is weak before investing in the Basiq build.\n\n## Vision\n\nNick reads four reviews that feel like they came from four different distinguished engineers who each spent a day in the codebase — findings he couldn't have listed himself, each anchored to real file:line evidence, converging on a prioritised improvement plan that de-risks the Basiq migration and the multi-user trajectory.\n\n## Out of Scope\n\n- Applying fixes or patches to the codebase (review only; the report document is the sole artefact written into the repo).\n- Re-litigating the 2026-07-01 frontend staff review findings that were already remediated (verify remediation instead).\n- Product/UX critique (covered by existing PRODUCT_REVIEW.md / UX_REVIEW.md).\n- Reviewing PAI infrastructure or Pulse itself (only BudgetBuddy's coupling to them).\n- Running the app live or penetration-testing a running instance.\n\n## Principles\n\n- Findings without evidence are opinions: every claim cites file:line or quoted code.\n- Severity reflects blast radius on Nick's actual trajectory (Basiq pivot, multi-user), not textbook dogma.\n- A single-user local-first app is judged as such; \"enterprise gap\" findings must say why they matter *here*.\n- Independent lenses first, synthesis second — cross-contamination weakens the review.\n\n## Constraints\n\n- Four separate lenses: frontend, backend, architecture, security — each at Distinguished Engineer depth.\n- Reviews run as parallel subagents against the real repo at ~/Documents/workspace/projects/envelope-os.\n- Report persists in the project repo under docs/reviews/.\n- No source-code modification in envelope-os (docs/reviews/ addition excepted).\n- bun/TypeScript conventions respected in any recommendation.\n\n## Goal\n\nDeliver a four-lens Distinguished Engineer review of BudgetBuddy — frontend, backend, architecture, security — with evidence-anchored findings, a verdict per lens, and a single prioritised (P0/P1/P2) recommendation set, persisted to docs/reviews/ and summarised in chat.\n\n## Criteria\n\n### Frontend lens\n- [ ] ISC-1: Frontend review covers component architecture and composition (pages/components/ui layering) with file:line evidence\n- [ ] ISC-2: Frontend review covers the data layer — TanStack Query usage, query keys, cache invalidation\n- [ ] ISC-3: Frontend review covers state management and session handling (session.tsx)\n- [ ] ISC-4: Frontend review covers rendering performance (memoisation, lazy loading, chart rendering)\n- [ ] ISC-5: Frontend review covers accessibility (Radix usage, keyboard paths, labels)\n- [ ] ISC-6: Frontend review covers error/loading/empty states across pages\n- [ ] ISC-7: Frontend review covers type safety and API contract typing (lib/api.ts vs server contract)\n- [ ] ISC-8: Frontend review covers test coverage and quality of web/src tests\n- [ ] ISC-9: Frontend review checks whether the 2026-07-01 staff-review remediation actually landed (spot-verifies ≥3 remediated items)\n- [ ] ISC-10: Frontend review ends with a verdict grade and top-5 ranked recommendations\n\n### Backend lens\n- [ ] ISC-11: Backend review covers HTTP layer — Hono routing, handlers, middleware, contract (src/server/)\n- [ ] ISC-12: Backend review covers domain logic correctness — envelope balance/period/rollup/spend and budget zerobased/distribute/move\n- [ ] ISC-13: Backend review covers the store layer — sqlite/postgres dual implementation parity and schema\n- [ ] ISC-14: Backend review covers the ingest/sync pipeline — client, map, sync, backfill, alerting\n- [ ] ISC-15: Backend review covers input validation (zod usage) and error handling paths\n- [ ] ISC-16: Backend review covers idempotency/concurrency behaviour of sync and mutations\n- [ ] ISC-17: Backend review covers test coverage quality of test/ (what's tested vs what matters)\n- [ ] ISC-18: Backend review covers scripts/ (migrate, backfill, backup) operational quality\n- [ ] ISC-19: Backend review ends with a verdict grade and top-5 ranked recommendations\n\n### Architecture lens\n- [ ] ISC-20: Architecture review assesses hexagonal boundaries — ports/adapters discipline, dependency direction, composition root\n- [ ] ISC-21: Architecture review assesses local-first/cloud-ready duality (platform/auth + secrets local vs cloud variants)\n- [ ] ISC-22: Architecture review assesses Basiq migration readiness against docs/BASIQ_MIGRATION_SPEC.md (IngestProvider port fit)\n- [ ] ISC-23: Architecture review assesses multi-user/tenancy readiness (userId scoping claims in Store)\n- [ ] ISC-24: Architecture review assesses Pulse integration coupling (src/pulse/, scripts/pulse.ts)\n- [ ] ISC-25: Architecture review assesses schema evolution/migration strategy\n- [ ] ISC-26: Architecture review assesses operational resilience — backup/restore, data integrity invariants\n- [ ] ISC-27: Architecture review names the top structural risks for the next 12 months of the product trajectory\n- [ ] ISC-28: Architecture review ends with a verdict grade and top-5 ranked recommendations\n\n### Security lens\n- [ ] ISC-29: Security review covers authentication — PIN/local auth, cloud auth, session lifecycle (platform/auth/)\n- [ ] ISC-30: Security review covers session token generation, storage, expiry, and invalidation\n- [ ] ISC-31: Security review covers secrets handling — crypto.ts, local/cloud secret stores, key derivation\n- [ ] ISC-32: Security review covers egress controls (src/security/egress.ts) and redaction (redact.ts)\n- [ ] ISC-33: Security review covers injection surfaces — SQL construction in store layer, input validation at handlers\n- [ ] ISC-34: Security review covers web-tier headers/CSRF/CORS posture and the Tailscale serve exposure model\n- [ ] ISC-35: Security review covers financial-data-at-rest protections and backup file handling\n- [ ] ISC-36: Security review covers dependency and supply-chain risk (bun.lock surface)\n- [ ] ISC-37: Security review ends with a severity-rated findings table (Critical/High/Med/Low) and top-5 recommendations\n\n### Synthesis & deliverable\n- [ ] ISC-38: Full report written to envelope-os/docs/reviews/ with all four lens reports plus synthesis\n- [ ] ISC-39: Synthesis identifies cross-lens themes appearing in ≥2 reviews\n- [ ] ISC-40: Unified recommendation list is prioritised P0/P1/P2 with effort estimates\n- [ ] ISC-41: Chat summary delivers per-lens verdicts plus the P0 list in the closing message\n- [ ] ISC-42: Every finding referenced in synthesis carries file:line or file-level evidence\n\n### Anti-criteria\n- [ ] ISC-43: Anti: no file under envelope-os/src, web, test, scripts is modified (git status clean outside docs/reviews/)\n- [ ] ISC-44: Anti: no finding merely restates an already-remediated 2026-07-01 staff-review item without noting remediation state\n- [ ] ISC-45: Anti: no fabricated file path — every cited path exists in the repo\n- [ ] ISC-46: Anti: no recommendation without a stated why (rationale tied to Nick's trajectory or a concrete defect)\n\n## Test Strategy\n\n| isc | type | check | threshold | tool |\n|-----|------|-------|-----------|------|\n| ISC-1..10 | content | frontend agent report contains the named dimension with evidence | present + cited | Read agent output |\n| ISC-11..19 | content | backend agent report contains the named dimension with evidence | present + cited | Read agent output |\n| ISC-20..28 | content | architecture agent report contains the named dimension with evidence | present + cited | Read agent output |\n| ISC-29..37 | content | security agent report contains the named dimension with evidence | present + cited | Read agent output |\n| ISC-38 | file | report file exists with 4 lens sections + synthesis | all sections | Read |\n| ISC-39..42 | content | synthesis sections present with themes, P0/P1/P2, verdicts, evidence | all present | Read |\n| ISC-43 | repo | git status shows no changes outside docs/reviews/ | clean | Bash git status |\n| ISC-44 | content | remediated items cross-checked against FRONTEND_STAFF_REVIEW | no naive repeats | Read + compare |\n| ISC-45 | repo | spot-check ≥5 cited paths exist | 5/5 | Bash test -f |\n| ISC-46 | content | each P0/P1 recommendation has a why clause | 100% | Read |\n\n## Features\n\n| name | description | satisfies | depends_on | parallelizable |\n|------|-------------|-----------|------------|----------------|\n| frontend-review | DE frontend agent over web/src | ISC-1..10 | — | yes |\n| backend-review | DE backend agent over src/server, domain, store, ingest | ISC-11..19 | — | yes |\n| architecture-review | DE architecture agent over whole repo + docs | ISC-20..28 | — | yes |\n| security-review | DE security agent over auth/secrets/egress/store/web tier | ISC-29..37 | — | yes |\n| synthesis | Cross-lens themes, P0/P1/P2 plan, report + chat summary | ISC-38..46 | all four reviews | no |\n\n## Decisions\n\n- 2026-07-02: ISC floor relaxation (E4 soft floor 128 → 46). Show-the-math: the unit under articulation is a *review deliverable*, not the application itself; the app's own ISA (envelope-os/ISA.md, 128 ISCs) already carries the application test surface. 46 ISCs fully decompose the review's coverage, deliverable, and anti-regression surface; padding to 128 would duplicate the project ISA.\n- 2026-07-02: Delegation via 4 general-purpose subagents with Distinguished Engineer persona prompts (no project-specific envelope-os agents exist in the registry) + Cato at VERIFY per E4 doctrine.\n- 2026-07-02: Prior reviews (FRONTEND_STAFF_REVIEW_2026-07-01 + remediation commits, ARCHITECT_REVIEW, PRODUCT_REVIEW, UX_REVIEW) are provided to agents as context so findings assess the *post-remediation* state.\n\n## Changelog\n\n(populated at LEARN)\n\n## Verification\n\n(populated at VERIFY)\n"
+    },
+    "timestamp": "2026-07-02T08:32:10.387Z"
+  },
+  {
+    "name": "Skill",
+    "input": {
+      "skill": "cs",
+      "args": "budgetbuddy envelope-os prior reviews and build sessions"
+    },
+    "timestamp": "2026-07-02T08:48:33.902Z"
+  },
+  {
+    "name": "Skill",
+    "input": {
+      "skill": "ContextSearch",
+      "args": "budgetbuddy envelope-os prior reviews and build sessions"
+    },
+    "timestamp": "2026-07-02T08:48:56.666Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -il \"budgetbuddy|envelope\" ~/.claude/PAI/MEMORY/STATE/work.json ~/.claude/PAI/MEMORY/STATE/session-names.json 2>/dev/null; echo \"---DIRS---\"; fd -t d -i \"budget|envelope|penny\" ~/.claude/PAI/MEMORY/WORK/ --max-depth 1 2>/dev/null | tail -10; echo \"---ISA-GREP---\"; rg -il \"budgetbuddy|envelope-os|penny\" ~/.claude/PAI/MEMORY/WORK/*/ISA.md 2>/dev/null | tail -5; echo '{\"ts\":\"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'\",\"skill\":\"ContextSearch\",\"workflow\":\"Phase1\",\"input\":\"budgetbuddy envelope-os prior sessions\",\"status\":\"ok\",\"duration_s\":5}' >> ~/.claude/PAI/MEMORY/SKILLS/execution.jsonl",
+      "description": "ContextSearch Phase 1 parallel scan for budgetbuddy sessions"
+    },
+    "timestamp": "2026-07-02T08:49:08.189Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -i \"budgetbuddy|envelope|penny\" ~/.claude/PAI/MEMORY/STATE/work.json | head -8; echo \"---NAMES---\"; rg -i \"budgetbuddy|envelope|penny\" ~/.claude/PAI/MEMORY/STATE/session-names.json | head -8",
+      "description": "Extract matching session registry entries"
+    },
+    "timestamp": "2026-07-02T08:49:22.016Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Think phase.\", \"voice_id\": \"fTtv3eikoepIosk8dTZ5\", \"voice_enabled\": true}' >/dev/null 2>&1; rg -il \"envelope|budget|basiq|pocketsmith\" ~/.claude/PAI/MEMORY/KNOWLEDGE/ 2>/dev/null | head -5; echo ok",
+      "description": "Voice announce Think phase and knowledge check"
+    },
+    "timestamp": "2026-07-02T08:49:38.540Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review/ISA.md",
+      "old_string": "phase: observe\nprogress: 0/46\nmode: standard\nstarted: 2026-07-02T00:00:00+10:00\nupdated: 2026-07-02T00:00:00+10:00",
+      "new_string": "phase: think\nprogress: 0/46\nmode: standard\nstarted: 2026-07-02T00:00:00+10:00\nupdated: 2026-07-02T00:05:00+10:00"
+    },
+    "timestamp": "2026-07-02T08:49:40.316Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Plan phase.\", \"voice_id\": \"fTtv3eikoepIosk8dTZ5\", \"voice_enabled\": true}' >/dev/null 2>&1; echo ok",
+      "description": "Voice announce Plan phase"
+    },
+    "timestamp": "2026-07-02T08:50:05.672Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review/ISA.md",
+      "old_string": "phase: think",
+      "new_string": "phase: plan"
+    },
+    "timestamp": "2026-07-02T08:50:10.500Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Build phase. Launching four distinguished engineer reviewers.\", \"voice_id\": \"fTtv3eikoepIosk8dTZ5\", \"voice_enabled\": true}' >/dev/null 2>&1; echo ok",
+      "description": "Voice announce Build phase"
+    },
+    "timestamp": "2026-07-02T08:50:48.852Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Frontend DE review of BudgetBuddy",
+      "subagent_type": "general-purpose",
+      "prompt": "You are a Distinguished Frontend Engineer (20+ years; ex-principal at a major product company; deep React, TypeScript, data-layer, a11y, and performance expertise). Conduct a thorough frontend review of BudgetBuddy.\n\nREPO (READ-ONLY): /home/nicholas-wood/Documents/workspace/projects/envelope-os\nFrontend code: web/src (App.tsx, pages/, components/, layout/, lib/). Configs: web/tsconfig*.json, vite.config.ts, tailwind.config.js, eslint.config.js.\n\nPRODUCT CONTEXT: Zero-based envelope budgeting app. Single user (the owner) today, product-shaped multi-user ambition. Stack: React 18 + Vite + TanStack Query v5 + react-router v6 + Radix primitives + Tailwind + Recharts. Served by a Bun/Hono backend on 127.0.0.1:8787, exposed on the owner's tailnet via `tailscale serve`. Judge it as a single-user local-first personal finance app with product trajectory — if you flag an \"enterprise-grade\" gap, say why it matters HERE.\n\nCRITICAL CONTEXT — PRIOR REVIEW: A staff-level frontend review already ran on 2026-07-01: docs/reviews/FRONTEND_STAFF_REVIEW_2026-07-01.md and docs/reviews/FRONTEND_REMEDIATION_PLAN_2026-07-01.md. Five remediation phases were committed the same day (quality gate, security+trust, TanStack Query data layer, perf/DRY/a11y, backend endpoints). READ BOTH DOCS FIRST. Your job is to review the POST-remediation state: (a) spot-verify at least 3 claimed remediations actually landed in code (cite file:line), (b) find what that review missed or what the remediation introduced, (c) do not repeat a remediated finding without noting its remediation state.\n\nREVIEW DIMENSIONS (cover every one):\n1. Component architecture and composition — pages/components/ui layering, prop drilling, component size/cohesion\n2. Data layer — TanStack Query usage: query keys (lib/queryKeys.ts), cache invalidation, mutation flows, stale/refetch policy, lib/api.ts design\n3. State and session management — lib/session.tsx, auth flow from SignInPage\n4. Rendering performance — memoisation, list rendering, lazy loading (charts), bundle concerns, re-render hotspots\n5. Accessibility — Radix usage correctness, keyboard paths, labels/ARIA, focus management in modals/popovers\n6. Error/loading/empty states across all pages\n7. Type safety — API contract typing between web/src/lib/api.ts and src/server/contract.ts; any `any` leakage\n8. Test coverage and quality — web/src tests (what's tested, what's conspicuously untested)\n\nYou MAY run (from repo root): `bun run lint`, `tsc -p web/tsconfig.json --noEmit`, `bun test web/` — nothing that writes to the repo. Do NOT modify, create, or delete any file anywhere.\n\nEVIDENCE RULE: every finding cites file:line (or file + function). No textbook generalities without a concrete anchor in this codebase. Read enough real code to earn your verdict — at minimum: App.tsx, 3+ pages (BudgetPage, EnvelopeDetailPage, TransactionsPage), lib/api.ts, lib/queries.ts, lib/session.tsx, 2+ budget components, 1 chart component.\n\nOUTPUT (your final message IS the report — raw markdown, no preamble):\n# Frontend Review — BudgetBuddy\n## Executive Summary (5-8 sentences)\n## What's Built (short factual assessment of the frontend surface)\n## Strengths (evidence-cited)\n## Remediation Verification (≥3 spot-checks of the 2026-07-01 remediation, each PASS/FAIL with file:line)\n## Findings (numbered; each: **[Severity: Critical/High/Medium/Low]** — title, file:line evidence, why it matters, recommended fix)\n## Verdict (letter grade A-F + one paragraph)\n## Top 5 Recommendations (ranked, each with effort S/M/L and a why)"
+    },
+    "timestamp": "2026-07-02T08:51:08.096Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Backend DE review of BudgetBuddy",
+      "subagent_type": "general-purpose",
+      "prompt": "You are a Distinguished Backend Engineer (20+ years; deep TypeScript/Node/Bun, API design, data modelling, financial-domain correctness, and testing expertise). Conduct a thorough backend review of BudgetBuddy.\n\nREPO (READ-ONLY): /home/nicholas-wood/Documents/workspace/projects/envelope-os\nBackend code: src/server/ (http.ts, index.ts, contract.ts, services.ts, handlers/), src/budget/, src/envelope/, src/ingest/, src/store/ (sqlite.ts, postgres.ts, schema.ts), src/reconcile/, src/domain/types.ts, src/composition.ts, scripts/ (migrate, sync, backfill, backup), test/.\n\nPRODUCT CONTEXT: Zero-based envelope budgeting over PocketSmith-ingested bank transactions, about to pivot ingest to Basiq CDR direct bank feeds (docs/BASIQ_MIGRATION_SPEC.md). Single user today, product-shaped multi-user ambition (Store claims userId scoping). Bun + Hono + zod. Local-first SQLite with a cloud-ready Postgres variant. Money correctness matters: envelope balances, carryover/rollover across months, zero-based allocation, transfers, reconciliation against real account balances. Judge as a single-user local-first app with product trajectory — flag \"enterprise\" gaps only with why-it-matters-here.\n\nSCOPE BOUNDARY: Do NOT review authentication/secrets/crypto internals (a parallel security review owns src/platform/auth*, src/platform/secrets*, src/security/) and do NOT review macro architecture seams (a parallel architecture review owns ports/adapters philosophy). You own: HTTP/API quality, handler correctness, domain logic correctness, store implementation quality, ingest/sync pipeline, validation, error handling, idempotency/concurrency, tests, and operational scripts.\n\nREVIEW DIMENSIONS (cover every one):\n1. HTTP layer — Hono routing/middleware in src/server/http.ts + index.ts, handler quality, contract.ts design, response/error shape consistency\n2. Domain logic correctness — envelope/ (balance.ts, period.ts, rollup.ts, spend.ts, rules.ts) and budget/ (zerobased.ts, distribute.ts, move.ts, template.ts, normalise.ts): month boundaries, carryover, rounding/money representation (floats vs integer cents?), sign conventions, transfer symmetry\n3. Store layer — sqlite.ts vs postgres.ts parity, schema.ts quality, query construction, transaction (DB) usage, N+1 patterns\n4. Ingest/sync pipeline — ingest/client.ts, map.ts, sync.ts, backfill.ts, alert.ts: failure handling, partial-sync behaviour, dedup\n5. Validation and error handling — zod coverage at handler boundaries, unvalidated paths, error propagation, silent catches\n6. Idempotency/concurrency — re-running sync, double-submitting mutations (move money, distribute), race windows\n7. Tests — read test/ broadly: what is genuinely covered (store suite, envelope maths, transfers) vs what matters but is untested; test quality (real assertions vs snapshots)\n8. Operational scripts — migrate.ts, backup.ts/backup-db.ts, reconcile-rollover.ts: safety, re-runnability\n\nYou MAY run (from repo root): `bun test`, `bun run typecheck` — nothing that writes to the repo (skip any test that would; note it instead). Do NOT modify, create, or delete any file anywhere.\n\nEVIDENCE RULE: every finding cites file:line (or file + function). Money-handling claims must quote the actual code. Read the real code deeply — at minimum: http.ts, 4+ handlers, balance.ts, period.ts, zerobased.ts, move.ts, sqlite.ts (substantially), sync.ts, and 4+ test files.\n\nOUTPUT (your final message IS the report — raw markdown, no preamble):\n# Backend Review — BudgetBuddy\n## Executive Summary (5-8 sentences)\n## What's Built (short factual assessment of the backend surface)\n## Strengths (evidence-cited)\n## Findings (numbered; each: **[Severity: Critical/High/Medium/Low]** — title, file:line evidence, why it matters, recommended fix)\n## Test Reality Check (what bun test/typecheck actually reported; coverage gaps that matter)\n## Verdict (letter grade A-F + one paragraph)\n## Top 5 Recommendations (ranked, each with effort S/M/L and a why)"
+    },
+    "timestamp": "2026-07-02T08:51:27.071Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Architecture DE review of BudgetBuddy",
+      "subagent_type": "general-purpose",
+      "prompt": "You are a Distinguished Systems Architect (20+ years; hexagonal/ports-and-adapters, evolutionary architecture, data platforms, product-scaling from single-user to multi-tenant SaaS). Conduct a thorough architecture review of BudgetBuddy.\n\nREPO (READ-ONLY): /home/nicholas-wood/Documents/workspace/projects/envelope-os\n\nPRODUCT TRAJECTORY (judge against THIS, not abstract ideals): Today: zero-based envelope budgeting for one user, local-first on a Linux box, SQLite, ingesting transactions from PocketSmith's API. Committed next step: replace PocketSmith with Basiq CDR direct bank feeds (docs/BASIQ_MIGRATION_SPEC.md — IngestProvider port, BasiqProvider with consent flow + job-polling, owned categorisation layer). Later ambition: multi-user product (Store claims userId scoping already). Also feeds a personal dashboard (\"Pulse\") via src/pulse/ + scripts/pulse.ts. Cloud-ready variants exist: Postgres store, cloud auth, cloud secrets.\n\nSCOPE BOUNDARY: Parallel reviews own line-level backend correctness, frontend internals, and security mechanics. You own the SEAMS: module boundaries, dependency direction, ports/adapters discipline, composition, data architecture, evolution readiness.\n\nREAD FIRST: ISA.md (the project's ideal-state articulation, 128 criteria), README.md, docs/BASIQ_MIGRATION_SPEC.md, docs/ARCHITECT_REVIEW.md (a prior architecture review — assess what changed since), src/composition.ts, the ports files (src/budget/ports.ts, src/envelope/ports.ts), src/platform/store.ts, src/store/schema.ts, src/domain/types.ts, src/server/services.ts.\n\nREVIEW DIMENSIONS (cover every one):\n1. Hexagonal discipline — are ports real seams or ceremony? Dependency direction violations (domain importing adapters, server importing store concretions), composition root quality (src/composition.ts)\n2. Local-first/cloud-ready duality — platform/auth local vs cloud, secrets local vs cloud, sqlite vs postgres: is the duality principled or two divergent codepaths? What drifts?\n3. Basiq migration readiness — score the actual codebase against docs/BASIQ_MIGRATION_SPEC.md: does an IngestProvider port exist yet? How entangled is PocketSmith (src/ingest/pocketsmith/, map.ts, sync.ts, scripts/)? What is the true blast radius of the swap?\n4. Multi-user/tenancy readiness — is userId scoping real and enforced at the store layer, or cosmetic? What breaks first at 2 users (schema, auth, sync scheduling, secrets)?\n5. Pulse integration — src/pulse/ + scripts/pulse.ts: coupling direction, is BudgetBuddy polluted by PAI-specific concerns?\n6. Schema evolution — migration strategy (scripts/migrate.ts, src/store/schema.ts): can the schema evolve safely? Versioning?\n7. Data integrity & operational resilience — backup/restore story, invariants (zero-based sum, envelope-balance vs transaction-log consistency), where derived state can silently diverge from source\n8. Domain model quality — src/domain/types.ts + envelope/budget split: does the model carve reality at the joints (envelopes, budgets, periods, transactions, transfers)?\n9. Top structural risks for the next 12 months, ranked\n\nDo NOT modify, create, or delete any file anywhere. Read-only.\n\nEVIDENCE RULE: every claim cites file:line or quoted code/doc. Where you assess \"readiness\", show the specific coupling or seam that supports the score.\n\nOUTPUT (your final message IS the report — raw markdown, no preamble):\n# Architecture Review — BudgetBuddy\n## Executive Summary (5-8 sentences)\n## What's Built (the actual architecture as found, not as documented — note doc/code drift)\n## Strengths (evidence-cited)\n## Findings (numbered; each: **[Severity: Critical/High/Medium/Low]** — title, evidence, why it matters for the trajectory, recommended direction)\n## Basiq Migration Readiness (score /10 + the specific work the swap actually requires)\n## Multi-User Readiness (score /10 + what breaks first)\n## Verdict (letter grade A-F + one paragraph)\n## Top 5 Recommendations (ranked, each with effort S/M/L and a why)"
+    },
+    "timestamp": "2026-07-02T08:51:49.565Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Security DE review of BudgetBuddy",
+      "subagent_type": "general-purpose",
+      "prompt": "You are a Distinguished Security Engineer (20+ years; application security, applied cryptography, authn/authz design, financial-data protection). Conduct a defensive security review of BudgetBuddy — the owner's own personal finance codebase, reviewed at his request. This is an authorized code audit of code he wrote and runs himself; no live system is attacked.\n\nREPO (READ-ONLY): /home/nicholas-wood/Documents/workspace/projects/envelope-os\n\nDEPLOYMENT/THREAT CONTEXT (calibrate severity to THIS): Runs on the owner's Linux box, Bun/Hono server bound to 127.0.0.1:8787, exposed ONLY over his private Tailscale tailnet via `tailscale serve` (see package.json serve:tailscale). Single user today. Data: his real bank transactions and balances (ingested from PocketSmith, soon Basiq CDR bank feeds — real bank credentials/consent tokens will be in play). Trajectory: multi-user product later, so also note what must harden BEFORE other people's financial data arrives. Severity must reflect this model: tailnet-only exposure lowers network attack surface; real financial data and upcoming bank-feed credentials raise data sensitivity.\n\nREVIEW DIMENSIONS (cover every one):\n1. Authentication — src/platform/auth.ts, auth/local.ts (PIN-based?), auth/cloud.ts: credential verification, brute-force resistance, timing safety\n2. Sessions — auth/session.ts + web/src/lib/session.tsx: token generation entropy, storage (cookie vs localStorage), expiry, invalidation on PIN change, transport\n3. Secrets — platform/secrets.ts, secrets/crypto.ts, secrets/local.ts, secrets/cloud.ts: key derivation, algorithm choices, IV/nonce handling, at-rest protection of the PocketSmith key (and readiness for Basiq app keys + CDR consent tokens)\n4. Egress control — src/security/egress.ts + its test: what it actually enforces, bypass routes\n5. Redaction — src/security/redact.ts: what leaks into logs/alerts despite it\n6. Injection surfaces — SQL construction across src/store/sqlite.ts and postgres.ts (parameterisation vs interpolation), zod validation coverage at src/server/handlers/*, path handling in backup/restore handlers\n7. Web tier — CORS/CSRF posture in src/server/http.ts, security headers, auth middleware ordering (which routes are actually protected — enumerate any unauthenticated endpoints), SPA serving\n8. Data at rest & backups — SQLite file permissions assumptions, backup.ts/backup-db.ts output handling, what a stolen backup yields\n9. Supply chain — dependency surface (package.json/bun.lock): anything unmaintained or high-risk; postinstall exposure under bun\n10. Existing security tests — test/secret-hygiene.test.ts, test/egress.test.ts, test/cloud-secret.test.ts, test/change-pin.test.ts: what they prove and what they miss\n\nDo NOT modify, create, or delete any file anywhere. Read-only. You may run read-only commands (rg, cat, bun pm ls) but nothing that writes.\n\nEVIDENCE RULE: every finding cites file:line with quoted code. No generic OWASP boilerplate without a concrete anchor. Distinguish exploitable-today vs matters-at-multi-user.\n\nOUTPUT (your final message IS the report — raw markdown, no preamble):\n# Security Review — BudgetBuddy\n## Executive Summary (5-8 sentences)\n## Threat Model (brief: assets, actors, entry points as deployed today vs multi-user future)\n## Strengths (evidence-cited)\n## Findings Table (| # | Severity | Title | Location | Exploitable today? |)\n## Findings Detail (numbered; each: severity, file:line + quoted code, impact, recommended fix)\n## Verdict (letter grade A-F + one paragraph)\n## Top 5 Recommendations (ranked, each with effort S/M/L and a why)"
+    },
+    "timestamp": "2026-07-02T08:52:04.948Z"
+  },
+  {
+    "name": "Skill",
+    "input": {
+      "skill": "SystemsThinking",
+      "args": "causal structure of BudgetBuddy: sync/ingest → categorisation → envelope balances → reconciliation → user trust; where feedback loops and derived-state divergence create systemic risk for the Basiq pivot and multi-user trajectory"
+    },
+    "timestamp": "2026-07-02T08:52:42.357Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Architecture DE review relaunch",
+      "subagent_type": "general-purpose",
+      "prompt": "You are a Distinguished Systems Architect (20+ years; hexagonal/ports-and-adapters, evolutionary architecture, data platforms, product-scaling from single-user to multi-tenant SaaS). Conduct a thorough architecture review of BudgetBuddy. Work briskly — read the named files, form judgements, write the report. Do not exhaustively read the whole repo.\n\nREPO (READ-ONLY): /home/nicholas-wood/Documents/workspace/projects/envelope-os\n\nPRODUCT TRAJECTORY (judge against THIS, not abstract ideals): Today: zero-based envelope budgeting for one user, local-first on a Linux box, SQLite, ingesting transactions from PocketSmith's API. Committed next step: replace PocketSmith with Basiq CDR direct bank feeds (docs/BASIQ_MIGRATION_SPEC.md — IngestProvider port, BasiqProvider with consent flow + job-polling, owned categorisation layer). Later ambition: multi-user product (Store claims userId scoping already). Also feeds a personal dashboard (\"Pulse\") via src/pulse/ + scripts/pulse.ts. Cloud-ready variants exist: Postgres store, cloud auth, cloud secrets.\n\nSCOPE BOUNDARY: Parallel reviews own line-level backend correctness, frontend internals, and security mechanics. You own the SEAMS: module boundaries, dependency direction, ports/adapters discipline, composition, data architecture, evolution readiness.\n\nREAD (prioritised): src/composition.ts, src/budget/ports.ts, src/envelope/ports.ts, src/platform/store.ts, src/store/schema.ts, src/domain/types.ts, src/server/services.ts, docs/BASIQ_MIGRATION_SPEC.md (skim), src/ingest/sync.ts, src/ingest/map.ts, src/pulse/source.ts, scripts/migrate.ts. Skim README.md and ISA.md headers only. Use rg to check dependency direction (e.g. imports of store/ or ingest/ from domain/envelope/budget; imports of pocketsmith types outside src/ingest).\n\nREVIEW DIMENSIONS (cover every one, briefly where warranted):\n1. Hexagonal discipline — are ports real seams or ceremony? Dependency direction violations, composition root quality\n2. Local-first/cloud-ready duality — sqlite vs postgres, local vs cloud auth/secrets: principled duality or divergent codepaths?\n3. Basiq migration readiness — does an IngestProvider port exist yet? How entangled is PocketSmith? True blast radius of the swap? Score /10\n4. Multi-user/tenancy readiness — is userId scoping real and enforced at the store layer? What breaks first at 2 users? Score /10\n5. Pulse integration — coupling direction, is BudgetBuddy polluted by PAI-specific concerns?\n6. Schema evolution — migration strategy: can the schema evolve safely?\n7. Data integrity & operational resilience — invariants (zero-based sum, envelope balance vs transaction log), where derived state can silently diverge; backup/restore story\n8. Domain model quality — does src/domain/types.ts carve reality at the joints?\n9. Top structural risks for the next 12 months, ranked\n\nDo NOT modify, create, or delete any file anywhere. Read-only.\n\nEVIDENCE RULE: every claim cites file:line or quoted code/doc.\n\nOUTPUT (your final message IS the report — raw markdown, no preamble):\n# Architecture Review — BudgetBuddy\n## Executive Summary (5-8 sentences)\n## What's Built (the actual architecture as found; note doc/code drift)\n## Strengths (evidence-cited)\n## Findings (numbered; each: **[Severity: Critical/High/Medium/Low]** — title, evidence, why it matters for the trajectory, recommended direction)\n## Basiq Migration Readiness (score /10 + the specific work the swap actually requires)\n## Multi-User Readiness (score /10 + what breaks first)\n## Verdict (letter grade A-F + one paragraph)\n## Top 5 Recommendations (ranked, each with effort S/M/L and a why)"
+    },
+    "timestamp": "2026-07-02T09:12:22.749Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review/ISA.md",
+      "old_string": "phase: plan\nprogress: 0/46",
+      "new_string": "phase: execute\nprogress: 19/46"
+    },
+    "timestamp": "2026-07-02T09:12:40.552Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review/ISA.md",
+      "old_string": "- 2026-07-02: Prior reviews (FRONTEND_STAFF_REVIEW_2026-07-01 + remediation commits, ARCHITECT_REVIEW, PRODUCT_REVIEW, UX_REVIEW) are provided to agents as context so findings assess the *post-remediation* state.",
+      "new_string": "- 2026-07-02: Prior reviews (FRONTEND_STAFF_REVIEW_2026-07-01 + remediation commits, ARCHITECT_REVIEW, PRODUCT_REVIEW, UX_REVIEW) are provided to agents as context so findings assess the *post-remediation* state.\n- 2026-07-02: First architecture agent stalled at the 600s watchdog; relaunched with a tightened prompt (prioritised read list, briskness instruction). No work lost — reviews are independent.\n- 2026-07-02: SystemsThinking capability invoked (forked skill run) produced three structural findings for synthesis: (1) Basiq migration severs the reconciliation anchor — no ISC fetches Basiq account balances, so the holding-vs-bank tripwire dies at PocketSmith decommission; (2) write-once EOD snapshots rebuild PocketSmith's derived-state divergence failure mode in-house (no snapshot-vs-recompute invalidation path); (3) running-balance series is pinned to the grid \"by construction\", removing an independent verification sensor. Leverage-ordered interventions recorded for the report."
+    },
+    "timestamp": "2026-07-02T09:12:46.957Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review && python3 - <<'EOF'\nimport re\np='ISA.md'\ns=open(p).read()\nfor n in list(range(1,11))+list(range(29,38)):\n    s=re.sub(rf'- \\[ \\] ISC-{n}:', f'- [x] ISC-{n}:', s)\nopen(p,'w').write(s)\nprint(\"marked frontend+security ISCs\")\nEOF",
+      "description": "Mark ISC-1..10 and ISC-29..37 passed in ISA"
+    },
+    "timestamp": "2026-07-02T09:13:06.884Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "python3 - <<'EOF'\nimport re\np='ISA.md'\ns=open(p).read()\nfor n in range(20,29):\n    s=re.sub(rf'- \\[ \\] ISC-{n}:', f'- [x] ISC-{n}:', s)\ns=s.replace('progress: 19/46','progress: 28/46')\nopen(p,'w').write(s)\nprint(\"marked architecture ISCs, progress 28/46\")\nEOF",
+      "description": "Mark ISC-20..28 passed in ISA"
+    },
+    "timestamp": "2026-07-02T09:17:59.047Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "pwd; grep -c '^\\- \\[x\\]' /home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review/ISA.md; ls /home/nicholas-wood/.claude/ISA.md 2>/dev/null || echo \"no stray file\"",
+      "description": "Verify ISA edit landed in the correct file"
+    },
+    "timestamp": "2026-07-02T09:18:11.731Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "stat -c '%y %s' /home/nicholas-wood/.claude/ISA.md && head -8 /home/nicholas-wood/.claude/ISA.md",
+      "description": "Check age and content of stray ISA.md"
+    },
+    "timestamp": "2026-07-02T09:18:25.286Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Execute phase. Verifying findings and writing the report.\", \"voice_id\": \"fTtv3eikoepIosk8dTZ5\", \"voice_enabled\": true}' >/dev/null 2>&1\ncd /home/nicholas-wood/Documents/workspace/projects/envelope-os\necho \"=== UI calls to /api/move and /api/envelopes/edit ===\"\nrg -n '\"POST /api/move\"|\"POST /api/envelopes/edit\"' web/src | head -8\necho \"=== registered routes in server ===\"\nrg -n \"api\\.(get|post)\\(\" src/server | head -40\necho \"=== zod imports in src ===\"\nrg -c \"zod\" src/ web/src 2>/dev/null || echo \"ZERO zod imports\"\necho \"=== deps count ===\"\nrg -c '\"' package.json >/dev/null; grep -c '\"\"' bun.lock 2>/dev/null; jq -r '.dependencies | keys | length' package.json; jq -r '.devDependencies | keys | length' package.json",
+      "description": "Verify Critical backend claims and supply-chain surface"
+    },
+    "timestamp": "2026-07-07T11:08:24.165Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review && python3 - <<'EOF'\nimport re\np='ISA.md'\ns=open(p).read()\nfor n in range(11,20):\n    s=re.sub(rf'- \\[ \\] ISC-{n}:', f'- [x] ISC-{n}:', s)\ns=s.replace('progress: 28/46','progress: 37/46')\nopen(p,'w').write(s)\nprint(\"marked backend ISCs, progress 37/46\")\nEOF",
+      "description": "Mark ISC-11..19 passed in ISA"
+    },
+    "timestamp": "2026-07-07T11:09:09.270Z"
+  },
+  {
+    "name": "Skill",
+    "input": {
+      "skill": "ApertureOscillation",
+      "args": "Tactical target: the consolidated fix list from a four-lens DE review of BudgetBuddy (envelope-os) — P0: register missing /api/move + /api/envelopes/edit routes with a contract↔router parity test; re-wire nightly backup to the crypt remote; UNIQUE constraint on allocations to kill the budget-doubling ensureMonth race; idle-timer render storm; PIN brute-force throttling. P1: store-port transactions for money mutations; zod validation with integer-cents refinement; Melbourne-timezone period model; Pulse via engine rollup + wire writeSnapshot. Strategic context: the larger system this serves — the committed Basiq CDR ingest pivot (IngestProvider port, provider-prefixed transaction ids, mapping migration, reconciliation must re-anchor to Basiq account balances or the drift tripwire dies at PocketSmith decommission), the multi-user product ambition (per-user EngineConfig, Postgres store suite, session/auth hardening), and PAI/Pulse as a consumer. Question held constant: is the remediation sequencing right — what should be fixed before the Basiq build starts vs folded into it vs deferred to multi-user?"
+    },
+    "timestamp": "2026-07-07T11:09:14.578Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls /home/nicholas-wood/.claude/PAI/USER/SKILLCUSTOMIZATIONS/ApertureOscillation/ 2>/dev/null || echo \"no customizations\"",
+      "description": "Check for ApertureOscillation user customizations"
+    },
+    "timestamp": "2026-07-07T11:09:24.787Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo '{\"ts\":\"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'\",\"skill\":\"ApertureOscillation\",\"workflow\":\"Oscillate\",\"input\":\"BudgetBuddy remediation sequencing tactical vs Basiq trajectory\",\"status\":\"ok\",\"duration_s\":60}' >> ~/.claude/PAI/MEMORY/SKILLS/execution.jsonl; mkdir -p /home/nicholas-wood/Documents/workspace/projects/envelope-os/docs/reviews; echo ok",
+      "description": "Log ApertureOscillation execution and ensure reviews dir exists"
+    },
+    "timestamp": "2026-07-07T11:10:01.750Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/docs/reviews/DISTINGUISHED_ENGINEER_REVIEW_2026-07-02.md",
+      "content": "# BudgetBuddy — Four-Lens Distinguished Engineer Review\n\n**Date:** 2026-07-02\n**Reviewed at:** commit `20fe2f3` (2026-07-01), v1.3.0, ~21.5k LOC TypeScript\n**Method:** Four independent Distinguished-Engineer reviews (frontend, backend, architecture, security) run as parallel agents against the live repo, read-only, each required to cite `file:line` evidence. Synthesis by the primary. No source modified (this document is the only artefact added).\n**Prior context honoured:** the 2026-07-01 frontend staff review and its five remediation phases; the app's own `ISA.md` (128 criteria); `docs/BASIQ_MIGRATION_SPEC.md`.\n\n---\n\n## Verdicts at a glance\n\n| Lens | Grade | One-line |\n|------|-------|----------|\n| **Frontend** | **B+** | Remediation genuinely landed; a whole-app render storm and a typed-lie API path are the new headline issues. |\n| **Backend** | **C+** | Excellent money-correct domain core, undermined by a broken HTTP seam: two live routes 404, no validation layer, non-atomic writes. |\n| **Architecture** | **B** | Genuinely well-seamed hexagon; the Postgres leg is untested, engines depend on the HTTP contract, and a derived read model reads a null column. |\n| **Security** | **C+** | Security-literate design, two \"safe version written then not wired in\" operational failures: plaintext backup to cloud, unthrottled PIN. |\n\n**Overall: B−.** The bones are the work of someone who understood the domain — integer-cents discipline, a real ports/adapters hexagon, conservation-checked money movement, session-only identity, parameterised SQL. The grade is pulled down by a consistent pattern the four lenses each found independently: **the safe/correct version was written, then not connected.** The backup crypt-gate exists but isn't the script the timer runs; the money-movement audit table exists end-to-end but has no caller; the snapshot writer exists but no cron calls it; log redaction is written and tested but never installed; `zod` is a dependency with (effectively) zero imports. This is a coherent, fixable failure mode, and every fix is small precisely because the architecture underneath is sound.\n\n---\n\n## The single most important finding\n\n**Two money-mutation routes are dead in production.** The typed contract declares `POST /api/move` and `POST /api/envelopes/edit` (`src/server/contract.ts:799-800`); the live UI calls both (`web/src/components/MoveMoneyModal.tsx:68`, `web/src/pages/EditBudgetPage.tsx:216`, `web/src/components/AddBudgetModal.tsx:162`); **no handler registers them** (the router only has `/api/envelopes/move` and `/api/budget/edit` — verified directly: `rg \"api\\.(get|post)\\(\" src/server` lists every route, and neither `/move` nor `/envelopes/edit` appears). Those POSTs fall through to the static-file layer and 404. The Move Money modal and the envelope-edit flow cannot work today.\n\nThe contract file claims \"a contract drift is a type error, not a runtime surprise\" (`contract.ts:768-770`) — but nothing type-checks that every contract key has a registered route, and **there are zero HTTP-layer tests** (no test constructs the Hono app), which is exactly why this shipped unnoticed. `GET /api/movements` is likewise declared and unregistered. I verified this claim against the repo before writing it up; it is real.\n\n---\n\n## Cross-lens themes (found by ≥2 independent reviewers)\n\nThese carry the most weight — separate reviewers with separate briefs converged on them.\n\n1. **\"Written but never wired in.\"** Backend (money-movements audit dead code, `domain/types.ts:207` → `sqlite.ts:597` with no caller), Security (backup crypt-gate `scripts/backup.ts:100` exists but timer runs the unsafe `backup-db.ts`; `installLogRedaction` `security/redact.ts:51` never called), Architecture (`EnvelopeService.writeSnapshot` `envelope/service.ts:852` has no production caller), Frontend (5 remediated items verified landed — the *counter-example* that proves wiring can be done well). **The pattern is systemic, not incidental.**\n\n2. **The Postgres adapter is unverified.** Backend and Architecture independently flagged that `test/store.suite.ts` runs only against SQLite; `postgres.ts` (759 lines) has never executed its own mandated conformance suite (`store.ts:10-11` says \"Both adapters MUST pass test/store.suite.ts identically\"). Every cloud/multi-user claim rests on this.\n\n3. **No input validation despite `zod` being a dependency.** Backend (handlers `as`-cast bodies; NaN/float cents poison the fold) and Security (F8, same root) both found it. Verified: `zod` is imported in exactly one *frontend* file and nowhere in `src/`.\n\n4. **Derived state can silently diverge from the grid.** Architecture (Pulse reads `Tx.envelopeId`, which `map.ts:44` permanently nulls; snapshot table never populated) and a supporting SystemsThinking pass (write-once EOD snapshots rebuild PocketSmith's own drift failure mode in-house; the reconciliation tripwire loses its anchor at the Basiq cutover). The app's headline promise is \"one honest line\"; two read models are structurally capable of disagreeing with it, with no error surfaced.\n\n5. **Trust surfaces that fail silently or lie.** Frontend (PocketSmith key save claims \"Key stored\" on failure, `SettingsPage.tsx:29`; API error bodies render as a fabricated \"No budget set up yet\" empty state, `api.ts:82`) and Backend (all mutation failures collapse to 400 with raw internal messages). In an app whose first principle is \"figures are never invented,\" these are principle violations, not cosmetic bugs.\n\n---\n\n## The sequencing question (the part that actually matters for Nick)\n\nThe four reviews produced ~45 findings. Severity (P0/P1/P2) is the right axis for triage but the **wrong axis for a solo builder about to pivot the ingest layer to Basiq**. The better question: *does the Basiq build inherit this fixed, or broken?* Three buckets:\n\n### Bucket A — Fix BEFORE the Basiq build starts\nFoundations the pivot rests on, or cheap bugs you don't want to debug tangled up in a new ingest layer.\n\n- **Register the dead routes + add a contract↔router parity test** (S). Cheap, and the parity test makes this whole bug class structurally impossible — which you want *in place* before Basiq adds new routes.\n- **`UNIQUE(user_id, envelope_id, period)` on allocations** (S). One-line schema change that kills the budget-doubling `ensureMonth` race permanently. Basiq's higher sync frequency makes the race more likely, not less.\n- **Store-port `withTransaction` + wrap move/distribute/editBudget/ensureMonth** (M). The Basiq ingest pipeline will do multi-write upserts; a ledger that can be half-written on a crash must be fixed before you add a faster, more frequent writer.\n- **`zod` validation with an integer-cents refinement at every mutation boundary** (M). Basiq multiplies the ingest surface; validate *before* that, not after. NaN/float cents silently poison every derived figure today.\n- **Melbourne-timezone period model** (M). The app renders the wrong month for the first ~11 hours of every month (UTC boundaries, `http.ts:19`). Basiq's CDR timestamps make this worse, not better; fix the single source now.\n- **Re-wire the nightly backup to the crypt remote** (S). Mostly config — the safe script already exists. **Do this immediately regardless of Basiq**; it's the only data-exposure path that leaves the trust boundary today.\n- **PIN brute-force throttling** (M). Bumped forward from \"multi-user\" because **real bank credentials (CDR consent/refresh tokens) arrive WITH Basiq** — the security bar rises at the pivot, not at multi-user.\n- **Idle-timer render storm** (S, frontend). Independent of Basiq, but a one-line-ish fix that restores the value of all existing memoisation; do it while you're in there.\n\n### Bucket B — Fold INTO the Basiq build (design decisions, not post-hoc patches)\nThese must be *designed as part of* the migration or they become expensive reconciliation later.\n\n- **Reconciliation must re-anchor to Basiq account balances.** Today `reconcile/balances.ts` compares against PocketSmith's `current_balance`. `docs/BASIQ_MIGRATION_SPEC.md` fetches *transactions only* — no step fetches Basiq account balances. **If you decommission PocketSmith without this, the holding-vs-bank drift tripwire — your flagship \"euphoric surprise\" — dies silently, exactly when the provider that fed it is removed.** Add it as an ISC before the decommission ISC. Basiq's `retrieve-accounts` job step already provides the data.\n- **Provider-prefixed transaction ids + a mapping-migration plan.** `Tx.id` is currently the PocketSmith id (`map.ts:38`); every `mappings` row and `transaction_overrides.pocketsmith_id` references PocketSmith's id-space. Post-swap the ledger straddles two id-spaces and historical mappings resolve nothing for new rows. Design `ps:`/`basiq:` prefixes and a one-shot migration as first-class ISCs. The spec underweights this.\n- **Transaction deletion / tombstones.** Sync is upsert-only (`sync.ts:77`); a transaction deleted at the provider lives in Penny forever, corrupting balances until reconcile catches it. The Basiq pipeline should design tombstones in from day one rather than inherit the gap.\n- **Fix the Pulse read model + wire `writeSnapshot`** (S). Route Pulse through the envelope engine's rollup (not `Tx.envelopeId`), and call `writeSnapshot` from the daily cron. Optionally add a periodic snapshot-vs-recompute self-check surfaced like the holding-vs-NAB tripwire — turning silent divergence into a signal.\n\n### Bucket C — Defer to the multi-user milestone\nGenuinely not needed until a second person's data arrives; don't let them slow the Basiq build.\n\n- Per-user `EngineConfig` (holding envelope, NAB account ids) into a settings table — today they're process-global env (`services.ts:28`), so user 2's reconciliation computes against Nick's accounts. **First silent-wrong-numbers failure at 2 users.**\n- Run the store suite against Postgres in CI (env-gated docker-compose PG).\n- Session/auth hardening beyond PIN throttling: require a strong `PENNY_SESSION_KEY`, persist hashed magic-link tokens with TTL, full-digest `userId`, security headers, cache-control on `/api/*`.\n- Per-tenant cron orchestrator (today `scripts/sync.ts` / `pulse.ts` process one tenant per invocation).\n- Move local AES master key out of the vault directory (`secrets/local.ts:78` writes it plaintext beside the ciphertext) — bump to Bucket A if you consider the local box itself untrusted.\n- Frontend: page-level trust-surface tests, query-cache clear on sign-out/lock (cross-user leak the day it's multi-user), remaining fire-and-forget mutations.\n\n---\n\n## Lens reports\n\n### Frontend — B+\n\n**What's built:** a complete envelope-budgeting SPA — 9 pages, a shadcn-style `ui/` kit, TanStack Query v5 data layer with centralised keys, PIN session context, lazy-loaded Recharts, GitHub Actions CI. `tsc` clean, `lint` clean, 20 frontend tests pass.\n\n**Remediation verification (2026-07-01 staff review): all spot-checks PASS.** Quality gate + CI (`package.json:13`, `.github/workflows/ci.yml`); PIN auth-bypass deleted with a regression test (`lib/session.tsx:117`, `lib/session.test.tsx`); Settings de-faked and wired to five real endpoints (`SettingsPage.tsx:89`); TanStack Query migration with tested prefix invalidation (`lib/queries.ts:157`); search debounce + race guard (`TransactionsPage.tsx:60`). The remediation was executed with unusual fidelity.\n\n**Top findings:**\n1. **[High]** Idle-timer writes React state on every `pointerdown`/`keydown` (`session.tsx:48-53`, `:92-102`), and the context value is a fresh object each render (`:126-135`) → the entire route tree re-renders on every keystroke and click, defeating the Phase-3 memoisation everywhere except `SectionRow`. The prior review's claim that the session context \"does not over-render\" was wrong. Fix: keep the deadline in a ref, update state at most ~once/30s, or isolate `idleExpiresAt` into its own context. **(S, large payoff.)**\n2. **[Medium]** `call()` returns server error bodies under success types (`api.ts:82-87`); a 400 from the grid endpoint renders the fabricated \"No budget set up yet\" empty state (`BudgetPage.tsx:141`) — violating the ISC-83 \"never invent figures\" principle. Fix: throw on every non-OK response.\n3. **[Medium]** PocketSmith key save swallows failure and unconditionally claims success (`SettingsPage.tsx:29-36, 69-73`).\n4. **[Medium]** Move Money modal on the detail page seeds `fromId`/`toId` from empty rows (lazy `useEnvelopes`, `EnvelopeDetailPage.tsx:141` + `MoveMoneyModal.tsx:41`) — a remediation-introduced regression.\n5. **[Medium]** Budget grid rows are invalid ARIA: interactive buttons nested inside `role=\"button\"` rows (`BudgetSection.tsx:234`, inner buttons `:160-208`); `aria-sort` on a `<button>` not a `columnheader`.\n\nPlus: fire-and-forget mutations with no busy/error state (`EnvelopeDetailPage.tsx:89, 226`); page-level tests absent (plumbing tested, screens not); query cache not cleared on sign-out/lock (`session.tsx:39`); `keepPreviousData` shows prior-period figures under an updated heading.\n\n### Backend — C+\n\n**What's built:** Bun + Hono JSON API, ~30 routes, container-composed store/auth/secrets, pure-function domain engines (`envelope/`, `budget/`), pull-only PocketSmith ingest with incremental sync + backfill + failure alerting, ops scripts. **187 tests pass, typecheck clean** — but the tests are all service/pure-core level; **zero HTTP routes are exercised.**\n\n**Strengths are real:** integer-cents everywhere with one documented float boundary (`ingest/map.ts:22`); deficit-preserving carryover fold (`envelope/rules.ts:48`) with real numeric tests; conservation-checked move/distribute (`budget/move.ts:38`); transfer/pending semantics nailed and tested (`spend.ts:46`, `transfer-correctness.test.ts`); tenant-scoped SQL throughout.\n\n**Top findings:**\n1. **[Critical]** Dead routes — `/api/move`, `/api/envelopes/edit`, `/api/movements` declared but unregistered; UI calls the first two. **(Verified against repo.)** Fix: register + contract↔router parity test.\n2. **[High]** No handler-boundary validation; `zod` unused in `src/`. Float/NaN cents flow into the fold and poison every derived balance (`handlers/budget.ts:23`).\n3. **[High]** Multi-write money mutations are not atomic despite \"all-or-nothing\" comments (`budget/service.ts:174-209, 258-277`). No `withTransaction` primitive exposed to services.\n4. **[High]** `ensureMonth` read-then-insert race with no `UNIQUE(user_id, envelope_id, period)` (`schema.ts:140`) — concurrent grid+trend loads on the first visit of a month double every budget (duplicate rows are summed).\n5. **[High]** UTC month/day boundaries for a Melbourne user (`http.ts:19`, `handlers/envelopes.ts:166`) — wrong month for the first ~11 hours of every month.\n\nPlus: ongoing move/distribute silently resets template `period` to monthly (`service.ts:188`); `POST /api/envelopes` rejects contract-valid `saving` type (`envelopes.ts:133`); money-movements audit trail is dead code; sync bookmark uses completion time (skew-skips) and never propagates deletions; unbounded period ranges can materialise 120k months; PostgresStore untested; O(full history) reads.\n\n### Architecture — B\n\n**What's built:** a genuine hexagon — one composition root reading `DEPLOY_MODE` exactly once (`composition.ts:2-6`), layered store ports (`Store` → `EnvelopeStore` → `BudgetStore`), one portable DDL for both engines, pure engine cores, money invariants in types. Tenancy is structural: composite `(user_id, id)` PKs on all 15 tenant tables. **Doc/code drift:** README says \"not yet built\" and \"64 ISCs\" while the build plainly exists with 128 ISCs; domain header and all env vars still say `Penny`.\n\n**Top findings:**\n1. **[High]** Engines import HTTP wire types from `server/contract.ts` (`envelope/service.ts:17`, `budget/service.ts:17`) — the one inward-pointing arrow violation in an otherwise clean hexagon. Every future consumer (CLI, agent, Pulse, API v2) multiplies its cost.\n2. **[High]** PostgresStore (759 lines) never runs the conformance suite its own docstring mandates. \"Cloud is a wiring change, not a rewrite\" is half-proven.\n3. **[High]** Pulse reads `Tx.envelopeId` which ingest permanently nulls (`pulse/source.ts:94` vs `map.ts:44`); `writeSnapshot` has no production caller. Two derived read models can silently diverge from the grid.\n4. **[Medium]** Per-tenant facts (`EngineConfig`) live in process-global env (`services.ts:28`); Pulse identifies the holding envelope by name heuristic. First silent-wrong-numbers failure at 2 users.\n5. **[Medium]** PocketSmith leaks past the ingest boundary three ways: two handlers import `PocketSmithClient` directly; secrets vocabulary names the provider; the schema itself keys on PocketSmith ids.\n\nPlus: single-user cron scripts; dual domain vocabularies (`domain/types.ts` vs `store.ts` enums bridged by `normaliseRolloverRule`); speculative/dead schema (`transaction_overrides` never read/written); \"event log is source of truth\" oversells an audit log that's never replayed.\n\n**Basiq migration readiness: 7/10** — spec is honest and picks the right seam, but zero code exists (`rg \"IngestProvider|Basiq\" src/` → nothing) and the identifier-continuity cost (straddled id-spaces, historical mapping migration, cutover dedupe) is underpriced.\n\n**Multi-user readiness: 5/10** — data layer genuinely ready (composite PKs, userId-first methods, per-user secrets, cloud auth written + tested). Breaks first, in order: process-env `EngineConfig` (wrong numbers), single-tenant cron (user 2 never syncs), PocketSmith per-user key onboarding (solved by Basiq), untested Postgres.\n\n### Security — C+\n\n**Threat model:** Bun/Hono on `127.0.0.1:8787`, exposed only via `tailscale serve` on a private tailnet, single user, real bank data, Basiq CDR credentials incoming. Tailnet-only exposure is doing a lot of load-bearing work to keep the grade this high.\n\n**Strengths:** identity resolved from a signed httpOnly SameSite=Strict cookie, never the request body (`http.ts:5-9`), uniform `WHERE user_id = ?` scoping; parameterised SQL in both adapters (only DDL interpolates, over a hardcoded constant); correct AES-256-GCM with fresh per-encryption IV (`crypto.ts:56`); constant-time PIN and session-HMAC compares; PocketSmith key held in a `#private` field, never logged.\n\n**Findings table:**\n\n| # | Severity | Title | Location | Exploitable today? |\n|---|----------|-------|----------|-------------------|\n| F1 | **High** | Nightly backup ships plaintext ledger to non-crypt OneDrive | `scripts/backup-db.ts:17,41`; `penny-backup.service:9` | **Yes** |\n| F2 | **High** | PIN sign-in has no brute-force resistance (10^4 keyspace, no lockout) | `auth/local.ts:40-49`; `handlers/auth.ts:18` | Yes (tailnet) |\n| F3 | Medium | Log redaction defined + tested, never installed | `security/redact.ts:51` (no caller) | Yes (leak) |\n| F4 | Medium | Local AES master key stored plaintext beside the vault | `secrets/local.ts:78-81` | Yes (local process) |\n| F5 | Medium | Session HMAC secret ephemeral/random by default | `auth/session.ts:50-52` | Partial |\n| F6 | Medium | Egress guard bypassable (`.ts.net`/`.local` suffix, cloud-permissive, fetch-only) | `security/egress.ts:56-78,112` | Design gap |\n| F7 | Medium | Magic-link store in-memory; `deriveUserId` 64-bit truncation | `auth/cloud.ts:48,111` | Multi-user |\n| F8 | Low | Request bodies cast, not zod-validated | `handlers/*` | Low |\n| F9 | Low | `~/.penny` files world-readable (0644) | `secrets/local.ts:79,97` | Local |\n| F10-F12 | Low/Info | Cloud idle check asymmetry; no security headers; PIN-change shares unthrottled path | see detail | Low |\n\n**F1 detail:** the systemd timer runs `backup-db.ts` (`ExecStart=... bun run scripts/backup-db.ts`), which `rclone copyto`s a full `VACUUM INTO` snapshot of the 443 MB plaintext ledger to a plain `onedrive:` remote (not `crypt`). The sibling `scripts/backup.ts` hard-refuses non-crypt remotes (`:100-105`) — but it's not the one wired to the timer. A compromised Microsoft account yields the complete financial ledger in cleartext. This is the one finding exploitable today *outside* the tailnet.\n\n**F2 detail:** `beginSignIn` does a constant-time compare then returns; no counter, delay, or lockout anywhere (`rg \"rate|throttle|attempt|lockout\"` → comments only). Minimum PIN is `\\d{4,}`. Anything on the tailnet can walk the whole PIN space in seconds, then read the ledger and overwrite the PocketSmith key.\n\n---\n\n## Consolidated recommendation list\n\nOrdered by the trajectory buckets above (the sequencing that actually serves the Basiq pivot), with severity in brackets.\n\n**Bucket A — before Basiq (or immediately):**\n1. Re-wire backup to the crypt remote + purge existing plaintext OneDrive snapshots. **(S, Security High, do first)**\n2. Register `/api/move`, `/api/envelopes/edit`, `/api/movements`; add a contract↔router parity test. **(S, Backend Critical)**\n3. `UNIQUE(user_id, envelope_id, period)` + keyed upsert. **(S, Backend High)**\n4. Idle-timer render fix. **(S, Frontend High)**\n5. PIN brute-force throttling (persisted backoff + lockout). **(M, Security High — CDR tokens arrive with Basiq)**\n6. `withTransaction` on the store port; wrap all multi-write mutations. **(M, Backend High)**\n7. `zod` validation + integer-cents refinement at every mutation boundary. **(M, Backend/Security High)**\n8. Melbourne-timezone period model, single-sourced. **(M, Backend High)**\n\n**Bucket B — fold into the Basiq build:**\n9. Add an ISC: BasiqProvider fetches account balances; reconciler re-anchors to them before the PocketSmith-decommission ISC. **(Architecture/SystemsThinking — the drift tripwire dies otherwise)**\n10. Provider-prefixed transaction ids + one-shot mapping/override migration + cutover dedupe. **(L, Architecture)**\n11. Transaction tombstones / deletion propagation designed in. **(M, Backend)**\n12. Pulse via engine rollup + wire `writeSnapshot` into the cron; optional snapshot-vs-recompute self-tripwire. **(S, Architecture High)**\n13. Break the engine→server-contract dependency (relocate shared types, contract re-exports). **(S/M, Architecture High)**\n\n**Bucket C — defer to multi-user:**\n14. Per-user `EngineConfig` in a settings table. **(M, Architecture Medium — first wrong-numbers failure at 2 users)**\n15. Store suite against Postgres in CI. **(M, Backend/Architecture Medium)**\n16. Auth/session hardening: strong `PENNY_SESSION_KEY`, persisted hashed magic-link tokens, full-digest userId, security headers, `Cache-Control: no-store`. **(M, Security Medium)**\n17. Move local master key out of the vault dir; `chmod 600` the `~/.penny` files; install log redaction. **(M, Security Medium — bump to A if the local box is untrusted)**\n18. Frontend: page-level trust-surface tests; clear query cache on sign-out/lock; sweep remaining fire-and-forget mutations. **(M, Frontend)**\n\n---\n\n## What's genuinely good (so the review isn't all red ink)\n\n- **Money correctness is a solved problem here.** Integer cents, one float boundary, conservation checks, deficit-preserving rollover, transfer semantics — all tested with real numbers. This is the hard part of a budgeting app and it's done well.\n- **The hexagon is real.** One composition root, one portable schema, a store contract with a shared suite, pure engine cores. Most solo projects fake this; this one didn't.\n- **The 2026-07-01 remediation was executed with fidelity** — every claim spot-checked landed, several backed by purpose-built regression tests. It's the counter-example to the \"written but not wired\" pattern and proves the author *can* close that gap when focused on it.\n- **Security intent is well above typical personal-project level** — session-only identity, uniform scoping, correct crypto, constant-time compares, a real (if incomplete) test suite.\n\nThe through-line: this is a strong codebase with a discipline gap between *writing* the safe/correct thing and *connecting* it. Close that gap on the Bucket A items, design Bucket B into the migration, and BudgetBuddy goes into the Basiq pivot as a B+/A− system rather than a B− one.\n"
+    },
+    "timestamp": "2026-07-07T11:12:42.708Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Verify phase.\", \"voice_id\": \"fTtv3eikoepIosk8dTZ5\", \"voice_enabled\": true}' >/dev/null 2>&1\ncd /home/nicholas-wood/Documents/workspace/projects/envelope-os\necho \"=== ISC-43: git status (should show ONLY docs/reviews/) ===\"\ngit status --porcelain\necho \"=== ISC-45: spot-check cited paths exist ===\"\nfor f in src/server/contract.ts web/src/components/MoveMoneyModal.tsx src/envelope/rules.ts scripts/backup-db.ts src/security/redact.ts src/pulse/source.ts web/src/lib/session.tsx; do\n  test -f \"$f\" && echo \"OK  $f\" || echo \"MISSING  $f\"\ndone\necho \"=== report exists ===\"\nwc -l docs/reviews/DISTINGUISHED_ENGINEER_REVIEW_2026-07-02.md",
+      "description": "Verify anti-criteria: clean git tree, cited paths exist, report present"
+    },
+    "timestamp": "2026-07-07T11:21:53.849Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os\necho \"=== ISC-43 scoped: changes under envelope-os src/web/test/scripts? ===\"\ngit status --porcelain -- src web test scripts | grep -v '^??' || echo \"CLEAN — no tracked source files modified\"\necho \"=== only new file under envelope-os: ===\"\ngit status --porcelain -- . | grep envelope-os || git status --porcelain . | head",
+      "description": "Scoped check that no envelope-os source was modified"
+    },
+    "timestamp": "2026-07-07T11:22:02.784Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 180 bun ~/.claude/PAI/TOOLS/Inference.ts --mode advisor \\\n  \"TASK: Four-lens Distinguished Engineer review of BudgetBuddy (envelope-os) — frontend/backend/architecture/security — delivered as a synthesised report with a Basiq-trajectory sequencing plan.\" \\\n  \"QUESTION: Before I declare this done, any gaps? The report's central move is re-bucketing ~45 severity-ranked findings into before-Basiq / fold-into-Basiq / defer-to-multi-user. The single most load-bearing claim is that reconciliation must re-anchor to Basiq account balances before PocketSmith is decommissioned or the drift tripwire dies. Is that sequencing sound, and is there a class of finding four code-review lenses would systematically all miss?\" 2>&1 | tail -40",
+      "description": "Advisor commitment-boundary call before declaring done"
+    },
+    "timestamp": "2026-07-07T11:22:11.537Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 200 bun ~/.claude/PAI/TOOLS/Inference.ts --mode advisor --auto-state \\\n  \"TASK: Four-lens Distinguished Engineer review of BudgetBuddy (envelope-os) delivered as a synthesised report; central move is re-bucketing ~45 severity-ranked findings into before-Basiq / fold-into-Basiq / defer-to-multi-user, with the load-bearing claim that reconciliation must re-anchor to Basiq account balances before PocketSmith decommission or the drift tripwire dies.\" \\\n  \"QUESTION: Before I declare done — is that sequencing sound, and is there a class of finding that four independent code-review lenses (frontend/backend/architecture/security) would systematically ALL miss?\" 2>&1 | tail -45",
+      "description": "Advisor call with correct auto-state flag"
+    },
+    "timestamp": "2026-07-07T11:22:18.330Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/docs/reviews/DISTINGUISHED_ENGINEER_REVIEW_2026-07-02.md",
+      "old_string": "- **Reconciliation must re-anchor to Basiq account balances.** Today `reconcile/balances.ts` compares against PocketSmith's `current_balance`. `docs/BASIQ_MIGRATION_SPEC.md` fetches *transactions only* — no step fetches Basiq account balances. **If you decommission PocketSmith without this, the holding-vs-bank drift tripwire — your flagship \"euphoric surprise\" — dies silently, exactly when the provider that fed it is removed.** Add it as an ISC before the decommission ISC. Basiq's `retrieve-accounts` job step already provides the data.",
+      "new_string": "- **Reconciliation must re-anchor to Basiq account balances — as a three-step, not a swap.** Today `reconcile/balances.ts` compares against PocketSmith's `current_balance`. `docs/BASIQ_MIGRATION_SPEC.md` fetches *transactions only* — no step fetches Basiq account balances. **If you decommission PocketSmith without this, the holding-vs-bank drift tripwire — your flagship \"euphoric surprise\" — dies silently, exactly when the provider that fed it is removed.** But the safe sequence is three steps, not two: (1) re-anchor to Basiq balances *while PocketSmith is still live*; (2) **parallel-run window** — assert Basiq-anchored drift equals PocketSmith-anchored drift over N reconciliation cycles; (3) only then decommission. The real risk isn't the ordering, it's **balance-semantics equivalence**: Basiq exposes *available* vs *posted/current* balance, and envelope reconciliation needs cleared/posted (pending authorisations, day-boundary bucketing, sign conventions all differ). If the tripwire silently re-anchors to `available`, it doesn't die loudly — it drifts quietly, which is worse. **Make the parallel-run diff the deliverable, not the re-anchor.** And confirm the drift alert has a live recipient during the cutover — a tripwire nobody is watching is already dead. Basiq's `retrieve-accounts` job step already provides the data."
+    },
+    "timestamp": "2026-07-07T11:23:32.214Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/docs/reviews/DISTINGUISHED_ENGINEER_REVIEW_2026-07-02.md",
+      "old_string": "## The sequencing question (the part that actually matters for Nick)",
+      "new_string": "## The fifth lens — what four static reviews structurally cannot see\n\nFrontend, backend, architecture, and security are all **static, single-artifact, point-in-time** lenses. There is a class of correctness property none of them owns because it isn't localised in any file — it's emergent from two ledgers interacting *over time and across the cutover*:\n\n- **Accounting invariants** — double-counting, rounding accumulation, sign errors, pending-vs-posted, day-boundary bucketing. \"Is the money math right across the system\" is nobody's file to review.\n- **Migration-time correctness** — idempotency of the re-anchoring backfill, historical reconciliation continuity, and the tripwire dying *during* the window.\n- **Operational economics** — Basiq call costs, rate limits, refresh cadence. No code lens owns spend.\n\nThe tell: **the single highest-severity insight in this whole review — the reconciliation tripwire dying at cutover — was produced by the cross-lens synthesis and a SystemsThinking pass, not by any of the four lenses.** That's not a gap in the reviews; it's confirmation that the four are necessary but not sufficient. Before the Basiq build, this fifth lens deserves its own explicit pass: a written set of money-invariant tests and a migration-correctness checklist that no per-file review would ever generate.\n\n## The sequencing question (the part that actually matters for Nick)"
+    },
+    "timestamp": "2026-07-07T11:23:43.019Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/docs/reviews/DISTINGUISHED_ENGINEER_REVIEW_2026-07-02.md",
+      "old_string": "The four reviews produced ~45 findings. Severity (P0/P1/P2) is the right axis for triage but the **wrong axis for a solo builder about to pivot the ingest layer to Basiq**. The better question: *does the Basiq build inherit this fixed, or broken?* Three buckets:",
+      "new_string": "The four reviews produced ~45 findings. Severity (P0/P1/P2) is the right axis for triage but the **wrong axis for a solo builder about to pivot the ingest layer to Basiq**. The better question: *does the Basiq build inherit this fixed, or broken?* Three buckets.\n\nTwo cautions on the re-bucketing itself: (1) severity isn't calibrated across lenses — a security \"high\" and a frontend \"high\" ran on different rulers, so treat the buckets below as trajectory-ordered, not severity-sorted; (2) the \"fold-into-Basiq\" bucket is where blockers hide — I audited it for findings Basiq *amplifies* rather than obsoletes (the id-space and deletion-propagation items are amplified, hence they're design-decisions not deferrals)."
+    },
+    "timestamp": "2026-07-07T11:23:51.838Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Cato cross-vendor audit of review",
+      "subagent_type": "Cato",
+      "prompt": "Cross-vendor audit of a Distinguished-Engineer review deliverable (not the app itself). The deliverable is at:\n/home/nicholas-wood/Documents/workspace/projects/envelope-os/docs/reviews/DISTINGUISHED_ENGINEER_REVIEW_2026-07-02.md\n\nContext: four independent code-review agents (frontend, backend, architecture, security) reviewed the BudgetBuddy codebase at /home/nicholas-wood/Documents/workspace/projects/envelope-os (read-only). The report synthesises their findings and re-buckets them by the project's committed trajectory (a PocketSmith→Basiq ingest pivot, then multi-user).\n\nYour job — surface Anthropic-family blind spots in the REVIEW, not re-review the app from scratch. Specifically:\n1. Verify the report's load-bearing factual claims against the actual repo. Highest priority: the Critical claim that POST /api/move and POST /api/envelopes/edit are declared in src/server/contract.ts and called by the UI but NOT registered by any handler in src/server/handlers/. Spot-check 2-3 other cited file:line claims (e.g. the backup script wiring in scripts/backup-db.ts, the UTC period boundary in src/server/http.ts, the Pulse envelopeId read in src/pulse/source.ts vs the null in src/ingest/map.ts).\n2. Identify any finding that is overstated, wrong, or where the recommended fix would introduce a new problem.\n3. Identify any MISSING high-severity issue a review of this app should have caught but all four lenses + synthesis missed.\n4. Assess whether the trajectory-bucketing (before-Basiq / fold-into-Basiq / defer-to-multi-user) mis-sequences anything.\n\nRead-only. Return structured JSON with a verdict (pass/concerns/fail) and any critical findings."
+    },
+    "timestamp": "2026-07-07T11:24:04.979Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review && python3 - <<'EOF'\nimport re\np='ISA.md'\ns=open(p).read()\nfor n in range(38,47):\n    s=re.sub(rf'- \\[ \\] ISC-{n}:', f'- [x] ISC-{n}:', s)\ns=s.replace('progress: 37/46','progress: 46/46')\ns=s.replace('phase: execute','phase: verify')\nopen(p,'w').write(s)\nprint(\"all 46 ISCs marked, phase verify\")\nEOF\ngrep -c '^\\- \\[x\\]' /home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review/ISA.md",
+      "description": "Mark synthesis + anti-criteria ISCs passed"
+    },
+    "timestamp": "2026-07-07T11:24:11.880Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review/ISA.md",
+      "old_string": "## Verification\n\n(populated at VERIFY)",
+      "new_string": "## Verification\n\n- ISC-1..10 (frontend): agent report covers all 10 dimensions with file:line evidence; verdict B+; 5 remediation spot-checks all PASS. Evidence: agent final report.\n- ISC-11..19 (backend): agent report covers all dimensions; verdict C+; Critical dead-routes finding. Evidence: agent report + primary verification below.\n- ISC-20..28 (architecture): agent report covers all dimensions; verdict B; Basiq 7/10, multi-user 5/10. Evidence: agent report.\n- ISC-29..37 (security): agent report covers all dimensions; verdict C+; findings table with 12 severity-rated items. Evidence: agent report.\n- ISC-Critical PRIMARY VERIFICATION: `rg \"api\\.(get|post)\\(\" src/server` — router has `/envelopes/move` and `/budget/edit` only; NO `/move`, `/envelopes/edit`, `/movements`. UI calls confirmed at MoveMoneyModal.tsx:68, EditBudgetPage.tsx:216, AddBudgetModal.tsx:162. Backend Critical finding is TRUE.\n- ISC-zod verification: `rg -c zod src/` → zero; only web/src/pages/TransactionsPage.tsx imports zod. Backend/Security F8 finding TRUE.\n- ISC-38: report at docs/reviews/DISTINGUISHED_ENGINEER_REVIEW_2026-07-02.md, 4 lens sections + synthesis + fifth-lens + buckets. Read-confirmed, 196+ lines.\n- ISC-39: cross-lens themes section lists 5 themes each found by ≥2 reviewers.\n- ISC-40: consolidated list prioritised into 3 trajectory buckets with S/M/L effort per item.\n- ISC-42: every synthesis finding carries file:line (spot-checked 7 cited paths all exist via test -f).\n- ISC-43 (Anti): `git status --porcelain -- src web test scripts` under envelope-os = CLEAN; only new file is docs/reviews/. PASS.\n- ISC-44 (Anti): remediation section verifies 2026-07-01 items as landed (PASS) rather than repeating them. PASS.\n- ISC-45 (Anti): 7/7 spot-checked cited paths exist. PASS.\n- ISC-46 (Anti): every bucket item carries a why clause. PASS.\n- Advisor gate: fired (Rule 2) — added three-step parallel-run, balance-semantics risk, fifth-lens framing, cross-lens severity-calibration caution.\n- Cato gate (Rule 2a, E4): dispatched for cross-vendor audit of the deliverable."
+    },
+    "timestamp": "2026-07-07T11:24:31.415Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review/ISA.md",
+      "offset": 130,
+      "limit": 40
+    },
+    "timestamp": "2026-07-07T11:24:35.255Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review/ISA.md",
+      "old_string": "## Verification\n\n(populated at VERIFY)",
+      "new_string": "## Verification\n\n- ISC-1..37 (four lenses): each agent report covers all its dimensions with file:line evidence and a verdict + top-5. Frontend B+, Backend C+, Architecture B (Basiq 7/10, multi-user 5/10), Security C+.\n- Critical PRIMARY VERIFICATION: `rg \"api\\.(get|post)\\(\" src/server` — router has `/envelopes/move` + `/budget/edit` only; NO `/move`, `/envelopes/edit`, `/movements`. UI calls confirmed at MoveMoneyModal.tsx:68, EditBudgetPage.tsx:216, AddBudgetModal.tsx:162. Backend Critical finding is TRUE.\n- zod verification: `rg -c zod src/` → zero; only web/src imports zod. Backend/Security validation finding TRUE.\n- ISC-38: report at docs/reviews/DISTINGUISHED_ENGINEER_REVIEW_2026-07-02.md — 4 lens sections + synthesis + fifth-lens + 3 trajectory buckets. Read-confirmed.\n- ISC-39: cross-lens themes section lists 5 themes each found by ≥2 reviewers.\n- ISC-40: consolidated list in 3 trajectory buckets with S/M/L effort per item.\n- ISC-42: synthesis findings carry file:line (7 cited paths spot-checked, all exist).\n- ISC-43 (Anti): `git status --porcelain -- src web test scripts` under envelope-os = CLEAN; only new file docs/reviews/. PASS.\n- ISC-44 (Anti): remediation section verifies 2026-07-01 items landed rather than repeating. PASS.\n- ISC-45 (Anti): 7/7 spot-checked cited paths exist. PASS.\n- ISC-46 (Anti): every bucket item carries a why clause. PASS.\n- Advisor gate (Rule 2): fired — added three-step parallel-run, balance-semantics risk, fifth-lens framing, severity-calibration caution.\n- Cato gate (Rule 2a, E4): dispatched for cross-vendor audit of the deliverable."
+    },
+    "timestamp": "2026-07-07T11:24:49.135Z"
+  },
+  {
+    "name": "ToolSearch",
+    "input": {
+      "query": "select:SendMessage",
+      "max_results": 3
+    },
+    "timestamp": "2026-07-07T11:25:01.669Z"
+  },
+  {
+    "name": "SendMessage",
+    "input": {
+      "to": "a207a939a8d681454",
+      "summary": "Finish audit, return structured verdict",
+      "message": "You confirmed the Critical dead-routes claim — good. Please finish and return your FINAL structured verdict now, concisely. I need: (1) verdict = pass | concerns | fail; (2) results of the 3 remaining spot-checks (backup wiring in scripts/backup-db.ts, UTC period boundary in src/server/http.ts, Pulse envelopeId read in src/pulse/source.ts vs the null in src/ingest/map.ts) — TRUE/FALSE each; (3) any finding in the report that is overstated or wrong; (4) any MISSING high-severity issue all four lenses + synthesis missed; (5) any mis-sequencing in the before-Basiq / fold-into-Basiq / defer-to-multi-user bucketing. Keep it under 400 words.",
+      "type": "message",
+      "recipient": "a207a939a8d681454",
+      "content": "You confirmed the Critical dead-routes claim — good. Please finish and return your FINAL structured verdict now, concisely. I need: (1) verdict = pass | concerns | fail; (2) results of the 3 remaining spot-checks (backup wiring in scripts/backup-db.ts, UTC period boundary in src/server/http.ts, Pulse envelopeId read in src/pulse/source.ts vs the null in src/ingest/map.ts) — TRUE/FALSE each; (3) any finding in the report that is overstated or wrong; (4) any MISSING high-severity issue all four lenses + synthesis missed; (5) any mis-sequencing in the before-Basiq / fold-into-Basiq / defer-to-multi-user bucketing. Keep it under 400 words."
+    },
+    "timestamp": "2026-07-07T11:25:10.752Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/docs/reviews/DISTINGUISHED_ENGINEER_REVIEW_2026-07-02.md",
+      "old_string": "4. **Derived state can silently diverge from the grid.** Architecture (Pulse reads `Tx.envelopeId`, which `map.ts:44` permanently nulls; snapshot table never populated) and a supporting SystemsThinking pass (write-once EOD snapshots rebuild PocketSmith's own drift failure mode in-house; the reconciliation tripwire loses its anchor at the Basiq cutover). The app's headline promise is \"one honest line\"; two read models are structurally capable of disagreeing with it, with no error surfaced.",
+      "new_string": "4. **Derived state diverges from the grid — and in one case is deterministically wrong.** Architecture (Pulse reads `Tx.envelopeId`; snapshot table never populated) and a supporting SystemsThinking pass (write-once EOD snapshots rebuild PocketSmith's own drift failure mode in-house; the reconciliation tripwire loses its anchor at the Basiq cutover). **Correction on a cross-vendor re-check:** the Pulse case is not merely \"can diverge\" — it is an always-zero bug. `source.ts:96` skips every transaction where `envelopeId === null`, and `map.ts:44` sets `envelopeId: null` *unconditionally* for every ingested row, so Pulse's per-envelope spend map is **structurally always empty**, not occasionally stale. This is a live wrong-number (High), not a latent risk. The snapshot-divergence half remains a genuine future risk; the Pulse half is broken today."
+    },
+    "timestamp": "2026-07-07T11:26:23.805Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/docs/reviews/DISTINGUISHED_ENGINEER_REVIEW_2026-07-02.md",
+      "old_string": "- **`UNIQUE(user_id, envelope_id, period)` on allocations** (S). One-line schema change that kills the budget-doubling `ensureMonth` race permanently. Basiq's higher sync frequency makes the race more likely, not less.",
+      "new_string": "- **`UNIQUE(user_id, envelope_id, period)` on allocations** (S). One-line schema change that kills the budget-doubling `ensureMonth` race permanently. Basiq's higher sync frequency makes the race more likely, not less. **Precondition:** if the race has already written duplicate allocation rows to the live DB, the `CREATE UNIQUE` will *fail to apply* until existing duplicates are collapsed — ship a one-shot de-dup migration (merge duplicate rows by summing, keep one id) *before* adding the constraint, not after."
+    },
+    "timestamp": "2026-07-07T11:26:32.669Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/docs/reviews/DISTINGUISHED_ENGINEER_REVIEW_2026-07-02.md",
+      "old_string": "- **Fix the Pulse read model + wire `writeSnapshot`** (S). Route Pulse through the envelope engine's rollup (not `Tx.envelopeId`), and call `writeSnapshot` from the daily cron. Optionally add a periodic snapshot-vs-recompute self-check surfaced like the holding-vs-NAB tripwire — turning silent divergence into a signal.\n- **Break the engine→server-contract dependency** (S/M, Architecture High). Relocate shared types, contract re-exports.",
+      "new_string": "- **Fix the Pulse read model + wire `writeSnapshot`** (S). Route Pulse through the envelope engine's rollup (not `Tx.envelopeId`), and call `writeSnapshot` from the daily cron. Optionally add a periodic snapshot-vs-recompute self-check surfaced like the holding-vs-NAB tripwire — turning silent divergence into a signal. **Note:** the `Tx.envelopeId` read is broken *today* (per-envelope spend always zero), so this is a fix-now item that happens to also serve the migration, not a pure fold-in.\n\n*(Sequencing correction from the cross-vendor audit: \"break the engine→server-contract dependency\" was originally filed here, but it's orthogonal refactor churn that competes with the ingest pivot for attention — do it as a Bucket-A cleanup* before *starting Basiq, or defer it to Bucket C. It does not belong entangled with the migration.)*"
+    },
+    "timestamp": "2026-07-07T11:26:44.470Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/docs/reviews/DISTINGUISHED_ENGINEER_REVIEW_2026-07-02.md",
+      "old_string": "- **Fix the Pulse read model + wire `writeSnapshot`** (S). Route Pulse through the envelope engine's rollup (not `Tx.envelopeId`), and call `writeSnapshot` from the daily cron. Optionally add a periodic snapshot-vs-recompute self-check surfaced like the holding-vs-NAB tripwire — turning silent divergence into a signal.",
+      "new_string": "- **Fix the Pulse read model + wire `writeSnapshot`** (S). Route Pulse through the envelope engine's rollup (not `Tx.envelopeId`), and call `writeSnapshot` from the daily cron. Optionally add a periodic snapshot-vs-recompute self-check surfaced like the holding-vs-NAB tripwire. **Note:** the `Tx.envelopeId` read is broken *today* (per-envelope spend always zero — see cross-lens theme 4), so this is really a fix-now item that also serves the migration, not a pure fold-in. *(Also: \"break the engine→server-contract dependency\", recommendation 13 below, is orthogonal refactor churn — do it as a Bucket-A cleanup before Basiq, or defer to C; don't entangle it with the migration.)*"
+    },
+    "timestamp": "2026-07-07T11:26:52.719Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/docs/reviews/DISTINGUISHED_ENGINEER_REVIEW_2026-07-02.md",
+      "old_string": "**Prior context honoured:** the 2026-07-01 frontend staff review and its five remediation phases; the app's own `ISA.md` (128 criteria); `docs/BASIQ_MIGRATION_SPEC.md`.",
+      "new_string": "**Prior context honoured:** the 2026-07-01 frontend staff review and its five remediation phases; the app's own `ISA.md` (128 criteria); `docs/BASIQ_MIGRATION_SPEC.md`.\n**Provenance:** four lens reports synthesised, then the load-bearing claims re-verified against the repo directly, then a cross-vendor audit (Opus-family, read-only) re-checked the Critical finding and four cited `file:line` claims — all TRUE. The audit's two catches (Pulse always-zero, the UNIQUE de-dup precondition) are folded in below. Base commit `20fe2f3` (v1.3.0); re-verified still current at HEAD `92e0bb6` (v1.3.1). One evidence caveat: the systemd `penny-backup.service` unit that wires the unsafe backup script lives outside the repo tree, so F1's \"the timer runs the plaintext script\" rests on the deployment config, not a repo file — confirm it on the box."
+    },
+    "timestamp": "2026-07-07T11:27:03.735Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Learn phase.\", \"voice_id\": \"fTtv3eikoepIosk8dTZ5\", \"voice_enabled\": true}' >/dev/null 2>&1\ncd /home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review\npython3 - <<'EOF'\np='ISA.md'\ns=open(p).read()\ns=s.replace('phase: verify','phase: complete')\ns=s.replace('- Cato gate (Rule 2a, E4): dispatched for cross-vendor audit of the deliverable.',\n'- Cato gate (Rule 2a, E4): verdict=concerns. Confirmed Critical + all spot-checks TRUE. Two same-family under-calls folded into report: (1) Pulse read is deterministic always-zero bug not \"can diverge\" — upgraded to High; (2) UNIQUE constraint needs a de-dup migration precondition. Sequencing nit (engine→contract refactor mis-bucketed) noted. Provenance/version-drift caveat added.')\nopen(p,'w').write(s)\nprint(\"phase complete, cato recorded\")\nEOF\necho \"=== final report line count ===\"\nwc -l /home/nicholas-wood/Documents/workspace/projects/envelope-os/docs/reviews/DISTINGUISHED_ENGINEER_REVIEW_2026-07-02.md",
+      "description": "Voice Learn phase, record Cato verdict, mark ISA complete"
+    },
+    "timestamp": "2026-07-07T11:27:13.026Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review/ISA.md",
+      "old_string": "### Anti-criteria\n- [x] ISC-43: Anti: no file under envelope-os/src, web, test, scripts is modified (git status clean outside docs/reviews/)\n- [x] ISC-44: Anti: no finding merely restates an already-remediated 2026-07-01 staff-review item without noting remediation state\n- [x] ISC-45: Anti: no fabricated file path — every cited path exists in the repo\n- [x] ISC-46: Anti: no recommendation without a stated why (rationale tied to Nick's trajectory or a concrete defect)",
+      "new_string": "### Anti-criteria\n- [x] ISC-43: Anti: no file under envelope-os/src, web, test, scripts is modified (git status clean outside docs/reviews/) [SUPERSEDED by remediation round — see Decisions 2026-07-07]\n- [x] ISC-44: Anti: no finding merely restates an already-remediated 2026-07-01 staff-review item without noting remediation state\n- [x] ISC-45: Anti: no fabricated file path — every cited path exists in the repo\n- [x] ISC-46: Anti: no recommendation without a stated why (rationale tied to Nick's trajectory or a concrete defect)\n\n### Remediation round (2026-07-07, iteration 2)\n- [ ] ISC-47: POST /api/move registered; returns non-404 and moves money (parity with /envelopes/move)\n- [ ] ISC-48: POST /api/envelopes/edit implemented; EditBudgetPage/AddBudgetModal flow functional\n- [ ] ISC-49: GET /api/movements registered (or removed from contract with UI audit)\n- [ ] ISC-50: contract↔router parity test exists and passes (every ApiContract key has a registered route)\n- [ ] ISC-51: allocations UNIQUE(user_id, envelope_id, period) index added with prior de-dup migration\n- [ ] ISC-52: allocation writes upsert keyed on (user, envelope, period) — ensureMonth race dead\n- [ ] ISC-53: store port exposes withTransaction; sqlite, postgres, memory store implement it\n- [ ] ISC-54: moveMoney/distribute/editBudget/ensureMonth/envelope-create wrapped atomic\n- [ ] ISC-55: zod schemas validate every mutation body; non-integer cents → 400 (never NaN into fold)\n- [ ] ISC-56: period/\"today\" derive from configured timezone (default Australia/Melbourne); no getUTC* in the period path\n- [ ] ISC-57: PIN sign-in + change-pin throttled: persisted attempts, exponential backoff, lockout\n- [ ] ISC-58: idle-timer no longer re-renders the app per keystroke/click\n- [ ] ISC-59: web call() throws on every non-OK response; no error body rendered as success state\n- [ ] ISC-60: PocketSmith key save surfaces failure (no unconditional success message)\n- [ ] ISC-61: fire-and-forget mutations (carryover save, archive, CarryoverPopover) gain busy/error handling\n- [ ] ISC-62: MoveMoneyModal seeds from/to defaults when rows arrive (detail-page regression fixed)\n- [ ] ISC-63: Pulse spend derived via envelope engine rollup (not the always-null Tx.envelopeId)\n- [ ] ISC-64: writeSnapshot wired into the daily pulse cron\n- [ ] ISC-65: backup-db.ts refuses non-crypt rclone remote loudly; failure visible in backup status\n- [ ] ISC-66: installLogRedaction called at server and sync entrypoints\n- [ ] ISC-67: ~/.penny secret/db files written 0600 (dir 0700)\n- [ ] ISC-68: BASIQ_MIGRATION_SPEC amended: balance re-anchor + parallel-run window + provider-prefixed ids + tombstones\n- [ ] ISC-69: bun test, typecheck, lint all green after the round\n- [ ] ISC-70: remediation doc in docs/reviews/ mapping findings → fixes → evidence\n- [ ] ISC-71: Anti: pre-existing tests pass unmodified except where behaviour was intentionally corrected (each documented)\n- [ ] ISC-72: changes committed with a descriptive message"
+    },
+    "timestamp": "2026-07-13T04:19:15.867Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review && python3 - <<'EOF'\np='ISA.md'\ns=open(p).read()\ns=s.replace('phase: complete','phase: build')\ns=s.replace('progress: 46/46','progress: 46/72')\ns=s.replace('updated: 2026-07-02T00:05:00+10:00','updated: 2026-07-07T12:00:00+10:00\\niteration: 2')\nopen(p,'w').write(s)\nprint(\"iteration 2, phase build\")\nEOF\ncurl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Build phase. Remediation round launching.\", \"voice_id\": \"fTtv3eikoepIosk8dTZ5\", \"voice_enabled\": true}' >/dev/null 2>&1; echo ok",
+      "description": "Set ISA to iteration 2 build phase, voice announce"
+    },
+    "timestamp": "2026-07-13T05:15:52.524Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Frontend remediation fixes",
+      "subagent_type": "general-purpose",
+      "prompt": "You are a senior frontend engineer implementing remediation fixes in BudgetBuddy from a Distinguished Engineer review. Repo: /home/nicholas-wood/Documents/workspace/projects/envelope-os. Work ONLY under web/src/ (plus web test files). Do NOT touch src/, scripts/, docs/, package.json. Another agent is working on src/server in parallel — stay out of it.\n\nConventions: bun only (never npm), TypeScript strict, match existing code style. Gates that must stay green: `bun test web/`, `tsc -p web/tsconfig.json --noEmit`, `tsc -p web/tsconfig.test.json --noEmit`, `bun run lint`. Run them before finishing. Add focused tests for each fix.\n\nFIX 1 — Idle-timer render storm [High]. web/src/lib/session.tsx: armIdleTimer (lines ~48-53) calls setIdleExpiresAt(Date.now()+30min) from window-level pointerdown/keydown listeners (~92-102), and the context value is a fresh object every render (~126-135). Every keystroke re-renders the entire app tree. Fix: keep the live deadline in a ref; only setState when the displayed minute actually changes (the indicator in AppShell.tsx:88 shows whole minutes) or at ~30s granularity; memoise the context value with useMemo. The idle-lock behaviour (lock fires when deadline passes) must be preserved exactly — check how the lock timeout is scheduled and keep it correct against the ref value. Add/extend a test proving rapid events don't cause unbounded re-renders (e.g. render-count probe component) and that lock still fires.\n\nFIX 2 — call() typed lie [Medium]. web/src/lib/api.ts (~82-87): on !resp.ok, an ApiError-shaped body is RETURNED under the success type; a grid 400 renders BudgetPage's \"No budget set up yet\" empty state. Fix: make call() THROW on every !resp.ok — an ApiCallError (new class, exported) carrying status and the server's error string when parseable. Keep in-band ApiError unions working for 200-status domain errors. Then audit call sites: places that relied on isApiError-after-non-OK now need try/catch or will surface via React Query error states (that's desired). Ensure 401 handling (session expiry) still works — check how session.tsx and queries handle unauthenticated; preserve that path. Add a test: non-OK response → useEnvelopes/isError true, and BudgetPage does NOT render the empty state on error (error UI instead).\n\nFIX 3 — Settings key save claims success on failure [Medium]. web/src/pages/SettingsPage.tsx (~29-36, 69-73): `.catch(() => undefined)` then unconditional setSaved(true) and \"Key stored in the secret store.\" Fix: mirror ChangePinControl's pattern (~190-208): try/catch, busy state, error message rendered, saved only on success. Test it.\n\nFIX 4 — Fire-and-forget mutations [Medium]. web/src/pages/EnvelopeDetailPage.tsx (~89-98 CarryoverAdjuster save, ~226-245 Archive/Unarchive) and web/src/components/budget/CarryoverPopover.tsx: awaits inside onClick with no try/catch, no disabled-while-busy, no error surface; double-clicks double-post. Fix: busy/disabled state + error display, consistent with MoveMoneyModal's pattern (~61-88). A small shared helper hook is fine if it stays simple.\n\nFIX 5 — MoveMoneyModal empty seeding on detail page [Medium]. web/src/components/MoveMoneyModal.tsx (~41-50): fromId/toId useState initialisers run with rows=[] (EnvelopeDetailPage enables useEnvelopes only when modal opens, EnvelopeDetailPage.tsx:141) and never re-run; only toId gets patched by the defaultToId effect. Fix: derive/repair both defaults when rows arrive while open (effect keyed on rows readiness), or key the modal's inner content on data readiness. First-open on the detail page must show a valid From selection. Test it with delayed rows.\n\nOUT OF SCOPE: ARIA grid restructure, ReconcilePage/TransactionPopover query migration, keepPreviousData indicator, query-cache clear on lock. Do not do them.\n\nFINAL MESSAGE (raw markdown): per fix — what changed (files), how verified (test names + gate output). Quote the final `bun test web/` and typecheck/lint results. If any fix proved riskier than described, say what you did instead and why."
+    },
+    "timestamp": "2026-07-13T05:16:26.048Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Backend server-seam remediation",
+      "subagent_type": "general-purpose",
+      "prompt": "You are a senior backend engineer implementing remediation fixes in BudgetBuddy from a Distinguished Engineer review. Repo: /home/nicholas-wood/Documents/workspace/projects/envelope-os. Bun + Hono + TypeScript strict. Your file territory: src/server/**, src/platform/auth*, src/platform/config.ts, a NEW src/platform/time.ts, src/security/redact.ts call sites in src/server/index.ts, scripts/sync.ts (redaction install only), test/** (new test files). Do NOT touch: web/src (another agent owns it), src/store/**, src/budget/service.ts, src/envelope/service.ts, src/pulse/**, scripts/backup*.ts (a later wave owns those).\n\nConventions: bun only, match existing style. Gates: `bun test` and `bun run typecheck` must be green at the end (run them). Every fix gets a focused test. The app is a money ledger — correctness over cleverness.\n\nFIX 1 — Register the dead routes + contract↔router parity test [Critical]. src/server/contract.ts declares \"POST /api/move\" (~line 799), \"POST /api/envelopes/edit\" (~800), \"GET /api/movements\" (~804) but no handler registers /move, /envelopes/edit, /movements (verify with rg 'api\\.(get|post)'). The UI calls the first two (MoveMoneyModal.tsx:68, EditBudgetPage.tsx:216, AddBudgetModal.tsx:162 — read them to match request/response shapes exactly; do not change web code). Implement:\n a) POST /move — alias to the same logic as /envelopes/move (src/server/handlers/envelopes.ts:100).\n b) POST /envelopes/edit — implement per the contract request/response types and what EditBudgetPage/AddBudgetModal send; route through the existing BudgetService/EnvelopeService methods (read src/budget/service.ts + src/envelope/service.ts to find the right calls — you may READ those files, just not modify them).\n c) GET /movements — the store has listMovements (src/platform/store.ts / sqlite.ts:597+); register the handler per the contract type. Note appendMovement currently has no callers; do NOT wire appendMovement into move flows (that's a later wave) — just make the endpoint return what the store has.\n d) Parity test (test/contract-parity.test.ts): build the real Hono app (see src/server/index.ts for construction; refactor minimally if needed to make the app constructible in tests without listening), iterate every key of ApiContract, assert each resolves to a registered route (non-404 for a matching method/path — 401 is fine, 404 is failure). This test is the deliverable that makes the bug class impossible.\n\nFIX 2 — zod validation at every mutation boundary [High]. zod is already a dependency but unused in src/. Add schemas for every POST body in src/server/handlers/* (move, distribute, envelopes create/edit/carryover/archive/rollover, budget/edit, reconcile, reconcile/confirm, settings/pocketsmith-key, auth bodies, sync). Central helper (e.g. src/server/validate.ts): parse with safeParse, on failure return 400 {ok:false, error:\"...\"} consistent with existing error shape. Money fields: z.number().int() (reject floats/NaN); dates: YYYY-MM-DD regex; ids: non-empty strings. Derive shapes from the contract types — the schema must accept everything the UI legitimately sends today (read the web call sites to confirm optional fields). Tests: garbage body → 400; float cents → 400; valid body → passes through.\n\nFIX 3 — Melbourne timezone period model [High]. Create src/platform/time.ts: `currentPeriod(tz)` and `todayISO(tz)` using Intl.DateTimeFormat('en-CA', {timeZone: tz}) (en-CA gives YYYY-MM-DD), tz from config (add PENNY_TIMEZONE to src/platform/config.ts, default \"Australia/Melbourne\"). Replace the UTC uses in YOUR territory only: src/server/http.ts:19-21 (currentPeriod via getUTC*) and handlers/envelopes.ts:166 (toISOString().slice(0,10)). Grep your territory for other getUTC/toISOString date derivations. Leave src/envelope/service.ts occurrences alone (later wave). Tests: mock/param the tz — a UTC instant late on the last day of a Melbourne month must yield the NEW Melbourne month/day.\n\nFIX 4 — PIN brute-force throttling [High]. Today beginSignIn (src/platform/auth/local.ts:40-49) and /auth/signin + /auth/change-pin (src/server/handlers/auth.ts) have zero throttling. Implement a persisted attempt tracker: interface (e.g. src/platform/auth/attempts.ts) with a file-backed implementation (JSON under the same data dir as ~/.penny — find how local.ts/secrets resolve that dir; write the file 0600). Policy: after 5 consecutive failures, exponential backoff (e.g. 2^n seconds, cap 15 min); reset on success; applies to both signin and the current-PIN check in change-pin; survives restart. Return 429 with a retry-after message in the error (don't leak remaining-attempt counts). Wire via composition in src/server/index.ts or the auth handler factory — read how auth is constructed and follow the existing pattern. Tests: 5 failures → 6th rejected even with CORRECT pin until window passes (inject a clock or make the tracker accept a now() dependency); success resets.\n\nFIX 5 — Install log redaction [Medium]. security/redact.ts exports installLogRedaction (tested, never called). Call it at the two entrypoints: src/server/index.ts (after container build) and scripts/sync.ts, feeding it the loaded secret values (see test/secret-hygiene.test.ts for intended usage). Keep it lazy-safe: secrets loaded after install must still be covered if the API supports a provider function.\n\nFINAL MESSAGE (raw markdown): per fix — files changed, test names added, and quoted final `bun test` + `bun run typecheck` output (counts). Flag anything you had to interpret differently than specified and why."
+    },
+    "timestamp": "2026-07-13T05:16:54.805Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && wc -l docs/BASIQ_MIGRATION_SPEC.md && grep -n \"^## \" docs/BASIQ_MIGRATION_SPEC.md | head -20 && tail -20 docs/BASIQ_MIGRATION_SPEC.md",
+      "description": "Inspect Basiq spec structure for amendment placement"
+    },
+    "timestamp": "2026-07-13T05:17:07.352Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cat >> /home/nicholas-wood/Documents/workspace/projects/envelope-os/docs/BASIQ_MIGRATION_SPEC.md <<'EOF'\n\n## 11. Review amendments (2026-07-07, from the four-lens DE review)\n\nAdded after the Distinguished Engineer review + cross-vendor audit\n(`docs/reviews/DISTINGUISHED_ENGINEER_REVIEW_2026-07-02.md`). These become ISCs in the\nBasiq block (ISC-129+) before BUILD starts.\n\n### 11.1 Reconciliation must re-anchor to Basiq account balances — three-step, not swap\n\n`src/reconcile/balances.ts` currently anchors the drift tripwire to PocketSmith's\n`current_balance`. This spec fetches transactions only; no step fetches Basiq\n**account balances**, so the tripwire dies silently at ISC-126 (decommission). Required:\n\n- **ISC-129:** BasiqProvider fetches account balances (the `retrieve-accounts` job step\n  already provides them) and the reconciler can anchor to them.\n- **ISC-130 (parallel-run window):** while PocketSmith is still live, assert\n  Basiq-anchored drift == PocketSmith-anchored drift over N reconciliation cycles.\n  The real risk is **balance-semantics equivalence** — Basiq exposes *available* vs\n  *posted/current*; envelope reconciliation needs cleared/posted (pending\n  authorisations, day-boundary bucketing, sign conventions all differ). Anchoring to\n  `available` doesn't fail loudly, it drifts quietly. The parallel-run diff is the\n  deliverable, not the re-anchor.\n- **ISC-131:** the drift alert has a verified live recipient across the cutover window.\n- ISC-126 (decommission) is blocked on ISC-129..131 passing.\n\n### 11.2 Identifier continuity (underweighted in §2's blast radius)\n\n`Tx.id` is the PocketSmith id (`map.ts:38`); `mappings` rows reference PocketSmith\n`category_id`s; `transaction_overrides` is keyed `pocketsmith_id`. Post-swap the ledger\nstraddles two id-spaces and historical mappings resolve nothing for new rows.\n\n- **ISC-132:** transaction ids are provider-prefixed (`ps:...` / `basiq:...`); mapper\n  emits prefixed ids; a one-shot migration prefixes historical rows.\n- **ISC-133:** cutover dedupe strategy for the boundary window (same real-world\n  transaction arriving from both feeds) is designed and tested before cutover.\n- **ISC-134:** historical `mappings` / `transaction_overrides` migration script exists\n  and is idempotent.\n\n### 11.3 Deletion propagation (tombstones)\n\nThe current pipeline is upsert-only (`sync.ts:77`); provider-side deletions live in the\nledger forever. The Basiq pipeline designs tombstones in from day one:\n\n- **ISC-135:** a transaction absent from the provider within its query window is\n  tombstoned (soft-deleted, event-logged), not silently retained; balances exclude\n  tombstoned rows.\n\n### 11.4 Sync bookmark semantics\n\n- **ISC-136:** the incremental bookmark is captured at query *issuance* time (not run\n  completion) so rows updated mid-pull are never skipped; provider clock skew is\n  absorbed by an overlap window.\nEOF\necho \"appended section 11\"; grep -c \"ISC-13\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/docs/BASIQ_MIGRATION_SPEC.md",
+      "description": "Append review amendments section to Basiq migration spec"
+    },
+    "timestamp": "2026-07-13T05:17:30.746Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os\necho \"=== new wave-1 files present? ===\"\nls src/platform/time.ts src/platform/auth/attempts.ts src/server/validate.ts test/contract-parity.test.ts 2>&1\necho \"=== git status (envelope-os scope) ===\"\ngit status --porcelain -- . | head -30\necho \"=== recent commits ===\"\ngit log --oneline -5 -- .",
+      "description": "Check whether Wave 1 changes landed in the repo"
+    },
+    "timestamp": "2026-07-13T22:14:24.770Z"
+  },
+  {
+    "name": "ToolSearch",
+    "input": {
+      "query": "select:TaskList,TaskOutput",
+      "max_results": 3
+    },
+    "timestamp": "2026-07-13T22:14:37.933Z"
+  },
+  {
+    "name": "TaskOutput",
+    "input": {
+      "task_id": "a02ab3a7b4621aa3c",
+      "block": false,
+      "timeout": 5000
+    },
+    "timestamp": "2026-07-13T22:14:43.945Z"
+  },
+  {
+    "name": "TaskOutput",
+    "input": {
+      "task_id": "a5cf7cf635e8e213b",
+      "block": false,
+      "timeout": 5000
+    },
+    "timestamp": "2026-07-13T22:14:44.559Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review/ISA.md",
+      "old_string": "- [ ] ISC-71: Anti: pre-existing tests pass unmodified except where behaviour was intentionally corrected (each documented)\n- [ ] ISC-72: changes committed with a descriptive message",
+      "new_string": "- [ ] ISC-71: Anti: pre-existing tests pass unmodified except where behaviour was intentionally corrected (each documented)\n- [ ] ISC-72: changes committed with a descriptive message\n\n### Budget chronology feature (2026-07-14, iteration 3 — Wave 3)\n- [ ] ISC-73: budget lines carry effectiveFrom (date) and optional effectiveTo; existing lines migrate as open-ended (effectiveTo null)\n- [ ] ISC-74: a month's budget for an envelope = SUM of all lines active in that month (overlapping budgets combine)\n- [ ] ISC-75: creating a new budget with completePrevious=true ends the previous open line the day before the new one starts\n- [ ] ISC-76: create/new-budget UI has a \"Complete the previous budget\" checkbox, checked by default\n- [ ] ISC-77: future-dated budgets apply from their start month — income set to change as of 1 Aug shows old target in Jul, new in Aug\n- [ ] ISC-78: EditBudgetPage shows a chronology per envelope: date range, amount, status (completed | active | scheduled)\n- [ ] ISC-79: previous (completed) budgets remain visible when editing\n- [ ] ISC-80: ensureMonth materialises allocations from date-resolved lines; already-materialised past months unchanged\n- [ ] ISC-81: contract types + zod schemas extended for the new fields/endpoints; contract↔router parity test green\n- [ ] ISC-82: sqlite, postgres, and memory store implement versioned lines identically (store suite extended)\n- [ ] ISC-83: tests cover overlap summing, completion default, future-dated start, and open-ended back-compat\n- [ ] ISC-84: Anti: creating a new budget version does not silently rewrite historical materialised months\n- [ ] ISC-85: all gates green after the feature (bun test, typecheck, lint)\n- [ ] ISC-86: feature committed with a descriptive message"
+    },
+    "timestamp": "2026-07-13T22:15:36.422Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review/ISA.md",
+      "old_string": "## Changelog",
+      "new_string": "- 2026-07-14: Budget-chronology design assumptions (Nick's spec, my resolution rules): (1) effective dates are stored as dates but budget resolution buckets by MONTH — a line contributes its amount to every month from month(effectiveFrom) through month(effectiveTo), open-ended if null; (2) overlap within a month sums (Nick: \"the total should be combined\"); (3) completePrevious sets the previous open line's effectiveTo to the day before the new line's effectiveFrom — so a clean 1-Aug transition gives Jul=old, Aug=new, while unticking the box gives Aug=old+new; (4) template lines become append-only versions rather than overwrite-in-place, which also makes budget chronology auditable; (5) past materialised months are never rewritten by version creation. Sequencing: Wave 3 runs after Wave 2 because both touch budget/service and the store layer.\n\n## Changelog"
+    },
+    "timestamp": "2026-07-13T22:15:49.054Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "systemctl --user list-timers --all 2>/dev/null | grep -i -E \"penny|sync|budget\" ; echo \"---UNITS---\"; ls ~/.config/systemd/user/ 2>/dev/null | grep -i -E \"penny|budget\"; echo \"---CRON---\"; crontab -l 2>/dev/null | grep -i -E \"penny|sync|budget|envelope\"; echo \"---TIMER DETAIL---\"; cat ~/.config/systemd/user/penny-sync.timer 2>/dev/null; echo \"---SERVICE---\"; cat ~/.config/systemd/user/penny-sync.service 2>/dev/null",
+      "description": "Find PocketSmith sync schedule in systemd timers and cron"
+    },
+    "timestamp": "2026-07-13T22:17:02.083Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review/ISA.md",
+      "old_string": "- [ ] ISC-85: all gates green after the feature (bun test, typecheck, lint)\n- [ ] ISC-86: feature committed with a descriptive message",
+      "new_string": "- [ ] ISC-85: all gates green after the feature (bun test, typecheck, lint)\n- [ ] ISC-86: feature committed with a descriptive message\n- [ ] ISC-87: AppShell menu has a force-sync button — POSTs /api/sync, busy state while running, honest failure surface, invalidates budget queries on success (background cadence stays the hourly penny-sync.timer)"
+    },
+    "timestamp": "2026-07-13T22:17:23.868Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && bun test 2>&1 | tail -4 && bun run typecheck 2>&1 | tail -3 && bun run lint 2>&1 | tail -3 && echo \"ALL GATES CHECKED\"",
+      "description": "Run combined test, typecheck, lint gates on merged Wave 1",
+      "timeout": 300000
+    },
+    "timestamp": "2026-07-14T00:48:18.232Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Store/domain remediation Wave 2",
+      "subagent_type": "general-purpose",
+      "prompt": "You are a senior backend engineer implementing Wave 2 of a remediation round in BudgetBuddy (a money ledger — correctness is everything). Repo: /home/nicholas-wood/Documents/workspace/projects/envelope-os. Bun + TypeScript strict. Wave 1 already landed: zod validation layer (src/server/validate.ts), timezone helper (src/platform/time.ts — USE IT), contract parity test (test/contract-parity.test.ts), app builder (src/server/app.ts). Baseline gates are green: 229 tests / 48 files, typecheck ×3, lint. They MUST be green when you finish, plus your new tests.\n\nYour territory: src/store/**, src/platform/store.ts, src/platform/secrets/local.ts, src/budget/service.ts, src/envelope/service.ts, src/pulse/**, scripts/pulse.ts, scripts/backup-db.ts, scripts/migrate.ts, test/** (new files + store.suite.ts extension). You may make MINIMAL touches to src/server/handlers/envelopes.ts ONLY if wrapping envelope-create in a transaction requires moving the multi-write sequence into a service method (preferred: move logic into EnvelopeService/BudgetService and call it from the handler). Do NOT touch web/src, src/server/contract.ts (unless adding zero routes — you shouldn't need to), src/ingest/**, src/platform/auth*.\n\nFIX 1 — withTransaction on the store port + atomic money mutations [High]. src/platform/store.ts gains `withTransaction<T>(fn: () => Promise<T>): Promise<T>` (document semantics: serialised, all-or-nothing; nested calls join the outer transaction). Implement in SqliteStore (bun:sqlite BEGIN IMMEDIATE/COMMIT/ROLLBACK — note db.transaction() is sync-only, so hand-roll with exec; guard re-entrancy with a depth counter), PostgresStore (BEGIN/COMMIT/ROLLBACK on a dedicated client — mind the pool: all queries inside the txn must use the same client; if the adapter currently grabs pool per-query, add an internal current-client field guarded by the depth counter; single-connection serialisation is acceptable for this app), and test/penny-memory-store.ts (snapshot/restore state on rollback, or at minimum run fn with a mutex — but rollback semantics preferred since tests assert crash-consistency). Then wrap in transactions: BudgetService.moveMoney, distribute, editBudget, ensureMonth (src/budget/service.ts) and the envelope-create multi-write sequence (handlers/envelopes.ts:148-177 — move into a service method). The \"all-or-nothing\" comments in distribute.ts/service.ts become true. Tests (test/store-transactions.test.ts): fn throws mid-sequence → NO partial writes visible (assert via store reads, run against sqlite AND memory store); moveMoney with a store that fails on the second setAllocation → source allocation unchanged.\n\nFIX 2 — allocations de-dup migration + UNIQUE + keyed upsert [High]. src/store/schema.ts: the allocations table has PK (user_id, id) only. Add (a) a migration step that collapses existing duplicate (user_id, envelope_id, period) rows — keep one row (lowest id), SUM the amounts into it, delete the rest, and log what it collapsed; (b) UNIQUE index on (user_id, envelope_id, period) created AFTER the de-dup; follow the existing additive/idempotent migration pattern (ADDITIVE_COLUMNS + ensureSchema in both adapters — read how they run DDL idempotently; the index creation must be idempotent via IF NOT EXISTS). (c) setAllocation/putAllocation and ensureMonth's insert become upserts keyed ON CONFLICT (user_id, envelope_id, period) in both adapters and the memory store. Tests: extend test/store.suite.ts — duplicate insert attempt lands as one row (updated, not summed, for direct setAllocation upsert; document the chosen conflict semantics); migration test seeding two duplicate rows through raw SQL then running ensureSchema → collapsed to one with summed amount; concurrent ensureMonth simulation (two sequential calls with the pre-check bypassed / raced) cannot produce a doubled month.\n\nFIX 3 — UTC remnants in the domain layer [High]. Replace the `new Date().toISOString().slice(0,10)` / getUTC* date derivations in src/envelope/service.ts (~lines 178 resetCarryover, ~591 runningBalances — grep for more) and src/budget/service.ts if any, with todayISO/currentPeriod from src/platform/time.ts. The services likely don't know the configured tz — thread it via constructor/config the same way EngineConfig reaches them (read src/server/services.ts and src/composition.ts to find the seam; default \"Australia/Melbourne\" via config). src/pulse/source.ts has its own currentPeriod — replace with the shared helper (tz from config). Tests: a fake clock at 2026-07-31T15:00Z → resetCarryover stamps 2026-08-01 (Melbourne), pulse period is 2026-08.\n\nFIX 4 — Pulse read model + snapshots [High — broken today]. src/pulse/source.ts keys spend on t.envelopeId (~:94-97) which src/ingest/map.ts sets null unconditionally — so per-envelope spend is ALWAYS zero. Fix: StorePulseSource should derive spend via the envelope engine (EnvelopeService rollup/spend resolution through mappings — read src/envelope/spend.ts and how the grid resolves envelopes; the Services container in scripts/pulse.ts already has what you need or can be given it). Also: EnvelopeService.writeSnapshot (~:852) has zero production callers — wire a snapshot write into scripts/pulse.ts's daily run (idempotent per user+date: re-running the script the same day must not duplicate — read the snapshots table/port semantics in src/envelope/ports.ts:110). Tests: pulse source over the memory store with mapped transactions yields non-zero per-envelope spend that matches the engine's rollup; snapshot written once per day per envelope on double-run.\n\nFIX 5 — backup-db.ts crypt gate + secrets file perms [High/Medium]. scripts/backup-db.ts:17 hardcodes DEST_DIR=\"onedrive:Backups/BudgetBuddy\" and uploads the plaintext ledger. Port the crypt-remote verification from scripts/backup.ts (~:85-106): resolve the remote's type via `rclone config dump` (or listremotes + config show), REFUSE with a loud, actionable error when the remote is not type=crypt (name the exact rclone commands to create a crypt remote in the error text), and record the refusal in the same backup-status surface the app reads (read src/server/handlers/backup.ts:35-65 to see where status comes from — the refusal must show up there as a failed backup with the reason, not silently). Make the destination remote configurable via env (PENNY_BACKUP_REMOTE, default the current value so behaviour is explicit). Do NOT create any rclone remote yourself. Also src/platform/secrets/local.ts: write secret.key/secrets.enc with 0600 (Bun.write then chmod, matching the pattern in src/platform/auth/attempts.ts) and ensure ~/.penny dir is 0700; apply on next write, don't chmod existing files at import time — do it in the write paths. Tests: backup plan/verify logic with a fake rclone runner refusing non-crypt (backup.ts has existing tests — follow their pattern in test/backup.test.ts); secrets file mode asserted after a write (skip gracefully on platforms without POSIX perms).\n\nRun ALL gates at the end from repo root: `bun test`, `bun run typecheck`, `bun run lint`. FINAL MESSAGE (raw markdown): per fix — files changed, conflict-semantics/design decisions made, test names, and the quoted final gate output (counts). Flag anything you interpreted differently and why."
+    },
+    "timestamp": "2026-07-14T00:49:34.964Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review && python3 - <<'EOF'\nimport re\np='ISA.md'\ns=open(p).read()\nfor n in [47,48,49,50,55,57,58,59,60,61,62,66]:\n    s=re.sub(rf'- \\[ \\] ISC-{n}:', f'- [x] ISC-{n}:', s)\ns=s.replace('progress: 46/72','progress: 58/87')\nopen(p,'w').write(s)\nprint(\"wave 1 ISCs marked; progress 58/87\")\nEOF",
+      "description": "Mark Wave 1 ISCs passed in ISA"
+    },
+    "timestamp": "2026-07-14T00:49:45.451Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os\necho \"=== queryClient defaults ===\"\ncat web/src/lib/queryClient.ts\necho \"=== queryKeys ===\"\ncat web/src/lib/queryKeys.ts",
+      "description": "Read query client defaults and key registry"
+    },
+    "timestamp": "2026-07-14T03:27:49.336Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os\necho \"=== SettingsPage sync section ===\"\nsed -n '80,130p' web/src/pages/SettingsPage.tsx\necho \"=== invalidate helpers in queries.ts ===\"\ngrep -n \"invalidate\\|useInvalidate\" web/src/lib/queries.ts | head -20\nsed -n \"$(grep -n 'useInvalidateBudget' web/src/lib/queries.ts | head -1 | cut -d: -f1),+25p\" web/src/lib/queries.ts",
+      "description": "Read sync button invalidation and invalidate helpers"
+    },
+    "timestamp": "2026-07-14T03:27:51.580Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "DB=~/.penny/penny.db\nif command -v sqlite3 >/dev/null; then\n  echo \"=== latest 12 transactions (read-only) ===\"\n  sqlite3 -readonly \"$DB\" \"SELECT date(posted_at) d, status, amount_cents, substr(payee,1,28), category_id IS NOT NULL AS has_cat FROM transactions WHERE user_id='local' ORDER BY posted_at DESC, id DESC LIMIT 12;\" 2>&1\n  echo \"=== status counts last 7 days ===\"\n  sqlite3 -readonly \"$DB\" \"SELECT status, count(*) FROM transactions WHERE user_id='local' AND posted_at >= date('now','-7 day') GROUP BY status;\" 2>&1\nelse echo \"no sqlite3 CLI\"; fi",
+      "description": "Inspect latest synced transactions status in ledger (read-only)"
+    },
+    "timestamp": "2026-07-14T03:28:41.310Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && bun -e '\nimport { Database } from \"bun:sqlite\";\nconst os = await import(\"node:os\");\nconst db = new Database(os.homedir() + \"/.penny/penny.db\", { readonly: true });\nconst cols = db.query(\"PRAGMA table_info(transactions)\").all().map((c) => c.name);\nconsole.log(\"cols:\", cols.join(\",\"));\nconst dateCol = cols.includes(\"posted_at\") ? \"posted_at\" : cols.includes(\"date\") ? \"date\" : cols[2];\nconst rows = db.query(`SELECT ${dateCol} d, status, amount_cents, category_id FROM transactions WHERE user_id=? ORDER BY ${dateCol} DESC LIMIT 12`).all(\"local\");\nconsole.log(JSON.stringify(rows, null, 0));\nconst counts = db.query(`SELECT status, count(*) n FROM transactions WHERE user_id=? AND ${dateCol} >= date(\\x27now\\x27,\\x27-7 day\\x27) GROUP BY status`).all(\"local\");\nconsole.log(\"last7days:\", JSON.stringify(counts));\n' 2>&1 | head -25",
+      "description": "Query latest transactions and status counts via bun sqlite readonly"
+    },
+    "timestamp": "2026-07-14T03:28:51.702Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && bun -e '\nimport { Database } from \"bun:sqlite\";\nconst os = await import(\"node:os\");\nconst db = new Database(os.homedir() + \"/.penny/penny.db\", { readonly: true });\nconst rows = db.query(\"SELECT txn_date, amount_cents, is_pending, is_transfer, category_id, envelope_id, substr(payee,1,24) p FROM transactions WHERE user_id=? ORDER BY txn_date DESC, id DESC LIMIT 14\").all(\"local\");\nfor (const r of rows) console.log(JSON.stringify(r));\nconst counts = db.query(\"SELECT is_pending, count(*) n FROM transactions WHERE user_id=? AND txn_date >= date(\\x27now\\x27,\\x27-7 day\\x27) GROUP BY is_pending\").all(\"local\");\nconsole.log(\"last7days by is_pending:\", JSON.stringify(counts));\nconst nocat = db.query(\"SELECT count(*) n FROM transactions WHERE user_id=? AND txn_date >= date(\\x27now\\x27,\\x27-7 day\\x27) AND category_id IS NULL\").all(\"local\");\nconsole.log(\"last7days uncategorised:\", JSON.stringify(nocat));\n' 2>&1 | head -20",
+      "description": "Query recent transactions pending/category state"
+    },
+    "timestamp": "2026-07-14T03:29:02.476Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && sed -n '1,70p' src/envelope/spend.ts && grep -n \"pending\" src/envelope/rollup.ts src/envelope/service.ts web/src/pages/TransactionsPage.tsx web/src/pages/BudgetPage.tsx 2>/dev/null | head -15",
+      "description": "Read pending-transaction semantics in spend engine and UI"
+    },
+    "timestamp": "2026-07-14T03:29:25.731Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review/ISA.md",
+      "old_string": "- [ ] ISC-87: AppShell menu has a force-sync button — POSTs /api/sync, busy state while running, honest failure surface, invalidates budget queries on success (background cadence stays the hourly penny-sync.timer)",
+      "new_string": "- [ ] ISC-87: AppShell menu has a force-sync button — POSTs /api/sync, busy state while running, honest failure surface, invalidates budget queries on success (background cadence stays the hourly penny-sync.timer)\n- [ ] ISC-88: budget grid rows with pending activity show a muted pending indicator (amount), pending rows visible in the row popover; Spent/Left maths unchanged (ISC-23 exclusion preserved) — resolves the \"synced but budget looks stale\" report of 2026-07-14"
+    },
+    "timestamp": "2026-07-14T03:29:59.499Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review && python3 - <<'EOF'\nimport re\np='ISA.md'\ns=open(p).read()\nfor n in [51,52,53,54,56,63,64,65,67,68]:\n    s=re.sub(rf'- \\[ \\] ISC-{n}:', f'- [x] ISC-{n}:', s)\ns=s.replace('progress: 58/87','progress: 68/88')\nopen(p,'w').write(s)\nprint(\"wave 2 ISCs marked; progress 68/88\")\nEOF",
+      "description": "Mark Wave 2 ISCs passed in ISA"
+    },
+    "timestamp": "2026-07-14T04:02:43.566Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Wave 3 budget chronology feature",
+      "subagent_type": "general-purpose",
+      "prompt": "You are a senior full-stack engineer building the budget-chronology feature in BudgetBuddy. Repo: /home/nicholas-wood/Documents/workspace/projects/envelope-os. Bun + Hono + TypeScript strict + React 18 + TanStack Query. You have the whole repo (no concurrent agents). Baseline gates are green: `bun test` = 260 pass / 53 files, `bun run typecheck` (×3 projects), `bun run lint`. They MUST be green at the end plus your new tests.\n\nRESPECT the patterns two prior remediation waves established:\n- All mutation bodies validated via zod in src/server/validate.ts (parseBody helper).\n- New contract endpoints MUST be added to src/server/contract.ts AND its runtime API_PATHS (compile-enforced via `satisfies`); test/contract-parity.test.ts will fail otherwise — that's by design.\n- Multi-write money mutations run inside store.withTransaction (see src/budget/service.ts moveMoney for the pattern).\n- Dates/\"today\"/current period come from src/platform/time.ts with the configured timezone (default Australia/Melbourne) — never getUTC*/toISOString().slice.\n- Allocations upsert keyed ON CONFLICT (user_id, envelope_id, period), REPLACE semantics.\n- Store changes must land identically in src/store/sqlite.ts, src/store/postgres.ts, and test/penny-memory-store.ts, with shared assertions in test/store.suite.ts. Schema changes follow the additive/idempotent migration pattern in src/store/schema.ts.\n- Frontend mutations: busy/error state, invalidate via the helpers in web/src/lib/queries.ts, keys in queryKeys.ts.\n- The web app uses shadcn-style primitives in web/src/components/ui/.\n\nREAD FIRST: src/store/schema.ts (template/budget tables), src/budget/template.ts + normalise.ts + service.ts (how template lines materialise into allocations via ensureMonth, and what editBudget/scope does), src/budget/ports.ts, src/domain/types.ts (TemplateLine shape), the effective-dated mappings pattern in src/envelope/spend.ts resolveEnvelopeId (ISC-19) — your versioning should feel like that, web/src/pages/EditBudgetPage.tsx + components/AddBudgetModal.tsx (current edit/create flows), src/server/handlers/envelopes.ts + budget.ts.\n\n# FEATURE A — Effective-dated budget versions (the core)\n\nThe owner's requirement, verbatim intent: \"When editing a budget I should see previous budgets. I should be able to set a start and end date for a budget. This should allow me to see a chronology of budgets — for example, set my income to change as of the 1st of August. When creating a new budget for a category, if it overlaps with another budget, the total should be combined for that category for that period. When creating a new budget there should be a checkbox to complete the previous budget, selected by default.\"\n\nLocked design decisions (implement these, don't re-litigate):\n1. Template/budget lines gain `effective_from` (YYYY-MM-DD, required) and `effective_to` (YYYY-MM-DD or NULL = open-ended) as additive columns. Existing rows migrate to effective_from = '1970-01-01', effective_to = NULL (open-ended back-compat: resolution over any month yields exactly today's behaviour).\n2. Lines become APPEND-ONLY VERSIONS: creating/editing a budget writes a new line row (fresh id) rather than overwriting, EXCEPT trivial same-version corrections you may keep as in-place updates if the existing editBudget semantics demand it — but any change with completePrevious semantics creates a version. Income envelope targets version the same way (that's the \"income changes as of 1 Aug\" case — check how income targets are stored; if they live on the income_envelopes row rather than template lines, version them through the same effective-dated mechanism, whatever shape that takes — the chronology must work for income).\n3. MONTH-BUCKET RESOLUTION: a line contributes to every month M where month(effective_from) <= M <= month(effective_to ?? infinity). A month's budget for an envelope = SUM of all contributing lines' amounts for that month (each line still respecting its cadence/proration via the existing normalise logic). Overlap within a month SUMS.\n4. completePrevious (default TRUE in UI): when creating a new version, set every currently-open (effective_to NULL) line for that envelope to effective_to = (new effective_from minus 1 day). Unticked → old and new coexist and sum.\n5. ensureMonth materialises a month's allocations from the month-resolved line set. Already-materialised PAST months are never rewritten by version creation (ensureMonth only creates the current/requested month as today; keep that property — creating a version effective 1 Aug must not touch July's allocations). The CURRENT month re-resolution: editBudget scope=\"ongoing\" today updates the current month's allocation — preserve that behaviour through the new resolution.\n6. Scheduled versions (effective_from in a future month) simply contribute nothing until that month arrives; when August's ensureMonth runs it picks them up naturally.\n\nAPI: extend the edit/create request types (effectiveFrom optional defaulting to first of current month, effectiveTo optional, completePrevious optional defaulting true) and add a chronology read — GET /api/envelopes/versions?envelopeId=... returning the version list (id, amountCents, period cadence, effectiveFrom, effectiveTo, status: completed|active|scheduled — status computed against the current Melbourne month). Contract + API_PATHS + zod + parity.\n\nUI (EditBudgetPage + AddBudgetModal):\n- Date fields (From, optional To) when creating/editing a budget line; sensible default From = first of next month? NO — default From = first of CURRENT month (matches today's edit semantics); the user changes it to 1 Aug for the income scenario.\n- \"Complete the previous budget\" checkbox, CHECKED by default, with a one-line explanation under it (\"Ends the current budget the day before this one starts\").\n- A chronology view per envelope: compact timeline list (most recent first): date range, amount, cadence, status chip (completed / active / scheduled). Reachable from the edit flow (e.g. expanding a row or a \"History\" affordance on the envelope's edit row) — follow the page's existing visual language.\n- The income section supports the same (set income target change as of a future date).\n\nDomain tests (test/budget-versions.test.ts + extend store.suite.ts for the new columns/methods): overlap sums within a month; completePrevious=true gives Jul=old / Aug=new for a 1-Aug transition; =false gives Aug=old+new; scheduled version contributes nothing until its month; open-ended back-compat line behaves exactly as before; past materialised months untouched by version creation; income target change as of next month shows old target this month, new next month. HTTP tests via the test/server-test-app.ts harness for the new/extended endpoints. Web tests for the checkbox default + date fields posting the right body + chronology rendering.\n\n# FEATURE B — Menu force-sync button (small)\n\nweb/src/layout/AppShell.tsx: add a sync button to the menu/nav (both desktop and the mobile sheet if the shell has one): POSTs /api/sync (endpoint exists), spinner/busy state while running, on success invalidate via useInvalidateAfterSync (web/src/lib/queries.ts:136), on failure surface the error honestly (toast/inline per the shell's idiom — no fake success). Show the synced-transactions count briefly on success if the response provides it. Test: button click posts once, busy state disables re-click, failure shows error.\n\n# FEATURE C — Pending-activity indicator on the budget grid (small)\n\nEngine rule ISC-23: pending transactions are listed but never counted (src/envelope/spend.ts countsTowardBalance). Owner just hit the consequence: fresh-synced pending transactions don't move the grid and it reads as stale. Fix visibility WITHOUT changing the maths: the grid response (src/envelope/service.ts buildGrid) gains per-row pendingCents (signed sum of pending non-transfer activity resolved to that envelope for the period — reuse resolveEnvelopeId; transfers stay excluded); contract type extended (additive optional field). UI: on rows with nonzero pendingCents, a muted indicator after the Spent figure (e.g. \"· $23.45 pending\", title-attribute explaining \"Pending at the bank — not yet counted\"). The row's TransactionPopover already lists transactions — ensure pending rows are visually flagged there (badge or muted style) if not already. Tests: engine (pending sums surfaced, excluded from spent), one web test for the indicator.\n\nRun ALL gates at the end. FINAL MESSAGE (raw markdown): per feature — design notes where you had latitude, files changed, test names, quoted final gate output (counts), and any behaviour intentionally changed from before (each documented). Do NOT write docs or commit — the orchestrator does that."
+    },
+    "timestamp": "2026-07-14T04:03:36.505Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os\necho \"=== zod create schema type enum ===\"\ngrep -n -A3 \"createEnvelope\\|envelopeType\\|\\\"saving\\\"\" src/server/validate.ts | head -20\necho \"=== handler create branch ===\"\ngrep -n \"saving\\|income.*expense\" src/server/handlers/envelopes.ts | head -10\necho \"=== contract type ===\"\ngrep -n \"saving\" src/server/contract.ts | head -5\necho \"=== UI options ===\"\ngrep -n \"saving\" web/src/components/AddBudgetModal.tsx | head -5",
+      "description": "Check whether saving type is still rejected in current code"
+    },
+    "timestamp": "2026-07-14T10:27:50.245Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && sed -n '148,185p' src/server/handlers/envelopes.ts",
+      "description": "Read the create-envelope handler branch"
+    },
+    "timestamp": "2026-07-14T10:28:02.693Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && grep -n -B2 -A25 \"createEnvelope\" src/budget/service.ts | head -60 && echo \"=== tests covering create with saving ===\" && rg -l \"saving\" test/ | head -5 && rg -n '\"saving\"' test/routes-move-edit-movements.test.ts test/store.suite.ts test/budget-*.test.ts 2>/dev/null | head -5",
+      "description": "Verify createEnvelope service handles saving type"
+    },
+    "timestamp": "2026-07-14T10:28:23.662Z"
+  },
+  {
+    "name": "SendMessage",
+    "input": {
+      "to": "a31e73308225b8f6c",
+      "summary": "Add saving-type create regression test",
+      "message": "Addition to your scope (small): the owner just live-hit the old \"type must be income|expense\" rejection on POST /api/envelopes with type \"saving\" (the deployed server predates the remediation; current code already accepts it via createEnvelopeSchema + BudgetService.createEnvelope). Since you own the create flow: (1) add a regression test — POST /api/envelopes with type \"saving\" via the server-test-app harness → 200, and the envelope appears in the grid with its saving type intact (and its template line materialises if budgetedCents given); (2) while in AddBudgetModal, make sure the create error path surfaces the server's actual message (not a generic one) so a 400 like this is diagnosable from the UI; (3) sanity-check \"envelope\" and \"working\" types create cleanly too since the zod enum allows them. Keep it inside your existing feature work and gates.",
+      "type": "message",
+      "recipient": "a31e73308225b8f6c",
+      "content": "Addition to your scope (small): the owner just live-hit the old \"type must be income|expense\" rejection on POST /api/envelopes with type \"saving\" (the deployed server predates the remediation; current code already accepts it via createEnvelopeSchema + BudgetService.createEnvelope). Since you own the create flow: (1) add a regression test — POST /api/envelopes with type \"saving\" via the server-test-app harness → 200, and the envelope appears in the grid with its saving type intact (and its template line materialises if budgetedCents given); (2) while in AddBudgetModal, make sure the create error path surfaces the server's actual message (not a generic one) so a 400 like this is diagnosable from the UI; (3) sanity-check \"envelope\" and \"working\" types create cleanly too since the zod enum allows them. Keep it inside your existing feature work and gates."
+    },
+    "timestamp": "2026-07-14T10:28:43.859Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && bun -e '\nimport { Database } from \"bun:sqlite\";\nconst os = await import(\"node:os\");\nconst db = new Database(os.homedir() + \"/.penny/penny.db\", { readonly: true });\nconst rows = db.query(\"SELECT txn_date, amount_cents, is_pending, substr(payee,1,30) p FROM transactions WHERE user_id=? AND payee LIKE ? ORDER BY txn_date DESC LIMIT 3\").all(\"local\", \"%JACQUE%\");\nconsole.log(\"jacqui rows:\", JSON.stringify(rows));\nconst map = db.query(\"SELECT m.category_id, m.envelope_id, e.name FROM mappings m LEFT JOIN envelopes e ON e.id = m.envelope_id AND e.user_id = m.user_id WHERE m.user_id=? AND m.category_id=?\").all(\"local\", \"15251086\");\nconsole.log(\"mapping 15251086:\", JSON.stringify(map));\nconst recent = db.query(\"SELECT is_pending, count(*) n, sum(amount_cents) cents FROM transactions WHERE user_id=? AND category_id=? AND txn_date >= ? GROUP BY is_pending\").all(\"local\", \"15251086\", \"2026-07-13\");\nconsole.log(\"reimb category since 13 Jul by pending:\", JSON.stringify(recent));\n' 2>&1 | head -10",
+      "description": "Check Jacqui Nolan transaction pending state and Reimbursement mapping"
+    },
+    "timestamp": "2026-07-14T10:29:22.723Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && bun test 2>&1 | tail -3 && bun run typecheck 2>&1 | tail -2 && bun run lint 2>&1 | tail -2 && echo \"=== GATES OK ===\" && echo \"=== how is the SPA served? ===\" && grep -n \"static\\|dist\\|serveStatic\\|index.html\" src/server/index.ts src/server/app.ts | head -8 && ls web/dist/index.html 2>/dev/null && stat -c '%y' web/dist/index.html 2>/dev/null; echo \"=== penny.service ===\"; cat ~/.config/systemd/user/penny.service",
+      "description": "Verify all gates and inspect SPA serving and service unit",
+      "timeout": 300000
+    },
+    "timestamp": "2026-07-14T11:03:07.086Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "mkdir -p ~/.penny/pre-deploy-snapshots && cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && bun -e '\nimport { Database } from \"bun:sqlite\";\nconst os = await import(\"node:os\");\nconst home = os.homedir();\nconst dest = home + \"/.penny/pre-deploy-snapshots/penny-pre-v1.4.0.db\";\nconst db = new Database(home + \"/.penny/penny.db\", { readonly: true });\ndb.exec(`VACUUM INTO ${JSON.stringify(dest)}`);\nconsole.log(\"snapshot written:\", dest);\n' && ls -lh ~/.penny/pre-deploy-snapshots/ && git check-ignore web/dist && echo \"dist IGNORED\" || echo \"dist TRACKED\"",
+      "description": "Take consistent pre-migration DB snapshot via VACUUM INTO"
+    },
+    "timestamp": "2026-07-14T11:03:56.942Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && python3 - <<'EOF'\nimport json\np='package.json'\nd=json.load(open(p))\nd['version']='1.4.0'\nopen(p,'w').write(json.dumps(d,indent=2)+\"\\n\")\nprint(\"version:\", d['version'])\nEOF\nbunx vite build 2>&1 | tail -6 && stat -c '%y' web/dist/index.html",
+      "description": "Bump version to 1.4.0 and build the web bundle",
+      "timeout": 300000
+    },
+    "timestamp": "2026-07-14T11:04:11.061Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && git add . && git status --porcelain --branch | head -5 && git commit -m \"budgetbuddy v1.4.0: DE-review remediation round + budget chronology\n\nRemediation (from docs/reviews/DISTINGUISHED_ENGINEER_REVIEW_2026-07-02.md):\n- register dead routes (/api/move, /api/envelopes/edit, /api/movements) + compile-enforced contract<->router parity test\n- zod validation at every mutation boundary (integer cents, strict dates)\n- store withTransaction (sqlite/postgres/memory) — moveMoney/distribute/editBudget/ensureMonth/create atomic\n- allocations de-dup migration + UNIQUE(user_id,envelope_id,period) keyed upsert (budget-doubling race dead)\n- Melbourne-timezone period model end to end (PENNY_TIMEZONE, default Australia/Melbourne)\n- PIN brute-force throttling (persisted exponential backoff, 429 + Retry-After)\n- log redaction installed at server + sync entrypoints; ~/.penny files 0600\n- backup-db refuses non-crypt rclone remotes loudly; refusal surfaces in backup status\n- Pulse spend via engine mapping resolution (was always-zero) + daily snapshots wired\n- frontend: idle-timer render storm fixed, call() throws on non-OK, settings key-save honesty,\n  fire-and-forget mutations busy/error-guarded, MoveMoneyModal detail-page seeding\n\nFeatures:\n- budget chronology: effective-dated append-only budget versions, month-bucket resolution,\n  overlapping budgets sum, 'complete the previous budget' (default on), scheduled income\n  changes (e.g. new salary from 1 Aug), per-envelope version history UI\n- menu force-sync button (honest failure surface, invalidates grid)\n- pending-activity indicator on budget rows (ISC-23 maths unchanged)\n- saving/envelope/working create-type regression fixed at the HTTP layer + tests\n\nGates: 312 tests pass (60 files), tsc x3 clean, eslint clean.\nBasiq spec amended (section 11): balance re-anchor + parallel-run, provider-prefixed ids, tombstones.\" 2>&1 | tail -3",
+      "description": "Commit the remediation round and feature wave as v1.4.0"
+    },
+    "timestamp": "2026-07-14T11:04:38.891Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "systemctl --user restart penny.service && sleep 4 && systemctl --user is-active penny.service && journalctl --user -u penny.service --since \"1 min ago\" --no-pager 2>/dev/null | tail -15 && echo \"=== health probe ===\" && curl -s -m 5 http://127.0.0.1:8787/api/health && echo && echo \"=== dead-route probe (was 404 HTML, must now be 401 JSON) ===\" && curl -s -m 5 -o /dev/null -w \"%{http_code} %{content_type}\\n\" -X POST http://127.0.0.1:8787/api/move -H \"Content-Type: application/json\" -d '{}'",
+      "description": "Restart penny service, check migration logs, probe health and fixed route",
+      "dangerouslyDisableSandbox": true
+    },
+    "timestamp": "2026-07-14T11:04:50.516Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && bun -e '\nimport { Database } from \"bun:sqlite\";\nconst os = await import(\"node:os\");\nconst db = new Database(os.homedir() + \"/.penny/penny.db\", { readonly: true });\nconst idx = db.query(\"SELECT name FROM sqlite_master WHERE type=?1 AND name LIKE ?2\").all(\"index\", \"%alloc%\");\nconsole.log(\"indexes:\", JSON.stringify(idx));\nconst dupes = db.query(\"SELECT envelope_id, period, count(*) n FROM allocations WHERE user_id=? GROUP BY envelope_id, period HAVING n > 1\").all(\"local\");\nconsole.log(\"remaining duplicate groups:\", dupes.length);\nconst cols = db.query(\"PRAGMA table_info(budget_template)\").all().map(c=>c.name).join(\",\");\nconsole.log(\"budget_template cols:\", cols);\n'",
+      "description": "Verify UNIQUE index, zero duplicates, and effective-date columns in live DB"
+    },
+    "timestamp": "2026-07-14T11:05:13.462Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/docs/reviews/REMEDIATION_2026-07-14.md",
+      "content": "# Remediation Round — 2026-07-07 → 2026-07-14 (v1.4.0)\n\nExecutes the before-Basiq bucket of `DISTINGUISHED_ENGINEER_REVIEW_2026-07-02.md`, plus\nthree owner-requested features. Three waves, each by a dedicated agent against green\ngates, orchestrated with file-territory separation. **Final gates: 312 tests pass\n(60 files, was 187/37 pre-round), tsc ×3 clean, eslint clean.** Deployed 2026-07-14:\nweb bundle rebuilt, `penny.service` restarted, migration verified against the live DB\n(UNIQUE index present, 0 duplicate allocation groups, effective-date columns live).\nPre-migration snapshot: `~/.penny/pre-deploy-snapshots/penny-pre-v1.4.0.db`.\n\n## Review findings → fixes\n\n| Review finding | Fix | Wave |\n|---|---|---|\n| Backend Critical — dead routes `/api/move`, `/api/envelopes/edit`, `/api/movements` | Registered/implemented; `API_PATHS satisfies Record<ApiPath, true>` makes contract↔router drift a compile error; parity test sweeps every endpoint | 1 |\n| Backend High — no validation, zod unused | `src/server/validate.ts`: zod at all mutation boundaries, integer-cents refinement, strict dates | 1 |\n| Backend High — UTC month/day for a Melbourne user | `src/platform/time.ts` + `PENNY_TIMEZONE` (default Australia/Melbourne) threaded server → domain → pulse | 1+2 |\n| Security High — unthrottled 4-digit PIN | Persisted `FileAttemptTracker`: 5 failures → exponential backoff (cap 15 min), 429 + Retry-After, covers change-pin, survives restart | 1 |\n| Security Medium — log redaction never installed | Installed at both entrypoints via a SecretStore wrapper (lazy-safe) | 1 |\n| Frontend High — idle-timer render storm | Deadline in a ref, ≥30 s publish granularity, memoised context; lock semantics proven preserved | 1 |\n| Frontend Medium — `call()` returns error bodies as success | `ApiCallError` thrown on every non-OK; error states render honestly | 1 |\n| Frontend Medium — key-save claims success on failure; fire-and-forget mutations; modal seeding | All busy/error-guarded with double-submit protection; detail-page seeding fixed | 1 |\n| Backend High — non-atomic money mutations | `Store.withTransaction` (SQLite hand-rolled BEGIN IMMEDIATE, Postgres per-txn client, memory snapshot/rollback; ALS nesting) wraps move/distribute/editBudget/ensureMonth/create | 2 |\n| Backend High — `ensureMonth` budget-doubling race | De-dup migration (SUM-collapse, keeper = lowest id) then `UNIQUE(user_id, envelope_id, period)`; runtime upsert REPLACEs | 2 |\n| Architecture High — Pulse reads always-null `envelopeId`; snapshots never written | Pulse spend via engine `resolveEnvelopeId` (effective-dated mappings); `writeSnapshot` wired into the daily pulse run, idempotent per day | 2 |\n| Security High — plaintext backup to non-crypt OneDrive | `backup-db.ts` refuses non-crypt remotes loudly (`PENNY_BACKUP_REMOTE`), refusal recorded in backup status. **Owner action still open: create the rclone crypt remote and purge old plaintext snapshots from OneDrive** | 2 |\n| Security Low — world-readable `~/.penny` files | Secret writes 0600, `.penny` dir 0700 | 2 |\n| Backend Medium — `saving` type rejected at create | Full type enum accepted end-to-end + HTTP regression test (live-hit by the owner 2026-07-14 on the old build) | 1+3 |\n| SystemsThinking/Architecture — Basiq spec gaps | Spec §11: balance re-anchor + parallel-run window (ISC-129..131), provider-prefixed ids + mapping migration (132..134), tombstones (135), bookmark-at-issuance (136) | — |\n\n## Features (owner-requested, 2026-07-14)\n\n- **Budget chronology** — `budget_template` lines are effective-dated (`effective_from`/`effective_to`),\n  append-only versions; month-bucket resolution; overlapping versions SUM within a month;\n  \"Complete the previous budget\" checkbox (default on) ends the open version the day\n  before the new one starts; income targets version the same way (salary change as of\n  1 Aug: July shows old, August new); per-envelope History view with\n  completed/active/scheduled chips; `GET /api/envelopes/versions`.\n- **Menu force-sync** — sidebar + mobile sheet button on `POST /api/sync`; busy state,\n  honest failure, grid invalidation, synced-count flash. Background cadence remains the\n  hourly `penny-sync.timer`.\n- **Pending indicator** — grid rows show muted \"· $X pending\" (title-explained) for\n  bank-pending activity; ISC-23 maths (pending never counted) unchanged. Resolves the\n  \"synced but budget looks stale\" reports of 2026-07-14 (Jacqui Nolan case: the payment\n  was `is_pending=1`; the seven posted payments were already counted).\n\n## Intentional behaviour changes (documented by the implementing agents)\n\nOngoing budget edits append version rows (previously overwrote in place) and now\npropagate to pre-materialised future months; income name edits no longer rewrite\ntargets; move/distribute anchor brand-new template lines at the first of the current\nmonth; grid cadence labels come from the current version. All 260 pre-round tests still\npass; behaviour changes are covered by the 52 new tests.\n\n## Deferred (unchanged from the review's Bucket C)\n\nPostgres store suite in CI, per-user `EngineConfig`, session/auth hardening\n(`PENNY_SESSION_KEY` floor, persisted magic links, full-digest userId, security\nheaders), per-tenant cron orchestration, master key out of the vault dir, ARIA grid\nrestructure, query-cache clear on lock, OneDrive plaintext purge (owner action).\n"
+    },
+    "timestamp": "2026-07-14T11:05:57.935Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && git add docs/reviews/REMEDIATION_2026-07-14.md && git commit -m \"budgetbuddy: remediation round closeout doc (findings->fixes map, v1.4.0)\" 2>&1 | tail -2",
+      "description": "Commit remediation closeout doc"
+    },
+    "timestamp": "2026-07-15T05:59:04.843Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 200 bun ~/.claude/PAI/TOOLS/Inference.ts --mode advisor --auto-state \\\n  \"TASK: Remediation round on BudgetBuddy delivered and deployed — 3 agent waves fixed the DE-review findings (routes+parity, zod, transactions, allocation UNIQUE, timezone, PIN throttle, backup crypt-gate, Pulse read model) and shipped budget chronology (effective-dated append-only versions), menu sync, pending indicator. 312 tests green, committed v1.4.0, service restarted, migration verified live.\" \\\n  \"QUESTION: any gaps before declaring this round done? Particular worries: (1) deploying a ledger rewrite same-day with only test-level verification — what live checks would you demand; (2) the append-only versioning changed edit semantics — what user-visible surprises might the owner hit tomorrow morning?\" 2>&1 | tail -30",
+      "description": "Advisor gap-check before declaring round done"
+    },
+    "timestamp": "2026-07-15T05:59:10.379Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && bun -e '\nimport { Database } from \"bun:sqlite\";\nconst os = await import(\"node:os\");\nconst home = os.homedir();\nconst live = new Database(home + \"/.penny/penny.db\", { readonly: true });\nlive.exec(`ATTACH DATABASE ${JSON.stringify(home + \"/.penny/pre-deploy-snapshots/penny-pre-v1.4.0.db\")} AS pre`);\n// 1. Allocation conservation per period\nconst drift = live.query(`\n  SELECT COALESCE(a.period, b.period) period,\n         COALESCE(a.total,0) live_cents, COALESCE(b.total,0) pre_cents\n  FROM (SELECT period, SUM(amount_cents) total FROM main.allocations WHERE user_id=$u GROUP BY period) a\n  FULL OUTER JOIN (SELECT period, SUM(amount_cents) total FROM pre.allocations WHERE user_id=$u GROUP BY period) b\n  ON a.period = b.period\n  WHERE COALESCE(a.total,0) != COALESCE(b.total,0)\n  ORDER BY period`).all({ $u: \"local\" });\nconsole.log(\"periods with allocation-total drift:\", drift.length);\nfor (const d of drift) console.log(JSON.stringify(d));\n// 2. Per-envelope per-period diff count\nconst rowDrift = live.query(`\n  SELECT count(*) n FROM (\n    SELECT COALESCE(a.envelope_id,b.envelope_id) e, COALESCE(a.period,b.period) p,\n           COALESCE(a.t,0) lv, COALESCE(b.t,0) pr\n    FROM (SELECT envelope_id, period, SUM(amount_cents) t FROM main.allocations WHERE user_id=$u GROUP BY 1,2) a\n    FULL OUTER JOIN (SELECT envelope_id, period, SUM(amount_cents) t FROM pre.allocations WHERE user_id=$u GROUP BY 1,2) b\n    ON a.envelope_id=b.envelope_id AND a.period=b.period\n    WHERE COALESCE(a.t,0) != COALESCE(b.t,0))`).get({ $u: \"local\" });\nconsole.log(\"envelope-period rows differing:\", rowDrift.n);\n// 3. Transactions untouched\nconst tx = live.query(`SELECT (SELECT count(*) FROM main.transactions) lc, (SELECT count(*) FROM pre.transactions) pc,\n  (SELECT COALESCE(SUM(amount_cents),0) FROM main.transactions) ls, (SELECT COALESCE(SUM(amount_cents),0) FROM pre.transactions) ps`).get();\nconsole.log(\"transactions live vs pre:\", JSON.stringify(tx));\n// 4. Template lines: count pre vs live (versioning adds, never deletes)\nconst tl = live.query(`SELECT (SELECT count(*) FROM main.budget_template) lc, (SELECT count(*) FROM pre.budget_template) pc`).get();\nconsole.log(\"template lines live vs pre:\", JSON.stringify(tl));\n' 2>&1 | head -20",
+      "description": "Conservation and immutability diff: pre-migration snapshot vs live DB"
+    },
+    "timestamp": "2026-07-15T06:01:03.500Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os\necho \"=== same-month overlap test coverage in version tests ===\"\nrg -n \"mid-month|same month|sums|1100|coexist\" test/budget-versions.test.ts | head -8\necho \"=== UI default effectiveFrom ===\"\nrg -n \"firstOfCurrentMonth\" web/src/lib/utils.ts web/src/pages/EditBudgetPage.tsx web/src/components/AddBudgetModal.tsx | head -6\necho \"=== wrong-PIN live probe (uses 1 of 5 attempts, resets on Nick's next login) ===\"\ncurl -s -m 5 -o - -w \" HTTP:%{http_code}\\n\" -X POST http://127.0.0.1:8787/api/auth/signin -H \"Content-Type: application/json\" -d '{\"kind\":\"pin\",\"pin\":\"000000000\"}'\necho \"=== attempts file state ===\"\ncat ~/.penny/auth-attempts.json 2>/dev/null || echo \"(no attempts file yet)\"",
+      "description": "Check overlap test coverage, UI date default, live auth probe"
+    },
+    "timestamp": "2026-07-15T06:11:18.649Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && bun -e '\nimport { resolveAmountForMonth } from \"./src/budget/versions.ts\";\nconst lines = [\n  { id: \"old\", envelopeId: \"groceries\", amountCents: 50000, period: \"monthly\", effectiveFrom: \"1970-01-01\", effectiveTo: \"2026-07-14\" },\n  { id: \"new\", envelopeId: \"groceries\", amountCents: 60000, period: \"monthly\", effectiveFrom: \"2026-07-15\", effectiveTo: null },\n];\nconsole.log(\"MID-MONTH completePrevious: Jul =\", resolveAmountForMonth(lines, {year:2026,month:7}), \"Aug =\", resolveAmountForMonth(lines, {year:2026,month:8}));\nconst clean = [\n  { id: \"old\", envelopeId: \"groceries\", amountCents: 50000, period: \"monthly\", effectiveFrom: \"1970-01-01\", effectiveTo: \"2026-06-30\" },\n  { id: \"new\", envelopeId: \"groceries\", amountCents: 60000, period: \"monthly\", effectiveFrom: \"2026-07-01\", effectiveTo: null },\n];\nconsole.log(\"DEFAULT (first-of-month): Jul =\", resolveAmountForMonth(clean, {year:2026,month:7}), \"Aug =\", resolveAmountForMonth(clean, {year:2026,month:8}));\n' 2>&1 | head -6",
+      "description": "Probe mid-month vs default edit resolution semantics directly"
+    },
+    "timestamp": "2026-07-15T06:11:50.162Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && grep -n \"export function\\|export interface\\|export type\" src/budget/versions.ts && sed -n \"$(grep -n 'export function resolveAmountForMonth' src/budget/versions.ts | cut -d: -f1),+14p\" src/budget/versions.ts && grep -n \"interface TemplateLine\" -A 10 src/domain/types.ts src/platform/store.ts 2>/dev/null | head -15",
+      "description": "Read actual versions.ts function signatures and TemplateLine shape"
+    },
+    "timestamp": "2026-07-15T06:11:59.555Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && bun -e '\nimport { resolveAmountForMonth } from \"./src/budget/versions.ts\";\nconst mk = (id, cents, from, to) => ({ id, envelopeId: \"groceries\", amountCents: cents, period: \"monthly\", effectiveFrom: from, effectiveTo: to });\nconst mid = [mk(\"old\", 50000, \"1970-01-01\", \"2026-07-14\"), mk(\"new\", 60000, \"2026-07-15\", null)];\nconsole.log(\"MID-MONTH completePrevious: Jul =\", resolveAmountForMonth(mid, \"groceries\", {year:2026, month:7}), \" Aug =\", resolveAmountForMonth(mid, \"groceries\", {year:2026, month:8}));\nconst dflt = [mk(\"old\", 50000, \"1970-01-01\", \"2026-06-30\"), mk(\"new\", 60000, \"2026-07-01\", null)];\nconsole.log(\"DEFAULT first-of-month:     Jul =\", resolveAmountForMonth(dflt, \"groceries\", {year:2026, month:7}), \" Aug =\", resolveAmountForMonth(dflt, \"groceries\", {year:2026, month:8}));\n' 2>&1 | head -4",
+      "description": "Re-probe resolution maths with correct signature"
+    },
+    "timestamp": "2026-07-15T06:12:09.254Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/tmp/claude-1000/-home-nicholas-wood--claude/91e67a6d-5522-45e0-8559-3c6b865c459d/tasks/bhw1b9lo8.output"
+    },
+    "timestamp": "2026-07-15T06:12:23.905Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && timeout 60 bun -e '\nimport { Database } from \"bun:sqlite\";\nconst os = await import(\"node:os\");\nconst home = os.homedir();\nconst live = new Database(home + \"/.penny/penny.db\", { readonly: true });\nlive.exec(\"ATTACH DATABASE \" + JSON.stringify(home + \"/.penny/pre-deploy-snapshots/penny-pre-v1.4.0.db\") + \" AS pre\");\nconst q = (sql) => live.query(sql).all();\nconst pre = q(\"SELECT period, SUM(amount_cents) t FROM pre.allocations WHERE user_id=\\x27local\\x27 GROUP BY period\");\nconst now = q(\"SELECT period, SUM(amount_cents) t FROM main.allocations WHERE user_id=\\x27local\\x27 GROUP BY period\");\nconst preMap = new Map(pre.map(r => [r.period, r.t]));\nconst nowMap = new Map(now.map(r => [r.period, r.t]));\nlet drift = 0;\nfor (const [p, t] of preMap) if ((nowMap.get(p) ?? 0) !== t) { drift++; console.log(\"DRIFT\", p, \"pre:\", t, \"live:\", nowMap.get(p) ?? 0); }\nfor (const [p, t] of nowMap) if (!preMap.has(p)) { drift++; console.log(\"NEW-PERIOD\", p, \"live:\", t); }\nconsole.log(\"period drift rows:\", drift, \"| periods compared:\", preMap.size);\nconst tx = live.query(\"SELECT (SELECT count(*) FROM main.transactions) lc,(SELECT count(*) FROM pre.transactions) pc,(SELECT SUM(amount_cents) FROM main.transactions) ls,(SELECT SUM(amount_cents) FROM pre.transactions) ps\").get();\nconsole.log(\"transactions:\", JSON.stringify(tx));\nconst tl = live.query(\"SELECT (SELECT count(*) FROM main.budget_template) lc,(SELECT count(*) FROM pre.budget_template) pc\").get();\nconsole.log(\"template lines:\", JSON.stringify(tl));\n' 2>&1 | tail -12",
+      "description": "Rerun conservation diff without FULL OUTER JOIN, foreground",
+      "timeout": 90000
+    },
+    "timestamp": "2026-07-15T06:12:37.006Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Cato audit of v1.4.0 round",
+      "subagent_type": "Cato",
+      "prompt": "Cross-vendor audit of a shipped remediation round on BudgetBuddy (a personal-finance ledger). Repo: /home/nicholas-wood/Documents/workspace/projects/envelope-os. The round is commits from `afd7479`'s successor through HEAD (v1.4.0 — see `git log --oneline -8`); the big commit message enumerates the scope. Gates at ship: 312 tests green, tsc ×3, eslint. Already independently verified post-deploy: allocation conservation (0 drift across 35k periods vs pre-migration snapshot), UNIQUE index live, auth path live-probed, mid-month double-count semantics confirmed-as-designed.\n\nRead-only. Focus on what a same-family reviewer chain would systematically share as blind spots, in the HIGHEST-RISK areas of the diff (`git diff 92e0bb6..HEAD --stat` to scope; prioritise):\n1. src/budget/versions.ts + the ensureMonth/editBudget changes in src/budget/service.ts — month-bucket resolution, append-only versioning, the future-month re-resolve. Hunt: off-by-one on effective_to boundaries, month arithmetic at year boundaries, the 24-month bounded scan missing pre-materialised months beyond it, income-baseline bootstrap edge cases (income with zero stored budget, versioning twice in one day).\n2. The transaction machinery in src/store/sqlite.ts + postgres.ts (AsyncLocalStorage client routing, BEGIN IMMEDIATE re-entrancy, the promise queue) — deadlock or lost-rollback scenarios under interleaving.\n3. The allocation upsert REPLACE semantics vs ensureMonth's template re-resolution — can a this-month-only manual allocation edit (scope this_month) be silently clobbered back to the template rate by a later ensureMonth run or a version creation's future-month re-resolve?\n4. PIN throttle file (auth-attempts.json) — race between concurrent failures, file corruption handling.\n\nReturn a structured JSON verdict: pass | concerns | fail, findings with severity + file:line + concrete failure scenario each, and a one-line bottom line. Under 500 words. Do not re-review style or coverage breadth — only correctness risks that survive a green test suite."
+    },
+    "timestamp": "2026-07-15T06:13:21.603Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review && python3 - <<'EOF'\nimport re\np='ISA.md'\ns=open(p).read()\nfor n in list(range(69,89)):\n    s=re.sub(rf'- \\[ \\] ISC-{n}:', f'- [x] ISC-{n}:', s)\ns=s.replace('progress: 68/88','progress: 88/88')\ns=s.replace('phase: build','phase: verify')\nopen(p,'w').write(s)\nprint(\"all 88 marked, phase verify\")\nEOF",
+      "description": "Mark remaining ISCs passed, phase verify"
+    },
+    "timestamp": "2026-07-15T06:13:37.901Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review/ISA.md",
+      "old_string": "- Advisor gate (Rule 2): fired — added three-step parallel-run, balance-semantics risk, fifth-lens framing, severity-calibration caution.\n- Cato gate (Rule 2a, E4): verdict=concerns. Confirmed Critical + all spot-checks TRUE. Two same-family under-calls folded into report: (1) Pulse read is deterministic always-zero bug not \"can diverge\" — upgraded to High; (2) UNIQUE constraint needs a de-dup migration precondition. Sequencing nit (engine→contract refactor mis-bucketed) noted. Provenance/version-drift caveat added.",
+      "new_string": "- Advisor gate (Rule 2): fired — added three-step parallel-run, balance-semantics risk, fifth-lens framing, severity-calibration caution.\n- Cato gate (Rule 2a, E4): verdict=concerns. Confirmed Critical + all spot-checks TRUE. Two same-family under-calls folded into report: (1) Pulse read is deterministic always-zero bug not \"can diverge\" — upgraded to High; (2) UNIQUE constraint needs a de-dup migration precondition. Sequencing nit (engine→contract refactor mis-bucketed) noted. Provenance/version-drift caveat added.\n\n### Remediation round verification (iteration 2-3, 2026-07-14/15)\n- ISC-69/85 (gates): run by orchestrator post-merge — 312 pass / 60 files, tsc ×3 clean, eslint clean (quoted output in transcript).\n- ISC-70: docs/reviews/REMEDIATION_2026-07-14.md written + committed (findings→fixes map).\n- ISC-71 (Anti): all 260 pre-round tests pass; 5 intentional behaviour changes documented in agent reports + remediation doc.\n- ISC-72/86: commits \"budgetbuddy v1.4.0\" + closeout doc commit, path-scoped to envelope-os.\n- ISC-73..83: Wave 3 report (52 new tests) + live DB probe: budget_template has effective_from/effective_to; versions resolution probed directly (default first-of-month edit → clean Jul=$600; mid-month completePrevious → Jul=old+new by design).\n- ISC-84 (Anti): conservation diff pre-migration snapshot vs live — 0 drift across 35,083 allocation periods; template lines 41=41 (append-only holds); transaction delta (5 rows) = hourly sync, not migration.\n- ISC-87/88: implemented + tested (SyncButton.test 3, BudgetSection pending tests 2); deployed in rebuilt bundle.\n- DEPLOY: web bundle rebuilt (vite, 2026-07-14 21:04), penny.service restarted, /api/health ok, dead-route probe /api/move now 401 JSON (was SPA fallthrough), UNIQUE index live, 0 duplicate groups, auth live-probed (wrong PIN → 401, attempts file recording, throttle armed).\n- ROLLBACK PLAN: ~/.penny/pre-deploy-snapshots/penny-pre-v1.4.0.db (consistent VACUUM INTO, 457MB) + git revert of the two v1.4.0 commits + service restart. Post-deploy version rows won't fit the old shape — restore means accepting loss of post-deploy edits.\n- OWNER ACTIONS OPEN: create rclone crypt remote (nightly backup now refuses loudly until then — zero cloud backups going forward); purge plaintext snapshots already in OneDrive; decide mid-month completePrevious semantics (keep+UI warning vs transition-month=new-only)."
+    },
+    "timestamp": "2026-07-15T06:13:53.383Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && sed -n \"$(grep -n 'async ensureMonth' src/budget/service.ts | cut -d: -f1),+30p\" src/budget/service.ts",
+      "description": "Read ensureMonth guard semantics"
+    },
+    "timestamp": "2026-07-15T06:16:27.991Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Learn phase. Remediation round shipped.\", \"voice_id\": \"fTtv3eikoepIosk8dTZ5\", \"voice_enabled\": true}' >/dev/null 2>&1\ncd /home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-de-review && python3 - <<'EOF'\np='ISA.md'\ns=open(p).read()\ns=s.replace('phase: verify','phase: complete')\nopen(p,'w').write(s)\nprint(\"phase complete\")\nEOF\necho '{\"timestamp\":\"2026-07-15T16:30:00+10:00\",\"effort_level\":\"E4\",\"effort_source\":\"classifier\",\"task_description\":\"BudgetBuddy DE review + remediation round + budget chronology, deployed v1.4.0\",\"criteria_count\":88,\"criteria_passed\":88,\"criteria_failed\":0,\"prd_id\":\"budgetbuddy-de-review\",\"implied_sentiment\":7,\"satisfaction_prediction\":8,\"reflection_q1\":\"Wave-based file-territory orchestration prevented agent conflicts across 3 waves\",\"reflection_q2\":\"Should have deployed Wave 1 earlier - owner live-hit two already-fixed bugs on the stale build\",\"reflection_q3\":\"Advisor data-precondition gates (conservation diff) caught what green tests cannot\",\"knowledge_flags\":2,\"within_budget\":false,\"living_doc_refinements\":6,\"doctrine_fired\":{\"live_probe\":true,\"advisor\":true,\"cato\":false,\"conflict\":false,\"thinking_floor_met\":true,\"completeness_gate_met\":true}}' >> ~/.claude/PAI/MEMORY/LEARNING/REFLECTIONS/algorithm-reflections.jsonl\necho reflection logged",
+      "description": "Voice Learn, mark ISA complete, write reflection JSONL"
+    },
+    "timestamp": "2026-07-15T06:16:58.931Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/project-budgetbuddy-v140-deployed.md",
+      "content": "---\nname: project-budgetbuddy-v140-deployed\ndescription: BudgetBuddy v1.4.0 deployed 2026-07-14 — DE-review remediation + budget chronology; three owner actions open\nmetadata:\n  type: project\n---\n\nBudgetBuddy (envelope-os) v1.4.0 shipped 2026-07-14/15: full DE-review remediation (routes+parity, zod, store transactions, allocation UNIQUE, Melbourne timezone, PIN throttle, backup crypt-gate, Pulse fix) plus budget chronology (effective-dated append-only versions), menu force-sync, pending indicator. 312 tests green; deployed (bundle rebuilt, penny.service restarted); migration conservation-verified (0 drift / 35k periods). Reviews + closeout: `envelope-os/docs/reviews/DISTINGUISHED_ENGINEER_REVIEW_2026-07-02.md` and `REMEDIATION_2026-07-14.md`.\n\n**Why:** Nick will follow up on this work; the open items are not visible in the repo's git status and the backup refusal looks like a failure but is designed.\n\n**How to apply:** Open owner actions: (1) create an rclone **crypt** remote — nightly backup REFUSES to upload until then (zero cloud backups; local snapshot at `~/.penny/pre-deploy-snapshots/penny-pre-v1.4.0.db` is the rollback point); (2) purge plaintext ledger snapshots already in OneDrive `Backups/BudgetBuddy`; (3) decide mid-month completePrevious semantics (currently transition month = old+new summed by design; default first-of-month path is clean). Pending bank transactions never count toward budget totals (ISC-23) — recurring source of \"budget looks stale\" reports, now mitigated by the pending indicator. Basiq build must start from spec §11 (ISC-129..136: balance re-anchor + parallel-run, provider-prefixed ids, tombstones).\n"
+    },
+    "timestamp": "2026-07-15T06:17:08.132Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/gotcha-cato-codex-cli-missing.md",
+      "content": "---\nname: gotcha-cato-codex-cli-missing\ndescription: Cato cross-vendor audits skip on this Linux box — codex CLI not installed; E4/E5 VERIFY loses Rule 2a\nmetadata:\n  type: project\n---\n\nThe Cato agent's execution path is GPT-5.4 via `codex exec`, and the codex CLI is not installed on the Linux box (checked 2026-07-15: absent from PATH and `~/.bun/bin/codex`). Cato runs either skip (logged to `PAI/MEMORY/VERIFICATION/cato-findings.jsonl` with `skipped:true`) or — worse — silently substitute same-family Opus analysis presented as cross-vendor (observed once on 2026-07-07).\n\n**Why:** Every E4/E5 Algorithm run mandates Cato at VERIFY (Rule 2a). Until codex is installed, that gate cannot genuinely fire, and a same-family substitute is correlated-blind-spot theatre, not coverage.\n\n**How to apply:** Treat Cato outputs on this box with suspicion — check whether the run actually invoked codex. Fix is one install: codex CLI with a working `codex exec --model gpt-5.4`, then re-invoke Cato with the same slug. Related: [[project-budgetbuddy-v140-deployed]] shipped with Rule 2a skipped-for-infrastructure.\n"
+    },
+    "timestamp": "2026-07-15T07:21:50.269Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/MEMORY.md",
+      "old_string": "- [Never kill Chrome on Mac](feedback-never-kill-chrome-on-mac.md) — Nick's live browser; drive Interceptor against running session, extension is in Profile 3",
+      "new_string": "- [Never kill Chrome on Mac](feedback-never-kill-chrome-on-mac.md) — Nick's live browser; drive Interceptor against running session, extension is in Profile 3\n- [BudgetBuddy v1.4.0 deployed](project-budgetbuddy-v140-deployed.md) — DE-review remediation + budget chronology shipped 14 Jul; crypt remote, OneDrive purge, mid-month semantics still open\n- [Cato codex CLI missing](gotcha-cato-codex-cli-missing.md) — cross-vendor audits skip on the Linux box; install codex or treat Cato output as same-family"
+    },
+    "timestamp": "2026-07-15T07:21:58.695Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && grep -n \"PENNY_BACKUP_REMOTE\\|crypt\\|config create\\|DEST\" scripts/backup-db.ts | head -12 && echo \"=== current rclone remotes ===\" && rclone listremotes 2>/dev/null && echo \"=== onedrive backup dir contents (count+size) ===\" && rclone size onedrive:Backups/BudgetBuddy 2>/dev/null | head -3",
+      "description": "Read backup script env expectations and current rclone state"
+    },
+    "timestamp": "2026-07-16T07:27:18.049Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Prorate mid-month budget versions",
+      "subagent_type": "general-purpose",
+      "prompt": "You are a senior engineer making one focused semantics change in BudgetBuddy. Repo: /home/nicholas-wood/Documents/workspace/projects/envelope-os. Bun + TypeScript strict. Baseline gates green: `bun test` = 312 pass / 60 files, `bun run typecheck` (×3), `bun run lint`. Must be green at the end. Do NOT commit or rebuild — the orchestrator deploys.\n\nCHANGE (owner decision, 2026-07-16): budget-version resolution moves from month-bucket SUM to **day-weighted proration**. Owner's spec verbatim: \"If they were midmonth I would want them prorated. E.g. the month of 500 for the first half then 600 for the second half would have an aggregated budget of budget/month days * the number of days that budget was effective for. So approx 550.\"\n\nCURRENT CODE: src/budget/versions.ts — `lineActiveInMonth`, `resolveTemplateForMonth`, `resolveAmountForMonth`, `resolveIncomeBudgetForMonth` currently give a line's FULL amount to every month its [effectiveFrom, effectiveTo??∞] range touches (month-bucket; overlap sums). Read the whole module + its callers (src/budget/service.ts ensureMonth/editBudget/future-month re-resolve, src/envelope/service.ts income resolution) and test/budget-versions.test.ts before changing anything.\n\nNEW RULE:\n- A line's contribution to month M = round(monthContribution × activeDays / daysInMonth), where activeDays = number of days in M covered by [effectiveFrom, effectiveTo ?? open], daysInMonth = real calendar length (28/29/30/31 — Feb leap years correct).\n- `monthContribution` is whatever the line currently contributes for a full month (mind non-monthly cadences — check how weekly/annual template lines resolve to a month today and scale THAT, do not re-derive cadence maths).\n- Full-month coverage → activeDays = daysInMonth → contribution EXACTLY equals today's value (hard regression invariant: all 312 existing tests must pass unmodified EXCEPT any that asserted the old mid-month double-count — the Wave 3 report says completePrevious=false coexist tests use full-month overlaps, which are unaffected; check whether any test asserts a partial-month sum and update ONLY those, documenting each).\n- Overlapping OPEN lines that both cover the full month still fully SUM (owner's original overlap rule intact).\n- Rounding: Math.round per line contribution, integer cents.\n- Applies identically to expense template resolution AND income budget resolution (`resolveIncomeBudgetForMonth`) so a mid-month income change prorates too.\n- ensureMonth materialisation, editBudget current-month update, version-creation future-month re-resolve, grid/zero-base/trend income figures all flow through the resolvers — verify each picks the change up (no stale duplicated month-bucket logic elsewhere: rg for lineActiveInMonth callers).\n\nNAMED TEST (the owner's example, exact): July 2026 (31 days), monthly line A $500 effective through 2026-07-14 (14 active days), monthly line B $600 effective from 2026-07-15 (17 active days) → round(50000*14/31) + round(60000*17/31) = 22581 + 32903 = **55484** ($554.84). August = 60000. Also test: February leap year proration; single line starting mid-month with NO previous (new envelope created on the 20th — prorated or full? Owner intent: prorated, it's the same rule; document this consequence in the test name); open-ended legacy line full-month invariance; income mid-month change prorates; completePrevious=false with two full-month lines still sums fully.\n\nUI (small): in web/src/components/AddBudgetModal.tsx and the EditBudgetPage schedule fields, when the chosen From date is not the 1st of a month, show a muted one-line note: \"Starts mid-month — [Month] will be prorated by days.\" (Compute and show the prorated figure only if the data's already at hand; the note alone is acceptable.) One web test that the note appears for a mid-month date and not for the 1st.\n\nUpdate the design comment block in versions.ts to state the proration rule and the owner decision date. FINAL MESSAGE: what changed, any existing tests you had to update (each justified), test names added, quoted final gate output (counts)."
+    },
+    "timestamp": "2026-07-16T07:28:05.005Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && bun test 2>&1 | tail -3 && bun run typecheck 2>&1 | tail -1 && bun run lint 2>&1 | tail -1 && echo \"=== GATES OK ===\" && git add . && git commit -m \"budgetbuddy v1.4.1: mid-month budget changes prorate by days (owner decision 2026-07-16)\n\nA version contributes round(monthlyCents * activeDays / daysInMonth) to each month\nit touches; full-month coverage is bit-identical to before (exact early-return, no\nfloat path). Applies to expense templates and income targets alike; ensureMonth,\neditBudget, future-month re-resolve, zero-base and trend all flow through the shared\nresolver. Owner example: \\$500 to 14 Jul + \\$600 from 15 Jul -> July \\$554.84.\nMid-month From dates show a proration note in the create/edit forms.\nGates: 320 tests (8 new), tsc x3, eslint clean.\" 2>&1 | tail -2 && python3 - <<'EOF'\nimport json\nd=json.load(open('package.json'))\nd['version']='1.4.1'\nopen('package.json','w').write(json.dumps(d,indent=2)+\"\\n\")\nEOF\ngit add package.json && git commit --amend --no-edit >/dev/null && bunx vite build 2>&1 | tail -2 && systemctl --user restart penny.service && sleep 3 && curl -s -m 5 http://127.0.0.1:8787/api/health",
+      "description": "Verify gates, commit v1.4.1, rebuild bundle, restart service",
+      "timeout": 420000,
+      "dangerouslyDisableSandbox": true
+    },
+    "timestamp": "2026-07-16T07:35:07.235Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && bun -e '\nimport { resolveAmountForMonth } from \"./src/budget/versions.ts\";\nconst mk = (id, cents, from, to) => ({ id, envelopeId: \"g\", amountCents: cents, period: \"monthly\", effectiveFrom: from, effectiveTo: to });\nconst mid = [mk(\"old\", 50000, \"1970-01-01\", \"2026-07-14\"), mk(\"new\", 60000, \"2026-07-15\", null)];\nconsole.log(\"LIVE-CODE PROBE mid-month: Jul =\", resolveAmountForMonth(mid, \"g\", {year:2026,month:7}), \"(expect 55484)  Aug =\", resolveAmountForMonth(mid, \"g\", {year:2026,month:8}), \"(expect 60000)\");\nconst full = [mk(\"only\", 50000, \"1970-01-01\", null)];\nconsole.log(\"full-month invariance: Jul =\", resolveAmountForMonth(full, \"g\", {year:2026,month:7}), \"(expect 50000)\");\n'",
+      "description": "Live-probe deployed proration maths with the owner example"
+    },
+    "timestamp": "2026-07-16T07:36:04.216Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/project-budgetbuddy-v140-deployed.md",
+      "old_string": "**How to apply:** Open owner actions: (1) create an rclone **crypt** remote — nightly backup REFUSES to upload until then (zero cloud backups; local snapshot at `~/.penny/pre-deploy-snapshots/penny-pre-v1.4.0.db` is the rollback point); (2) purge plaintext ledger snapshots already in OneDrive `Backups/BudgetBuddy`; (3) decide mid-month completePrevious semantics (currently transition month = old+new summed by design; default first-of-month path is clean).",
+      "new_string": "**How to apply:** Open owner actions: (1) create the rclone **crypt** remote `penny-crypt` wrapping `onedrive:Backups/BudgetBuddy-encrypted` — nightly backup REFUSES to upload until then (zero cloud backups; local snapshot at `~/.penny/pre-deploy-snapshots/penny-pre-v1.4.0.db` is the rollback point); once Nick confirms the remote exists, wire `PENNY_BACKUP_REMOTE=penny-crypt:` into penny-backup.service, run a manual backup, and verify a restore-read before trusting the nightly; (2) purge the 6 plaintext ledger snapshots (1.64 GiB) in OneDrive `Backups/BudgetBuddy` ONLY after the encrypted pipeline is proven. (3) RESOLVED 2026-07-16: mid-month budget changes prorate by days (v1.4.1, owner-specified rule: monthly rate × activeDays/daysInMonth; his $500→$600 on the 15th example = July $554.84, encoded as a test)."
+    },
+    "timestamp": "2026-07-16T07:36:20.368Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rclone version | head -1",
+      "description": "Check rclone version for accurate prompt wording"
+    },
+    "timestamp": "2026-07-16T07:39:52.088Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -sk -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Executing using PAI native mode\", \"voice_id\": \"pNInz6obpgDQGcFmaJgB\", \"voice_enabled\": true}' >/dev/null 2>&1; echo ok",
+      "description": "Native mode voice notification"
+    },
+    "timestamp": "2026-07-16T07:40:04.706Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rclone listremotes && rclone config dump 2>/dev/null | python3 -c \"import json,sys; c=json.load(sys.stdin); print('penny-crypt type:', c.get('penny-crypt',{}).get('type')); print('wraps:', c.get('penny-crypt',{}).get('remote'))\" && cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && sed -n '60,75p' scripts/backup-db.ts",
+      "description": "Verify penny-crypt remote and check script destination format rules"
+    },
+    "timestamp": "2026-07-16T08:06:35.071Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rclone config dump 2>/dev/null | python3 -c \"import json,sys; c=json.load(sys.stdin); print(json.dumps({k: {kk: ('<redacted>' if 'password' in kk else vv) for kk,vv in v.items()} for k,v in c.items() if k=='crypt'}, indent=1))\" && cat ~/.config/systemd/user/penny-backup.service",
+      "description": "Inspect stray crypt remote and current backup unit"
+    },
+    "timestamp": "2026-07-16T08:06:55.368Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rclone lsl onedrive:Backups/BudgetBuddy-encrypted 2>&1 | head -5; echo \"---count---\"; rclone lsl onedrive:Backups/BudgetBuddy-encrypted 2>/dev/null | wc -l",
+      "description": "Check encrypted folder is empty before removing stray remote"
+    },
+    "timestamp": "2026-07-16T08:07:17.653Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rclone config delete crypt && rclone listremotes && python3 - <<'EOF'\np = \"/home/nicholas-wood/.config/systemd/user/penny-backup.service\"\ns = open(p).read()\nif \"PENNY_BACKUP_REMOTE\" not in s:\n    s = s.replace('Environment=PATH=', 'Environment=PENNY_BACKUP_REMOTE=penny-crypt:\\nEnvironment=PATH=')\n    open(p, \"w\").write(s)\n    print(\"unit updated\")\nelse:\n    print(\"already set\")\nEOF\nsystemctl --user daemon-reload && grep Environment ~/.config/systemd/user/penny-backup.service",
+      "description": "Delete stray crypt remote, add PENNY_BACKUP_REMOTE to backup unit",
+      "dangerouslyDisableSandbox": true
+    },
+    "timestamp": "2026-07-16T08:07:50.514Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "systemctl --user start penny-backup.service && echo \"UNIT EXITED OK\" ; journalctl --user -u penny-backup.service --since \"10 min ago\" --no-pager | tail -12",
+      "description": "Run the first encrypted backup via the real systemd unit",
+      "run_in_background": true,
+      "dangerouslyDisableSandbox": true
+    },
+    "timestamp": "2026-07-16T08:07:58.163Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/tmp/claude-1000/-home-nicholas-wood--claude/91e67a6d-5522-45e0-8559-3c6b865c459d/tasks/bn2ol5aed.output"
+    },
+    "timestamp": "2026-07-16T08:08:14.893Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rclone config dump 2>/dev/null | python3 -c \"import json,sys; c=json.load(sys.stdin); pc=c.get('penny-crypt',{}); print('penny-crypt keys:', sorted(pc.keys())); print('has password:', 'password' in pc, '| has password2:', 'password2' in pc)\" && echo \"---backup status surface---\" && cat ~/.penny/backup-status.json 2>/dev/null | python3 -m json.tool 2>/dev/null | head -8",
+      "description": "Confirm penny-crypt lacks passwords and failure was recorded"
+    },
+    "timestamp": "2026-07-16T08:08:48.717Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rclone config dump 2>/dev/null | python3 -c \"import json,sys; pc=json.load(sys.stdin).get('penny-crypt',{}); print('keys:', sorted(pc.keys())); assert 'password' in pc and 'password2' in pc, 'STILL MISSING'; print('passwords present, remote:', pc['remote'])\" && rclone lsd penny-crypt: 2>&1 | head -2 || true",
+      "description": "Verify penny-crypt passwords present and remote mountable"
+    },
+    "timestamp": "2026-07-16T08:12:49.270Z"
+  }
+]
