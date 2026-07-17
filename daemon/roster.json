@@ -1,60 +1,8 @@
 {
   "proto": 1,
-  "supervisorPid": 2666713,
-  "updatedAt": 1784194848798,
+  "supervisorPid": 874447,
+  "updatedAt": 1784291450611,
   "workers": {
-    "fbf081be": {
-      "pid": 667289,
-      "procStart": "216575926",
-      "sessionId": "fbf081be-9928-4cc5-b6eb-1ae5e050b7cf",
-      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/fbf081be.sock",
-      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/f0ad5add.pty.sock",
-      "cliVersion": "2.1.195",
-      "startedAt": 1782536435316,
-      "attempt": 1,
-      "cwd": "/home/nicholas-wood/.claude",
-      "dispatch": {
-        "proto": 1,
-        "short": "fbf081be",
-        "nonce": "37510f0a",
-        "sessionId": "fbf081be-9928-4cc5-b6eb-1ae5e050b7cf",
-        "createdAt": 1782536435314,
-        "source": "fleet",
-        "cwd": "/home/nicholas-wood/.claude",
-        "launch": {
-          "mode": "resume",
-          "sessionId": "fbf081be-9928-4cc5-b6eb-1ae5e050b7cf",
-          "fork": false,
-          "flagArgs": [
-            "--agent",
-            "claude"
-          ]
-        },
-        "env": {},
-        "isolation": "none",
-        "respawnFlags": [
-          "--agent",
-          "claude"
-        ],
-        "agent": "claude",
-        "seed": {
-          "intent": ""
-        },
-        "cols": 119,
-        "rows": 49
-      },
-      "decModes": [
-        1000,
-        1002,
-        1003,
-        1006,
-        2004,
-        1004,
-        2031
-      ],
-      "rvAuth": "8b4f683b8afa3543e19939af99f03fed",
-      "ptyAuth": "e349c8aa7da2c5cb08438e13ca60411f"
-    },
     "b8d57280": {
       "pid": 2287082,
       "procStart": "250807742",
@@ -108,53 +56,98 @@
       "rvAuth": "5c8db63722930b48f0aa7e19649ef218",
       "ptyAuth": "bfb805d7a7915f7151eacf5f1b09399b"
     },
-    "91e67a6d": {
-      "pid": 3837835,
-      "procStart": "354506533",
-      "sessionId": "91e67a6d-5522-45e0-8559-3c6b865c459d",
-      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/91e67a6d.sock",
-      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/d2964ccf.pty.sock",
-      "cliVersion": "2.1.206",
-      "startedAt": 1783915691298,
+    "6000cab9": {
+      "pid": 123857,
+      "procStart": "381686792",
+      "sessionId": "6000cab9-6a5d-40d8-a8e6-bd21bcdd90df",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/6000cab9.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/c91f7638.pty.sock",
+      "cliVersion": "2.1.211",
+      "startedAt": 1784287687481,
       "attempt": 1,
       "cwd": "/home/nicholas-wood/.claude",
       "dispatch": {
         "proto": 1,
-        "short": "91e67a6d",
-        "nonce": "c39bef7e",
-        "sessionId": "91e67a6d-5522-45e0-8559-3c6b865c459d",
-        "createdAt": 1783915691295,
+        "short": "6000cab9",
+        "nonce": "a19b800f",
+        "sessionId": "6000cab9-6a5d-40d8-a8e6-bd21bcdd90df",
+        "createdAt": 1784287687478,
         "source": "fleet",
         "cwd": "/home/nicholas-wood/.claude",
         "launch": {
-          "mode": "resume",
-          "sessionId": "91e67a6d-5522-45e0-8559-3c6b865c459d",
-          "transcriptPath": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/91e67a6d-5522-45e0-8559-3c6b865c459d.jsonl",
-          "fork": false,
-          "flagArgs": [
+          "mode": "prompt",
+          "args": [
+            "--session-id",
+            "6000cab9-6a5d-40d8-a8e6-bd21bcdd90df",
             "--agent",
             "claude",
-            "--model",
-            "claude-fable-5[1m]",
-            "--permission-mode",
-            "acceptEdits"
+            "--",
+            "For Chris's life member nomination, they are word limits not character limits."
           ]
         },
         "env": {},
         "isolation": "none",
         "respawnFlags": [
           "--agent",
-          "claude",
-          "--model",
-          "claude-fable-5[1m]",
-          "--permission-mode",
-          "acceptEdits"
+          "claude"
+        ],
+        "agent": "claude",
+        "seed": {
+          "intent": "For Chris's life member nomination, they are word limits not character limits."
+        },
+        "cols": 166,
+        "rows": 40
+      },
+      "decModes": [
+        1000,
+        1002,
+        1003,
+        1006,
+        2004,
+        1004,
+        2031
+      ],
+      "rvAuth": "08119862aa7892e823203ebacbc42809",
+      "ptyAuth": "7f834c63be7786ab8d99b18cfdbd02ae"
+    },
+    "fbf081be": {
+      "pid": 667289,
+      "procStart": "216575926",
+      "sessionId": "fbf081be-9928-4cc5-b6eb-1ae5e050b7cf",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/fbf081be.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/f0ad5add.pty.sock",
+      "cliVersion": "2.1.195",
+      "startedAt": 1782536435316,
+      "attempt": 1,
+      "cwd": "/home/nicholas-wood/.claude",
+      "dispatch": {
+        "proto": 1,
+        "short": "fbf081be",
+        "nonce": "37510f0a",
+        "sessionId": "fbf081be-9928-4cc5-b6eb-1ae5e050b7cf",
+        "createdAt": 1782536435314,
+        "source": "fleet",
+        "cwd": "/home/nicholas-wood/.claude",
+        "launch": {
+          "mode": "resume",
+          "sessionId": "fbf081be-9928-4cc5-b6eb-1ae5e050b7cf",
+          "fork": false,
+          "flagArgs": [
+            "--agent",
+            "claude"
+          ]
+        },
+        "env": {},
+        "isolation": "none",
+        "respawnFlags": [
+          "--agent",
+          "claude"
         ],
         "agent": "claude",
         "seed": {
           "intent": ""
         },
-        "cols": 164,
+        "cols": 119,
         "rows": 49
       },
       "decModes": [
@@ -166,8 +159,8 @@
         1004,
         2031
       ],
-      "rvAuth": "a4d954f18c3a076ac424b4f4a006fdc6",
-      "ptyAuth": "0904989d66efcec5bbdfe0c1893c9ec2"
+      "rvAuth": "8b4f683b8afa3543e19939af99f03fed",
+      "ptyAuth": "e349c8aa7da2c5cb08438e13ca60411f"
     }
   }
 }

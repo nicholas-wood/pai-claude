@@ -1,0 +1,70 @@
+/**
+ * Rich transaction search filters (ISC-79, ISC-80). The pure filter applied over
+ * the resolved list: direction by amount sign, magnitude bounds (absolute cents),
+ * payee keyword, and envelope id, all AND-combined.
+ */
+
+import { describe, test, expect } from "bun:test";
+import { applyTransactionFilters } from "../src/server/handlers/transactions.ts";
+import type { TransactionListItem } from "../src/server/contract.ts";
+
+function item(p: Partial<TransactionListItem> & { id: string; amountCents: number; payee: string }): TransactionListItem {
+  return {
+    id: p.id,
+    date: p.date ?? "2026-06-10",
+    payee: p.payee,
+    amountCents: p.amountCents,
+    accountId: p.accountId ?? "acc",
+    categoryId: p.categoryId ?? null,
+    envelopeId: p.envelopeId ?? "inbox",
+    envelopeName: p.envelopeName ?? null,
+    isPending: p.isPending ?? false,
+    isTransfer: p.isTransfer ?? false,
+    balanceAfterCents: p.balanceAfterCents ?? 0,
+  };
+}
+
+const items: TransactionListItem[] = [
+  item({ id: "a", payee: "Woolworths", amountCents: -5000, envelopeId: "groceries" }),
+  item({ id: "b", payee: "Employer Pay", amountCents: 500000, envelopeId: "inc-salary" }),
+  item({ id: "c", payee: "Cafe Coffee", amountCents: -450, envelopeId: "recreation" }),
+];
+const ids = (xs: TransactionListItem[]) => xs.map((x) => x.id);
+
+describe("applyTransactionFilters", () => {
+  test("no filter returns everything", () => {
+    expect(ids(applyTransactionFilters(items, {}))).toEqual(["a", "b", "c"]);
+  });
+
+  test("type=income keeps positive amounts only", () => {
+    expect(ids(applyTransactionFilters(items, { type: "income" }))).toEqual(["b"]);
+  });
+
+  test("type=expense keeps negative amounts only", () => {
+    expect(ids(applyTransactionFilters(items, { type: "expense" }))).toEqual(["a", "c"]);
+  });
+
+  test("type=all is a no-op direction filter", () => {
+    expect(ids(applyTransactionFilters(items, { type: "all" }))).toEqual(["a", "b", "c"]);
+  });
+
+  test("amountMin/amountMax bound the magnitude (absolute cents)", () => {
+    expect(ids(applyTransactionFilters(items, { amountMin: 1000 }))).toEqual(["a", "b"]);
+    expect(ids(applyTransactionFilters(items, { amountMax: 1000 }))).toEqual(["c"]);
+    expect(ids(applyTransactionFilters(items, { amountMin: 1000, amountMax: 100000 }))).toEqual(["a"]);
+  });
+
+  test("keyword is a case-insensitive payee substring", () => {
+    expect(ids(applyTransactionFilters(items, { keyword: "coff" }))).toEqual(["c"]);
+    expect(ids(applyTransactionFilters(items, { keyword: "PAY" }))).toEqual(["b"]);
+  });
+
+  test("envelopeId narrows to one envelope", () => {
+    expect(ids(applyTransactionFilters(items, { envelopeId: "groceries" }))).toEqual(["a"]);
+  });
+
+  test("filters AND-combine", () => {
+    expect(ids(applyTransactionFilters(items, { type: "expense", keyword: "wool" }))).toEqual(["a"]);
+    expect(ids(applyTransactionFilters(items, { type: "expense", amountMax: 1000 }))).toEqual(["c"]);
+  });
+});

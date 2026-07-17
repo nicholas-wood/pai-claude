@@ -1,0 +1,72 @@
+/**
+ * Carryover adjustments interleave into the main transactions list as their own
+ * rows (dated, "Manual" badge, delta in the amount column) — but they are NOT
+ * cash movements, so they must never enter the money-in / money-out totals.
+ * The API client and the carryover-history query are mocked.
+ */
+import * as React from "react";
+import { describe, it, expect, mock } from "bun:test";
+import { render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import type { CarryoverHistoryResponse } from "@contract";
+import * as realApi from "@/lib/api";
+import { TestQueryProvider } from "@/test/utils";
+
+// A July view: one real transaction (−$50.00) and one carryover adjustment
+// (+$100.00 delta) dated inside the range. The default period is the current
+// month, so pin dates into it via an explicit range in the URL.
+const carryover: CarryoverHistoryResponse = {
+  entries: [
+    {
+      id: "cr-1",
+      ts: 1752624000000,
+      envelopeId: "env-presents",
+      envelopeName: "Presents",
+      beforeCents: -73865,
+      afterCents: -6000,
+      on: "2026-07-16",
+      actor: "ui",
+    },
+  ],
+};
+
+const call = mock(async (path: string) => {
+  if (path === "GET /api/envelopes") return { income: [], rows: [{ id: "env-presents", name: "Presents" }] };
+  if (path === "GET /api/transactions")
+    return {
+      items: [
+        { id: "t1", date: "2026-07-10", payee: "Shop", amountCents: -5000, accountId: "acc", envelopeName: "Presents", isPending: false, isTransfer: false },
+      ],
+    };
+  if (path === "GET /api/carryover/history") return carryover;
+  return {};
+});
+
+mock.module("@/lib/api", () => ({ ...realApi, call }));
+
+const { TransactionsPage } = await import("@/pages/TransactionsPage");
+
+describe("TransactionsPage — carryover adjustments in the list", () => {
+  it("renders a carryover adjustment as its own dated row without touching the totals", async () => {
+    render(
+      <TestQueryProvider>
+        <MemoryRouter initialEntries={["/transactions?from=2026-07-01&to=2026-07-31"]}>
+          <TransactionsPage />
+        </MemoryRouter>
+      </TestQueryProvider>
+    );
+
+    // The adjustment row shows, labelled and dated, with its +$677.65 delta.
+    expect(await screen.findByText("Carryover adjustment")).toBeInTheDocument();
+    expect(screen.getByText("Manual")).toBeInTheDocument();
+    expect(screen.getByText("2026-07-16")).toBeInTheDocument();
+    expect(screen.getByText("+$678.65")).toBeInTheDocument();
+
+    // Money-in is 0 and money-out is −$50.00 (the real txn only): the +$678.65
+    // adjustment delta must NOT appear in either subtotal.
+    const moneyIn = screen.getByText("Money in").parentElement as HTMLElement;
+    expect(within(moneyIn).getByText("$0.00")).toBeInTheDocument();
+    const moneyOut = screen.getByText("Money out").parentElement as HTMLElement;
+    expect(within(moneyOut).getByText("-$50.00")).toBeInTheDocument();
+  });
+});

@@ -1,0 +1,451 @@
+import * as React from "react";
+import { useSearchParams } from "react-router-dom";
+import { z } from "zod";
+import { Receipt, Filter, X, Clock, ChevronLeft, ChevronRight, Search, BarChart3 } from "lucide-react";
+import type { TransactionsQuery } from "@contract";
+import { useEnvelopes, useTransactions } from "@/lib/queries";
+import { cn, formatCents, periodBounds, currentPeriod } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { SpendByEnvelopeChart, SpendOverTimeChart } from "@/components/charts/TransactionCharts";
+
+const ANY = "__any__";
+const PAGE_SIZE = 50;
+
+/**
+ * The transaction type is sourced from the URL, so it is untrusted (m7).
+ * `?type=garbage` must not flow through as a typed lie — validate at the boundary
+ * with zod and fall back to "all" on anything unexpected.
+ */
+const txTypeSchema = z.enum(["all", "income", "expense"]).catch("all");
+
+/** Parse a dollars string to absolute integer cents, or undefined when blank/invalid. */
+function dollarsToCents(s: string): number | undefined {
+  if (!s.trim()) return undefined;
+  const n = parseFloat(s);
+  if (!Number.isFinite(n)) return undefined;
+  return Math.round(Math.abs(n) * 100);
+}
+
+/**
+ * Transactions list (ISC-78, ISC-79, ISC-82). Shows every transaction
+ * newest-first with date, payee, amount, account, and mapped envelope. On load it
+ * defaults the date range to THIS MONTH (not all-time), so the first paint is
+ * fast. A rich PocketSmith-style search panel — keyword/merchant, account,
+ * envelope (category), date range, amount min/max, and income/expense type — is
+ * AND-combined and pushed to the extended GET /api/transactions. Two charts
+ * (spend-by-envelope and spend-over-time) summarise the active filter set.
+ */
+export function TransactionsPage() {
+  const [params, setParams] = useSearchParams();
+  const from = params.get("from") ?? "";
+  const to = params.get("to") ?? "";
+  const envelopeId = params.get("envelopeId") ?? ANY;
+  const accountId = params.get("accountId") ?? ANY;
+  const type = txTypeSchema.parse(params.get("type") ?? "all");
+  const keyword = params.get("keyword") ?? "";
+  const amountMin = params.get("amountMin") ?? "";
+  const amountMax = params.get("amountMax") ?? "";
+
+  const [accountOptions, setAccountOptions] = React.useState<string[]>([]);
+  const [page, setPage] = React.useState(0);
+  const [showCharts, setShowCharts] = React.useState(true);
+
+  // Debounce the keyword (~300ms) so typing does not fire a request per keystroke.
+  // The input stays fully controlled by the URL param; only the value that enters
+  // the fetch query is debounced (M4).
+  const [debouncedKeyword, setDebouncedKeyword] = React.useState(keyword);
+  React.useEffect(() => {
+    const id = setTimeout(() => setDebouncedKeyword(keyword), 300);
+    return () => clearTimeout(id);
+  }, [keyword]);
+
+  // Default the range to this month on first load (fixes the all-time slow load).
+  React.useEffect(() => {
+    if (!params.get("from") && !params.get("to") && params.get("range") !== "all") {
+      const { from: mf, to: mt } = periodBounds(currentPeriod());
+      setParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("from", mf);
+          next.set("to", mt);
+          return next;
+        },
+        { replace: true }
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The grid (for envelope filter names) is the shared this-month query, deduped
+  // with every other this-month consumer — no bespoke per-page fetch.
+  const grid = useEnvelopes({ period: "this-month" }).data ?? null;
+
+  // Envelope filter options come from the live grid (spending + income).
+  const envelopeOptions = React.useMemo(() => {
+    if (!grid) return [] as { id: string; name: string }[];
+    const opts = [
+      ...grid.income.map((i) => ({ id: i.id, name: i.name })),
+      ...grid.rows.map((r) => ({ id: r.id, name: r.name })),
+    ];
+    // Dedupe by id, keeping the first occurrence (N3: clearer than the old
+    // comma-operator filter).
+    const byId = new Map<string, { id: string; name: string }>();
+    for (const o of opts) if (!byId.has(o.id)) byId.set(o.id, o);
+    return Array.from(byId.values());
+  }, [grid]);
+
+  // The filtered transactions list runs through the ['transactions', query] query.
+  // The keyword is already debounced (M4), so a new fetch only fires 300ms after
+  // typing stops; TanStack keys on the query object, so the last dispatched query
+  // wins (the race-guard the manual ignore-flag used to provide) and keepPreviousData
+  // holds the current results while a refilter is in flight.
+  const rangeActive = Boolean(from) || Boolean(to) || params.get("range") === "all";
+  const minC = dollarsToCents(amountMin);
+  const maxC = dollarsToCents(amountMax);
+  const query: TransactionsQuery = {
+    ...(from ? { from } : {}),
+    ...(to ? { to } : {}),
+    ...(envelopeId !== ANY ? { envelopeId } : {}),
+    ...(accountId !== ANY ? { accountId } : {}),
+    ...(type !== "all" ? { type } : {}),
+    ...(debouncedKeyword.trim() ? { keyword: debouncedKeyword.trim() } : {}),
+    ...(minC !== undefined ? { amountMin: minC } : {}),
+    ...(maxC !== undefined ? { amountMax: maxC } : {}),
+  };
+  const txnsQuery = useTransactions(query, { enabled: rangeActive });
+  const txns = txnsQuery.data ?? null;
+  // Hold the very first paint until the default this-month range lands (query
+  // disabled), so the skeleton shows rather than an empty "no matches" flash.
+  const loading = !rangeActive || txnsQuery.isLoading;
+  const error = txnsQuery.isError
+    ? txnsQuery.error instanceof Error
+      ? txnsQuery.error.message
+      : "Could not load transactions."
+    : null;
+
+  // Account filter options accumulate from every result set we see, so the
+  // dropdown grows as filters surface new accounts (no separate all-time fetch).
+  React.useEffect(() => {
+    if (!txns) return;
+    setAccountOptions((prev) => {
+      const set = new Set(prev);
+      txns.items.forEach((t) => set.add(t.accountId));
+      const next = Array.from(set).sort();
+      return next.length === prev.length && next.every((v, i) => v === prev[i]) ? prev : next;
+    });
+  }, [txns]);
+
+  const setParam = (key: string, value: string) => {
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (!value || value === ANY) next.delete(key);
+        else next.set(key, value);
+        return next;
+      },
+      { replace: true }
+    );
+  };
+
+  // Clear returns to the fast default (this month), not all-time.
+  const clearFilters = () => {
+    const { from: mf, to: mt } = periodBounds(currentPeriod());
+    setParams({ from: mf, to: mt }, { replace: true });
+  };
+  const hasExtraFilters = Boolean(
+    envelopeId !== ANY || accountId !== ANY || type !== "all" || keyword || amountMin || amountMax
+  );
+
+  // Defensive newest-first sort (the contract already returns newest-first).
+  const items = React.useMemo(
+    () => (txns ? [...txns.items].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)) : []),
+    [txns]
+  );
+
+  // Period money-in / money-out split for the footer (spreadsheet-native sums).
+  const totals = React.useMemo(() => {
+    let moneyIn = 0;
+    let moneyOut = 0;
+    for (const t of items) {
+      if (t.isTransfer) continue;
+      if (t.amountCents >= 0) moneyIn += t.amountCents;
+      else moneyOut += t.amountCents;
+    }
+    return { moneyIn, moneyOut, net: moneyIn + moneyOut };
+  }, [items]);
+
+  // Client-side pagination: reset to the first page whenever the filters change.
+  React.useEffect(() => {
+    setPage(0);
+  }, [from, to, envelopeId, accountId, type, debouncedKeyword, amountMin, amountMax]);
+
+  const pageCount = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const start = safePage * PAGE_SIZE;
+  const pageItems = items.slice(start, start + PAGE_SIZE);
+
+  return (
+    <div className="mx-auto max-w-4xl space-y-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight md:text-2xl">
+            <Receipt className="h-5 w-5" /> Transactions
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Defaults to this month. Search by keyword, account, envelope, amount, or type.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          onClick={() => setShowCharts((s) => !s)}
+          aria-pressed={showCharts}
+        >
+          <BarChart3 className="h-4 w-4" /> {showCharts ? "Hide" : "Show"} charts
+        </Button>
+      </div>
+
+      {/* Charts over the active filter set */}
+      {showCharts && items.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <SpendByEnvelopeChart items={items} />
+          <SpendOverTimeChart items={items} />
+        </div>
+      )}
+
+      {/* Rich search panel */}
+      <div className="rounded-lg border bg-card p-3">
+        <div className="mb-2 flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <Filter className="h-3.5 w-3.5" /> Search
+          </div>
+          {hasExtraFilters && (
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={clearFilters}>
+              <X className="h-3.5 w-3.5" /> Reset to this month
+            </Button>
+          )}
+        </div>
+
+        {/* Keyword / merchant */}
+        <div className="mb-3 space-y-1">
+          <Label htmlFor="keyword" className="text-xs">Keyword or merchant</Label>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="keyword"
+              placeholder="e.g. Woolworths, rent, NAB"
+              value={keyword}
+              onChange={(e) => setParam("keyword", e.target.value)}
+              className="pl-8"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-1">
+            <Label htmlFor="from" className="text-xs">From</Label>
+            <Input id="from" type="date" value={from} max={to || undefined} onChange={(e) => setParam("from", e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="to" className="text-xs">To</Label>
+            <Input id="to" type="date" value={to} min={from || undefined} onChange={(e) => setParam("to", e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Envelope / category</Label>
+            <Select value={envelopeId} onValueChange={(v) => setParam("envelopeId", v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Any envelope" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ANY}>Any envelope</SelectItem>
+                {envelopeOptions.map((o) => (
+                  <SelectItem key={o.id} value={o.id}>
+                    {o.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Account</Label>
+            <Select value={accountId} onValueChange={(v) => setParam("accountId", v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Any account" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ANY}>Any account</SelectItem>
+                {/* N6 (assessed Phase 4): shows the raw accountId. There is no
+                    accounts table — account names live only in PocketSmith and are
+                    fetched live per-request by the reconcile handler. A friendly
+                    label needs a dedicated, network-dependent accounts service
+                    (unavailable offline, out of this phase's scope), so the raw id
+                    is left as-is rather than faked. */}
+                {accountOptions.map((id) => (
+                  <SelectItem key={id} value={id}>
+                    {id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Type</Label>
+            <Select value={type} onValueChange={(v) => setParam("type", v === "all" ? "" : v)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Income & expense</SelectItem>
+                <SelectItem value="income">Income only</SelectItem>
+                <SelectItem value="expense">Expense only</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="amountMin" className="text-xs">Min amount ($)</Label>
+            <Input
+              id="amountMin"
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              placeholder="0"
+              value={amountMin}
+              onChange={(e) => setParam("amountMin", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="amountMax" className="text-xs">Max amount ($)</Label>
+            <Input
+              id="amountMax"
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              placeholder="No limit"
+              value={amountMax}
+              onChange={(e) => setParam("amountMax", e.target.value)}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* List */}
+      <div className="rounded-lg border bg-card">
+        {/* Column headers */}
+        <div className="hidden grid-cols-[7rem_1fr_8rem_8rem_6.5rem] gap-3 border-b px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:grid">
+          <div>Date</div>
+          <div>Payee</div>
+          <div>Account</div>
+          <div>Envelope</div>
+          <div className="text-right">Amount</div>
+        </div>
+        <div className="divide-y divide-border/40">
+          {loading ? (
+            <div className="px-4 py-12 text-center text-sm text-muted-foreground animate-pulse">Loading transactions…</div>
+          ) : error ? (
+            <div className="px-4 py-12 text-center text-sm text-destructive">{error}</div>
+          ) : items.length === 0 ? (
+            <div className="px-4 py-12 text-center text-sm text-muted-foreground">
+              No transactions match this search.
+            </div>
+          ) : (
+            pageItems.map((t) => (
+              <div
+                key={t.id}
+                className="grid grid-cols-[1fr_auto] items-center gap-2 px-4 py-3 sm:grid-cols-[7rem_1fr_8rem_8rem_6.5rem] sm:gap-3"
+              >
+                <div className="order-1 text-xs text-muted-foreground sm:text-sm">{t.date}</div>
+                <div className="order-3 col-span-2 min-w-0 sm:order-2 sm:col-span-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium">{t.payee}</span>
+                    {t.isPending && (
+                      <Badge variant="outline" className="gap-1 text-[10px]">
+                        <Clock className="h-3 w-3" /> Pending
+                      </Badge>
+                    )}
+                    {t.isTransfer && <Badge variant="secondary" className="text-[10px]">Transfer</Badge>}
+                  </div>
+                </div>
+                <div className="order-4 hidden truncate text-xs text-muted-foreground sm:order-3 sm:block">{t.accountId}</div>
+                <div className="order-5 truncate text-xs sm:order-4">
+                  {t.envelopeName ? (
+                    <span className="text-muted-foreground">{t.envelopeName}</span>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px]">Uncategorised</Badge>
+                  )}
+                </div>
+                <div
+                  className={cn(
+                    "order-2 text-right text-sm font-medium tnum sm:order-5",
+                    t.amountCents < 0 ? "" : "text-success"
+                  )}
+                >
+                  {formatCents(t.amountCents, { sign: true })}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {!loading && !error && items.length > 0 && (
+        <>
+          {/* Money-in / money-out / net subtotals for the active filter */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-lg border bg-card p-3">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Money in</div>
+              <div className="tnum mt-0.5 text-sm font-semibold text-success">{formatCents(totals.moneyIn)}</div>
+            </div>
+            <div className="rounded-lg border bg-card p-3">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Money out</div>
+              <div className="tnum mt-0.5 text-sm font-semibold">{formatCents(totals.moneyOut)}</div>
+            </div>
+            <div className="rounded-lg border bg-card p-3">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Net</div>
+              <div className={cn("tnum mt-0.5 text-sm font-semibold", totals.net < 0 ? "text-destructive" : "text-success")}>
+                {formatCents(totals.net, { sign: true })}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center justify-between gap-2 sm:flex-row">
+            <p className="text-xs text-muted-foreground">
+              Showing {start + 1}–{Math.min(start + PAGE_SIZE, items.length)} of {items.length} transactions
+            </p>
+            {pageCount > 1 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={safePage === 0}
+                >
+                  <ChevronLeft className="h-4 w-4" /> Prev
+                </Button>
+                <span className="tnum text-xs text-muted-foreground">
+                  Page {safePage + 1} of {pageCount}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                  disabled={safePage >= pageCount - 1}
+                >
+                  Next <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

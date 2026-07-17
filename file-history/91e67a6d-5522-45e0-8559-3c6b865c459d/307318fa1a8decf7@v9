@@ -164,16 +164,6 @@ Deliver a four-lens Distinguished Engineer review of BudgetBuddy — frontend, b
 
 ### Follow-ups (2026-07-17, iteration 5)
 - [x] ISC-98: budget-page chart Suspense shows a skeleton fallback, not blank (done inline)
-- [x] ISC-102: uncategorised transaction filter end-to-end; "N to be categorised" link targets it with the period (was bare /transactions)
-- [x] ISC-103: SPA html shell served no-store so redeploys are picked up without a hard refresh (root cause of "features not showing"); hashed assets stay cacheable
-- [x] ISC-104: new-category detection — endpoint lists PocketSmith categories present in synced transactions with NO envelope mapping (name from raw_json, txn count, total), current period + all-time
-- [x] ISC-105: "New categories detected" surface on the budget page prompting the wizard
-- [x] ISC-106: category→envelope wizard creates the envelope (name, type income/expense/saving/envelope/working, budget amount, cadence) AND the effective-dated category mapping in one atomic action, so those transactions categorise immediately
-- [x] ISC-107: wizard pre-fills sensible defaults (name from category, type inferred from typical amount sign) and is dismissable/skippable per category
-- [x] ISC-108: Anti: the detector never invents a category — only categories actually present on stored transactions with a resolvable name; unmapped-but-unnamed categories degrade gracefully
-- [x] ISC-109: contract + zod + parity for the new endpoints; store read for distinct unmapped categories + names; gates green; deployed
-- [x] ISC-110: envelope detail page transactions list interleaves the envelope's carryover adjustments (was chart-hover only) — resolves "can't see the adjustment on /envelope/env-groceries"
-- [x] ISC-111: grid exposes ownCarryoverCents (un-rolled); CarryoverPopover, detail-page CarryoverAdjuster, and the new History inline-edit all base Set/Add/Subtract on the OWN carryover, not the descendant-rolled figure — fixes "add $95.95 to Groceries carryover posts a $176 adjustment" (parent Groceries own −$448.05 + Supplements child −$272.00 rolled to −$720.05; add applied to rolled base). Deploy WITH the pending/history-edit round so the inline edit ships already-correct.
 - [x] ISC-99: manual-adjustment marker shows on custom date ranges (range-aware, not exact-equality) — in flight
 - [x] ISC-100: carryover adjustments interleave inline with transactions in the drill-down popover — in flight
 - [x] ISC-101: each History-page carryover entry has its own Undo (restore-to-this-point) button, restoring that entry's beforeCents; audited; Anti: never fabricates a value

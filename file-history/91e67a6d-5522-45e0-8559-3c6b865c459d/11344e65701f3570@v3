@@ -1,0 +1,291 @@
+import * as React from "react";
+import { History, ArrowRight, Bot, RefreshCw, User, PenLine, Undo2, Pencil } from "lucide-react";
+import type { BudgetHistoryResponse } from "@contract";
+import { call, isApiError } from "@/lib/api";
+import { useCarryoverHistory, useEnvelopes, useInvalidateBudget } from "@/lib/queries";
+import { resolveCarryoverCents } from "@/lib/carryover";
+import { cn, formatCents, formatIsoDay } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+
+/**
+ * Budget history (ISC-77). Every change to the budget template is recorded with
+ * a timestamp, before/after values, scope, and actor, and is scrollable here —
+ * followed by the manual carryover adjustments (every carryover.reset event,
+ * newest first) so a hand-set starting balance is never invisible history.
+ */
+const actorMeta = {
+  ui: { icon: User, label: "You" },
+  sync: { icon: RefreshCw, label: "Sync" },
+  agent: { icon: Bot, label: "Agent" },
+} as const;
+
+/**
+ * The "Carryover adjustments" section: the same visual idiom as the budget
+ * history list (name + actor/timestamp line, before → after → delta figures).
+ */
+function CarryoverAdjustments() {
+  const historyQ = useCarryoverHistory();
+  const entries = historyQ.data?.entries ?? [];
+  const invalidateBudget = useInvalidateBudget();
+  // The current-period grid, for each envelope's CURRENT carryover — the value
+  // an inline Edit pre-fills and edits from. An envelope absent from this map
+  // (deleted, or not on the current grid) cannot be edited here.
+  const gridQ = useEnvelopes({ period: "this-month" });
+  const currentCarryover = React.useMemo(
+    // The envelope's OWN carryover (not the rolled-over-descendants summary):
+    // adjustments edit the own value. Fall back to the rolled figure on older
+    // payloads without the own field.
+    () => new Map((gridQ.data?.rows ?? []).map((r) => [r.id, r.ownCarryoverCents ?? r.carryoverCents])),
+    [gridQ.data],
+  );
+  // Per-entry Undo: restore-to-this-point. Posts the entry's logged beforeCents
+  // VERBATIM (never computed) for its envelope, so undoing any past adjustment —
+  // not just the most recent — is one click. The undo is itself a carryover.reset
+  // event, so the trail stays complete. Keyed by entry id for independent busy state.
+  const [undoingId, setUndoingId] = React.useState<string | null>(null);
+  const [undoError, setUndoError] = React.useState<{ id: string; message: string } | null>(null);
+  // Per-entry inline Edit: open a number input pre-filled with the envelope's
+  // CURRENT carryover (dollars) and post the entered value through the same
+  // audited endpoint, recording a new carryover.reset. One row edits at a time.
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [editValue, setEditValue] = React.useState<string>("");
+  const [savingId, setSavingId] = React.useState<string | null>(null);
+  const [editError, setEditError] = React.useState<{ id: string; message: string } | null>(null);
+
+  const undo = async (entry: (typeof entries)[number]) => {
+    if (undoingId) return;
+    setUndoingId(entry.id);
+    setUndoError(null);
+    try {
+      const res = await call("POST /api/envelopes/carryover", {
+        envelopeId: entry.envelopeId,
+        carryoverCents: entry.beforeCents, // logged before-value, verbatim
+      });
+      if (isApiError(res)) {
+        setUndoError({ id: entry.id, message: res.error });
+        return;
+      }
+      invalidateBudget();
+    } catch (e) {
+      setUndoError({ id: entry.id, message: e instanceof Error ? e.message : "Could not undo." });
+    } finally {
+      setUndoingId(null);
+    }
+  };
+
+  const startEdit = (entry: (typeof entries)[number]) => {
+    const current = currentCarryover.get(entry.envelopeId) ?? 0;
+    setEditValue((current / 100).toFixed(2));
+    setEditError(null);
+    setEditingId(entry.id);
+  };
+
+  const saveEdit = async (entry: (typeof entries)[number]) => {
+    if (savingId) return;
+    setSavingId(entry.id);
+    setEditError(null);
+    try {
+      // "set" semantics: the entered dollars become the new absolute carryover.
+      const carryoverCents = resolveCarryoverCents("set", 0, editValue);
+      const res = await call("POST /api/envelopes/carryover", {
+        envelopeId: entry.envelopeId,
+        carryoverCents,
+      });
+      if (isApiError(res)) {
+        setEditError({ id: entry.id, message: res.error });
+        return;
+      }
+      invalidateBudget();
+      setEditingId(null);
+    } catch (e) {
+      setEditError({ id: entry.id, message: e instanceof Error ? e.message : "Could not save." });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  return (
+    <div>
+      <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight">
+        <PenLine className="h-4 w-4" /> Carryover adjustments
+      </h2>
+      <p className="text-sm text-muted-foreground">
+        Every manual reset of an envelope's carried starting balance, newest first.
+      </p>
+      <div className="mt-3 rounded-lg border bg-card divide-y divide-border/40">
+        {entries.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">No carryover adjustments recorded yet.</div>
+        ) : (
+          entries.map((e) => {
+            const meta = actorMeta[e.actor] ?? { icon: History, label: e.actor };
+            const ActorIcon = meta.icon;
+            const delta = e.afterCents - e.beforeCents;
+            return (
+              <div key={e.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={cn("truncate text-sm font-medium", e.envelopeName === null && "italic text-muted-foreground")}>
+                      {e.envelopeName ?? "Deleted envelope"}
+                    </span>
+                    <Badge variant="secondary" className="text-[10px]">Effective {formatIsoDay(e.on)}</Badge>
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <ActorIcon className="h-3 w-3" /> {meta.label} · {new Date(e.ts).toLocaleString("en-AU")}
+                  </div>
+                  {undoError?.id === e.id && (
+                    <div className="mt-1 text-xs text-destructive">{undoError.message}</div>
+                  )}
+                  {editError?.id === e.id && (
+                    <div className="mt-1 text-xs text-destructive">{editError.message}</div>
+                  )}
+                </div>
+                {editingId === e.id ? (
+                  // Inline editor: pre-filled with the envelope's CURRENT carryover
+                  // (dollars); Save posts the entered value as cents (audited reset).
+                  <div className="flex items-center gap-1.5 text-sm">
+                    <span className="text-muted-foreground tnum">$</span>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      className="h-8 w-24 tnum"
+                      value={editValue}
+                      autoFocus
+                      aria-label={`Carryover for ${e.envelopeName}`}
+                      onChange={(ev) => setEditValue(ev.target.value)}
+                      onKeyDown={(ev) => {
+                        if (ev.key === "Enter") void saveEdit(e);
+                        if (ev.key === "Escape") setEditingId(null);
+                      }}
+                    />
+                    <Button size="sm" className="h-8 px-2 text-xs" disabled={savingId !== null} onClick={() => void saveEdit(e)}>
+                      {savingId === e.id ? "Saving…" : "Save"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                      disabled={savingId !== null}
+                      onClick={() => setEditingId(null)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-sm tnum">
+                    <span className="text-muted-foreground">{formatCents(e.beforeCents)}</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="font-medium">{formatCents(e.afterCents)}</span>
+                    <span className={cn("w-16 text-right", delta >= 0 ? "text-success" : "text-destructive")}>
+                      {formatCents(delta, { sign: true })}
+                    </span>
+                    {e.envelopeName !== null && (
+                      <>
+                        {(() => {
+                          const editable = currentCarryover.has(e.envelopeId);
+                          return (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+                              disabled={undoingId !== null || savingId !== null || !editable}
+                              title={
+                                editable
+                                  ? "Edit this envelope's current carryover"
+                                  : "This envelope is not on the current budget, so its carryover can't be edited here"
+                              }
+                              onClick={() => startEdit(e)}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                              Edit
+                            </Button>
+                          );
+                        })()}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+                          disabled={undoingId !== null}
+                          title={`Restore ${formatCents(e.beforeCents)} — the value before this adjustment`}
+                          onClick={() => void undo(e)}
+                        >
+                          <Undo2 className="h-3.5 w-3.5" />
+                          {undoingId === e.id ? "Undoing…" : "Undo"}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function HistoryPage() {
+  const [history, setHistory] = React.useState<BudgetHistoryResponse>({ entries: [] });
+
+  React.useEffect(() => {
+    void (async () => {
+      try {
+        setHistory(await call("GET /api/budget/history"));
+      } catch {
+        setHistory({ entries: [] });
+      }
+    })();
+  }, []);
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-5">
+      <div>
+        <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight md:text-2xl">
+          <History className="h-5 w-5" /> Budget history
+        </h1>
+        <p className="text-sm text-muted-foreground">Every allocation change, with who changed it and when.</p>
+      </div>
+
+      <div className="rounded-lg border bg-card divide-y divide-border/40">
+        {history.entries.length === 0 ? (
+          <div className="px-4 py-12 text-center text-sm text-muted-foreground">No changes recorded yet.</div>
+        ) : (
+          history.entries.map((e) => {
+            // Fall back gracefully if the server ever returns an actor outside
+            // the known set (N5), rather than reading .icon off undefined.
+            const meta = actorMeta[e.actor] ?? { icon: History, label: e.actor };
+            const ActorIcon = meta.icon;
+            const delta = e.afterCents - e.beforeCents;
+            return (
+              <div key={e.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium">{e.envelopeName}</span>
+                    <Badge variant={e.scope === "ongoing" ? "default" : "secondary"} className="text-[10px]">
+                      {e.scope === "ongoing" ? "Every month" : "This month"}
+                    </Badge>
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <ActorIcon className="h-3 w-3" /> {meta.label} · {new Date(e.ts).toLocaleString("en-AU")}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-sm tnum">
+                  <span className="text-muted-foreground">{formatCents(e.beforeCents)}</span>
+                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="font-medium">{formatCents(e.afterCents)}</span>
+                  <span className={cn("w-16 text-right", delta >= 0 ? "text-success" : "text-destructive")}>
+                    {formatCents(delta, { sign: true })}
+                  </span>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <CarryoverAdjustments />
+    </div>
+  );
+}

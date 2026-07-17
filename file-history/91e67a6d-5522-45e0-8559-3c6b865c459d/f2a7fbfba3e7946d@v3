@@ -1,0 +1,89 @@
+/**
+ * Application assembly: container in, fully-routed Hono app out.
+ *
+ * Split out of index.ts so the REAL app — every registered route, mounted under
+ * the configured base path — is constructible in tests without binding a port
+ * or touching module-level side effects (the listener, the egress guard, and
+ * log redaction stay in index.ts, the process entrypoint). The contract-parity
+ * test builds this app and asserts every ApiContract endpoint resolves to a
+ * registered route, which is what makes a declared-but-unregistered route a
+ * failing test instead of a production 404.
+ */
+
+import { Hono } from "hono";
+import { serveStatic } from "hono/bun";
+import type { Container } from "../composition.ts";
+import type { AttemptTracker } from "../platform/auth/attempts.ts";
+import { FileAttemptTracker } from "../platform/auth/attempts.ts";
+import { buildServices, type Services } from "./services.ts";
+import { registerAuth } from "./handlers/auth.ts";
+import { registerEnvelopes } from "./handlers/envelopes.ts";
+import { registerReconcile } from "./handlers/reconcile.ts";
+import { registerBudget } from "./handlers/budget.ts";
+import { registerSettings } from "./handlers/settings.ts";
+import { registerPulse } from "./handlers/pulse.ts";
+import { registerTransactions } from "./handlers/transactions.ts";
+import { registerCategories } from "./handlers/categories.ts";
+import { registerSync } from "./handlers/sync.ts";
+import { registerBackup } from "./handlers/backup.ts";
+
+const WEB_DIST = "./web/dist";
+
+export interface BuildAppOptions {
+  /** Auth attempt tracker; defaults to the persisted file tracker. Tests inject their own. */
+  readonly attempts?: AttemptTracker;
+  /**
+   * Serve the built SPA (web/dist) with the index.html fallback. Defaults true.
+   * Tests turn it off so an unregistered path is a clean 404, never the SPA shell.
+   */
+  readonly serveWeb?: boolean;
+  /** Pre-built services; defaults to building them from the container. */
+  readonly services?: Services;
+}
+
+/** Build the full application: routed API + (optionally) static SPA, mounted at basePath. */
+export function buildApp(container: Container, options: BuildAppOptions = {}): Hono {
+  const services = options.services ?? buildServices(container);
+  const attempts = options.attempts ?? new FileAttemptTracker();
+
+  // All API routes live under /api on this sub-app.
+  const api = new Hono();
+  registerAuth(api, container, attempts);
+  registerEnvelopes(api, container, services);
+  registerReconcile(api, container, services);
+  registerBudget(api, container, services);
+  registerSettings(api, container);
+  registerPulse(api, container, services);
+  registerTransactions(api, container, services);
+  registerCategories(api, container, services);
+  registerSync(api, container);
+  registerBackup(api, container);
+
+  // Liveness probe, mode-agnostic.
+  api.get("/health", (c) => c.json({ ok: true, mode: container.config.deployMode } as const));
+
+  const inner = new Hono();
+  inner.route("/api", api);
+  if (options.serveWeb !== false) {
+    // The SPA HTML shell must never be cached: Vite content-hashes asset filenames
+    // (immutable, cache freely), but index.html references them by hash, so a
+    // cached shell pins old chunks after a redeploy — the "new features don't show
+    // until a hard refresh" failure mode. This middleware stamps no-store on every
+    // HTML response (the "/" root and every client-route fallback alike), while
+    // leaving hashed assets cacheable. (Also security review F11.)
+    inner.use("*", async (c, next) => {
+      await next();
+      if ((c.res.headers.get("content-type") ?? "").includes("text/html")) {
+        c.res.headers.set("Cache-Control", "no-store, must-revalidate");
+      }
+    });
+    // Static assets first, then SPA fallback to index.html for client-side routing.
+    inner.use("/*", serveStatic({ root: WEB_DIST }));
+    inner.get("*", serveStatic({ path: `${WEB_DIST}/index.html` }));
+  }
+
+  // Mount under the configured base path. "/" local, "/budget" cloud.
+  const app = new Hono();
+  app.route(container.config.basePath === "/" ? "/" : container.config.basePath, inner);
+  return app;
+}

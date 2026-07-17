@@ -1,0 +1,90 @@
+/**
+ * History page — the "Carryover adjustments" section renders from the mocked
+ * GET /api/carryover/history payload: envelope name (with the deleted-envelope
+ * fallback), the effective date, and the before → after figures.
+ */
+import { describe, it, expect, mock } from "bun:test";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import type { CarryoverHistoryResponse } from "@contract";
+import * as realApi from "@/lib/api";
+import { TestQueryProvider } from "@/test/utils";
+
+const carryoverHistory: CarryoverHistoryResponse = {
+  entries: [
+    {
+      id: "cr-2",
+      ts: 1752537600000,
+      envelopeId: "env-reimbursement",
+      envelopeName: "Reimbursement",
+      beforeCents: 123400,
+      afterCents: 0,
+      on: "2026-07-08",
+      actor: "ui",
+    },
+    {
+      id: "cr-1",
+      ts: 1751500800000,
+      envelopeId: "env-gone",
+      envelopeName: null,
+      beforeCents: 0,
+      afterCents: 5000,
+      on: "2026-07-03",
+      actor: "ui",
+    },
+  ],
+};
+
+const call = mock(async (path: string) => {
+  if (path === "GET /api/budget/history") return { entries: [] };
+  if (path === "GET /api/carryover/history") return carryoverHistory;
+  return {};
+});
+
+mock.module("@/lib/api", () => ({ ...realApi, call }));
+
+const { HistoryPage } = await import("@/pages/HistoryPage");
+
+describe("HistoryPage — carryover adjustments section", () => {
+  it("renders the section with envelope name, effective date, and before → after", async () => {
+    render(
+      <TestQueryProvider>
+        <HistoryPage />
+      </TestQueryProvider>
+    );
+
+    expect(await screen.findByText("Carryover adjustments")).toBeInTheDocument();
+    expect(await screen.findByText("Reimbursement")).toBeInTheDocument();
+    expect(screen.getByText("Effective 8 Jul 2026")).toBeInTheDocument();
+    // Before → after figures for the first entry.
+    expect(screen.getByText("$1,234.00")).toBeInTheDocument();
+    expect(screen.getAllByText("$0.00").length).toBeGreaterThan(0);
+    // A vanished envelope renders the honest fallback, not a blank.
+    expect(screen.getByText("Deleted envelope")).toBeInTheDocument();
+    expect(screen.getByText("Effective 3 Jul 2026")).toBeInTheDocument();
+  });
+
+  it("per-entry Undo restores that entry's beforeCents verbatim, and only for live envelopes", async () => {
+    call.mockClear();
+    render(
+      <TestQueryProvider>
+        <HistoryPage />
+      </TestQueryProvider>
+    );
+
+    // The live envelope's row has an Undo; the deleted-envelope row does not.
+    const reimb = (await screen.findByText("Reimbursement")).closest("div.flex.items-center.justify-between") as HTMLElement;
+    const undo = within(reimb).getByRole("button", { name: /undo/i });
+    const gone = (screen.getByText("Deleted envelope")).closest("div.flex.items-center.justify-between") as HTMLElement;
+    expect(within(gone).queryByRole("button", { name: /undo/i })).toBeNull();
+
+    fireEvent.click(undo);
+
+    // Posts the entry's logged beforeCents ($1,234.00) VERBATIM for its envelope.
+    await waitFor(() =>
+      expect(call).toHaveBeenCalledWith("POST /api/envelopes/carryover", {
+        envelopeId: "env-reimbursement",
+        carryoverCents: 123400,
+      })
+    );
+  });
+});
