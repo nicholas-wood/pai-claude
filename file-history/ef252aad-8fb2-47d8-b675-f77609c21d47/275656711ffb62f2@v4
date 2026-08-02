@@ -1,0 +1,136 @@
+---
+task: Investigate three AccessBuddy incidents and deliver a report plus action plan per issue
+slug: accessbuddy-incident-triage
+effort: E3
+phase: learn
+progress: 29/34
+mode: standard
+started: 2026-08-01T00:00:00+10:00
+updated: 2026-08-01T00:00:00+10:00
+---
+
+## Problem
+
+Three linked production incidents at AccessBuddy (SMLSC tenant live): (1) a member reports being logged out and unable to log back in; (2) the Resend daily email limit (100/day free tier) was hit, so an unknown subset of outbound emails silently failed and future blasts risk the same; (3) a fob-expiry notification went out without the critical renewal context ("expires 1 Sep unless you renew; ignore if already renewed"), generating confused member queries. Nick needs evidence-backed diagnosis and a plan per issue before anything is changed.
+
+## Vision
+
+Nick opens one report and instantly sees what actually happened across all three issues — including whether the email limit caused the login failure — with a concrete, low-risk plan per issue he can approve line by line. Nothing has been touched; everything is ready to execute on approval.
+
+## Out of Scope
+
+No code changes, no deploys, no database writes, no emails sent, no template edits — this run is investigation and planning only. No redesign of the wider notification system beyond the queue needed for the daily limit. No Resend plan upgrade decision (surfaced as an option only).
+
+## Constraints
+
+- Read-only against production: SELECTs and API GETs only; no mutations.
+- All agent work on the Fable model per Nick's explicit instruction.
+- Email architecture facts from `context/facts.md` are authoritative (Resend, 27-event registry, `email_configurations` overrides, `setEmailBranding()` convention).
+- Correction email and template copy must carry tenant branding and the renewal business context.
+- Plans must respect the existing stack (Bun/Hono, Postgres/Drizzle, Cloud Run) — no new infrastructure unless unavoidable.
+
+## Goal
+
+Deliver a three-part incident report — login failure, email-limit audit with queued-send design (15/day reserved for auth), fob-expiry template fix with correction-email draft and recipient list — each with root cause evidence and an approval-ready action plan, with zero production mutations performed.
+
+## Criteria
+
+### Issue 1 — Login failure
+- [x] ISC-1: Login/auth flow identified with file references (Firebase Auth usage, session lifecycle)
+- [x] ISC-2: Determination whether login depends on outbound email (verification, magic link, password reset)
+- [DEFERRED-VERIFY] ISC-3: Evidence gathered on whether login-related emails failed during the limit window — code path certain; live `email_failed` rows need prod DB (follow-up: appendix-a-queries)
+- [x] ISC-4: Any recent deploy/session-config change in the incident window identified or ruled out
+- [x] ISC-5: Root cause stated with confidence level, or explicit open questions listed
+- [x] ISC-6: Action plan for issue 1 with steps, owner, and verification method
+- [x] ISC-7: Immediate unblock path for the affected member named in the plan
+
+### Issue 2 — Email limit audit + queue design
+- [x] ISC-8: Email provider and exact limit confirmed from code/config (Resend tier, 100/day)
+- [DEFERRED-VERIFY] ISC-9: Sent emails in the incident window enumerated — queries prepared; needs prod DB or Resend dashboard (follow-up: appendix-a-queries)
+- [DEFERRED-VERIFY] ISC-10: Failed/unsent emails enumerated with recipient and event type — queries prepared (follow-up: appendix-a-queries)
+- [x] ISC-11: Failure mode identified (error handling path when limit hit — silent vs logged)
+- [x] ISC-12: The batch job / trigger that caused the blast identified with file reference
+- [DEFERRED-VERIFY] ISC-13: Total pending sends quantified against the 100/day cap — 354-credential upper bound known; cohort-sizing query prepared (follow-up: appendix-a-queries)
+- [x] ISC-14: Queue design proposed: persistent queue, daily budget, priority classes
+- [x] ISC-15: Design reserves ~15/day headroom for auth/transactional email
+- [x] ISC-16: Design spreads bulk sends across days with deterministic drain order
+- [x] ISC-17: Design covers retry of the currently-unsent backlog
+- [x] ISC-18: Design names concrete implementation surface (tables, job, code touchpoints)
+- [x] ISC-19: Resend paid-tier upgrade surfaced as costed alternative/complement
+
+### Issue 3 — Fob-expiry template + correction
+- [x] ISC-20: Offending template located (event key, code default vs tenant override) with file/row reference
+- [x] ISC-21: Actual sent wording captured as evidence
+- [x] ISC-22: Why the business context was missing explained (authoring gap vs wrong template path)
+- [x] ISC-23: Corrected template copy drafted (expires 1 Sep, renew to keep access, ignore if renewed)
+- [x] ISC-24: Corrected copy follows email standards (tenant branding, first-name greeting)
+- [DEFERRED-VERIFY] ISC-25: Recipient list of the bad email produced with count and source evidence — reconstruction query prepared (follow-up: appendix-a-queries)
+- [x] ISC-26: One-off correction email drafted for those recipients
+- [x] ISC-27: Correction send plan respects the daily cap and queue design
+- [x] ISC-28: Plan marks correction as once-off (no recurring artefact left behind)
+
+### Cross-cutting
+- [x] ISC-29: Cross-issue causal chain (blast → limit → login) confirmed or refuted with evidence
+- [x] ISC-30: Report orders actions by urgency across all three issues
+- [x] ISC-31: Every claim in the report traceable to a tool-verified source (file, query, API response)
+- [x] ISC-32: Anti: no file under `code/` modified during this run (git status clean)
+- [x] ISC-33: Anti: no email sent and no production row inserted/updated/deleted during this run
+- [x] ISC-34: Anti: report contains no fabricated counts — any unknown is marked unknown
+
+## Test Strategy
+
+| isc | type | check | threshold | tool |
+|-----|------|-------|-----------|------|
+| ISC-1..5 | evidence | agent report cites files/queries | every claim sourced | Agent(Fable) + Read |
+| ISC-6..7 | plan | plan section present with steps+verification | complete | Read of final report |
+| ISC-8..13 | evidence | counts from audit log / Resend API quoted | numbers or explicit unknown | Agent(Fable) Bash/psql/curl |
+| ISC-14..19 | design | queue design section covers budget, priority, backlog | all named elements present | Read of final report |
+| ISC-20..22 | evidence | template source + sent wording quoted | verbatim quote present | Agent(Fable) Grep/SQL |
+| ISC-23..28 | artefact | drafts present in report, standards applied | branding + context present | Read of final report |
+| ISC-29 | analysis | causal chain section with supporting timestamps | confirmed/refuted stated | RootCauseAnalysis |
+| ISC-30..31 | report | ordering + sourcing check on final text | pass | ReReadCheck |
+| ISC-32 | anti | `git status --porcelain` in code/ empty | empty | Bash |
+| ISC-33 | anti | no send/mutation commands in transcript | zero | self-audit |
+| ISC-34 | anti | unknowns explicitly marked | zero fabricated numbers | ReReadCheck |
+
+## Features
+
+| name | description | satisfies | depends_on | parallelizable |
+|------|-------------|-----------|------------|----------------|
+| login-investigation | Agent sweep of auth flow, session config, email dependency | ISC-1..5 | — | true |
+| email-audit | Agent sweep of send pipeline, audit log, Resend usage, blast job | ISC-8..13 | — | true |
+| template-forensics | Agent sweep of fob-expiry template, sent copy, recipients | ISC-20..22, ISC-25 | — | true |
+| causal-chain | RootCauseAnalysis linking the three issues | ISC-29 | login-investigation, email-audit | false |
+| queue-design | Daily-budget queue proposal with 15/day auth reserve | ISC-14..19 | email-audit | false |
+| drafts | Corrected template copy + one-off correction email | ISC-23..28 | template-forensics | false |
+| report | Assemble three-part report with ordered plans | ISC-6..7, ISC-30..31 | all | false |
+
+## Decisions
+
+- 2026-08-01: Task ISA (not project ISA) — this is an incident investigation; durable learnings reconcile to the project later. Delegation: 3 read-only background agents on Fable per Nick's instruction.
+- 2026-08-01: refined: root cause restructured from linear chain to AND-gate fault tree (RootCauseAnalysis) — Leg A session invalidation (14 Jul key rotation) AND Leg B auth-email starvation (Resend cap); template gap reclassified as amplifier that generated the returning-member traffic.
+- 2026-08-01: Advisor gaps applied: correction-email guards (logs-only list, renewal dedupe, idempotency), failure-visibility ordered above quota purchase, report retitled INTERIM with provisional root cause, 354 labelled as sourced upper bound.
+- 2026-08-01: Report shipped as artefact at `artifacts/reviews/2026-08-01-incident-report-email-cap-login-template.md`; 5 ISCs DEFERRED-VERIFY pending prod access (follow-up: appendix-a-queries — install gcloud + cloud-sql-proxy or use Resend dashboard, then run Appendix A).
+- 2026-08-01: Nick asked to update the Resend key for read access. Verified programmatic key creation is impossible (both keys 401 on /api-keys — send-only restriction covers key management). Dashboard-only action: Nick to create a TEMPORARY additional full-access key (do NOT replace the app's send key in Secret Manager — no redeploy needed), then `RESEND_FORENSICS_KEY=... bun artifacts/reviews/resend-forensics.ts` pulls counts + failed list + correction recipients; revoke key after. Script smoke-tested (graceful 401 on restricted key).
+
+## Changelog
+
+- conjectured: the three reported issues were three independent faults. refuted by: RootCauseAnalysis fault tree + agent evidence — member impact required BOTH the 14 Jul key rotation AND the quota exhaustion, with the bare template amplifying traffic into both legs. learned: bulk and auth email sharing one unprioritised, capped pipe means any blast can take down login; silent send-failure semantics turned a quota event into a lockout. criterion now: ISC-29 verified as AND-gate chain; queue design (ISC-14..18) reserves auth headroom as the structural fix.
+
+## Verification
+
+- ISC-1/2: Agent A trace — sign-in-form.tsx:75-97 (email-only paths), api/auth/session/route.ts:6 (14-day cookie). Login is magic-link/OTP/passkey; no password path.
+- ISC-4: git log — cd70131 "fix(auth): remove Host-header trust and fail closed on session signing" (14 Jul, v1.11.0); replaced signing key → mass cookie invalidation.
+- ISC-5/29: RootCauseAnalysis agent — AND-gate fault tree, confidence HIGH (mechanism) / MEDIUM (incident-level, pending logs).
+- ISC-8: Resend SDK at email.ts:2,62-68; resend.com/pricing fetched — free tier 100/day, 3,000/month.
+- ISC-11: email.ts:224-273 quoted — on error: console.error + email_failed audit row + return void; no retry, no throw; cron returns 200.
+- ISC-12: main.tf:469-492 Cloud Scheduler 2am daily → api/cron/daily/route.ts:374-454; diffDays===30||7 gate at :403; 1 Sep normalisation at :150.
+- ISC-14..19: report §Issue 2 — email_queue table, P0/P1/P2 classes, 85/day budget (15 reserved), oldest-first drain, backoff retry + backfill, Resend Pro ~US$20/mo recommendation.
+- ISC-20/21/22: email-templates.ts:614-636 + email.ts:634 quoted verbatim; email_configurations absent in prod (migration 0010 unmerged) and unread by any send path; bare copy since f36375a (v1.0.0).
+- ISC-23/24: corrected draft in report — 1 Sep context, ignore-if-renewed, first-name greeting, ships via existing branded template functions.
+- ISC-26/27/28: correction draft in report with logs-only list, renewal dedupe, idempotency guard, once-off script, budget-respecting send.
+- ISC-30/31: report execution order 1-5; every claim carries file:line or is marked UNKNOWN with its query.
+- ISC-32: `git status --porcelain` in code/ — empty output captured post-run.
+- ISC-33: self-audit — zero mutation commands issued; all agents read-only; both Resend keys send-restricted (401 on GETs) so no read even attempted a send.
+- ISC-34: all counts either file-sourced or marked UNKNOWN; 354 labelled as upper bound from tenant stats.
+- ISC-3/9/10/13/25: DEFERRED-VERIFY — follow-up task `appendix-a-queries` (prod DB or Resend dashboard).

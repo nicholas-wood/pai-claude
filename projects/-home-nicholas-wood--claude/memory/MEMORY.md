@@ -20,3 +20,4 @@
 - [BudgetBuddy v1.4.0 deployed](project-budgetbuddy-v140-deployed.md) — DE-review remediation + budget chronology shipped 14 Jul; crypt remote, OneDrive purge, mid-month semantics still open
 - [Cato codex CLI missing](gotcha-cato-codex-cli-missing.md) — cross-vendor audits skip on the Linux box; install codex or treat Cato output as same-family
 - [Advice not action](feedback-advice-not-action.md) — when Nick asks "should I...?", answer the question and stop; never apply the edit unprompted
+- [LSV proposal register](feedback-lsv-proposal-register.md) — org proposals read as formal documentation; keep stories, drop conversational devices

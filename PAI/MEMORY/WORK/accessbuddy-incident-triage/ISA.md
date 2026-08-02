@@ -2,8 +2,8 @@
 task: Investigate three AccessBuddy incidents and deliver a report plus action plan per issue
 slug: accessbuddy-incident-triage
 effort: E3
-phase: learn
-progress: 29/34
+phase: build
+progress: 29/37
 mode: standard
 started: 2026-08-01T00:00:00+10:00
 updated: 2026-08-01T00:00:00+10:00
@@ -69,6 +69,11 @@ Deliver a three-part incident report — login failure, email-limit audit with q
 - [x] ISC-27: Correction send plan respects the daily cap and queue design
 - [x] ISC-28: Plan marks correction as once-off (no recurring artefact left behind)
 
+### Issue 1b — Magic-link redirect loop (added 2026-08-02, new member evidence)
+- [x] ISC-35: Cause of click-link → back-to-email-entry loop identified — RESOLVED 2026-08-02: Nick confirmed user error (member unblocked), consistent with ranked cause #1 (cross-device/mail-viewer flow); callback-hardening fixes remain recommended as UX debt
+- [x] ISC-36: No-deploy unblock path for the looping member named (copy link into requesting browser; newest email; lowercase; real browser)
+- [x] ISC-37: Minimal fix for the loop scoped into the Issue 1 plan (callback email form replacing window.prompt, error-code mapping, cookie-landed check, lowercase normalisation, Sentry capture)
+
 ### Cross-cutting
 - [x] ISC-29: Cross-issue causal chain (blast → limit → login) confirmed or refuted with evidence
 - [x] ISC-30: Report orders actions by urgency across all three issues
@@ -114,6 +119,8 @@ Deliver a three-part incident report — login failure, email-limit audit with q
 - 2026-08-01: Nick asked to update the Resend key for read access. Verified programmatic key creation is impossible (both keys 401 on /api-keys — send-only restriction covers key management). Dashboard-only action: Nick to create a TEMPORARY additional full-access key (do NOT replace the app's send key in Secret Manager — no redeploy needed), then `RESEND_FORENSICS_KEY=... bun artifacts/reviews/resend-forensics.ts` pulls counts + failed list + correction recipients; revoke key after. Script smoke-tested (graceful 401 on restricted key).
 
 ## Changelog
+
+- conjectured: the 14 Jul commit cd70131 (session-signing key rotation) deployed in v1.11.0 and caused the mass logout (Leg A of the fault tree). refuted by: `git merge-base --is-ancestor cd70131 865a6004` fails — all ten 14-Jul commits are branch-only on fix/tenant-2-readiness; prod v1.11.0 differs from v1.10.2 by landing copy only, live-verified against the deployed bundle. learned: never attribute prod behaviour to a commit without proving it is an ancestor of the deployed tag; local branch checkouts lie about prod. criterion now: ISC-4 evidence corrected — logout cause is natural 14-day cookie expiry (and, for the looping member, inability to ever complete sign-in); cd70131's session invalidation is a FUTURE deploy note, not a past cause.
 
 - conjectured: the three reported issues were three independent faults. refuted by: RootCauseAnalysis fault tree + agent evidence — member impact required BOTH the 14 Jul key rotation AND the quota exhaustion, with the bare template amplifying traffic into both legs. learned: bulk and auth email sharing one unprioritised, capped pipe means any blast can take down login; silent send-failure semantics turned a quota event into a lockout. criterion now: ISC-29 verified as AND-gate chain; queue design (ISC-14..18) reserves auth headroom as the structural fix.
 

@@ -1,52 +1,48 @@
 {
   "proto": 1,
   "supervisorPid": 296821,
-  "updatedAt": 1785584277681,
+  "updatedAt": 1785669960974,
   "workers": {
-    "3c1eef75": {
-      "pid": 346949,
-      "procStart": "280828",
-      "sessionId": "3c1eef75-002d-4cf4-af36-9763a28c8369",
-      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/3c1eef75.sock",
-      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/0d7904ef.pty.sock",
+    "ea738dfa": {
+      "pid": 3536275,
+      "procStart": "7838149",
+      "sessionId": "ea738dfa-d20c-43e7-b6b2-324dba556b68",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/ea738dfa.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/3bf22218.pty.sock",
       "cliVersion": "2.1.220",
-      "startedAt": 1785580538476,
+      "startedAt": 1785665319113,
       "attempt": 1,
       "cwd": "/home/nicholas-wood/.claude",
       "dispatch": {
         "proto": 1,
-        "short": "3c1eef75",
-        "nonce": "2dc1031d",
-        "sessionId": "3c1eef75-002d-4cf4-af36-9763a28c8369",
-        "createdAt": 1785580538473,
+        "short": "ea738dfa",
+        "nonce": "0713256d",
+        "sessionId": "ea738dfa-d20c-43e7-b6b2-324dba556b68",
+        "createdAt": 1785665319110,
         "source": "fleet",
         "cwd": "/home/nicholas-wood/.claude",
         "launch": {
-          "mode": "resume",
-          "sessionId": "3c1eef75-002d-4cf4-af36-9763a28c8369",
-          "transcriptPath": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/3c1eef75-002d-4cf4-af36-9763a28c8369.jsonl",
-          "fork": false,
-          "flagArgs": [
+          "mode": "prompt",
+          "args": [
+            "--session-id",
+            "ea738dfa-d20c-43e7-b6b2-324dba556b68",
             "--agent",
             "claude",
-            "--model",
-            "claude-fable-5[1m]"
+            "--",
+            "I have some problems with the incident categorization document. I have just put the latest copy in the OneDrive in box. The crux of the problem is that when I go to explain this to people, I can't read through the document. I have to jump around. So the document is not structured properly. There are some examples of where there's duplication, for example types versus tasking, or when I list out all the types and the medical types are listed elsewhere. There is some repetition talk about types states before we actually discuss the the tree. We say in the section it says when to update an incident type that the type catches what we responded to, then it's set again straight away in key assumptions. We jump into a lot of detail before we've even covered all the fields. Don't really discuss why we're making the changes, for example, why we need to include the outcome, why we needed to include the tags. We don't really give that context in a good story. The principal piece of feedback that I got was we can't show this to the senior manager of operations because his eyes will glaze over. It is too long and too technical. The suggestion I got is you need to discuss it around how an incident flows and talk about it that way to make it really relevant to the people we need to get on board with this. As an example, like there are with overall there is going to be massive benefits in having consistent data, having reliable data, everything from how we structure our services to how we support our members. Members to how we go for funding. It will impact everything in terms of being able to rely on the data that comes out of WimSock without lots of manual manipulation, saving lots of time. More than anything, it is a foundation that will allow us to do so much more. At the moment we have a problem where multiple incidents and sorry a particular incident correction a particular incident could be categorized in multiple different ways. The reason that can happen, and also the reason that we cannot build on our current incident categorization structure is that it's not clear. Don't have it written down anywhere what an incident type means. Incident type is trying to be everything to everyone which makes it almost useless. East the kind of points I'm really trying to drill home. As an example, when I'm talking about not changing the incident type, at the moment if we have a rescue that becomes a drowning, the type gets updated to drowning, we ch we change that type and then there is no way to search on that. That Major Rescue. We don't even discern what is an incident versus what's a rescue log, when each should be done. So it's done inconsistently, which destroys all our stats. So by having the type not change and then having an incident outcome as a separate field, we can then search on both of those things. By having instant labels we can then capture all the relevant details and also by having the agency status we can capture what is important and what is not. Once we put this system in place, this new structure with clear definitions and clear expectations, we can then start lifting the expectations on our members, which will then allow us to move on to other things like AI-enabled features, like guided questions. Once upon a time LSV comms had to sign on every unit. That's no longer the case because of the digital advances in LIMSOC. So now the principal job of LSV comms is to get the data right. Capture what has happened in an incident and this structure will help us to do that. Another thing I often tell people when I'm explaining this document is last year we did the first aid form. We went from a really rudimentary not fit for purpose first aid form and we then transformed it into a fit-for-purpose first aid form. form that actually asked the questions to capture what was happening on the beach. Result of that was we actually had visibility for the first time. We were actually able to drill into the data for the first time. Never before have we reliably been able to jump in and say we're doing these first aids a lot or people a"
           ]
         },
         "env": {},
         "isolation": "none",
         "respawnFlags": [
           "--agent",
-          "claude",
-          "--model",
-          "claude-fable-5[1m]"
+          "claude"
         ],
         "agent": "claude",
         "seed": {
-          "intent": "",
-          "name": "budget buddy health check"
+          "intent": "I have some problems with the incident categorization document. I have just put the latest copy in the OneDrive in box. The crux of the problem is that when I go to explain this to people, I can't read through the document. I have to jump around. So the document is not structured properly. There are some examples of where there's duplication, for example types versus tasking, or when I list out all the types and the medical types are listed elsewhere. There is some repetition talk about types states before we actually discuss the the tree. We say in the section it says when to update an incident type that the type catches what we responded to, then it's set again straight away in key assumptions. We jump into a lot of detail before we've even covered all the fields. Don't really discuss why we're making the changes, for example, why we need to include the outcome, why we needed to include the tags. We don't really give that context in a good story. The principal piece of feedback that I got was we can't show this to the senior manager of operations because his eyes will glaze over. It is too long and too technical. The suggestion I got is you need to discuss it around how an incident flows and talk about it that way to make it really relevant to the people we need to get on board with this. As an example, like there are with overall there is going to be massive benefits in having consistent data, having reliable data, everything from how we structure our services to how we support our members. Members to how we go for funding. It will impact everything in terms of being able to rely on the data that comes out of WimSock without lots of manual manipulation, saving lots of time. More than anything, it is a foundation that will allow us to do so much more. At the moment we have a problem where multiple incidents and sorry a particular incident correction a particular incident could be categorized in multiple different ways. The reason that can happen, and also the reason that we cannot build on our current incident categorization structure is that it's not clear. Don't have it written down anywhere what an incident type means. Incident type is trying to be everything to everyone which makes it almost useless. East the kind of points I'm really trying to drill home. As an example, when I'm talking about not changing the incident type, at the moment if we have a rescue that becomes a drowning, the type gets updated to drowning, we ch we change that type and then there is no way to search on that. That Major Rescue. We don't even discern what is an incident versus what's a rescue log, when each should be done. So it's done inconsistently, which destroys all our stats. So by having the type not change and then having an incident outcome as a separate field, we can then search on both of those things. By having instant labels we can then capture all the relevant details and also by having the agency status we can capture what is important and what is not. Once we put this system in place, this new structure with clear definitions and clear expectations, we can then start lifting the expectations on our members, which will then allow us to move on to other things like AI-enabled features, like guided questions. Once upon a time LSV comms had to sign on every unit. That's no longer the case because of the digital advances in LIMSOC. So now the principal job of LSV comms is to get the data right. Capture what has happened in an incident and this structure will help us to do that. Another thing I often tell people when I'm explaining this document is last year we did the first aid form. We went from a really rudimentary not fit for purpose first aid form and we then transformed it into a fit-for-purpose first aid form. form that actually asked the questions to capture what was happening on the beach. Result of that was we actually had visibility for the first time. We were actually able to drill into the data for the first time. Never before have we reliably been able to jump in and say we're doing these first aids a lot or people a"
         },
-        "cols": 214,
+        "cols": 113,
         "rows": 50
       },
       "decModes": [
@@ -58,8 +54,8 @@
         1004,
         2031
       ],
-      "rvAuth": "9aa303204ed68752921bafe17325bbab",
-      "ptyAuth": "cbb6caa53e5941c18e558308563a50ef"
+      "rvAuth": "84f306db041e538c22003453dd2d7ae9",
+      "ptyAuth": "00f4787ef0ba03938961a9f1032d152d"
     }
   }
 }

@@ -1,0 +1,132 @@
+---
+task: Restructure LIMSOC Incident Categorisation pack around incident flow for exec readability
+slug: incident-categorisation-restructure
+effort: E3
+phase: build
+progress: 0/34
+mode: standard
+started: 2026-08-02T20:10:00+10:00
+updated: 2026-08-02T20:10:00+10:00
+---
+
+# ISA — Incident Categorisation Pack Restructure
+
+## Problem
+
+The v0.7 pack (OneDrive 00_Inbox, 9 Jul 2026) cannot be read linearly — Nick jumps around when explaining it. Verified structural defects: "When to update an Incident Type" stated in Definitions then restated as Key Assumption 3; Type states explained before the tree they govern; Medical children referenced in the tree then listed in a separate branch section; Tasking-vs-Incident logic split between the tree (External Agency) and its own later section; guided-questions detail arrives before all fields are introduced; the why behind Outcome, Tags, and the type-freeze is asserted, not motivated. Principal feedback: too long and too technical for the senior manager of operations — "his eyes will glaze over." The document lacks the story Nick tells in person (first aid form precedent, comms-role evolution, rescue-becomes-drowning searchability failure, data-foundation benefits).
+
+## Vision
+
+A pack that reads start-to-finish following how an incident actually flows — challenge with the current structure, the proposed change, the impact, and what each audience will see — such that the senior manager of operations reads the front section cold and gets it, while the SME group still has every technical detail in annexes. Nick presents it without jumping around; the ~10 points he makes verbally are on the page.
+
+## Out of Scope
+
+- Changing the model design itself (tree, states, precedence, MPDS alignment) — this is a document restructure, not a model redesign.
+- Resolving open model questions (D21 Welfare home, Not Final assignments) — they stay flagged.
+- The full tag taxonomy (priority 1.8 work).
+- Rollout/training collateral, unless Nick pulls change-management into scope (Q19).
+
+## Constraints
+
+- No content loss: all v0.7 technical material (migration map, decision log, platform dev notes, medical branch) survives somewhere.
+- Discovery gate: no restructure outline or rewrite until Nick answers the discovery questions (this turn's deliverable).
+- Outline approved by Nick before full rewrite.
+- Markdown source in workspace; OneDrive receives exported .docx only, rendered programmatically, pushed via rclone copy.
+- Australian English, no em dashes, executive-ready front narrative.
+
+## Goal
+
+Extract Nick's unstated points via targeted discovery questions, then restructure the pack into a flow-based narrative front (senior-manager-readable) with technical annexes (SME-grade), verified against every defect Nick named and every point extracted in discovery.
+
+## Criteria
+
+### Discovery (this turn)
+- [ ] ISC-1: Question set delivered covering audience/artefact shape, incident-flow spine, in-person stories, quantified impact, content disposition, and scope
+- [ ] ISC-2: Every question tied to a specific gap in v0.7 or a specific claim in Nick's word-dump
+- [ ] ISC-3: Question set includes a mechanism to extract the "10 more points" (walk-through / voice-memo prompt)
+- [ ] ISC-4: Highest-leverage questions flagged so Nick can answer partially and still unblock the outline
+- [ ] ISC-5: No restructuring, rewriting, or file edits to the pack performed this turn
+
+### Restructure outline (next turn, post-answers)
+- [ ] ISC-6: Section-by-section skeleton produced mapping every v0.7 section to its new home (main body, annex, or cut-with-reason)
+- [ ] ISC-7: Skeleton structured around the organising arc Nick confirms (incident-flow spine abandoned 2026-08-02; candidate arc: problem stories → why now → one-idea fix → model told contextually → what changes for you → bigger picture → annexes)
+- [ ] ISC-8: Skeleton approved by Nick before any rewrite begins
+
+### Restructured document (final)
+- [ ] ISC-9: Document reads linearly — no concept used before it is defined (verify: read-through pass finds zero forward references)
+- [ ] ISC-10: "When to update an Incident Type" appears exactly once (verify: rg count = 1 location)
+- [ ] ISC-11: Medical children enumerated exactly once (verify: rg for "Chest Pain" hits one section)
+- [ ] ISC-12: Tasking-vs-Incident rule lives in one place (verify: rg "Tasking versus" single location)
+- [ ] ISC-13: Type states explained at or after the tree, never before (verify: section order inspection)
+- [ ] ISC-14: All fields/mechanisms introduced before any detail section uses them (verify: read-through order check)
+- [ ] ISC-15: Each structural change (type-freeze, Outcome, Tags, Agency Status, guided questions) carries an explicit why grounded in a current-state failure (verify: per-change grep for motivation sentence)
+- [ ] ISC-16: Rescue-becomes-drowning searchability failure appears as a worked current-state example (verify: grep)
+- [ ] ISC-17: Incident-vs-rescue-log inconsistency named as a current-state problem (verify: grep)
+- [ ] ISC-18: "Type is trying to be everything to everyone" / no-written-definition problem stated up front (verify: front section grep)
+- [ ] ISC-19: First aid form transformation included as precedent evidence (verify: grep)
+- [ ] ISC-20: Comms-role evolution (sign-on retired → data quality is the job) framing included where Nick directs (verify: grep)
+- [ ] ISC-21: Foundation arc present: consistent data → services, member support, funding → future features (guided questions, AI) (verify: front section read)
+- [ ] ISC-22: "What they will see" covered for operations: consistency, common operating picture, reporting clarity (verify: dedicated section exists)
+- [ ] ISC-23: Front narrative readable by a non-technical senior manager (proxy: no model-internal jargon — Abstract/Not Final/Final, cardinality, MPDS mechanics — before the annex boundary)
+- [ ] ISC-24: Front narrative length within the target Nick sets in discovery (verify: page/word count)
+- [ ] ISC-25: Migration Map retained in full as annex (verify: 72 rows present)
+- [ ] ISC-26: Decision Log retained (verify: all dated decisions present)
+- [ ] ISC-27: Platform dev notes retained in annex (verify: section present)
+- [ ] ISC-28: SME Feedback scaffold retained (verify: section present)
+- [ ] ISC-29: Open questions (tree confirmation, Not Final assignments, D21 Welfare flag) still visible (verify: grep FLAG + Still open)
+- [ ] ISC-30: Every point Nick supplies in discovery answers is traceably placed (verify: checklist of answers vs document)
+- [ ] ISC-31: Exported .docx rendered programmatically and pushed to OneDrive via rclone copy, verified with rclone lsl (verify: file listed with fresh timestamp)
+- [ ] ISC-32: Markdown source committed in workspace, not OneDrive (verify: path check)
+- [ ] ISC-33: Anti: no technical content silently deleted — v0.7-to-new content audit shows every section accounted for
+- [ ] ISC-34: Anti: restructure introduces no new duplication — key rules stated once each (verify: rg counts on rule phrases)
+
+### Round-2 additions (2026-08-02)
+- [ ] ISC-35: Action Log proposal section present: first aid form + rescue log merge into one per-person log (rescue, first aid, or both), person details entered once, linked to an incident when incident criteria are met (verify: grep)
+- [ ] ISC-36: Separation-of-concerns table updated: clinical-detail row becomes Action Log (assistance provided to one individual) (verify: table read)
+- [ ] ISC-37: 2026-07-09 FAL-naming decision marked superseded by the Action Log proposal in the Decision Log annex (verify: grep)
+- [ ] ISC-38: Nothing repeated — every concept, rule, and list appears exactly once across the whole document (verify: rg counts per key phrase)
+- [ ] ISC-39: Related concepts co-located: type states with the tree, all classification rules in one section, Key Assumptions dissolved into their homes (verify: section inspection)
+- [ ] ISC-40: "Already broken — cannot get worse" and "complex problem, simple solution once understood" framing present in the case for change (verify: grep)
+- [ ] ISC-41: Collision examples included: Marine Incident vs Vessel Incident, default-to-Rescue-In-Water-Condition-Unknown, Recovered from Water vs Resuscitation (beach vs water unknown), assist-agency vs provide-our-service ambiguity, inconsistent type updates (verify: grep)
+- [ ] ISC-42: EMCaR manual season-reporting burden (SLSA, councils, LSV, clubs and services) named in the problem and relieved in the impact (verify: grep)
+- [ ] ISC-43: First aid form precedent told with specifics: static basic questions → adaptive questions following what happened (oxygen tick example) → first-time visibility (verify: grep)
+- [ ] ISC-44: Anti: no single running-scenario device woven through the document (dropped by Nick, round 2)
+- [ ] ISC-45: Workspace markdown diffed against v0.7 docx text before rewrite; markdown confirmed/reconciled as canonical source (verify: diff output)
+
+## Test Strategy
+
+| isc | type | check | threshold | tool |
+|-----|------|-------|-----------|------|
+| 1-5 | inspection | question set vs word-dump coverage map | all word-dump themes covered | ReReadCheck |
+| 6-8 | approval | Nick's explicit approval message | approved | conversation |
+| 9-24 | inspection | read-through + rg counts on rule phrases | per-ISC | Read/Grep |
+| 25-29 | content audit | section/row presence | complete | Grep |
+| 30, 33 | traceability | answers-to-placement checklist; v0.7 section audit | 100% accounted | Read |
+| 31-32 | live probe | rclone lsl timestamp; workspace path | fresh export | Bash |
+| 34 | regression | rg counts | 1 location per rule | Grep |
+
+## Features
+
+| name | satisfies | depends_on | parallelizable |
+|------|-----------|------------|----------------|
+| Discovery question set | ISC-1..5 | — | no |
+| Restructure outline | ISC-6..8 | discovery answers | no |
+| Flow-based rewrite | ISC-9..24, 30, 33, 34 | outline approval | no |
+| Annex assembly | ISC-25..29 | outline approval | yes |
+| Export + push | ISC-31..32 | rewrite complete | no |
+
+## Decisions
+
+- 2026-08-02: Delegation floor (E3 ≥2) relaxed, show-math: discovery questioning is single-author synthesis over one document plus Nick's verbal critique, all already in context; agents would add latency without new grounding. Delegation reconsidered at rewrite phase (career-positioning-style review agent or application-reviewer-style cold read could pressure-test the exec front).
+- 2026-08-02: This turn stops at questions per Nick's explicit gating ("The first step here is to ask me more questions") and the advice-not-action standing feedback.
+- 2026-08-02: ISC-9..34 are provisional until discovery answers land; expect refinement (splits keep ISC-N.M IDs).
+- 2026-08-02 (round 1 answers): Audience = operations staff AND volunteer leadership, all must endorse; one document, not two — even SMEs glaze without contextual selling of detail. Cold-readable target; Nick presents to hardest audiences. Length via de-duplication and lifting heavy technical passages, never artificially shorter.
+- 2026-08-02 (round 1 answers): refined: incident-flow organising spine ABANDONED — requirement is simply a structure that flows and reads linearly. Candidate arc to test in round 2.
+- 2026-08-02 (round 1 answers): New failure stories to include: same incident reasonably categorised multiple ways; operator divergence because no field definitions exist anywhere; end-of-season data pull unreliable and manually intensive.
+- 2026-08-02 (round 1 answers): National framing reworded: with the first aid form work, a cohesive industry-leading package LSV can proudly share with other states (replaces "national likely to follow LSV's lead").
+- 2026-08-02 (round 1 answers): Medical children list stays with the type tree in the body, including justification for removed MPDS complaints. Migration Map, Decision Log, Platform dev notes, SME feedback → annexes.
+- 2026-08-02 (round 1 answers): Member-expectation lift framed as byproduct opportunity, not scope.
+- 2026-08-02 (round 2 answers): Arc approved. Guiding principles: nothing repeated; related concepts together; stories/examples/reasons-why sell the detail. Comms evolution = supporting why-now point, not opener. Running scenario dropped. Decisions → annex. Volunteer leadership = duty officer group, LSV Comms Group, Lifesaving Operations Council leadership.
+- 2026-08-02 (round 2 answers): NEW SCOPE — Action Log proposal (FA form + rescue log merge) must be added; expands the clinical-detail concern; supersedes FAL naming decision.
+- 2026-08-02 (round 2 answers): Deadline — in front of senior manager operations THIS WEEK.
+- 2026-08-02: Markdown source located at workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ (edited 14 Jul, contains 9 Jul decisions — likely current); docx-vs-markdown diff gate added as ISC-45.

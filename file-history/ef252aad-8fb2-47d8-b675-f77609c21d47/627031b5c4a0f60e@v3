@@ -1,0 +1,173 @@
+# AccessBuddy Incident Report (INTERIM) — Email Cap, Login Failure, Fob-Expiry Template
+
+**Date:** 2026-08-01 · **Status:** INTERIM, provisional root cause — for Nick's review; no changes executed, nothing sent. The single named unblock for final confirmation is retrieving the send logs (Resend dashboard or the Appendix A audit-log queries).
+**Sources:** three read-only Fable investigation agents (login flow, email pipeline audit, template forensics), file:line evidence throughout. Counts requiring prod DB access are marked UNKNOWN with the exact query to obtain them.
+
+---
+
+## Executive summary
+
+The three reported issues are one incident with one root cause and one independent trigger.
+
+On 1–2 August the 2am daily cron (`accessbuddy-daily-cron` → `/api/cron/daily`) sent 30-day fob-expiry warnings to the SMLSC seasonal cohort. Because the platform normalises season expiry to **1 September**, the entire active cohort (upper bound 354 — SMLSC's total credentials on file per tenant stats; exact cohort count comes from the Appendix A sizing query) qualified in a single run — far past Resend's free-tier cap of **100 emails/day**. Every send past the cap failed. The failure is swallowed in code (`sendEmail` logs, writes an `email_failed` audit row, returns void), so:
+
+- **Issue 1 (login):** login is email-only (Firebase magic link in browser, 6-digit OTP in PWA). With the cap exhausted, auth emails fail silently while the UI says "we sent you a code". Members were logged out in the first place by the 14 July v1.11.0 deploy (`cd70131` rotated the session-signing key, invalidating all OTP/passkey sessions) and/or natural 14-day cookie expiry ~28 July. Logout was benign; the inability to log back in is the Resend cap.
+- **Issue 2 (email limit):** sends past ~100/day failed silently; failed 30-day warnings are **permanently lost** (the warning fires only at exactly 30 days out; no dedupe/backfill). Two more cap-breaching spikes are already scheduled: **~25 Aug** (7-day warnings, same cohort) and **~1–2 Sep** (credential-expired blast).
+- **Issue 3 (template):** the bare wording is the hardcoded code default — the per-tenant override system is dead configuration (the `email_configurations` table doesn't exist in prod; no send path reads it anyway). The cron also does **not** exclude members who already renewed (only fully reprogrammed-and-confirmed credentials are excluded), so renewed members legitimately got the warning — hence the confusion.
+
+## Causal chain
+
+```
+Season expiry normalised to 1 Sep (route.ts:150)
+  → whole cohort hits diffDays === 30 on the same day (1–2 Aug)
+    → cron attempts up to ~354 sends in one run
+      → Resend free tier caps at 100/day
+        → sends 101+ fail; sendEmail swallows error (email.ts:224-249)
+          → auth emails (magic link / OTP) also fail silently
+            → members logged out by 14 Jul key rotation / cookie expiry cannot re-authenticate
+```
+
+Contributing factors: fire-and-forget send path (no queue, no retry, no daily budget); auth and bulk email share one unprioritised quota; template lacked business context since v1.0.0 (`f36375a`); override system unwired; no alerting on `email_failed` bursts.
+
+---
+
+## CORRECTION (2026-08-02) — supersedes parts of Issue 1 below
+
+1. **The 14 July auth commits are NOT in prod.** Prod runs v1.11.0 (`865a600`) = v1.10.2 + landing copy only; `cd70131` (signing-key rotation) and `a960eba` (Postgres OTP store) live only on `fix/tenant-2-readiness` (verified: `git merge-base --is-ancestor` fails; live bundle probed). The mass-logout "Leg A = key rotation" claim is withdrawn — the logout cause is ordinary 14-day cookie expiry. Deploy note for later: when that branch DOES ship, it will invalidate all existing OTP/passkey sessions once (expected, communicate it).
+2. **New fault found (Issue 1b): magic-link callback loop.** The affected member RECEIVES the email — quota starvation is not their blocker. Clicking the link bounces them back to email entry. Ranked causes, with evidence: (1) HIGH — link opened in a different browser/in-app mail viewer than the one that requested it: `localStorage "emailForSignIn"` is absent, the callback falls back to a bare `window.prompt` (auth-callback.tsx:26) which many webviews suppress → error → back to sign-in → new link → loop; (2) stale/re-clicked one-time links compounding the loop; (3) browser discarding the session cookie (silent middleware 307 loop, live-verified with a bogus cookie); (4) email case mismatch — send route lowercases, localStorage stores raw case (sign-in-form.tsx:95); (5) `verifySessionCookie` rejection. Scanner prefetch is unlikely to consume links (GET doesn't consume the oobCode). Conclusive discrimination: member's two answers (same browser? which mail service?) or Cloud Run request logs for their timestamps (`GET /auth/callback` → `POST /api/auth/session` → dashboard status pattern).
+3. **Member unblock today (no deploy):** long-press the button in the email → Copy link → paste into the SAME browser they typed their email into; use only the newest sign-in email; if prompted, enter the email all-lowercase; avoid private windows. Note: do NOT steer them to the PWA OTP path — prod's OTP store is still an in-memory per-instance Map on scale-to-zero Cloud Run, so OTP verify can legitimately fail (fixed by the unshipped `a960eba`).
+4. **Minimal fixes for the loop (add to the Issue 1 `fix:` release):** replace `window.prompt` with a proper email-confirmation form on `/auth/callback`; map Firebase error codes to specific messages with one-click resend; verify the cookie actually landed before redirecting (else show cookie guidance); lowercase email at both capture points; preserve the redirect param in the dashboard bounce; add Sentry capture to the callback catch (currently console-only — why this was invisible).
+
+## Issue 1 — Member cannot log in
+
+**Root cause (confidence: HIGH on mechanism from code, MEDIUM on incident-level confirmation until the Appendix A queries run):** logout = session-signing key rotation (14 Jul deploy) or 14-day cookie expiry; blocked re-login = Resend cap + silently swallowed send failure (`email.ts:224-249` returns void; `/api/auth/send-otp` and `/api/auth/send-magic-link` return `{ sent: true }` regardless).
+
+**Evidence:** `apps/web/src/lib/auth.ts:9,59-93` (fail-closed HMAC verification, 14-day TTL); `sign-in-form.tsx:75-97` (email-only paths); commit `cd70131`; agents' full traces.
+
+**Plan (in order):**
+1. Check the Resend dashboard for quota state; daily reset is midnight UTC = 10:00 AEST.
+2. Unblock the member today: passkey login if previously enrolled; otherwise resend OTP/magic link after quota reset; fallback — generate a Firebase sign-in link via Admin SDK and send it from your own mailbox (needs your approval to contact the member).
+3. Pause or gate the cron's email sections until the queue/limit fix ships, so tomorrow's run doesn't re-break login.
+4. Code fix (with issue 2): propagate send failures for auth-critical templates so sign-in routes return an honest error instead of `{ sent: true }`.
+5. Comms: brief reply to the member (and any others who report it) explaining the outage window.
+
+**Verification:** member confirms login; `audit_log` shows no `email_failed` rows for `verificationCode`/`magicLink` after fix.
+
+## Issue 2 — Email cap: what sent, what didn't, and the queue
+
+**What sent vs what didn't:** recoverable but UNKNOWN from this box — prod Cloud SQL is private-IP only, `gcloud` is not installed (Linux box or Mac), and both Resend API keys are send-only restricted (401 on read endpoints). Two paths to the numbers:
+- **Fastest:** Resend dashboard → Emails view (or create a temporary full-access API key and `GET /emails`).
+- **Authoritative:** one read-only psql session via cloud-sql-proxy; queries prepared (per-template sent/failed counts, failed-recipient list with error text, cohort-sizing by expiry day) — see Appendix A.
+
+**Failure mode:** fire-and-forget; no retry, no queue; cron returns 200 even if every email failed; failed 30-day warnings never re-fire.
+
+**Queue design (proposed):**
+- New `email_queue` table (id, tenant, template, recipient, payload, priority, status, attempts, earliest_send_at, created_at, sent_at, error).
+- **Priority classes:** P0 auth (magic link, OTP — sent inline, never queued, but counted); P1 transactional (payment, pickup, approval); P2 bulk (expiry warnings, summaries, correction blasts).
+- **Daily budget:** cap outbound at **85/day** (100 − 15 reserved for P0 auth). A counter (Postgres, day-keyed) increments on every send including auth; the drain job stops P1/P2 when the counter hits 85, P0 always allowed to 100.
+- **Drain:** cron (reuse `/api/cron/daily` or a new 15-min cron) drains queue oldest-first within priority, spreading the ~354-recipient cohort across ~4–5 days automatically.
+- **Retry/backlog:** failed sends set `status='failed'` and re-queue with backoff (max 3 attempts); the currently-lost 30-day warnings get backfilled by enqueueing everyone from the failed-recipient query.
+- **Cron change:** expiry-warning windows become ranges (e.g. 30–26 days and 7–3 days with sent-dedupe against `email_queue`/audit) so spreading over days doesn't skip anyone.
+- **Guardrail:** alert (or at minimum a daily-summary line) when `email_failed` > 0 or queue depth > budget × 2.
+
+**Alternative/complement:** Resend Pro (~US$20/mo, 50k emails/mo, no daily cap) removes the ceiling instantly. **Recommendation: do both** — upgrade now for the September crunch (renewal season traffic: warnings, expired notices, correction email, plus login traffic from confused members all collide this month), keep the queue as structural protection and for per-tenant budgets when tenant 2 lands.
+
+**Verification:** cohort-sizing query shows no single day exceeding budget; simulated 429 produces queued retry, not silent loss.
+
+## Issue 3 — Fob-expiry template + one-off correction
+
+**What actually went out** (hardcoded default, certain — override system unwired and its table absent in prod):
+> Subject: "ACTION REQUIRED: Your credential is expiring soon"
+> "Dear \<First\>, Your credential expires on \<date\>. Please take action to renew it before it expires. Serial… Expires… Submit a renewal request through AccessBuddy to maintain your access."
+
+The expiry date was present; the membership context was not, and it's been that way since v1.0.0. Renewed-but-not-yet-reprogrammed members were **not** excluded (only confirm-programming completion moves live `expiresAt`), so they received it too.
+
+**Fix path:** edit the code default — `credentialExpiryWarningEmail()` in `apps/web/src/lib/email-templates.ts:614-636` and the subject at `email.ts:634`. Ship as `fix:` (release-please deploys `fix:`, not `chore:`). An override row is impossible (table missing) and would be inert anyway. Bundle in the same commit: skip warnings where `pendingExpiresAt` is set (renewal in pipeline), and give `credentialExpiredEmail()` the same context treatment before its 1 Sep firing.
+
+**Corrected template copy (draft):**
+> **Subject:** Your {club} fob will expire on {date} unless you renew your membership
+>
+> Hi {firstName},
+>
+> Your fob (serial {serial}) is due to expire on **{date}**.
+>
+> Fob access is tied to your club membership. If you renew your membership for the coming season, your fob stays active — its expiry is extended automatically once your renewal is processed, and you do not need to do anything with the fob itself.
+>
+> **If you have already renewed your membership, you can ignore this email.** Your fob's expiry will be updated shortly.
+>
+> If you have not renewed yet, please renew your membership before {date} to keep your access.
+>
+> Any questions, just reply to this email.
+
+**One-off correction email (draft, to recipients of the bare email):**
+> **Subject:** About the fob expiry email — what it actually means
+>
+> Hi {firstName},
+>
+> In the last few days you received an automated email from AccessBuddy saying your fob is expiring soon. Sorry — it was missing the context, and understandably caused some confusion.
+>
+> Here is the full picture: your fob will expire on **1 September** only if your club membership has not been renewed for the new season. Renewing your membership keeps your fob active — once your renewal is processed, the fob's expiry is extended automatically and you do not need to do anything with the fob itself.
+>
+> **If you have already renewed your membership, there is nothing you need to do** — please ignore both this and the earlier email.
+>
+> If you have not renewed yet, please renew before 1 September to keep your access.
+>
+> Apologies again for the confusion. The wording of the automated email has been fixed so future reminders explain this properly.
+
+**Send plan for the correction (three guards, per advisor review):**
+- **List from logs only:** recipients come strictly from the audit-log query (Appendix A) — the actual successful `credentialExpiryWarning` sends of the last 4 days. Never from an inferred/reconstructed cohort, or we email people who never got the original.
+- **Dedupe against renewals:** exclude anyone whose renewal completed (attestation done or `pendingExpiresAt` set) since the blast — telling someone who just renewed to renew again recreates the original failure.
+- **Idempotency:** the once-off script records sends (audit entries with a distinct subject) and skips already-sent recipients, so a re-run cannot double-send.
+- Delivery: throttled under the daily budget (or freely after the Resend upgrade); once-off script, not a scheduled job; every send audited with subject per email standards; final recipient list goes to Nick for sign-off before sending.
+
+**Verification:** rendered template screenshot with SMLSC branding before deploy; correction recipient list reviewed by you before send.
+
+---
+
+## Recommended execution order (on your approval)
+
+1. **Today:** Resend dashboard — confirm quota state + failed sends; **upgrade to Pro** (removes the ceiling before the ~25 Aug and 1 Sep spikes; start now — billing/verification isn't always instant). Unblock the locked-out member.
+2. **Today/tomorrow — make failures loud before relying on quota:** ship auth-error propagation (sign-in routes return an honest error on send failure) plus an `email_failed` alert, alongside the template fix + `pendingExpiresAt` skip, as one `fix:` release. On Pro you'd still fail silently on bounces, suppressions, and per-second rate limits — quota alone treats the symptom. Alternatively pause cron email sections until this ships.
+3. **This week:** run Appendix A queries (needs `gcloud` installed + cloud-sql-proxy) → definitive sent/failed lists → backfill lost 30-day warnings → send the one-off correction email (list to you for sign-off first).
+4. **Next:** implement the email queue with priority classes and the 85/day budget (structural fix; still worthwhile post-upgrade for tenant-2 scale and per-tenant budgets).
+5. **Follow-ups:** apply migration 0010 in prod, wire `email_configurations` into the send path (dead config for all 27 events), fix the `expiryDate`/`expiresAt` variable mismatch, add an `email_failed` alert.
+
+## Appendix A — Prepared read-only queries (prod, via cloud-sql-proxy)
+
+```sql
+-- Per-template sent/failed, incident window
+SELECT action, metadata->>'templateType' AS template, count(*)
+FROM audit_log
+WHERE action IN ('email_sent','email_failed')
+  AND created_at >= now() - interval '4 days'
+  AND coalesce(metadata->>'suppressed','') <> 'true'
+  AND coalesce(metadata->>'noop','') <> 'true'
+GROUP BY 1,2 ORDER BY 1,2;
+
+-- Failed recipients + actual Resend error text
+SELECT created_at, metadata->>'to' AS recipient, metadata->>'subject' AS subject,
+       metadata->>'templateType' AS template, metadata->>'error' AS error
+FROM audit_log
+WHERE action = 'email_failed' AND created_at >= now() - interval '4 days'
+ORDER BY created_at;
+
+-- Correction-email recipient list (successful bare-template sends)
+SELECT al.created_at, al.metadata->>'to' AS recipient_email,
+       u.first_name, u.last_name, c.serial_number, c.expires_at
+FROM audit_log al
+LEFT JOIN credentials c ON c.id = al.entity_id
+LEFT JOIN users u ON u.id = c.owner_id
+WHERE al.action = 'email_sent'
+  AND al.metadata->>'templateType' = 'credentialExpiryWarning'
+  AND al.created_at >= now() - interval '4 days'
+ORDER BY al.created_at;
+
+-- Forward risk: cohort size by expiry day
+SELECT expires_at::date AS expiry_day, count(*)
+FROM credentials
+WHERE status = 'active' AND expires_at IS NOT NULL
+  AND expires_at < now() + interval '70 days'
+GROUP BY 1 ORDER BY 1;
+```
+
+Note: `audit_log` is RLS-forced — connect as postgres or `SELECT set_config('app.current_tenant_id', (SELECT id::text FROM tenants WHERE slug='smlsc'), false);` first.
