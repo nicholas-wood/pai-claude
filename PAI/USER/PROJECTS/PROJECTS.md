@@ -4,7 +4,8 @@
 
 ## Career & Consulting
 
-- **[Career Pivot](career-pivot.md)** - Engineering to digital strategy consulting. BCG submitted + ~13 roles in pipeline (as of May 2026). Engineering kept as differentiator.
+- **[Virgin Australia](~/Documents/workspace/projects/virgin-australia/README.md)** - Nick's role: Senior AI Engineer, CIO/AI team, Brisbane (started ~Aug 2026). First initiative: TA + onboarding AI discovery interrogating the BCG savings recommendation. Discovery approach at `projects/virgin-australia/talent-acquisition/DiscoveryApproach.md`; initiative ISA alongside it.
+- **[Career Pivot](career-pivot.md)** - Engineering to digital strategy consulting. Resolved for now: joined Virgin Australia as Senior AI Engineer (Aug 2026). Consulting entity and case studies retained as options.
 - **[LIMSOC National IMS](limsoc-national-ims.md)** - **Completed (2026).** Paid SLSA consulting engagement: national IMS architecture, governance, commercials, rollout. Now the lead case study for the consulting pivot.
 
 ## Products (SaaS)

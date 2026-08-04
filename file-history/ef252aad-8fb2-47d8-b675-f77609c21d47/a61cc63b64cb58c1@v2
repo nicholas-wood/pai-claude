@@ -1,0 +1,63 @@
+\set QUIET off
+\echo === TENANT CONTEXT ===
+SELECT set_config('app.current_tenant_id',(SELECT id::text FROM tenants WHERE slug='south-melb-lsc'),false);
+
+\echo === Q1 EMAIL COUNTS BY ACTION/TEMPLATE (since 30 Jul) ===
+SELECT action, metadata->>'templateType' AS template, count(*)
+FROM audit_log
+WHERE action IN ('email_sent','email_failed') AND created_at >= '2026-07-30'
+GROUP BY 1,2 ORDER BY 1,2;
+
+\echo === Q2 FAILED SENDS DETAIL ===
+SELECT created_at, metadata->>'to' AS recipient, metadata->>'subject' AS subject, metadata->>'error' AS error
+FROM audit_log
+WHERE action='email_failed' AND created_at >= '2026-07-30'
+ORDER BY created_at;
+
+\echo === Q3 DISTINCT EXPIRY-WARNING RECIPIENTS (correction audience) ===
+SELECT DISTINCT lower(metadata->>'to') AS recipient
+FROM audit_log
+WHERE action='email_sent' AND metadata->>'templateType'='credentialExpiryWarning'
+  AND created_at >= '2026-07-30'
+ORDER BY 1;
+
+\echo === Q3b COUNT ===
+SELECT count(DISTINCT lower(metadata->>'to')) AS distinct_recipients FROM audit_log
+WHERE action='email_sent' AND metadata->>'templateType'='credentialExpiryWarning' AND created_at >= '2026-07-30';
+
+\echo === Q4 COHORT SIZING BY EXPIRY DAY (next 70 days) ===
+SELECT expires_at::date AS expiry_day_utc, count(*) FROM credentials
+WHERE status='active' AND expires_at IS NOT NULL AND expires_at < now() + interval '70 days'
+GROUP BY 1 ORDER BY 1;
+
+\echo === Q5 FOB 3001 REQUEST ROWS ===
+SELECT r.id, r.request_type, r.status, r.serial_number, r.related_request_id, r.submitted_at,
+       u.first_name, u.last_name
+FROM fob_requests r LEFT JOIN users u ON u.id=r.requester_id
+WHERE r.serial_number='3001'
+   OR r.replaces_credential_id IN (SELECT id FROM credentials WHERE serial_number='3001')
+   OR r.related_request_id IN (SELECT id FROM fob_requests WHERE serial_number='3001')
+ORDER BY r.submitted_at;
+
+\echo === Q6 CREDENTIAL 3001 HIJACK CHECK ===
+SELECT id, serial_number, status, request_id, owner_id FROM credentials WHERE serial_number='3001';
+
+\echo === Q7 PHANTOM SWEEP (backfill-created pairs) ===
+SELECT pair.id AS pair_id, pair.status AS pair_status, pair.serial_number AS pair_serial,
+       d.id AS deact_id, d.status AS deact_status, d.serial_number AS deact_serial,
+       (SELECT al.metadata->>'action' FROM audit_log al
+         WHERE al.entity_type='fob_request' AND al.entity_id=d.id AND al.action='create'
+         ORDER BY al.created_at LIMIT 1) AS deact_origin
+FROM fob_requests pair
+JOIN fob_requests d ON d.id = pair.related_request_id
+WHERE pair.request_type='new'
+  AND EXISTS (SELECT 1 FROM audit_log al
+              WHERE al.entity_type='fob_request' AND al.entity_id=pair.id
+                AND al.metadata->>'createdVia'='backfill_paired_replacement_requests_script')
+ORDER BY pair.submitted_at DESC;
+
+\echo === Q8 HIJACKED CREDENTIALS ===
+SELECT c.id, c.serial_number, c.status, c.request_id FROM credentials c
+WHERE EXISTS (SELECT 1 FROM audit_log al
+              WHERE al.entity_type='credential' AND al.entity_id=c.id
+                AND al.metadata->>'action'='backfill_link_to_paired_request');

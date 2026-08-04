@@ -1,0 +1,26 @@
+# Remediation email — final package (2026-08-04)
+
+**Audience:** 96 members — the 98 distinct recipients of the confusing "ACTION REQUIRED: Your credential is expiring soon" email (31 Jul–2 Aug), minus `operational.nps@smlsc.internal` (internal placeholder, bounced) and `hargestk@wesleycollege.net.au` (bounced — never received the original; note: member email likely a typo for wesleycollege.**edu**.au, fix in member records).
+Full list: Q3 output in `~/.claude/jobs/ef252aad/tmp/audit-full.out` (copy below the fold in artifacts if needed).
+
+**Send plan:** one-off script via Resend API (forensics key until revoked, or the app's send key). Daily cap 100 with no upgrade planned → split: ~85 today, remainder tomorrow. Each send logged locally; not a recurring job.
+
+---
+
+**Subject:** About the fob expiry email — renew your membership to keep your fob active
+
+Hi {firstName},
+
+You recently received an automated email saying your fob is expiring soon. It was missing important context — sorry for the confusion. Here is what it actually means:
+
+Fobs expire on **1 September 2026** at the end of the season, and are **reinstated when you renew your club membership**. There is nothing you need to do with the fob itself.
+
+**To renew:** log in to the SLSA Hub at **sls.com.au**, select season 2026/2027, choose your membership type, and make payment. The membership team's renewal email has the full step-by-step details, including family group renewals.
+
+Once you have renewed, you will receive an email with a link to confirm you still have your fob — click it and you are done.
+
+**If you have already renewed and confirmed, you can ignore this email** — your fob will stay active.
+
+Any issues with renewal: contact the Membership Manager, Belinda Porter, on 0493 688 428.
+
+Apologies again for the earlier confusion — the automated email wording has been fixed so future reminders explain this properly.

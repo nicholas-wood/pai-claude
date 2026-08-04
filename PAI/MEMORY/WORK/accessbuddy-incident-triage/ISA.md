@@ -46,11 +46,11 @@ Deliver a three-part incident report — login failure, email-limit audit with q
 
 ### Issue 2 — Email limit audit + queue design
 - [x] ISC-8: Email provider and exact limit confirmed from code/config (Resend tier, 100/day)
-- [DEFERRED-VERIFY] ISC-9: Sent emails in the incident window enumerated — queries prepared; needs prod DB or Resend dashboard (follow-up: appendix-a-queries)
-- [DEFERRED-VERIFY] ISC-10: Failed/unsent emails enumerated with recipient and event type — queries prepared (follow-up: appendix-a-queries)
+- [x] ISC-9: Sent emails enumerated from prod audit_log — 151 total since 30 Jul: 110 credentialExpiryWarning + 9 magicLink + 9 dailySummary + others; Resend cross-check: 5 delivery bounces only
+- [x] ISC-10: Failed/unsent enumerated — ZERO email_failed rows; no quota blocking occurred; the "limit" was Resend's usage warning. Bounces: operational.nps@smlsc.internal ×4 (placeholder), hargestk@wesleycollege.net.au ×1 (typo domain)
 - [x] ISC-11: Failure mode identified (error handling path when limit hit — silent vs logged)
 - [x] ISC-12: The batch job / trigger that caused the blast identified with file reference
-- [DEFERRED-VERIFY] ISC-13: Total pending sends quantified against the 100/day cap — 354-credential upper bound known; cohort-sizing query prepared (follow-up: appendix-a-queries)
+- [x] ISC-13: Cohort quantified — 99 active credentials expire midnight 1 Sep AEST + 12 the next day; the ~25 Aug 7-day-warning run and the 1-2 Sep expiry run will each attempt ~111 emails, breaching 100/day (Nick declined Pro upgrade → queue/chunking REQUIRED before 25 Aug)
 - [x] ISC-14: Queue design proposed: persistent queue, daily budget, priority classes
 - [x] ISC-15: Design reserves ~15/day headroom for auth/transactional email
 - [x] ISC-16: Design spreads bulk sends across days with deterministic drain order
@@ -64,7 +64,7 @@ Deliver a three-part incident report — login failure, email-limit audit with q
 - [x] ISC-22: Why the business context was missing explained (authoring gap vs wrong template path)
 - [x] ISC-23: Corrected template copy drafted (expires 1 Sep, renew to keep access, ignore if renewed)
 - [x] ISC-24: Corrected copy follows email standards (tenant branding, first-name greeting)
-- [DEFERRED-VERIFY] ISC-25: Recipient list of the bad email produced with count and source evidence — reconstruction query prepared (follow-up: appendix-a-queries)
+- [x] ISC-25: Recipient list produced from prod audit_log — 98 distinct (110 sends), correction audience 96 after excluding internal placeholder + bounced typo address; saved with the remediation package
 - [x] ISC-26: One-off correction email drafted for those recipients
 - [x] ISC-27: Correction send plan respects the daily cap and queue design
 - [x] ISC-28: Plan marks correction as once-off (no recurring artefact left behind)
@@ -73,6 +73,11 @@ Deliver a three-part incident report — login failure, email-limit audit with q
 - [x] ISC-35: Cause of click-link → back-to-email-entry loop identified — RESOLVED 2026-08-02: Nick confirmed user error (member unblocked), consistent with ranked cause #1 (cross-device/mail-viewer flow); callback-hardening fixes remain recommended as UX debt
 - [x] ISC-36: No-deploy unblock path for the looping member named (copy link into requesting browser; newest email; lowercase; real browser)
 - [x] ISC-37: Minimal fix for the loop scoped into the Issue 1 plan (callback email form replacing window.prompt, error-code mapping, cookie-landed check, lowercase normalisation, Sentry capture)
+
+### Issue 4 — New defects (added 2026-08-04)
+- [x] ISC-38: Cause of 3001 dual-queue identified (~85% confidence) — two rows: legit deactivation + phantom paired replacement spawned by the paired-replacement backfill that runs on EVERY container start (entrypoint.sh, 85d89b0 in prod); backfill can't distinguish attestation lost-reports from orphan-linked replacements, auto-matched the deactivating fob itself and hijacked credentials.request_id; data-fix SQL + code fixes proposed; bonus latent defect: attestation route omits replacesCredentialId so attested-lost fobs never flip to inactive
+- [x] ISC-39: Attestation expiry label mismatch explained — UTC date-only rendering of a correct midnight-AEST timestamptz; three affected sites (persisted programmingReason, cron warning email, reconciliation audit string); no software early-expiry; human risk via Integriti programming + reconciliation write-back; display-helper fix, no migration
+- [ ] ISC-40: Remediation email updated with how-to-renew-membership instructions and send plan (blocked on recipient list + Nick's renewal-channel wording)
 
 ### Cross-cutting
 - [x] ISC-29: Cross-issue causal chain (blast → limit → login) confirmed or refuted with evidence
@@ -119,6 +124,8 @@ Deliver a three-part incident report — login failure, email-limit audit with q
 - 2026-08-01: Nick asked to update the Resend key for read access. Verified programmatic key creation is impossible (both keys 401 on /api-keys — send-only restriction covers key management). Dashboard-only action: Nick to create a TEMPORARY additional full-access key (do NOT replace the app's send key in Secret Manager — no redeploy needed), then `RESEND_FORENSICS_KEY=... bun artifacts/reviews/resend-forensics.ts` pulls counts + failed list + correction recipients; revoke key after. Script smoke-tested (graceful 401 on restricted key).
 
 ## Changelog
+
+- conjectured: sends past the Resend 100/day cap failed silently during the 1-2 Aug blast (Leg B). refuted by: Cloud Logging (via Mac gcloud, 120h window) shows ZERO "[email] Failed to send" lines at any severity; cron summaries show the blast was 98 warnings (1 Aug 02:00 AEST run) + 11 (2 Aug) + 1 (3 Aug) — attempts, with no logged provider failures. learned: the blast profile is confirmed but provider-side blocking is NOT — the "limit hit" signal Nick saw may have been Resend's usage warning rather than blocked sends; delivered-vs-blocked truth requires Resend-side logs or audit_log email_failed rows. criterion now: ISC-10 evidence source narrowed to Resend log or prod audit_log; quota-starvation framing downgraded pending that data.
 
 - conjectured: the 14 Jul commit cd70131 (session-signing key rotation) deployed in v1.11.0 and caused the mass logout (Leg A of the fault tree). refuted by: `git merge-base --is-ancestor cd70131 865a6004` fails — all ten 14-Jul commits are branch-only on fix/tenant-2-readiness; prod v1.11.0 differs from v1.10.2 by landing copy only, live-verified against the deployed bundle. learned: never attribute prod behaviour to a commit without proving it is an ancestor of the deployed tag; local branch checkouts lie about prod. criterion now: ISC-4 evidence corrected — logout cause is natural 14-day cookie expiry (and, for the looping member, inability to ever complete sign-in); cd70131's session invalidation is a FUTURE deploy note, not a past cause.
 

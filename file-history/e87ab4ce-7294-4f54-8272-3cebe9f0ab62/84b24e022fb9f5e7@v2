@@ -1,0 +1,230 @@
+# Talent Acquisition & Onboarding AI Initiative: Discovery Approach
+
+**Virgin Australia | AI Team | Prepared 3 August 2026 | Status: working draft for Nick's review**
+
+---
+
+## Executive summary
+
+BCG says there are savings in talent acquisition and onboarding. The advice is generic because the evidence to be specific does not exist inside VA yet: there is no end-to-end candidate platform, the funnel is fragmented across discrete systems, and Excel bridges every gap. This discovery phase exists to build that evidence, and its design rests on one reframe:
+
+> **The decision is not "digitise first, then add AI." The decision is replatform vs overlay: buy an AI-native end-to-end platform (one migration, digitisation and AI arrive together), or point AI tools at the current fragments. Discovery collects exactly the evidence that decides between them.**
+
+Three structural findings shape the approach:
+
+1. **The spreadsheets are the map.** Spreadsheets appear precisely at unowned handoffs between systems, teams, and streams; each one is a requirements document written by a frustrated coordinator. They also act as a pressure-relief valve: they relieve pain fast enough that the escalation signal for a platform business case never accumulates. This is likely why no end-to-end platform has ever been bought, and why BCG could only be generic.
+2. **The market moved underneath the old shortlists.** Workday acquired Paradox (Oct 2025), SAP acquired SmartRecruiters (closed Q4 2025), Humanforce absorbed LiveHire (Mar 2025). High-volume conversational hiring AI is no longer a point-solution decision; it is largely a suite decision. This strengthens the buy-lean leaning but changes what "buy" means.
+3. **Vendor numbers are marketing until proven otherwise.** The only well-documented airline AI deployment (Qantas on Sapia.ai) publishes internally inconsistent figures with no independent audit, and Fosway reports only 27% of vendor-claimed AI features are live with customers. Our baseline must be built from VA's own data, not vendor ROI claims.
+
+**Week-one moves:** confirm mandate and savings-target ownership with Tom; book the two stream leads and the HRIS owner; issue the initial data request (Section 7); start the spreadsheet census.
+
+**Discovery outputs (6 weeks, indicative):** current-state process and systems map, quantified baseline, bottom-up sizing tested against BCG's number, replatform-vs-overlay option set with quick wins, and a roadmap recommendation. No vendor selection in this phase.
+
+---
+
+## 1. Context and mandate
+
+- A BCG report identifies cost-saving potential in TA and onboarding. The recommendation is directionally obvious (there is heavy manual effort) but generic: no baseline, no mechanism, no sequencing.
+- The function has no end-to-end candidate management platform. Discrete systems cover fragments; Excel bridges the gaps.
+- Two hiring streams run separately on separate platforms: **direct** (cabin crew, pilots; standardised roles, standardised questions, bulk processing, bulk interviews) and **indirect** (specialised roles, role-specific questions, higher salaries).
+- This document designs the discovery phase: what we must learn, from whom, and what data proves it. It deliberately makes no solution recommendation.
+
+**Why this initiative matters beyond itself:** it is the AI team's first structured interrogation of a BCG line item. The method here (hypotheses, questions, data, options) is intended to be the reusable template for every subsequent recommendation.
+
+## 2. Facts vs assumptions register
+
+Everything in the left column is treated as established; everything in the right column is a hypothesis this discovery must test, however plausible it sounds.
+
+| Established (from the report / observed) | Assumption to test (flagged, not fact) |
+|---|---|
+| BCG report exists and claims savings potential | The savings number is reproducible bottom-up |
+| No end-to-end candidate platform exists | An end-to-end platform was never seriously proposed |
+| Discrete systems + Excel bridges | Excel effort is the dominant hidden cost |
+| Direct and indirect streams use separate platforms | The separation is procurement history, not workflow necessity |
+| Direct roles are standardised with bulk processing | Direct stream has higher turnover and re-hiring load |
+| Nick's seat: Senior AI Engineer, CIO/AI team | The AI team holds the mandate for this discovery |
+
+## 3. Hypotheses
+
+Each hypothesis names the evidence that would falsify it. Discovery succeeds when every H is confirmed, killed, or reshaped by evidence.
+
+**H1. The BCG savings are real but mislocated: they live mostly in coordination labour (capacity release across recruiters, coordinators, and hiring managers), not in recruiter headcount.**
+Falsified by: effort baseline showing manual coordination is a minor share of TA cost, or the report's number reconciling only as headcount reduction.
+
+**H2. Excel is a boundary symptom, not a tooling preference. Spreadsheets sit at unowned handoffs (system-to-system, team-to-team, stream-to-stream) and act as a relief valve that suppresses the platform business case.**
+Falsified by: the census finding spreadsheets mid-workflow inside a system's happy path, or boundaries that are clean while spreadsheets persist anyway.
+
+**H3. The two-stream platform separation is historical accident (separate procurements at separate times by separate owners), not a workflow necessity. The likely end-state is a shared platform layer with differentiated workflows, which is the industry norm for volume vs specialist hiring.**
+Falsified by: a documented decision that evaluated a single platform for both streams and rejected it on genuine workflow grounds.
+
+**H4. No end-to-end platform was ever bought because the business case could never form: benefits are diffuse across cost centres, the journey has no single owner, the two-stream split halves any proposal's scope, and the baseline data to quantify benefit is trapped in the spreadsheets themselves.**
+Falsified by: evidence of a fully formed business case that was rejected on price or fit, or discovery of an actual journey owner.
+
+**H5. "Digitise first, then AI" is a false sequence. The real fork is replatform (AI-native suite, one migration) vs overlay (AI point tools on current fragments). Sequencing is decided by the baseline evidence, not by principle.**
+Falsified by: baseline showing current systems are individually sound and integrable, making overlay clearly dominant; or data/compliance constraints ruling out migration on any near horizon.
+
+**H6. The direct stream holds most of the near-term automatable effort: screening standardised applications at volume, bulk interview scheduling, assessment-day logistics, and candidate status communications.**
+Falsified by: volume and effort data showing indirect-stream coordination consumes comparable or greater FTE effort.
+
+**H7. Onboarding savings are bounded by statutory clock-time. Background checks, aviation security identification, medicals, and licensing verification have fixed external durations; AI's value is parallelisation, pre-emption, and day-one readiness, not check elimination.**
+Falsified by: data showing internal administrative queuing, not statutory processing, dominates onboarding elapsed time (which would raise the savings ceiling, not lower it).
+
+**H8. The funnel cannot currently be baselined from systems alone; reconstruction will require spreadsheet archaeology. If true, this is itself first-order evidence for the replatform option and explains why BCG stayed generic.**
+Falsified by: systems yielding a consistent 12-month funnel with agreed stage definitions across both streams.
+
+## 4. Question bank
+
+Tagged to hypotheses (H#) or to baseline data (D). Ordered roughly as conversations will occur.
+
+### 4.1 Mandate and ownership
+- Who owns the BCG recommendation internally, and has anyone upstream already committed to its number? (H1, risk)
+- Who is the executive sponsor for this initiative: CIO, CHRO, or joint? Where does the transformation office sit?
+- If savings are found, whose budget line realises them, and are they counted as headcount reduction or capacity release? (H1)
+- If an end-to-end platform were bought, who would own it: CHRO or CIO?
+- What is the AI team's mandate boundary here: evidence and recommendation, or delivery too?
+
+### 4.2 Current process, per stream
+- Walk me through the last cabin crew intake end to end: from requisition approval to the new hire's first rostered duty. Where did people touch spreadsheets? (H2, H6)
+- Same walk for a recent pilot intake, and for a recent corporate/technology hire. (H2, H6)
+- Which steps differ between streams because the work genuinely differs, and which differ only because the platforms differ? (H3)
+- Where do candidates drop out or go silent, and how would you know? (D, H8)
+- What do bulk assessment days involve logistically? Who schedules, who communicates, who records outcomes, and in what tool? (H6)
+
+### 4.3 Systems inventory
+- Which systems touch a candidate today (attraction, application, assessment, offer, checks, provisioning, HRIS), per stream? For each: vendor, contract end date, annual cost, owner, integration points. (D, H5)
+- Which HRIS is the system of record, and what actually flows into it automatically versus by re-keying? (H8)
+- What has each vendor shipped or announced on AI features, and is any of it switched on? (H5; note the Fosway 27% live-feature finding)
+- What does the incumbent vendor's AI roadmap already include under existing licences, and what does VA's Microsoft estate (Copilot, Power Platform) already cover? "Why are we buying what we already licence" must be answerable. (H5)
+- When do the current platform contracts renew? Renewal windows are the natural replatform decision points. (H5)
+
+### 4.4 Procurement history and prior attempts
+- Has an end-to-end ATS/CRM ever been proposed, piloted, or rejected? What happened, and who remembers it? (H3, H4)
+- What is the delegation-of-authority threshold that TA system purchases historically sat under? (H4)
+- Is there scar tissue from any prior HR technology project that this initiative will be pattern-matched against? (risk)
+- What is realistic procurement lead time for enterprise SaaS here? (risk, sequencing)
+
+### 4.5 Volumes and calendar
+- Requisitions, applicants, interviews, offers, and hires per year, per stream, for the last 2 to 3 years. (D)
+- What does the hiring calendar look like: crew intakes ahead of peak travel, cadet cycles, surge events from new routes or aircraft deliveries? (H6, temporal)
+- Actual turnover by role family, especially cabin crew. This is suspected higher but unverified. (assumption register)
+- Applicant-to-hire ratios per stream. Volume hiring economics depend on the top of the funnel. (D)
+
+### 4.6 Effort and cost
+- Recruiter and coordinator FTE by stream, plus the hiring-manager and crew-trainer hours embedded in assessment days. (H1, D)
+- The spreadsheet census: every recurring spreadsheet in TA and onboarding, its owner, its purpose, hours per week spent in it, and which system gap it bridges. (H2, H4, H8)
+- Agency and contingent-search spend, per stream. (D)
+- Current cost-per-hire and time-to-hire, if measured; and critically, how each is defined per stream. (H8)
+
+### 4.7 Onboarding and compliance
+- Full pre-commencement checklist per role family, naming the regulated gates explicitly: ASIC (Aviation Security Identification Card) via AusCheck background checking; CASA licence, rating, and Class 1 medical verification for flight crew; DAMP (drug and alcohol management plan) obligations; right-to-work; criminal history. For each: statutory or internal, external processing time, internal queuing time. (H7)
+- Who inside VA coordinates ASIC issuance and gate-chasing today, and in what tool? The most credible AI value in regulated onboarding is usually gate-status orchestration, not content generation. (H7, H2)
+- Where does onboarding coordination live today, and in what tools? (H2)
+- What is provisioning lead time (accounts, uniforms, IDs, rostering entry), and how often do new starters arrive not day-one ready? (D)
+- Which checks could start earlier in the funnel if the process were re-sequenced? (H7)
+- Which unions cover which workgroups (FAAA for cabin crew, AFAP for pilots, TWU ground, ASU corporate; verify coverage for VA specifically), and what enterprise-agreement consultation obligations are triggered by changes to assessment or work practices? (risk)
+
+### 4.8 Data quality and measurement
+- Can a 12-month funnel be reconstructed per stream from system exports alone? Where do timestamps live? (H8)
+- Is there any common candidate identifier across systems, or is matching by name/email? (H8)
+- Are stage definitions (what starts the time-to-hire clock) consistent between streams? (H8)
+- What privacy constraints govern using candidate data for baselining and, later, for AI screening? (constraint)
+- What is the realistic elapsed time to get data access through security review and privacy assessment? Discoveries slip on access latency, not analysis; the data request must go out week 1 for this reason. (risk)
+- Baselines must be segmented by role family (cabin crew, pilots, engineers/LAMEs, ground ops, corporate), not aggregated: funnel economics, seasonality, and regulatory load differ radically, and a single blended cost-per-hire reads as consultant boilerplate. (D)
+
+### 4.9 Candidate experience, brand, and AI guardrails
+- What does the candidate see and feel today, per stream: response times, silence gaps, communication quality? A consumer airline's applicants are its customers. (H6)
+- Current candidate satisfaction measurement, if any. (D)
+- Guardrail stance to establish before any AI assessment pilot: no autonomous rejection, human in the loop, candidate disclosure of AI use, an appeal path, and disability accommodation in any assessment format. (constraint)
+- What adverse-impact testing method would legal accept for any AI screening step, against protected attributes under the Sex Discrimination Act, Racial Discrimination Act, and Disability Discrimination Act? (constraint)
+
+## 5. Stakeholder map
+
+| Stakeholder | Why they matter | What they unlock |
+|---|---|---|
+| Head of AI (Tom) | Sponsor of this discovery; mandate holder | Mandate confirmation, intro pathways |
+| TA lead, direct stream (crew/pilots) | Owns volume hiring reality | Process walks, volumes, assessment-day logistics |
+| TA lead, indirect stream | Owns specialist hiring reality | Process walks, stream comparison for H3 |
+| Onboarding / people services lead | Owns the checks-and-provisioning bridge | Compliance checklist, spreadsheet census core |
+| HRIS platform owner | Knows what actually integrates | Systems inventory, contract dates, data feasibility |
+| IT architecture / security | SaaS onboarding, data residency, integration | Constraint reality for replatform option |
+| Procurement | History and thresholds | H4 evidence, prior attempts, lead times |
+| Finance partner for P&C | Where savings would be counted | Cost baseline, savings ownership (H1) |
+| Hiring managers (crew ops, flight ops, corporate) | Consume the process | Pain points, assessment-day effort |
+| Safety & security (ASIC coordination) | Owns the regulated identity gate in onboarding | H7 gate timings, orchestration opportunity |
+| Legal / privacy | Candidate data and AI assessment constraints | Guardrails before any AI pilot |
+| BCG engagement owner / transformation office | Source of the recommendation | The model behind the savings number |
+
+## 6. Sequenced plan (indicative, 6 weeks)
+
+**Phase 0, week 1: mandate and access.** Confirm sponsorship and savings-target ownership; book stakeholders; issue the data request; start the spreadsheet census. Output: agreed scope note.
+
+**Phase 1, weeks 1 to 3: current state.** Process walks per stream; systems inventory with contract dates; onboarding compliance checklist; census completion. Output: current-state map with every spreadsheet located at its boundary.
+
+**Phase 2, weeks 2 to 4: baseline.** Funnel reconstruction per stream; effort and cost baseline; data-quality verdict (H8 answered). Output: quantified baseline, or a documented finding that the data cannot support one and why.
+
+**Phase 3, weeks 4 to 5: sizing and options.** Bottom-up opportunity sizing tested against BCG's number; opportunity scan mapped to funnel stages; option set scored across four options, not two: replatform, overlay, process redesign without AI, and do nothing. Packs that only evaluate AI options read as solution-first and lose the room. Quick-win candidates flagged. Output: options paper.
+
+**Phase 4, week 6: recommendation and decision.** Present the evidence pack to a named governance forum with a named decision-maker and a stated investment ask range; recommend the fork; propose the first funded increment (likely a quick win that demonstrates value while the platform question runs its governance course). "Findings presented" is not an ending; a decision requested is. Output: exec-ready pack plus a scheduled decision.
+
+**Quick-win watchlist (validate in discovery, do not pre-commit):** interview scheduling automation for bulk intakes; candidate status communications; pre-emptive parallelisation of onboarding checks; recruiter copilot for screening notes. These are classic high-volume wins, flagged early because the AI team's credibility clock runs faster than a platform procurement cycle.
+
+## 7. Initial data request (issue week 1)
+
+| # | Item | Likely source | Purpose |
+|---|---|---|---|
+| 1 | Requisitions, applicants, interviews, offers, hires; 2 to 3 years, per stream | ATS exports per platform | Volume baseline (H6, D) |
+| 2 | Time-to-hire and stage timestamps, 12 months, per stream | ATS + spreadsheets | Funnel + H8 data-quality verdict |
+| 3 | Recruiter/coordinator org chart and FTE by stream | TA leads | Effort baseline (H1) |
+| 4 | Spreadsheet census returns | All TA + onboarding staff | H2, H4; requirements harvest |
+| 5 | Systems list: vendor, cost, contract end, owner, integrations | HRIS owner + procurement | H5 fork evidence |
+| 6 | Onboarding checklist per role family with external processing times | Onboarding lead | H7 ceiling |
+| 7 | Agency and contingent spend, per stream | Finance | Cost baseline |
+| 8 | Turnover by role family | HRIS | Verify the turnover assumption |
+| 9 | Offer-accept rates and candidate withdrawal points | ATS + TA leads | Experience and funnel leakage |
+| 10 | Prior business cases or proposals for TA platforms | Procurement / TA leadership | H4 |
+| 11 | BCG model extract for the TA savings line | Transformation office | Reconcile top-down vs bottom-up |
+| 12 | Provisioning lead times and day-one readiness failures | IT + onboarding | Onboarding baseline |
+
+## 8. Market scan (evidence, not recommendation)
+
+All URLs verified live 3 August 2026. Vendor-published figures are marked as such; treat them as marketing until independently verified.
+
+**The consolidation wave reshaped the landscape in 12 months:**
+- Workday completed its acquisition of Paradox (conversational high-volume hiring AI, "Olivia") on 1 October 2025; Paradox is now Workday's candidate experience agent alongside HiredScore screening. [Workday newsroom](https://newsroom.workday.com/2025-10-01-Workday-Completes-Acquisition-of-Paradox), [Bersin's analysis](https://joshbersin.com/2025/08/workday-to-acquire-paradox-a-bigger-deal-than-you-think/), [Workday TA stack](https://blog.workday.com/en-us/workday-leads-talent-acquisition-agentic-era.html)
+- SAP acquired SmartRecruiters (announced 1 August 2025, closed Q4 2025) explicitly to fill SuccessFactors' high-volume recruiting gap. [erp.today](https://erp.today/sap-announces-acquisition-of-smartrecruiters/), [Unleash interview](https://www.unleash.ai/talent-acquisition/inside-saps-acquisition-of-smartrecruiters-with-ceo-rebecca-carr/)
+- Humanforce absorbed Australian high-volume player LiveHire and delisted it from the ASX (March 2025).
+- 2026 Gartner MQ for TA Suites Leaders per vendor self-reporting: Workday, Oracle, Avature, iCIMS; Eightfold and Phenom as Visionaries. Placements are reconstructed from vendor announcements (the MQ itself is paywalled), so treat as a floor, not the full grid.
+
+**Implication for VA:** whichever HRIS VA runs (to confirm in week 1) now largely determines the gravitational pull of the replatform option, because the conversational high-volume layer has been absorbed into the suites.
+
+**High-volume assessment layer:**
+- Sapia.ai (Melbourne-founded): blind chat-based structured interviews. Verified Kmart Group case study: 12,000 hires/year, time-to-hire 44 days to 11.8 days, vendor-published. [Kmart case study](https://sapia.ai/resources/blog/how-kmart-group-used-ai-interviews-to-fix-high-volume-hiring/)
+- HireVue: incumbent global video assessment; discontinued facial analysis in 2021 after an FTC complaint and an audit finding it contributed little predictive validity. A cautionary tale on assessment-AI claims. [EPIC](https://epic.org/hirevue-facing-ftc-complaint-from-epic-halts-use-of-facial-recognition/), [HireVue](https://www.hirevue.com/)
+
+**Airline deployments, with evidence quality attached:**
+- **Qantas on Sapia.ai** (cabin crew, ground crew, graduates) is the only well-documented airline AI hiring deployment found, and every figure is vendor-published with internally inconsistent units and no independent audit. Useful as an existence proof, not as a benchmark. [Sapia Qantas page](https://sapia.ai/customer-stories/qantas/)
+- **Delta** uses HireVue for flight-attendant interviews; whether algorithmic scoring or just async video with human review is undocumented, and that distinction carries the legal weight. [Delta careers](https://www.delta.com/us/en/careers/flight-attendant-careers)
+- **United** reportedly uses Phenom high-volume automation for flight-attendant hiring (vendor-sourced). [Phenom blog](https://www.phenom.com/blog/redefining-talent-acquisition-united-airlines-better-hiring)
+- **British Airways** discloses no AI interviewing; **Emirates** AI-screening claims trace only to content farms. Do not repeat them. [BA hiring process](https://careers.ba.com/hiring-process)
+
+**Regulatory and liability context for any AI assessment step:**
+- **Australia first:** DISR's proposed mandatory guardrails for high-risk AI explicitly name employment and recruitment as a high-risk setting, with the Voluntary AI Safety Standard (September 2024) as the interim reference. Privacy Act reforms introduce automated-decision-making transparency obligations, and AHRC guidance addresses algorithmic bias in hiring. Together these define what an AI screening step must be able to demonstrate.
+- Mobley v. Workday established that AI hiring vendors can be directly liable as employer agents (US precedent; the reasoning travels).
+- EU AI Act high-risk hiring obligations slipped from August 2026 to December 2027 under the May 2026 Digital Omnibus; the direction is unchanged and Annex III remains the de facto global benchmark for hiring AI.
+- Fosway's research finding that only 27% of vendor-claimed AI features are live with customers is the right prior for every vendor conversation.
+
+A governance and legal-exposure section is a required part of the Phase 3 options paper, not an appendix. It is the single most common omission that gets hiring-AI proposals killed at CIO level.
+
+## 9. Open questions for Nick
+
+1. **Mandate:** is this discovery formally sanctioned by Tom, or are you building the case to sanction it? The stakeholder sequence changes accordingly.
+2. **The BCG report:** can you get the underlying model (data request item 11)? Reconciling their number is the single highest-leverage analysis in the pack.
+3. **HRIS:** which HRIS does VA run? This is the biggest known unknown in the replatform fork.
+4. **Timebox:** is 6 weeks the right shape for your credibility clock, or does Tom need a first readout sooner?
+5. **Scope edge:** is internal mobility / redeployment in scope, or external hiring only?
+6. **The savings word:** do you know yet whether leadership hears "savings" as headcount or capacity? Worth knowing before the first TA interview, because it determines how guarded people will be.
+7. **Audience:** is this pack for Tom as a working document, or genuinely headed for CIO/CHRO? Consulting-grade polish for an audience of one reads as a new hire overreaching; confirm before optimising the artefacts.
+
+## 10. Method note (reusable)
+
+The pattern used here, for the next BCG line item: (1) classify the claim's constraints as hard, soft, or assumption; (2) find the structure generating the symptom, not the symptom; (3) state falsifiable hypotheses; (4) design questions and data collection against the hypotheses; (5) let the baseline decide sequencing; (6) verify every external claim to its primary source and mark vendor figures as vendor figures.

@@ -13,7 +13,8 @@
 - [Docx export tool](reference-docx-export-tool.md) — formatting-faithful md→docx for resumes/cover letters at PAI/TOOLS/DocxExport; use instead of ad-hoc docx generation
 - [MD→PDF→OneDrive pipeline](reference-md-to-pdf-onedrive-pipeline.md) — render general docs to PDF via marked + puppeteer Chrome headless (no pandoc/python-docx); push with rclone copy
 - [Inbox triage practice](feedback-inbox-triage-practice.md) — empty 00_Inbox by routing each artefact to its OneDrive domain folder, extract notes to workspace markdown, quarantine creds locally
-- [Virgin Australia pipeline](project-virgin-australia-pipeline.md) — passed round 2 (3 Jul 2026), at references; ANZ Plus = AI search not full RAG, LIMSOC = designs not shipped
+- [Virgin Australia role](project-virgin-australia-role.md) — Nick IS Senior AI Engineer at VA (Brisbane, AI team, under Tom); first initiative: TA/onboarding AI discovery at projects/virgin-australia/
+- [Virgin Australia pipeline](project-virgin-australia-pipeline.md) — superseded by role memory; ANZ Plus = AI search not full RAG, LIMSOC = designs not shipped
 - [Brisbane move: lease vs sell](project-brisbane-move-lease-vs-sell.md) — moving to Brisbane for work; St Kilda apartment analysis says lease not sell (CGT 6-year option); inputs pending
 - [Never kill Chrome on Mac](feedback-never-kill-chrome-on-mac.md) — Nick's live browser; drive Interceptor against running session, extension is in Profile 3
 - [No form submission, collect only](feedback-no-form-submission-collect-only.md) — outcome approval ≠ funnel approval; gather info, draft, surface forms to Nick to submit

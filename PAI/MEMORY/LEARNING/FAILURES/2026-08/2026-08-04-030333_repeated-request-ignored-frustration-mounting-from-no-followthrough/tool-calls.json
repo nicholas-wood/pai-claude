@@ -1,0 +1,1019 @@
+[
+  {
+    "name": "Bash",
+    "input": {
+      "command": "fd -i -t d \"00_Inbox\" ~/OneDrive ~/Documents 2>/dev/null | head; ls -d ~/OneDrive 2>/dev/null || rclone listremotes 2>/dev/null",
+      "description": "Locate OneDrive inbox directory"
+    },
+    "timestamp": "2026-08-02T10:08:54.361Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls ~/OneDrive/ | head -30; echo ---; ls -lt ~/OneDrive/00_Inbox/ 2>/dev/null | head -20",
+      "description": "List OneDrive root and inbox contents"
+    },
+    "timestamp": "2026-08-02T10:08:57.797Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd \"$CLAUDE_JOB_DIR/tmp\" && cp ~/OneDrive/00_Inbox/\"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.7.docx\" doc.docx && (pandoc doc.docx -t markdown -o doc.md 2>/dev/null || bunx mammoth doc.docx --output-format=markdown > doc.md 2>/dev/null) && wc -l doc.md && head -5 doc.md",
+      "description": "Convert incident categorisation docx to markdown"
+    },
+    "timestamp": "2026-08-02T10:09:10.443Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/ALGORITHM/LATEST"
+    },
+    "timestamp": "2026-08-02T10:09:10.861Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/ALGORITHM/v6.3.0.md"
+    },
+    "timestamp": "2026-08-02T10:09:20.296Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -sk -m 3 -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Algorithm\", \"voice_id\": \"fTtv3eikoepIosk8dTZ5\", \"voice_enabled\": true}' >/dev/null 2>&1; echo done",
+      "description": "Voice announcement for Algorithm entry"
+    },
+    "timestamp": "2026-08-02T10:09:39.883Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/jobs/ea738dfa/tmp/doc.md",
+      "limit": 700
+    },
+    "timestamp": "2026-08-02T10:09:40.505Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/jobs/ea738dfa/tmp/doc.md",
+      "offset": 700
+    },
+    "timestamp": "2026-08-02T10:09:45.438Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -il \"document|cover letter|advice|restructur|brief|exec\" /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/ 2>/dev/null | head -8",
+      "description": "FeedbackMemoryConsult: grep memory for relevant feedback"
+    },
+    "timestamp": "2026-08-02T10:11:44.829Z"
+  },
+  {
+    "name": "Skill",
+    "input": {
+      "skill": "IterativeDepth",
+      "args": "Generate discovery questions for restructuring the LIMSOC incident categorisation pack — rotate lenses: senior ops manager audience, SME group, operator on shift, reporting/funding consumer, change-management"
+    },
+    "timestamp": "2026-08-02T10:11:46.113Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/incident-categorisation-restructure/ISA.md",
+      "content": "---\ntask: Restructure LIMSOC Incident Categorisation pack around incident flow for exec readability\nslug: incident-categorisation-restructure\neffort: E3\nphase: build\nprogress: 0/34\nmode: standard\nstarted: 2026-08-02T20:10:00+10:00\nupdated: 2026-08-02T20:10:00+10:00\n---\n\n# ISA — Incident Categorisation Pack Restructure\n\n## Problem\n\nThe v0.7 pack (OneDrive 00_Inbox, 9 Jul 2026) cannot be read linearly — Nick jumps around when explaining it. Verified structural defects: \"When to update an Incident Type\" stated in Definitions then restated as Key Assumption 3; Type states explained before the tree they govern; Medical children referenced in the tree then listed in a separate branch section; Tasking-vs-Incident logic split between the tree (External Agency) and its own later section; guided-questions detail arrives before all fields are introduced; the why behind Outcome, Tags, and the type-freeze is asserted, not motivated. Principal feedback: too long and too technical for the senior manager of operations — \"his eyes will glaze over.\" The document lacks the story Nick tells in person (first aid form precedent, comms-role evolution, rescue-becomes-drowning searchability failure, data-foundation benefits).\n\n## Vision\n\nA pack that reads start-to-finish following how an incident actually flows — challenge with the current structure, the proposed change, the impact, and what each audience will see — such that the senior manager of operations reads the front section cold and gets it, while the SME group still has every technical detail in annexes. Nick presents it without jumping around; the ~10 points he makes verbally are on the page.\n\n## Out of Scope\n\n- Changing the model design itself (tree, states, precedence, MPDS alignment) — this is a document restructure, not a model redesign.\n- Resolving open model questions (D21 Welfare home, Not Final assignments) — they stay flagged.\n- The full tag taxonomy (priority 1.8 work).\n- Rollout/training collateral, unless Nick pulls change-management into scope (Q19).\n\n## Constraints\n\n- No content loss: all v0.7 technical material (migration map, decision log, platform dev notes, medical branch) survives somewhere.\n- Discovery gate: no restructure outline or rewrite until Nick answers the discovery questions (this turn's deliverable).\n- Outline approved by Nick before full rewrite.\n- Markdown source in workspace; OneDrive receives exported .docx only, rendered programmatically, pushed via rclone copy.\n- Australian English, no em dashes, executive-ready front narrative.\n\n## Goal\n\nExtract Nick's unstated points via targeted discovery questions, then restructure the pack into a flow-based narrative front (senior-manager-readable) with technical annexes (SME-grade), verified against every defect Nick named and every point extracted in discovery.\n\n## Criteria\n\n### Discovery (this turn)\n- [ ] ISC-1: Question set delivered covering audience/artefact shape, incident-flow spine, in-person stories, quantified impact, content disposition, and scope\n- [ ] ISC-2: Every question tied to a specific gap in v0.7 or a specific claim in Nick's word-dump\n- [ ] ISC-3: Question set includes a mechanism to extract the \"10 more points\" (walk-through / voice-memo prompt)\n- [ ] ISC-4: Highest-leverage questions flagged so Nick can answer partially and still unblock the outline\n- [ ] ISC-5: No restructuring, rewriting, or file edits to the pack performed this turn\n\n### Restructure outline (next turn, post-answers)\n- [ ] ISC-6: Section-by-section skeleton produced mapping every v0.7 section to its new home (main body, annex, or cut-with-reason)\n- [ ] ISC-7: Skeleton structured around the incident flow stages Nick confirms\n- [ ] ISC-8: Skeleton approved by Nick before any rewrite begins\n\n### Restructured document (final)\n- [ ] ISC-9: Document reads linearly — no concept used before it is defined (verify: read-through pass finds zero forward references)\n- [ ] ISC-10: \"When to update an Incident Type\" appears exactly once (verify: rg count = 1 location)\n- [ ] ISC-11: Medical children enumerated exactly once (verify: rg for \"Chest Pain\" hits one section)\n- [ ] ISC-12: Tasking-vs-Incident rule lives in one place (verify: rg \"Tasking versus\" single location)\n- [ ] ISC-13: Type states explained at or after the tree, never before (verify: section order inspection)\n- [ ] ISC-14: All fields/mechanisms introduced before any detail section uses them (verify: read-through order check)\n- [ ] ISC-15: Each structural change (type-freeze, Outcome, Tags, Agency Status, guided questions) carries an explicit why grounded in a current-state failure (verify: per-change grep for motivation sentence)\n- [ ] ISC-16: Rescue-becomes-drowning searchability failure appears as a worked current-state example (verify: grep)\n- [ ] ISC-17: Incident-vs-rescue-log inconsistency named as a current-state problem (verify: grep)\n- [ ] ISC-18: \"Type is trying to be everything to everyone\" / no-written-definition problem stated up front (verify: front section grep)\n- [ ] ISC-19: First aid form transformation included as precedent evidence (verify: grep)\n- [ ] ISC-20: Comms-role evolution (sign-on retired → data quality is the job) framing included where Nick directs (verify: grep)\n- [ ] ISC-21: Foundation arc present: consistent data → services, member support, funding → future features (guided questions, AI) (verify: front section read)\n- [ ] ISC-22: \"What they will see\" covered for operations: consistency, common operating picture, reporting clarity (verify: dedicated section exists)\n- [ ] ISC-23: Front narrative readable by a non-technical senior manager (proxy: no model-internal jargon — Abstract/Not Final/Final, cardinality, MPDS mechanics — before the annex boundary)\n- [ ] ISC-24: Front narrative length within the target Nick sets in discovery (verify: page/word count)\n- [ ] ISC-25: Migration Map retained in full as annex (verify: 72 rows present)\n- [ ] ISC-26: Decision Log retained (verify: all dated decisions present)\n- [ ] ISC-27: Platform dev notes retained in annex (verify: section present)\n- [ ] ISC-28: SME Feedback scaffold retained (verify: section present)\n- [ ] ISC-29: Open questions (tree confirmation, Not Final assignments, D21 Welfare flag) still visible (verify: grep FLAG + Still open)\n- [ ] ISC-30: Every point Nick supplies in discovery answers is traceably placed (verify: checklist of answers vs document)\n- [ ] ISC-31: Exported .docx rendered programmatically and pushed to OneDrive via rclone copy, verified with rclone lsl (verify: file listed with fresh timestamp)\n- [ ] ISC-32: Markdown source committed in workspace, not OneDrive (verify: path check)\n- [ ] ISC-33: Anti: no technical content silently deleted — v0.7-to-new content audit shows every section accounted for\n- [ ] ISC-34: Anti: restructure introduces no new duplication — key rules stated once each (verify: rg counts on rule phrases)\n\n## Test Strategy\n\n| isc | type | check | threshold | tool |\n|-----|------|-------|-----------|------|\n| 1-5 | inspection | question set vs word-dump coverage map | all word-dump themes covered | ReReadCheck |\n| 6-8 | approval | Nick's explicit approval message | approved | conversation |\n| 9-24 | inspection | read-through + rg counts on rule phrases | per-ISC | Read/Grep |\n| 25-29 | content audit | section/row presence | complete | Grep |\n| 30, 33 | traceability | answers-to-placement checklist; v0.7 section audit | 100% accounted | Read |\n| 31-32 | live probe | rclone lsl timestamp; workspace path | fresh export | Bash |\n| 34 | regression | rg counts | 1 location per rule | Grep |\n\n## Features\n\n| name | satisfies | depends_on | parallelizable |\n|------|-----------|------------|----------------|\n| Discovery question set | ISC-1..5 | — | no |\n| Restructure outline | ISC-6..8 | discovery answers | no |\n| Flow-based rewrite | ISC-9..24, 30, 33, 34 | outline approval | no |\n| Annex assembly | ISC-25..29 | outline approval | yes |\n| Export + push | ISC-31..32 | rewrite complete | no |\n\n## Decisions\n\n- 2026-08-02: Delegation floor (E3 ≥2) relaxed, show-math: discovery questioning is single-author synthesis over one document plus Nick's verbal critique, all already in context; agents would add latency without new grounding. Delegation reconsidered at rewrite phase (career-positioning-style review agent or application-reviewer-style cold read could pressure-test the exec front).\n- 2026-08-02: This turn stops at questions per Nick's explicit gating (\"The first step here is to ask me more questions\") and the advice-not-action standing feedback.\n- 2026-08-02: ISC-9..34 are provisional until discovery answers land; expect refinement (splits keep ISC-N.M IDs).\n"
+    },
+    "timestamp": "2026-08-02T10:12:49.150Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls ~/.claude/PAI/USER/SKILLCUSTOMIZATIONS/IterativeDepth/ 2>/dev/null; echo '{\"ts\":\"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'\",\"skill\":\"IterativeDepth\",\"workflow\":\"Explore\",\"input\":\"discovery questions incident categorisation pack restructure\",\"status\":\"ok\",\"duration_s\":120}' >> ~/.claude/PAI/MEMORY/SKILLS/execution.jsonl; curl -sk -m 3 -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Build phase.\", \"voice_id\": \"fTtv3eikoepIosk8dTZ5\", \"voice_enabled\": true}' >/dev/null 2>&1; echo ok",
+      "description": "Check skill customizations, log execution, voice announce"
+    },
+    "timestamp": "2026-08-02T10:12:52.201Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/incident-categorisation-restructure/ISA.md",
+      "old_string": "- [ ] ISC-7: Skeleton structured around the incident flow stages Nick confirms",
+      "new_string": "- [ ] ISC-7: Skeleton structured around the organising arc Nick confirms (incident-flow spine abandoned 2026-08-02; candidate arc: problem stories → why now → one-idea fix → model told contextually → what changes for you → bigger picture → annexes)"
+    },
+    "timestamp": "2026-08-02T10:21:55.230Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/incident-categorisation-restructure/ISA.md",
+      "old_string": "- 2026-08-02: ISC-9..34 are provisional until discovery answers land; expect refinement (splits keep ISC-N.M IDs).",
+      "new_string": "- 2026-08-02: ISC-9..34 are provisional until discovery answers land; expect refinement (splits keep ISC-N.M IDs).\n- 2026-08-02 (round 1 answers): Audience = operations staff AND volunteer leadership, all must endorse; one document, not two — even SMEs glaze without contextual selling of detail. Cold-readable target; Nick presents to hardest audiences. Length via de-duplication and lifting heavy technical passages, never artificially shorter.\n- 2026-08-02 (round 1 answers): refined: incident-flow organising spine ABANDONED — requirement is simply a structure that flows and reads linearly. Candidate arc to test in round 2.\n- 2026-08-02 (round 1 answers): New failure stories to include: same incident reasonably categorised multiple ways; operator divergence because no field definitions exist anywhere; end-of-season data pull unreliable and manually intensive.\n- 2026-08-02 (round 1 answers): National framing reworded: with the first aid form work, a cohesive industry-leading package LSV can proudly share with other states (replaces \"national likely to follow LSV's lead\").\n- 2026-08-02 (round 1 answers): Medical children list stays with the type tree in the body, including justification for removed MPDS complaints. Migration Map, Decision Log, Platform dev notes, SME feedback → annexes.\n- 2026-08-02 (round 1 answers): Member-expectation lift framed as byproduct opportunity, not scope."
+    },
+    "timestamp": "2026-08-02T10:22:01.998Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -il --glob '*.md' \"incident categoris|incident categoriz\" ~/Documents/workspace/ 2>/dev/null | head -10; echo ---; fd -i -e md . ~/Documents/workspace/projects/ -t f 2>/dev/null | rg -i \"categor|limsoc\" | head -10",
+      "description": "Search workspace for markdown source of the pack"
+    },
+    "timestamp": "2026-08-02T10:35:26.127Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ && ls -lt && echo --- && rg -c \"Operational Change|Flare Sighting\" Model-Design.md Decision-Log.md 2>/dev/null && echo --- && rg -o \"v0\\.[0-9]\" Pack-Overview.md | head -3 && rg -c \"\" Model-Design.md Migration-Map.md",
+      "description": "Check markdown source freshness against v0.7 content markers"
+    },
+    "timestamp": "2026-08-02T10:35:34.621Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/incident-categorisation-restructure/ISA.md",
+      "old_string": "- [ ] ISC-34: Anti: restructure introduces no new duplication — key rules stated once each (verify: rg counts on rule phrases)",
+      "new_string": "- [ ] ISC-34: Anti: restructure introduces no new duplication — key rules stated once each (verify: rg counts on rule phrases)\n\n### Round-2 additions (2026-08-02)\n- [ ] ISC-35: Action Log proposal section present: first aid form + rescue log merge into one per-person log (rescue, first aid, or both), person details entered once, linked to an incident when incident criteria are met (verify: grep)\n- [ ] ISC-36: Separation-of-concerns table updated: clinical-detail row becomes Action Log (assistance provided to one individual) (verify: table read)\n- [ ] ISC-37: 2026-07-09 FAL-naming decision marked superseded by the Action Log proposal in the Decision Log annex (verify: grep)\n- [ ] ISC-38: Nothing repeated — every concept, rule, and list appears exactly once across the whole document (verify: rg counts per key phrase)\n- [ ] ISC-39: Related concepts co-located: type states with the tree, all classification rules in one section, Key Assumptions dissolved into their homes (verify: section inspection)\n- [ ] ISC-40: \"Already broken — cannot get worse\" and \"complex problem, simple solution once understood\" framing present in the case for change (verify: grep)\n- [ ] ISC-41: Collision examples included: Marine Incident vs Vessel Incident, default-to-Rescue-In-Water-Condition-Unknown, Recovered from Water vs Resuscitation (beach vs water unknown), assist-agency vs provide-our-service ambiguity, inconsistent type updates (verify: grep)\n- [ ] ISC-42: EMCaR manual season-reporting burden (SLSA, councils, LSV, clubs and services) named in the problem and relieved in the impact (verify: grep)\n- [ ] ISC-43: First aid form precedent told with specifics: static basic questions → adaptive questions following what happened (oxygen tick example) → first-time visibility (verify: grep)\n- [ ] ISC-44: Anti: no single running-scenario device woven through the document (dropped by Nick, round 2)\n- [ ] ISC-45: Workspace markdown diffed against v0.7 docx text before rewrite; markdown confirmed/reconciled as canonical source (verify: diff output)"
+    },
+    "timestamp": "2026-08-02T10:36:02.998Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/incident-categorisation-restructure/ISA.md",
+      "old_string": "- 2026-08-02 (round 1 answers): Member-expectation lift framed as byproduct opportunity, not scope.",
+      "new_string": "- 2026-08-02 (round 1 answers): Member-expectation lift framed as byproduct opportunity, not scope.\n- 2026-08-02 (round 2 answers): Arc approved. Guiding principles: nothing repeated; related concepts together; stories/examples/reasons-why sell the detail. Comms evolution = supporting why-now point, not opener. Running scenario dropped. Decisions → annex. Volunteer leadership = duty officer group, LSV Comms Group, Lifesaving Operations Council leadership.\n- 2026-08-02 (round 2 answers): NEW SCOPE — Action Log proposal (FA form + rescue log merge) must be added; expands the clinical-detail concern; supersedes FAL naming decision.\n- 2026-08-02 (round 2 answers): Deadline — in front of senior manager operations THIS WEEK.\n- 2026-08-02: Markdown source located at workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ (edited 14 Jul, contains 9 Jul decisions — likely current); docx-vs-markdown diff gate added as ISC-45."
+    },
+    "timestamp": "2026-08-02T10:36:08.451Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/Model-Design.md"
+    },
+    "timestamp": "2026-08-02T10:51:44.295Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-BRIEF-LSV-2026-001-Incident-Categorisation.md"
+    },
+    "timestamp": "2026-08-02T10:51:45.322Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/Pack-Overview.md"
+    },
+    "timestamp": "2026-08-02T10:51:46.048Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/Migration-Map.md"
+    },
+    "timestamp": "2026-08-02T10:52:55.081Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/Decision-Log.md"
+    },
+    "timestamp": "2026-08-02T10:52:55.553Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "content": "# LIMSOC Incident Categorisation\n\nOperational Change Proposal, v0.8, 2 August 2026\n\n*LIMSOC-BRIEF-LSV-2026-001 | Season 2026-27 | Focus Area 1: Enhance Our Incident Management | Working draft, not yet SME-circulated*\n\n| Field | Value |\n|-------|-------|\n| brief_id | LIMSOC-BRIEF-LSV-2026-001 |\n| project_ref | 1.1 New Incident Categorisation |\n| focus_area | 1. Enhance Our Incident Management |\n| season | 2026-27 |\n| status | draft v0.8 |\n| owner | Nicholas Wood |\n| sme_group | Incident Categorisation and Flow |\n| themes | Simplification, Cohesion |\n| last_updated | 2026-08-02 |\n\n## About this pack\n\nThis pack proposes a new incident categorisation model for LIMSOC, Life Saving Victoria's operational incident-management system, and maps every current incident type to the new model. Nothing in this pack is endorsed yet.\n\n**How to read it.** Part 1 explains the problem we have today. Part 2 explains the proposed model, one concept at a time, and why each piece exists. Part 3 describes what will change for operators, duty officers, and our leadership. Part 4 covers what happens next and what we need from you. The annexes hold the working detail: the full migration map for all 72 current types, the decision log, and the platform notes.\n\nFeedback to Nicholas Wood, State Lifesaving Communications Officer.\n\n---\n\n# Part 1: The case for change\n\n## The problem\n\nAsk two experienced operators what an incident type means and when it should change, and you will get two different answers. That is not their fault. It has never been written down. The incident type is currently trying to be everything to everyone: what happened, how serious it was, who was involved, how it ended, and who asked us to attend. A field that carries all of that classifies nothing reliably.\n\nThe result is that a single incident can reasonably be categorised several different ways, and in practice, it is:\n\n- There is no guidance on when something is a Marine Incident versus a Vessel Incident, so the same capsize lands in different places on different shifts.\n- With no better guidance, a large share of in-water work is generalised to Rescue (In Water), Condition Unknown, and the detail is lost.\n- Recovered from Water and Resuscitation overlap with no rule between them. Today we cannot tell whether a resuscitation was a patient we came across on the beach or a person we pulled from the water. Those are profoundly different stories, and our data cannot separate them.\n- We cannot distinguish between assisting another agency to do their job and delivering our own service with other agencies alongside. Both look the same in the data.\n- There is no rule for when an incident type should be updated, so sometimes it is and sometimes it is not, based on each individual's experience and view of what should happen. When a rescue becomes a drowning, the type is often overwritten, and the rescue disappears from the record. We cannot search for our Major Rescues, because some of them are no longer typed as rescues.\n- The same confusion exists between records: there is no clear rule for when something is an incident, a rescue log, or a first aid form, so it is done inconsistently, and our statistics inherit that inconsistency.\n\nEvery one of these problems flows from the same root cause: none of these fields has a written definition, so each has drifted into whatever each operator understood it to be.\n\n**What it costs us.** Every season, the EMCaR team pulls incident data for SLSA, for councils, for LSV, and for our own clubs and services. Because the data cannot be trusted at face value, each pull means manual interrogation and cleanup before anyone will stand behind the numbers. The effort is large, it repeats every season, and it caps what we can do: reporting we cannot produce, trends we cannot see, and questions we cannot answer.\n\n## Why now\n\nPeople have been saying for years that incident categorisation needs to be redone. It has not happened, because it is genuinely complex: 72 types, years of accumulated practice, and interagency dependencies. There is a lot of detail in this pack for the same reason. But the solution underneath it is simple, and once the core idea lands, everything else follows from it.\n\nTwo things make this the right moment:\n\n**Our role has changed.** LSV Comms once spent its time signing on every unit. Digital advances in LIMSOC have retired that work. The principal job of LSV Comms now is to get the data right: to capture what actually happened in an incident, accurately and consistently. This proposal is that job.\n\n**We have done this before.** Last season we replaced a rudimentary first aid form that was not fit for purpose. The old form asked a small set of basic questions that often did not match what had happened, and gave members no way to record the details that mattered. The new form asks questions based on what occurred: tick that oxygen was used, and the oxygen questions appear. The result was visibility we had never had. For the first time we could drill into the data and trust what it told us: which first aids are trending, where forms are being filled out incorrectly, and what is actually happening on our beaches. This proposal extends that same transformation from first aid to our entire incident response.\n\nOne more thing should be said plainly: this is a change, and change costs effort. But the current structure is already broken. Every season we run it, we accumulate more inconsistent data. Done well, we cannot get worse than we are today. We can only get better.\n\n---\n\n# Part 2: The proposal\n\n## One idea: every value answers exactly one question\n\nThe whole model reduces to one principle. Every value attached to an incident answers exactly one question, and no two mechanisms answer the same question. This removes the ambiguity, streamlines the flow for members, and eliminates the duplication that degrades our data today. It simplifies our world: users' lives get easier, and the result gets better.\n\nFor the first time, each mechanism gets a written definition:\n\n| Question | Mechanism | Cardinality | Example |\n|----------|-----------|-------------|---------|\n| What is it, fundamentally | Type (inheritance tree) | one | SAR, Rescue, Person |\n| What qualifies or characterises it | Tags (the Incident Labels work, priority 1.8) | many | Resuscitation, Rescue Completed, External Request |\n| Where is it in the lifecycle | Agency Status | one at a time | Responding, On Scene, Under Control |\n| How did it end | Incident Outcome | one, gated by Type | Resolved, False Alarm, Fatality, Located |\n| Assistance provided to one individual | Action Log (proposed merge of first aid form and rescue log, see below) | one per person helped | rescue, resus, fracture, marine sting |\n| Part of a bigger event | Event | one | Wye River Floods |\n| Free-form situational context | Incident Log | append-only | narrative entries with author and time |\n| Free-form summary | Incident Name and Incident Brief | one each | short human-readable identifiers |\n\n**Governing rule.** A value only earns its place as a Type if it changes what the incident fundamentally is. Otherwise it is a Tag, a Status, an Outcome, or Action Log detail.\n\nTwo definitions anchor everything else:\n\n**Incident.** A response by Life Saving Victoria members that either:\n\n- Requires a response from multiple lifesaving services, or\n- Requires assistance from other emergency services, including all situations where there is a danger to human life, or\n- Is otherwise serious or complex such that members would like support, assistance, and visibility from LSV Command.\n\n**Event.** A major occurrence that results in, or has the potential to result in, multiple Incidents. An Event is the vehicle for associating multiple Incidents that share a common cause or context. Not all incidents will require an event association. Example: Wye River Floods.\n\n## The fields around the Type\n\nBefore the type tree itself, the supporting fields. Each exists to take a job off the Type, so the Type can do one job well.\n\n### Agency Status: where we are\n\nCaptures our overall status as an agency across the life of the incident:\n\n1. Collecting Information\n2. Responding\n3. On Scene\n4. Under Control\n5. Returning\n6. Finalising\n7. Information Only (monitoring, aware but no active response)\n\nAgency Status also carries the advisory-versus-response distinction: Information Only covers the advisory posture, and every other status is a response. This is why the model adopts no priority codes. MPDS surfaces ProQA determinant codes (Delta, Charlie, Bravo, Alpha, Omega), but for lifesaving we are either responding or it is advisory, and the status already says which. A priority field would duplicate information the model already holds.\n\n### Incident Outcome: how it ended\n\nA required selection when closing an incident. Controlled and mutually exclusive, with the options gated by Type:\n\n- A Search surfaces: Located, Fatality, Stood Down.\n- A Medical surfaces: Resolved, Referred to Agency, Fatality.\n- A Rescue Equipment Activation surfaces the same outcomes as a Rescue, plus False Alarm.\n\nThe payoff is searchability. Today, when a rescue ends in a drowning, the type gets overwritten and the rescue vanishes from our statistics. With Outcome as its own field, we keep both truths: it was a Rescue, and it ended in a Fatality. We can finally search on each independently.\n\n### Tags: what characterised it\n\nTags characterise. They never classify. An incident carries as many as apply. Draft groups:\n\n**Care and clinical (form triggers).** Resuscitation, Member Injury, Penthrane Administered, Major First Aid, Oxygen Administered (each requiring an Action Log entry), and Rescue Completed (requiring the rescue detail, including method such as Heli rescue technique, which must flow back to the incident record: a platform requirement).\n\n**Operational context.** External Request (a request originating outside LSV, distinct from the External Agency > Request for Assistance Type), Off-duty response, Multi-agency, Extrication, Mass Rescue (a scale tag on a Rescue or SAR).\n\n**Vessel Incident modifiers.** Injury / No Injury.\n\n**Dangerous Animal modifiers.** Confirmed / Reported, and Confirmation source (Lifeguard, Aerial, Member of public, External agency).\n\nThe full tag taxonomy is being drafted with the Incident Labels project (priority 1.8); the two are one effort.\n\n### Incident Log, Name, and Brief\n\nThe Incident Log is the append-only narrative: timestamped entries with an author, carrying the situational context that does not belong in structured fields. Incident Name and Incident Brief remain the short human-readable identifiers.\n\n## A new kind of Type\n\nWith every other question answered by a purpose-built field, the Type is free to answer just one: **what is the nature of the situation we are responding to?** The Type reflects the primary driver of the response, not everything that happens during it. A rescue followed by first aid is still a Rescue. A member of the public presenting on the beach with a major first aid is a Medical incident.\n\nThe structural change is to replace the current flat category-and-type list with an inheritance tree. A type can be the parent of another type, so classification becomes a walk from general to specific, and the operator is guided to a single correct answer instead of choosing from a list of 72. Fewer types overall, one clear home for every situation, and no scenario where two options are equally valid.\n\n## Type states and guided questions\n\nTwo mechanisms make the tree work in practice.\n\n**Type states.** Every node in the tree carries a state that governs when it can be used:\n\n| State | Can open as this? | Can close as this? | Purpose |\n|-------|-------------------|--------------------|---------|\n| **Abstract** | No | No | Grouping node only. Structure and reporting, not selection. |\n| **Not Final** | Yes | No | Can be opened while the specific nature is unknown. Must be refined to a Final child before closure. |\n| **Final** | Yes | Yes | Fully specific. Terminal in the tree. |\n\nFor example, Medical is Not Final: an incident can be opened as Medical while the presenting problem is still being assessed, but before closure it must be refined to Chest Pain, Breathing Problems, and so on. Search and Rescue is Abstract: a bare SAR cannot be opened, one of its children must be selected. Chest Pain is Final.\n\nThis is also what retires the catch-all types (Other Incident, Other Medical, Other Vessel Incident). Instead of dumping the unknown into an \"Other\" bucket that tells us nothing, operators open at the most specific node they know, and refine before closure. Open wide, close narrow.\n\n**Guided questions.** A Type may carry key questions, in the style of ProQA (the scripted question flow used by MPDS dispatch systems). Each answer does one of two things: drills to a child Type, or sets a controlled Tag. No per-incident custom fields are created; the questions populate the existing primitives. Questions are centrally defined per Type, and an answer never maps to free text that fragments data. A deliberately small set of true structured fields is kept only where the value is quantitative and reporting-critical (for example, number of people involved). Everything else defaults to Tags.\n\nSpecificity comes from the tree walk and the questions, not from a long type list.\n\n## The types\n\nWith the concepts in place, the tree itself:\n\n- **Search And Rescue** [Abstract]\n    - **Search** [Abstract]\n        - Person [Not Final]\n            - Land [Final]\n            - Water [Final]\n        - Vessel [Final]\n    - **Rescue** [Abstract]\n        - Person [Not Final]\n            - Land [Final]\n            - Water [Final]\n        - Vessel [Final]\n    - **Emergency** [Abstract]\n        - Rescue Equipment Activation [Final]\n        - Duress Activation [Final]\n        - Flare Sighting [Final]\n- **Welfare Check** [placement and state to be confirmed, see Part 4]\n- **Medical** [Not Final]\n    - MPDS-aligned children, see the Medical branch below.\n- **External Agency** [Abstract]\n    - Tasking [Final]\n    - Request for Assistance [Final]\n- **Marine Incident** [Abstract]\n    - **Vessel Incident** [Abstract]\n        - Assist [Final]\n        - Report [Final]\n    - **Dangerous Animal** [Abstract]\n        - Shark [Final]\n        - Other [Final]\n- **Advisory Information** [Abstract]\n    - Dangerous Conditions [Final]\n    - Equipment Fault [Final]\n    - Medication Discrepancy [Final]\n    - Operational Change [Final]\n\n**Out of scope for the incident taxonomy.** Administrative items (system status advisories, COVID-era system messaging) do not belong here. They move out of the incident taxonomy entirely.\n\n### The Medical branch (MPDS-aligned)\n\nMedical children align to the Medical Priority Dispatch System (MPDS) chief complaints, as used by Ambulance Victoria and maintained by the International Academies of Emergency Dispatch (IAED). MPDS is used here as a naming taxonomy for interagency alignment, not as a dispatch triage tool. When we hand over to AV, we are speaking the same language.\n\nMedical is Not Final: every closed Medical incident must be refined to a Final child.\n\n**Medical children (all Final).**\n\n- Abdominal Pain / Problems\n- Allergies (Reactions) / Envenomations (Stings, Bites). Marine envenomation rides here, animal identity as a Tag\n- Animal Bites / Attacks\n- Assault / Sexual Assault\n- Back Pain (Non-Traumatic / Non-Recent)\n- Breathing Problems\n- Burns (Scalds) / Explosions\n- Carbon Monoxide / Inhalation / HAZMAT / CBRN\n- Cardiac or Respiratory Arrest / Death\n- Chest Pain\n- Choking\n- Convulsions / Seizures\n- Diabetic Problems\n- Drowning / Diving / SCUBA Accident\n- Electrocution / Lightning\n- Eye Problems / Injuries\n- Falls\n- Headache\n- Heat / Cold Exposure\n- Hemorrhage / Lacerations\n- Overdose / Poisoning (Ingestion)\n- Stab / Gunshot / Penetrating Trauma\n- Stroke (CVA) / Transient Ischemic Attack (TIA)\n- Traumatic Injuries\n- Unconscious / Fainting (Near)\n- Unknown Problem (Collapse, 3rd Party)\n\n**Cut from the MPDS list, with reason.** Keeping the tree small is a design discipline: a chief complaint earns its place only if it is part of our operating context.\n\n- Stun Gun component of the Assault compound: not our operating context.\n- Pandemic / Epidemic / Outbreak (Surveillance or Triage): not the incident taxonomy. Sits in Advisory Information or system-level messaging if it ever needs a home.\n- Inter-Facility Transfer / Palliative Care, and Inter-Facility Transfer for medically trained callers: patient transfer is not our operating context.\n- Removed on review, 2026-07-09: Heart Problems / AICD, Inaccessible Incident / Entrapments, Pregnancy / Childbirth / Miscarriage, Psychiatric / Suicide Attempt, Sick Person, Traffic / Transportation Incidents, Automatic Crash Notification (ACN), HCP (Health-Care Practitioner) Referral.\n\n**Worked example.** A bluebottle sting is Type: Medical > Allergies (Reactions) / Envenomations (Stings, Bites), Tag: Marine Envenomation, Tag: Bluebottle. Two stings with identical care pathways are one Type; the animal's identity characterises, it does not classify.\n\n## The rules that keep the data consistent\n\nFour rules govern classification. Each one closes a specific gap that corrupts our data today.\n\n### Rule 1: The Type is what we responded to\n\n- The Type is updated only when new information clarifies that the initial classification was incorrect.\n- The Type is never updated because the incident evolved.\n- Evolution is captured in the Agency Status, the Incident Outcome, Tags, and the Incident Log.\n\nThis is the rule that fixes the disappearing Major Rescue. The rescue that becomes a drowning stays a Rescue, with Outcome: Fatality. It aligns with Ambulance Victoria practice, which does not recategorise unless the incident was misreported. And because the rule is written down, \"sometimes updated, sometimes not\" ends: no more individual judgment calls producing inconsistent records.\n\n### Rule 2: One Type per incident\n\nThe Type captures the primary operational driver. Where two drivers genuinely co-occur, precedence selects the Type:\n\n1. Search and Rescue or Rescue (a save wins)\n2. Marine Incident\n3. Medical\n4. Advisory Information\n\nSupporting principles: human first, vessel second (where a situation involves both people and a vessel, the Type follows the people); clinical detail always rides in the Action Log, never as a competing Type; and multiple separate responses to one situation group under an Event, they are not merged into one incident.\n\n**Worked scenarios.**\n\n1. **Rescue then major medical.** Swimmer pulled from a rip, arrests on the beach. Type is Rescue. Resuscitation rides as a Tag (Action Log required) and in the Action Log detail.\n2. **Vessel incident producing a rescue.** Capsized vessel, people retrieved. Type is Rescue. Human first, vessel second. The vessel dimension is Tags and log.\n3. **Medical during an External Agency Tasking.** Severity decides. A severe injury becomes its own linked incident. A minor one stays on the Tasking incident with a Member Injury Tag.\n4. **Activation that becomes a rescue.** Stays one incident, typed as the activation. See Rule 4.\n\n### Rule 3: Our incident or theirs\n\nWhether something is a Tasking or our own incident is determined by our response. Are we delivering our services independently (including as part of an interagency response)? Then we open an incident of the appropriate type. Are we assisting another agency to perform their duties? Then it is External Agency > Tasking. This closes today's gap where the two are indistinguishable in the data.\n\n**Worked example.** AV asks us to help carry their patient off the beach. We are a resource on AV's job: External Agency > Tasking, with tags and log notes as required. If instead we are managing the patient and called AV, it is Medical, with AV listed in responding services.\n\nExtrication is an action, so it is a Tag, never a Type. This retires Assist Extrication as a Type.\n\n### Rule 4: Activations keep their Type\n\nWhen a Rescue Equipment Activation or Duress Activation leads to a real rescue, the incident stays as the activation Type it was opened as. One incident, no reclassification, no second incident. The rescue that follows is carried in Agency Status, Tags, Incident Outcome, and the log.\n\n## The Action Log\n\n*New in v0.8. Proposed here as a concept; detail to follow as its own piece of work.*\n\nToday we run two per-person records, the first aid form and the rescue log, with no clear rule for when each applies. A person pulled from the water and treated on the beach might generate one, both, or neither, depending on who is filling it out. Members enter the same person's details twice when both apply. The inconsistency flows straight into our rescue and first aid statistics.\n\nThe proposal: merge them into one **Action Log**, defined as the assistance we provide to one individual. That assistance may be a rescue, a first aid, or both. The expectation becomes simple enough to say in one sentence: **one Action Log for each person we help, every time.** The person's details are entered once. Where the situation meets the criteria for an incident, the Action Logs are linked to that incident, exactly as first aid records link today.\n\nThis gives the guided-questions machinery a natural home on the per-person record too: the adaptive first aid form we already built becomes a section of the Action Log, appearing when care was provided, alongside rescue detail that appears when a rescue was performed.\n\nPlatform implications are noted in Annex C. This proposal supersedes the earlier First Aid Log (FAL) terminology decision, noted in the Decision Log.\n\n## What this makes possible\n\nConsistent, well-defined data is not the end goal. It is the foundation.\n\n- **Backwards compatibility comes built in.** Every one of the 72 current types maps to exactly one home in the new model: a Type, a Tag, an Outcome, a Status, or a linked-record concept. Nothing is lost, and historical data stays comparable. The full map is Annex A.\n- **Guided questions get smarter over time.** Centrally governed question flows can grow per Type without adding types or fields.\n- **AI-enabled features become possible.** Structured, predictable data is the prerequisite for the features we want next: guided incident creation, quality checks at point of entry, automated summaries.\n- **Expectations can rise naturally.** With clear definitions and a simpler flow, we can ask more of our members, because for the first time the system makes the right way the easy way.\n\n---\n\n# Part 3: What you will see\n\n**Operators** get a guided path instead of a 72-item list, and a written definition for every field. The system asks the questions; the operator answers what they know. Faster incident creation, less second-guessing, and no more choosing between two equally defensible types at 2am.\n\n**Duty officers and command** get a consistent common operating picture. The same situation looks the same regardless of who entered it or which shift entered it. Status, type, and outcome each mean one thing, so the picture reads at a glance.\n\n**Our leadership and our services** get reporting that can finally be relied on. Season data for SLSA, councils, LSV, and our clubs stops being a manual interrogation exercise for the EMCaR team and becomes a query. Trends become visible. Questions get answered from the data instead of around it. That reliability compounds into everything the data touches: how we structure our services, how we support our members, and how we make the case for funding.\n\nTogether with the first aid form work, this presents a cohesive picture of operational data done properly, a piece of work LSV can be proud of and share with the other states as industry-leading.\n\n---\n\n# Part 4: Next steps and what we need from you\n\n**Process.** Stand up the Incident Categorisation and Flow SME group, circulate this pack, and capture decisions in the Decision Log (Annex B) as they are made, so settled points are not relitigated.\n\n**What we need from you.**\n\n- Review the model. In particular the top-level tree and the Abstract / Not Final / Final assignments.\n- Give a view on the flagged Migration Map rows (Annex A).\n- Test the model against real incidents from your patch. If you can name a situation that reasonably fits two Types, that is exactly the feedback we need.\n\n**Open items.**\n\n1. Confirm the top-level tree structure (SAR / Welfare Check / Medical / External Agency / Marine Incident / Advisory Information).\n2. Confirm the Abstract / Not Final / Final assignment on each node. Medical as Not Final in particular, and whether SAR and Marine Incident should also be Not Final for the early window when the specific nature is unknown.\n3. Confirm the placement and state of the new Welfare Check node, and complete the D21 Welfare mapping against it (Annex A).\n4. Confirm the treatment of Land / Water under Search > Person and Rescue > Person. The tree now carries them as Final children; an earlier draft carried them as Tags on a single Person node. The Migration Map rows A01 and A02 follow the tree and are flagged pending this confirmation.\n5. Draft the full tag taxonomy with the Incident Labels project (1.8).\n6. Detail the Action Log proposal as its own piece of work.\n\n---\n\n# Annex A: Migration Map\n\n**v0.3 (2026-08-02).** Every current LIMSOC incident type mapped to its new home in the proposed model. Source: `IncidentTypes-2026-07-08.xlsx` (72 types, exported from LIMSOC 2026-07-08). Rows marked **FLAG** need a decision before the map is final. Everything else follows mechanically from the model's rules.\n\nLegend for the New Home column. `Type:` a node in the new tree. `Tag:` a controlled tag. `Outcome:` an Incident Outcome value. `Status:` carried by Agency Status. `Responding Agency:` an external agency recorded on the incident. `Out:` leaves the incident taxonomy.\n\n## SAR (4 types)\n\n| Code | Current type | New home | Notes |\n|------|--------------|----------|-------|\n| A01 | Missing Person - Land | **FLAG** Type: SAR > Search > Person > Land | Follows the current tree (Land as a Final child). An earlier draft carried Land/Water as Tags on one Person node; pending confirmation, open item 4 |\n| A02 | Missing Person - Water | **FLAG** Type: SAR > Search > Person > Water | As above |\n| A03 | Missing Vessel | Type: SAR > Search > Vessel | Direct |\n| A04 | AMSA Tasking | Type: External Agency > Tasking, Responding Agency: AMSA, Tag: External Request | AMSA's job, we are a resource |\n\n## RESC (5 types)\n\n| Code | Current type | New home | Notes |\n|------|--------------|----------|-------|\n| C01 | Injury (inactive) | Type: SAR > Rescue > Person | Injury moves to the Action Log and Outcome |\n| C02 | No Injury (inactive) | Type: SAR > Rescue > Person | As above |\n| C03 | Rescue (In Water) - Condition Unknown | Type: SAR > Rescue > Person > Water | Condition rides in the Action Log and log |\n| C04 | Helicopter Rescue | Type: SAR > Rescue > Person, Tag: Rescue Completed | Method (Heli) captured by the rescue detail, which must flow back to the incident. Platform requirement already logged |\n| MR | Mass Rescue (category) | Tag: Mass Rescue on a Rescue or SAR | Scale is a Tag, not a Type |\n\n## MED (20 types)\n\n| Code | Current type | New home | Notes |\n|------|--------------|----------|-------|\n| D01 | Resuscitation | Type: Medical > Cardiac or Respiratory Arrest / Death, Tag: Resuscitation | Tag drives the Action Log requirement |\n| D02 | Chest Pain | Type: Medical > Chest Pain | Direct MPDS match |\n| D03 | Breathing Problems | Type: Medical > Breathing Problems | Direct MPDS match |\n| D04 | Suspected Spinal Injury | Type: Medical > Traumatic Injuries, Tag: Spinal | Specific location captured as a Tag |\n| D05 | Suspected Drug Overdose | Type: Medical > Overdose / Poisoning (Ingestion) | Direct MPDS match |\n| D06 | Unconscious/Fainting | Type: Medical > Unconscious / Fainting (Near) | Direct MPDS match |\n| D07 | Fall | Type: Medical > Falls | Direct MPDS match |\n| D08 | Penetrating Trauma | Type: Medical > Stab / Gunshot / Penetrating Trauma | Direct MPDS match |\n| D09 | Serious Bleeding | Type: Medical > Hemorrhage / Lacerations | Direct MPDS match |\n| D10 | Laceration | Type: Medical > Hemorrhage / Lacerations | Merges with D09 |\n| D11 | Needle Stick Injury | Type: Medical > Stab / Gunshot / Penetrating Trauma, Tag: Needle Stick | Penetrating mechanism wins between the two defensible homes |\n| D12 | Burns | Type: Medical > Burns (Scalds) / Explosions | Direct MPDS match |\n| D13 | Fracture | Type: Medical > Traumatic Injuries, Tag: Fracture | Merges into Traumatic Injuries |\n| D14 | Dislocation | Type: Medical > Traumatic Injuries, Tag: Dislocation | As above |\n| D15 | Heat-Cold Exposure | Type: Medical > Heat / Cold Exposure | Direct MPDS match |\n| D16 | Sprain-Strain | Type: Medical > Traumatic Injuries, Tag: Soft Tissue | Merges into Traumatic Injuries |\n| D17 | Marine Sting | Type: Medical > Allergies (Reactions) / Envenomations (Stings, Bites), Tag: Marine Envenomation | Animal identity as a further Tag |\n| D18 | Allergic Reaction | Type: Medical > Allergies (Reactions) / Envenomations (Stings, Bites) | Direct MPDS match |\n| D19 | Seizure | Type: Medical > Convulsions / Seizures | Direct MPDS match |\n| D20 | Suspected Stroke | Type: Medical > Stroke (CVA) / Transient Ischemic Attack (TIA) | Direct MPDS match |\n| D21 | Welfare | **FLAG** Type: TBC, expected home is the new Welfare Check node | The earlier recommendation (Sick Person with a Welfare Check Tag) no longer works: Sick Person and Psychiatric / Suicide Attempt were removed from the Medical children on review 2026-07-09. Confirm Welfare Check placement and state (open item 3), then map here |\n| D99 | Other Medical Incident | Retired. Open as Medical (Not Final), refine before closure | The Not Final mechanism replaces the catch-all |\n\n## VINC (8 types)\n\n| Code | Current type | New home | Notes |\n|------|--------------|----------|-------|\n| B01 | Marine Incident - Injury | Type: Marine Incident > Vessel Incident > Assist, injury to the Action Log | Human first: if a person needed retrieval, precedence makes it a Rescue instead |\n| B02 | Marine Incident - No Injury | Type: Marine Incident > Vessel Incident > Assist or Report | Injury dimension leaves the Type |\n| B03 | Broken Down Vessel | Type: Marine Incident > Vessel Incident > Assist | Direct |\n| B04 | Problem Vessel | Type: Marine Incident > Vessel Incident > Report | Non-compliance is a report, not an assist |\n| B05 | Flare Sighting | Type: SAR > Emergency > Flare Sighting | New Final child added under SAR > Emergency |\n| B06 | Capsized Vessel | Type: Marine Incident > Vessel Incident > Assist | Human first: people in the water retrieved makes it SAR > Rescue > Person instead, per the precedence rule |\n| B99 | Other Vessel Incident | Retired. Open as Marine Incident (per state model), refine before closure | Catch-all replaced by tree walk |\n| E05/E04 | Confirmed / Unconfirmed Shark Sighting (both inactive) | Superseded by S-series below | Already inactive in LIMSOC |\n\n## SHARK (7 active types)\n\n| Code | Current type | New home | Notes |\n|------|--------------|----------|-------|\n| S01 | Unconfirmed Sighting - Reported to LSV | Type: Marine Incident > Dangerous Animal > Shark, Tags: Reported, Source: Public via LSV | Confirmation and source both Tags |\n| S02 | Unconfirmed Sighting - Reported to VicPol | As S01, Tag Source: Public via Victoria Police | |\n| S03 | Confirmed Sighting - by LSV | Type: Marine Incident > Dangerous Animal > Shark, Tags: Confirmed, Source: LSV | |\n| S04 | Confirmed Sighting - by Victoria Police | As S03, Source: Victoria Police | |\n| S05 | Confirmed Sighting - by Fisheries Victoria | As S03, Source: Fisheries Victoria | |\n| S06 | Confirmed Sighting - by other government agency | As S03, Source: Other Government Agency | |\n| S07 | Shark Attack - Reported | Type: split by patient contact | Retrieval from the water is SAR > Rescue > Person. Patient on the beach is Medical > Animal Bites / Attacks. Report only with no patient contact stays Marine Incident > Dangerous Animal > Shark with Tag Attack Reported. All carry Shark and source Tags |\n\n## DUR (3 types)\n\n| Code | Current type | New home | Notes |\n|------|--------------|----------|-------|\n| F01 | Duress Activation | Type: SAR > Emergency > Duress Activation | Stays through any subsequent rescue, per Rule 4 |\n| F02 | Duress Activation - Accidental | Type: SAR > Emergency > Duress Activation, Tag: Accidental | Accidental is a Tag |\n| F03 | Rescue Equipment Activation | Type: SAR > Emergency > Rescue Equipment Activation | Same one-incident rule |\n\n## TASK (4 types)\n\n| Code | Current type | New home | Notes |\n|------|--------------|----------|-------|\n| T01 | EMLO Deployment | Type: External Agency > Tasking, Tag: EMLO | |\n| T02 | External Event Attendance | Type: External Agency > Tasking, Tag: Event Attendance | |\n| T03 | Assist External Agency | Type: External Agency > Tasking | The canonical Tasking |\n| E07 | Assist Extrication (INC category) | Type: External Agency > Tasking, Tag: Extrication | Retired as a Type. Worked example in Part 2, Rule 3 |\n\n## BAU (8 types)\n\n| Code | Current type | New home | Notes |\n|------|--------------|----------|-------|\n| Z94 | Equipment Deployment | Type: External Agency > Tasking | Deployment is directed support work, not an advisory |\n| Z95 | Test Incident | Likely to be maintained | Kept for development and testing |\n| Z96 | COVID-19 Advisory Information | Out. COVID-era admin | |\n| Z97 | Advisory Information | Type: Advisory Information, refine to child | Direct ancestor of the new top-level node |\n| G01 | LSV Event / Carnival (inactive) | Removed. Unit now signs on as event | |\n| G02 | Local Event / Carnival | As above | |\n| L01 | LSV Equipment Fault | Type: Advisory Information > Equipment Fault | Direct |\n| Z99 (FA) | False Alarm | Outcome: False Alarm | Not a Type |\n\n## INC (13 active types)\n\n| Code | Current type | New home | Notes |\n|------|--------------|----------|-------|\n| E01 | Diving Accident | Type: Medical > Drowning / Diving / SCUBA Accident | Direct MPDS match |\n| E02 | Drowning Death | Type: SAR > Rescue or Search > Person, Outcome: Fatality | Responded and retrieved is Rescue with Outcome Fatality. Body search is Search with Outcome Fatality |\n| E03 | Recovered from Water | Type: SAR > Rescue > Person, Outcome and Action Log carry condition | Settled treatment in Part 2 |\n| E06 | Request for Police | Type: External Agency > Request for Assistance | Requesting an external agency to handle a matter that is theirs |\n| E08 | External RPAS Operations (Non-LSV) | Type: Advisory Information, Tag: RPAS | Awareness item |\n| E09 | Dangerous Surf - Unpatrolled Location | Type: Advisory Information > Dangerous Conditions | Direct |\n| E10 | Beach Closure - COVID-19 | Out. COVID-era admin | A non-COVID closure would be Advisory Information > Dangerous Conditions |\n| E11 | Generic Animal Incident | Type: Marine Incident > Dangerous Animal > Other | Keeps animal work in one place |\n| E12 | Fatality | Outcome: Fatality | Not a Type |\n| E99 | Other Incident | Retired. The Not Final mechanism replaces the catch-all | Open at the most specific known node, refine before closure |\n| 176 | Medication Discrepancy | Type: Advisory Information > Medication Discrepancy | Direct. Controlled-medication inventory reconciliation, not patient care |\n| D-series in INC | (none) | | |\n| MR | Mass Rescue | Tag: Mass Rescue | Listed under RESC above |\n\n## Summary\n\n- 72 current types collapse into the new tree. Flagged rows: A01/A02 (Land/Water treatment, open item 4) and D21 Welfare (open item 3).\n- Catch-alls (E99, D99, B99) retire in favour of the Not Final mechanism.\n- The shark S-series (6 sighting types) collapses to one Type plus two Tag dimensions, the biggest single simplification in the map.\n- Inactive types (C01, C02, E04, E05, G01) mapped for historical comparability only.\n\n---\n\n# Annex B: Decision Log\n\nMaterial design decisions, with the reasoning, so the rationale is not lost and we do not relitigate settled points.\n\n| Date | Decision | Rationale | Decided by |\n|------|----------|-----------|------------|\n| 2026-07-07 | Medical children align to MPDS chief-complaint names verbatim, minus stun gun, pandemic, and patient transfer | Interagency terminology alignment with AV, who use MPDS. The three cuts are outside the lifesaving operating context | Nick Wood |\n| 2026-07-07 | No priority codes (Delta/Charlie/Bravo/Alpha/Omega) | For lifesaving we are either responding or it is advisory. That distinction is already carried by Type and Agency Status. A priority field duplicates it | Nick Wood |\n| 2026-07-07 | Marine envenomation: animal identity is a Tag, not a Type | Two stings with identical care pathways should not be two Types. Identity does not change what the incident fundamentally is | Nick Wood |\n| 2026-07-07 | Medication Discrepancy defined as controlled-medication inventory reconciliation | Not patient care. System count differs from physical count | Nick Wood |\n| 2026-07-07 | Incident Type updates only on miscategorisation, never on evolution | Type captures what we responded to. Aligns with AV practice, who do not recategorise unless misreported | Nick Wood |\n| 2026-07-08 | Precedence locked: save-family wins the Type, ahead of Marine Incident, Medical, Advisory | Confirmed against worked scenarios. Human first, vessel second | Nick Wood |\n| 2026-07-08 | An activation that becomes a rescue stays one incident, typed as the activation | No reclassification, no second incident. The response is carried by Status, Tags, Outcome, and log. Supersedes the v0.3 two-linked-incidents treatment | Nick Wood |\n| 2026-07-08 | Member injury during a Tasking: severity decides | Severe injury becomes its own linked incident, minor stays on the Tasking with a Member Injury Tag | Nick Wood |\n| 2026-07-08 | Rescue form must capture method (incl. Heli technique) and flow back to the incident | Elevated from open question to platform requirement | Nick Wood |\n| 2026-07-08 | Catch-all types (E99, D99, B99) retire in favour of the Not Final mechanism | Open at the most specific known node, refine before closure | Model design (pending SME) |\n| 2026-07-09 | Flare Sighting becomes its own Final type under SAR > Emergency | A flare is a distress signal treated as an emergency activation, not a vessel report | Nick Wood |\n| 2026-07-09 | AMSA Tasking maps to External Agency > Tasking, with Responding Agency AMSA and Tag External Request | Whose-incident rule holds. AMSA's job, we are a resource | Nick Wood |\n| 2026-07-09 | Needle Stick maps to Stab / Gunshot / Penetrating Trauma with Tag Needle Stick | Penetrating mechanism wins between the two defensible homes | Nick Wood |\n| 2026-07-09 | Shark Attack splits three ways by patient contact | Retrieval is SAR > Rescue > Person. Patient on the beach is Medical > Animal Bites / Attacks. Report only stays Dangerous Animal > Shark with Tag Attack Reported | Nick Wood |\n| 2026-07-09 | Equipment Deployment (Z94) maps to External Agency > Tasking | Deployment is directed support work, not an advisory | Nick Wood |\n| 2026-07-09 | Test Incident (Z95) likely to be maintained | Reverses the earlier out-of-scope call. Kept for development and testing | Nick Wood |\n| 2026-07-09 | Event / Carnival types (G01, G02) removed | Units now sign on as an event. No incident type needed | Nick Wood |\n| 2026-07-09 | Request for Police (E06) maps to External Agency > Request for Assistance | Requesting an external agency to handle a matter that is theirs is an external-agency incident | Nick Wood |\n| 2026-07-09 | Generic Animal Incident (E11) maps to Marine Incident > Dangerous Animal > Other | Keeps animal work in one place | Nick Wood |\n| 2026-07-09 | Medical children pruned by eight (Heart Problems / AICD, Inaccessible / Entrapments, Pregnancy, Psychiatric, Sick Person, Traffic / Transportation, ACN, HCP Referral) | Removed on review. Leaves D21 Welfare without a mapped home, flagged in the Migration Map | Nick Wood |\n| 2026-07-09 | Clinical record terminology is First Aid Log (FAL), not IRL | Matches the linked First Aid record naming. **Superseded 2026-08-02** by the Action Log proposal below | Nick Wood |\n| 2026-07-09 | New Advisory Information child: Operational Change | Added on review | Nick Wood |\n| 2026-07-09 | Advisory versus response is carried primarily by Agency Status | Information Only covers advisory posture, all other statuses are response | Nick Wood |\n| 2026-08-02 | Proposed: first aid form and rescue log merge into a single Action Log, one per person helped | One record per individual assisted (rescue, first aid, or both). Person details entered once, clear member expectation, consistent statistics. Supersedes the FAL terminology decision. Detail to follow as its own piece of work | Nick Wood (proposed) |\n\n## Design questions and where they landed\n\nThe questions this work opened with, and their current state.\n\n1. **Where is the line between a type and an attribute?** Proposed in full. A value is a Type only if it changes what the incident fundamentally is. Otherwise it is a Tag, a Status, an Outcome, or Action Log detail. See Part 2, One idea.\n2. **What does the type hierarchy look like?** Proposed in full. See Part 2, The types.\n3. **How does an incident record evolve as more is learned?** Proposed in full. The Type is only updated to correct miscategorisation, never because the incident evolved. Evolution is carried by Agency Status, Incident Outcome, Tags, and the Incident Log. See Part 2, Rule 1.\n4. **How do we migrate without losing historical comparability?** Drafted. Every one of the 72 current types is mapped in Annex A. Flagged rows remain open.\n5. **How does this interact with incident labels?** Proposed in full. Tags and the Incident Labels project (priority 1.8) are one effort. The full tag taxonomy is still to be drafted.\n6. **What is the minimum set of types, and how do we resist adding more?** Proposed in full. The governing rule plus the Abstract / Not Final / Final states keep the tree small. Open to SME pressure-testing.\n\n---\n\n# Annex C: Platform dev notes\n\nDesign constraints the platform must support.\n\n**Required documentation rules.**\n\n- Set required documents against an Incident Type. Inputs can include People (for example, patient count).\n- Set required documents against Incident Tags.\n- Distinguish between \"form submission required\" and \"specific section within a form required\".\n\n**Tag scoping.**\n\n- Constrain Tags to specific Incident Types by inclusion or exclusion. A Tag that only makes sense for Medical should not appear on a Marine Incident.\n\n**Type states, platform behaviour.**\n\n- Types are Abstract, Not Final, or Final. See Part 2, Type states.\n- Abstract Types cannot be selected on open or close.\n- Not Final Types can be opened but not closed. The user is prompted to refine before finalising.\n- Final Types can be opened and closed.\n\n**Action Log (proposed).**\n\n- A single per-person record replacing the first aid form and rescue log. One Action Log per individual assisted.\n- Sections appear conditionally: care sections when treatment was provided (the adaptive first aid form becomes a section), rescue detail when a rescue was performed (method, including Heli technique, flowing back to the incident record).\n- Action Logs link to an incident when the incident criteria are met, as first aid records link today.\n- Existing form-trigger Tags (Resuscitation, Member Injury, Penthrane Administered, Major First Aid, Oxygen Administered, Rescue Completed) become Action Log requirements.\n\n---\n\n# Annex D: SME Feedback\n\nInput from the Incident Categorisation and Flow SME group. Log feedback here as it arrives, then fold the resolved points into the pack.\n\n## Group members\n\n*To populate once membership is confirmed.*\n\n| Name | Unit / role | Particular expertise |\n|------|-------------|----------------------|\n| | | |\n\n## Feedback log\n\n| Date | From | Topic | Feedback | Action taken |\n|------|------|-------|----------|--------------|\n| | | | | |\n"
+    },
+    "timestamp": "2026-08-02T10:56:39.716Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "The Type captures the primary operational driver. Where two drivers genuinely co-occur, precedence selects the Type:",
+      "new_string": "Where two operational drivers genuinely co-occur, precedence selects the Type:"
+    },
+    "timestamp": "2026-08-02T11:11:57.001Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ && f=LIMSOC-Incident-Categorisation-Proposal-v0.8.md && for p in \"updated only when\" \"Can open as this\" \"Abdominal Pain\" \"determined by our response\" \"primary driver\" \"Governing rule\" \"one Action Log for each person\" \"—\"; do printf '%-32s %s\\n' \"$p:\" \"$(rg -c \"$p\" $f || echo 0)\"; done",
+      "description": "Verify key concepts appear exactly once and no em dashes"
+    },
+    "timestamp": "2026-08-02T11:11:59.546Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ && pandoc LIMSOC-Incident-Categorisation-Proposal-v0.8.md --reference-doc=\"$CLAUDE_JOB_DIR/tmp/doc.docx\" -o \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.docx\" && ls -la *.docx && pandoc \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.docx\" -t plain 2>/dev/null | rg -c \"Action Log|FLAG\" && rclone listremotes",
+      "description": "Export v0.8 to docx with v0.7 styling and verify round-trip"
+    },
+    "timestamp": "2026-08-02T11:12:08.958Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls ~/.claude/PAI/TOOLS/DocxExport/ 2>/dev/null && head -60 ~/.claude/PAI/TOOLS/DocxExport/README.md 2>/dev/null; which soffice libreoffice 2>/dev/null",
+      "description": "Inspect DocxExport tool and check for LibreOffice"
+    },
+    "timestamp": "2026-08-02T11:12:17.130Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd \"$CLAUDE_JOB_DIR/tmp\" && curl -sL -o pandoc.tgz https://github.com/jgm/pandoc/releases/download/3.6.4/pandoc-3.6.4-linux-amd64.tar.gz && tar xzf pandoc.tgz && ./pandoc-3.6.4/bin/pandoc --version | head -2",
+      "description": "Download static pandoc binary for docx export"
+    },
+    "timestamp": "2026-08-02T11:12:32.759Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "PD=\"$CLAUDE_JOB_DIR/tmp/pandoc-3.6.4/bin/pandoc\" && cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ && \"$PD\" LIMSOC-Incident-Categorisation-Proposal-v0.8.md --reference-doc=\"$CLAUDE_JOB_DIR/tmp/doc.docx\" --toc --toc-depth=2 -o \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.docx\" && ls -la \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.docx\" && \"$PD\" \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.docx\" -t plain | rg -c \"Action Log\" && \"$PD\" \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.docx\" -t plain | rg \"Psychiatric\" | head -3",
+      "description": "Export v0.8 docx with v0.7 styles and verify round-trip content"
+    },
+    "timestamp": "2026-08-02T11:12:42.597Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rclone listremotes && cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ && rclone copy \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.docx\" \"$(rclone listremotes | head -1)00_Outbox/\" && rclone lsl \"$(rclone listremotes | head -1)00_Outbox/\" | rg \"v0.8\"",
+      "description": "Push v0.8 docx to OneDrive outbox and verify upload"
+    },
+    "timestamp": "2026-08-02T11:12:53.318Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/incident-categorisation-restructure/ISA.md",
+      "old_string": "effort: E3\nphase: build\nprogress: 0/34",
+      "new_string": "effort: E3\nphase: verify\nprogress: 43/45"
+    },
+    "timestamp": "2026-08-02T11:13:27.088Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/incident-categorisation-restructure/ISA.md",
+      "old_string": "- 2026-08-02: Markdown source located at workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ (edited 14 Jul, contains 9 Jul decisions — likely current); docx-vs-markdown diff gate added as ISC-45.",
+      "new_string": "- 2026-08-02: Markdown source located at workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ (edited 14 Jul, contains 9 Jul decisions — likely current); docx-vs-markdown diff gate added as ISC-45.\n- 2026-08-02 (round 3): Part 2 reordered per Nick: fields first, type concept, states+guided questions, then the actual types; rules after the tree; Action Log and enablement after. One-page Action Log approved; v0.8 approved; reconciliation approved.\n- 2026-08-02 (execute): v0.8 written to workspace as single file LIMSOC-Incident-Categorisation-Proposal-v0.8.md. Reconciliation: docx tree (Land/Water children, Welfare Check node) newer than Model-Design.md; Migration Map and Decision Log md identical to docx. Corrections applied: Psychiatric removed from Medical children (three sources confirm removal; list retention was a v0.7 error). Conflicts FLAGGED not resolved: A01/A02 tag-vs-child treatment (open item 4), Welfare Check placement/state (open item 3). Export: static pandoc 3.6.4 (downloaded to job tmp; not on system) with v0.7 docx as reference-doc; DocxExport tool rejected (resume contract, no tables); pushed via rclone copy to onedrive:00_Outbox, verified by rclone lsl (46728 bytes, 21:12). ISC-24 (length target) untestable: no numeric target set; body substantially tightened. Remaining: Nick's review of the docx rendering in Word.\n\n## Verification\n\n- ISC-10/11/12/34/38: rg counts — freeze rule, states table, medical children, tasking rule, primary driver, governing rule, Action Log expectation each exactly 1 occurrence; em dashes 0.\n- ISC-25..29: all 9 migration tables (72 types), full decision log + new Action Log row, platform notes + Action Log section, SME scaffold, FLAG rows and 6 open items present in v0.8.\n- ISC-31: rclone lsl onedrive:00_Outbox shows \"...v0.8.docx\" 46728 bytes 2026-08-02 21:12.\n- ISC-35/36/37: Action Log one-pager present; separation table row updated; FAL decision marked superseded — confirmed by round-trip docx→plain text (Action Log x22, Psychiatric only in removal contexts)."
+    },
+    "timestamp": "2026-08-02T11:13:39.151Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "Ask two experienced operators what an incident type means and when it should change, and you will get two different answers. That is not their fault. It has never been written down. The incident type is currently trying to be everything to everyone: what happened, how serious it was, who was involved, how it ended, and who asked us to attend. A field that carries all of that classifies nothing reliably.\n\nThe result is that a single incident can reasonably be categorised several different ways, and in practice, it is:",
+      "new_string": "The current model provides no written definition of what an incident type represents or when it should be updated. In the absence of a definition, the type has been asked to carry every dimension of an incident: what happened, how serious it was, who was involved, how it ended, and who requested our attendance. A field that carries all of these dimensions cannot classify any of them reliably, and each operator's interpretation of it necessarily differs.\n\nAs a result, a single incident can reasonably be categorised in several different ways, and in current practice it is:"
+    },
+    "timestamp": "2026-08-02T11:33:19.498Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "- Recovered from Water and Resuscitation overlap with no rule between them. Today we cannot tell whether a resuscitation was a patient we came across on the beach or a person we pulled from the water. Those are profoundly different stories, and our data cannot separate them.",
+      "new_string": "- Recovered from Water and Resuscitation overlap with no rule between them. Today we cannot tell whether a resuscitation was a patient encountered on the beach or a person retrieved from the water. These are operationally distinct situations that the data cannot separate."
+    },
+    "timestamp": "2026-08-02T11:33:22.286Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "- There is no rule for when an incident type should be updated, so sometimes it is and sometimes it is not, based on each individual's experience and view of what should happen. When a rescue becomes a drowning, the type is often overwritten, and the rescue disappears from the record. We cannot search for our Major Rescues, because some of them are no longer typed as rescues.",
+      "new_string": "- There is no rule for when an incident type should be updated, so update practice varies with each individual's experience and view of what should happen. When a rescue becomes a drowning, the type is frequently overwritten and the rescue is lost from the record. Major Rescues cannot be reliably searched, because some are no longer typed as rescues."
+    },
+    "timestamp": "2026-08-02T11:33:25.148Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "Every one of these problems flows from the same root cause: none of these fields has a written definition, so each has drifted into whatever each operator understood it to be.\n\n**What it costs us.** Every season, the EMCaR team pulls incident data for SLSA, for councils, for LSV, and for our own clubs and services. Because the data cannot be trusted at face value, each pull means manual interrogation and cleanup before anyone will stand behind the numbers. The effort is large, it repeats every season, and it caps what we can do: reporting we cannot produce, trends we cannot see, and questions we cannot answer.",
+      "new_string": "These problems share a single root cause: no field in the current model carries a written definition, so practice on each has drifted into individual interpretation.\n\n**The cost.** Every season, the EMCaR team pulls incident data for SLSA, for councils, for LSV, and for our own clubs and services. Because the data cannot be taken at face value, each pull requires manual interrogation and correction before the figures can be relied upon. The effort is substantial, it recurs every season, and it limits what can be delivered: reporting that cannot be produced, trends that cannot be seen, and questions that cannot be answered."
+    },
+    "timestamp": "2026-08-02T11:33:29.792Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "People have been saying for years that incident categorisation needs to be redone. It has not happened, because it is genuinely complex: 72 types, years of accumulated practice, and interagency dependencies. There is a lot of detail in this pack for the same reason. But the solution underneath it is simple, and once the core idea lands, everything else follows from it.\n\nTwo things make this the right moment:\n\n**Our role has changed.** LSV Comms once spent its time signing on every unit. Digital advances in LIMSOC have retired that work. The principal job of LSV Comms now is to get the data right: to capture what actually happened in an incident, accurately and consistently. This proposal is that job.\n\n**We have done this before.** Last season we replaced a rudimentary first aid form that was not fit for purpose. The old form asked a small set of basic questions that often did not match what had happened, and gave members no way to record the details that mattered. The new form asks questions based on what occurred: tick that oxygen was used, and the oxygen questions appear. The result was visibility we had never had. For the first time we could drill into the data and trust what it told us: which first aids are trending, where forms are being filled out incorrectly, and what is actually happening on our beaches. This proposal extends that same transformation from first aid to our entire incident response.\n\nOne more thing should be said plainly: this is a change, and change costs effort. But the current structure is already broken. Every season we run it, we accumulate more inconsistent data. Done well, we cannot get worse than we are today. We can only get better.",
+      "new_string": "The need to redesign incident categorisation has been recognised for years. It has not been done because the problem is genuinely complex: 72 types, years of accumulated practice, and interagency dependencies. The level of detail in this pack reflects that complexity. The underlying solution, however, is simple, and every element of the design follows from a single principle set out in Part 2.\n\nTwo developments make this the right time.\n\n**The role has changed.** LSV Comms once spent much of its effort signing on every unit. Digital advances in LIMSOC have removed that workload. The principal responsibility of LSV Comms is now data quality: capturing what happened in an incident accurately and consistently. This proposal is a direct exercise of that responsibility.\n\n**The approach is proven.** Last season the first aid form was rebuilt from a rudimentary form that was not fit for purpose. The previous form asked a small set of fixed questions that frequently did not match the situation and gave members no way to record the details that mattered. The replacement asks questions based on what occurred: where oxygen use is recorded, the oxygen questions are presented. The result was visibility that had not existed before. For the first time the data could be interrogated with confidence: which first aid presentations are trending, where forms are completed incorrectly, and what is occurring on our beaches. This proposal applies the same transformation to the incident record.\n\nThe risk profile of the change should also be stated clearly. The current structure is already producing inconsistent data, and every season it operates adds to that inconsistency. The transition carries effort, but it carries no realistic risk of degrading data quality below its current state. It can only improve it."
+    },
+    "timestamp": "2026-08-02T11:33:39.124Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "The whole model reduces to one principle. Every value attached to an incident answers exactly one question, and no two mechanisms answer the same question. This removes the ambiguity, streamlines the flow for members, and eliminates the duplication that degrades our data today. It simplifies our world: users' lives get easier, and the result gets better.\n\nFor the first time, each mechanism gets a written definition:",
+      "new_string": "The model rests on one principle. Every value attached to an incident answers exactly one question, and no two mechanisms answer the same question. This removes ambiguity, streamlines the workflow for members, and eliminates the duplication that degrades data quality today: a simpler model that is easier to use and produces a better result.\n\nEach mechanism is given a written definition, for the first time:"
+    },
+    "timestamp": "2026-08-02T11:33:46.105Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "Before the type tree itself, the supporting fields. Each exists to take a job off the Type, so the Type can do one job well.",
+      "new_string": "The supporting fields are defined first. Each exists to carry a concern that would otherwise fall to the Type, so that the Type can serve a single purpose."
+    },
+    "timestamp": "2026-08-02T11:33:48.441Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "The payoff is searchability. Today, when a rescue ends in a drowning, the type gets overwritten and the rescue vanishes from our statistics. With Outcome as its own field, we keep both truths: it was a Rescue, and it ended in a Fatality. We can finally search on each independently.",
+      "new_string": "The benefit is searchability. Today, when a rescue ends in a drowning, the type is overwritten and the rescue is lost from our statistics. With Outcome as its own field, both facts are preserved: the incident was a Rescue, and it ended in a Fatality. Each can be searched independently."
+    },
+    "timestamp": "2026-08-02T11:33:51.694Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "With every other question answered by a purpose-built field, the Type is free to answer just one: **what is the nature of the situation we are responding to?** The Type reflects the primary driver of the response, not everything that happens during it. A rescue followed by first aid is still a Rescue. A member of the public presenting on the beach with a major first aid is a Medical incident.",
+      "new_string": "With every other question answered by a purpose-built field, the Type answers only one: **the nature of the situation we are responding to.** The Type reflects the primary driver of the response, not everything that happens during it. A rescue followed by first aid is still a Rescue. A member of the public presenting on the beach with a major first aid is a Medical incident."
+    },
+    "timestamp": "2026-08-02T11:33:55.585Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "This is also what retires the catch-all types (Other Incident, Other Medical, Other Vessel Incident). Instead of dumping the unknown into an \"Other\" bucket that tells us nothing, operators open at the most specific node they know, and refine before closure. Open wide, close narrow.",
+      "new_string": "This mechanism also retires the catch-all types (Other Incident, Other Medical Incident, Other Vessel Incident). Rather than assigning an unknown situation to an \"Other\" category that carries no information, operators open the incident at the most specific node known and refine it before closure. Incidents open at the general level and close at the specific."
+    },
+    "timestamp": "2026-08-02T11:33:58.357Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "Medical children align to the Medical Priority Dispatch System (MPDS) chief complaints, as used by Ambulance Victoria and maintained by the International Academies of Emergency Dispatch (IAED). MPDS is used here as a naming taxonomy for interagency alignment, not as a dispatch triage tool. When we hand over to AV, we are speaking the same language.",
+      "new_string": "Medical children align to the Medical Priority Dispatch System (MPDS) chief complaints, as used by Ambulance Victoria and maintained by the International Academies of Emergency Dispatch (IAED). MPDS is used here as a naming taxonomy for interagency alignment, not as a dispatch triage tool. Handover to AV then operates on shared terminology."
+    },
+    "timestamp": "2026-08-02T11:34:02.013Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "Four rules govern classification. Each one closes a specific gap that corrupts our data today.",
+      "new_string": "Four rules govern classification. Each closes a specific gap in current practice."
+    },
+    "timestamp": "2026-08-02T11:34:06.200Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "This is the rule that fixes the disappearing Major Rescue. The rescue that becomes a drowning stays a Rescue, with Outcome: Fatality. It aligns with Ambulance Victoria practice, which does not recategorise unless the incident was misreported. And because the rule is written down, \"sometimes updated, sometimes not\" ends: no more individual judgment calls producing inconsistent records.",
+      "new_string": "This rule resolves the loss of rescues from the record: a rescue that ends in a drowning remains a Rescue, with Outcome: Fatality. It aligns with Ambulance Victoria practice, which does not recategorise unless the incident was misreported. With the rule written down, update practice no longer varies with individual judgment, and records become consistent across operators."
+    },
+    "timestamp": "2026-08-02T11:34:10.107Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "Today we run two per-person records, the first aid form and the rescue log, with no clear rule for when each applies. A person pulled from the water and treated on the beach might generate one, both, or neither, depending on who is filling it out. Members enter the same person's details twice when both apply. The inconsistency flows straight into our rescue and first aid statistics.\n\nThe proposal: merge them into one **Action Log**, defined as the assistance we provide to one individual. That assistance may be a rescue, a first aid, or both. The expectation becomes simple enough to say in one sentence: **one Action Log for each person we help, every time.** The person's details are entered once. Where the situation meets the criteria for an incident, the Action Logs are linked to that incident, exactly as first aid records link today.",
+      "new_string": "Today we maintain two per-person records, the first aid form and the rescue log, with no clear rule for when each applies. A person retrieved from the water and treated on the beach might generate one, both, or neither, depending on who completes the record. Members enter the same person's details twice when both apply. The inconsistency flows directly into our rescue and first aid statistics.\n\nThe proposal is to merge them into one **Action Log**, defined as the assistance we provide to one individual. That assistance may be a rescue, a first aid, or both. The expectation for members reduces to a single sentence: **one Action Log for each person assisted, every time.** The person's details are entered once. Where the situation meets the criteria for an incident, the Action Logs are linked to that incident, exactly as first aid records link today."
+    },
+    "timestamp": "2026-08-02T11:34:16.071Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "- **Expectations can rise naturally.** With clear definitions and a simpler flow, we can ask more of our members, because for the first time the system makes the right way the easy way.",
+      "new_string": "- **Member expectations can be raised.** With clear definitions and a simpler workflow, more can be asked of members, because the correct process becomes the easiest process to follow."
+    },
+    "timestamp": "2026-08-02T11:34:18.428Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "**Operators** get a guided path instead of a 72-item list, and a written definition for every field. The system asks the questions; the operator answers what they know. Faster incident creation, less second-guessing, and no more choosing between two equally defensible types at 2am.\n\n**Duty officers and command** get a consistent common operating picture. The same situation looks the same regardless of who entered it or which shift entered it. Status, type, and outcome each mean one thing, so the picture reads at a glance.\n\n**Our leadership and our services** get reporting that can finally be relied on. Season data for SLSA, councils, LSV, and our clubs stops being a manual interrogation exercise for the EMCaR team and becomes a query. Trends become visible. Questions get answered from the data instead of around it. That reliability compounds into everything the data touches: how we structure our services, how we support our members, and how we make the case for funding.",
+      "new_string": "**Operators** receive a guided path instead of a 72-item list, and a written definition for every field. The system presents the questions; the operator records what is known. Incident creation is faster, and no situation requires a choice between two equally defensible types.\n\n**Duty officers and command** receive a consistent common operating picture. The same situation is recorded the same way regardless of who entered it or on which shift. Status, type, and outcome each carry a single meaning, so the picture can be read consistently.\n\n**Our leadership and our services** receive reporting that can be relied upon. Season data for SLSA, councils, LSV, and our clubs ceases to be a manual interrogation exercise for the EMCaR team and becomes a query. Trends become visible, and questions are answered directly from the data. That reliability compounds into everything the data touches: how we structure our services, how we support our members, and how we make the case for funding."
+    },
+    "timestamp": "2026-08-02T11:34:24.642Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "- There is no guidance on when something is a Marine Incident versus a Vessel Incident, so the same capsize lands in different places on different shifts.",
+      "new_string": "- There is no guidance on when something is a Marine Incident versus a Vessel Incident, so the same capsize is recorded differently on different shifts."
+    },
+    "timestamp": "2026-08-02T11:34:38.829Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "Whether something is a Tasking or our own incident is determined by our response. Are we delivering our services independently (including as part of an interagency response)? Then we open an incident of the appropriate type. Are we assisting another agency to perform their duties? Then it is External Agency > Tasking. This closes today's gap where the two are indistinguishable in the data.",
+      "new_string": "Whether an incident is a Tasking or our own incident is determined by our response. Where we are delivering our services independently, including as part of an interagency response, we open an incident of the appropriate type. Where we are assisting another agency to perform their duties, the incident is External Agency > Tasking. This closes the current gap where the two are indistinguishable in the data."
+    },
+    "timestamp": "2026-08-02T11:34:42.128Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "This gives the guided-questions machinery a natural home on the per-person record too: the adaptive first aid form we already built becomes a section of the Action Log, appearing when care was provided, alongside rescue detail that appears when a rescue was performed.",
+      "new_string": "This also extends the guided-questions approach to the per-person record: the adaptive first aid form already built becomes a section of the Action Log, presented when care was provided, alongside rescue detail presented when a rescue was performed."
+    },
+    "timestamp": "2026-08-02T11:34:44.556Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ && f=LIMSOC-Incident-Categorisation-Proposal-v0.8.md && rg -n \"you will|Ask two|2am|\\bstories\\b|right way|speak.*language|glance\" $f; rg -c \"—\" $f || echo \"em-dashes: 0\"; for p in \"updated only when\" \"Can open as this\" \"Abdominal Pain\" \"Governing rule\"; do printf '%s: %s\\n' \"$p\" \"$(rg -c \"$p\" $f)\"; done",
+      "description": "Scan for remaining casual constructs and re-verify dedup"
+    },
+    "timestamp": "2026-08-02T11:34:54.666Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "PD=\"$CLAUDE_JOB_DIR/tmp/pandoc-3.6.4/bin/pandoc\" && cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ && \"$PD\" LIMSOC-Incident-Categorisation-Proposal-v0.8.md --reference-doc=\"$CLAUDE_JOB_DIR/tmp/doc.docx\" --toc --toc-depth=2 -o \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.docx\" && \"$PD\" \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.docx\" -t plain | rg -c \"written definition\" && rclone copy \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.docx\" onedrive:00_Outbox/ && rclone lsl onedrive:00_Outbox/ | rg \"v0.8\"",
+      "description": "Re-export docx with formal register and re-push to OneDrive"
+    },
+    "timestamp": "2026-08-02T11:35:02.625Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ && sed -i 's/Operational Change Proposal, v0.8, 2 August 2026/Operational Change Proposal, v0.8.1, 2 August 2026/; s/| status | draft v0.8 |/| status | draft v0.8.1 |/' LIMSOC-Incident-Categorisation-Proposal-v0.8.md && PD=\"$CLAUDE_JOB_DIR/tmp/pandoc-3.6.4/bin/pandoc\" && \"$PD\" LIMSOC-Incident-Categorisation-Proposal-v0.8.md --reference-doc=\"$CLAUDE_JOB_DIR/tmp/doc.docx\" --toc --toc-depth=2 -o \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.1.docx\" && rclone copy \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.1.docx\" onedrive:00_Outbox/ && rclone lsl onedrive:00_Outbox/ | rg \"v0.8\"",
+      "description": "Bump to v0.8.1, re-export, push to OneDrive under new name"
+    },
+    "timestamp": "2026-08-02T11:35:31.133Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/feedback-lsv-proposal-register.md",
+      "content": "---\nname: feedback-lsv-proposal-register\ndescription: LSV/organisational proposal documents must read as formal documentation, not conversational prose\nmetadata:\n  type: feedback\n---\n\nNick rejected a narrative opening in the LIMSOC incident categorisation pack (\"Ask two experienced operators... That is not their fault.\") as \"too casual. I still want it to read like documentation / a proposal.\"\n\n**Why:** These packs go to operations leadership, SME groups, and volunteer leadership for formal endorsement. Storytelling structure (problem stories, precedent, worked examples) is wanted, but the register must stay documentary.\n\n**How to apply:** In LSV/SLSA/organisational proposal artefacts: no direct address (\"ask two operators\", \"you will get\"), no rhetorical question-and-answer constructions, no sentence fragments for punch (\"Open wide, close narrow.\"), no colour details (\"at 2am\"), no colloquial idiom (\"makes the right way the easy way\", \"speaking the same language\"). Keep the stories and reasons-why, phrased as formal statements. Related: [[feedback-cover-letter-craft]] (different register: cover letters stay warm/narrative).\n"
+    },
+    "timestamp": "2026-08-02T11:35:56.392Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/incident-categorisation-restructure/ISA.md",
+      "old_string": "- ISC-35/36/37: Action Log one-pager present; separation table row updated; FAL decision marked superseded — confirmed by round-trip docx→plain text (Action Log x22, Psychiatric only in removal contexts).",
+      "new_string": "- ISC-35/36/37: Action Log one-pager present; separation table row updated; FAL decision marked superseded — confirmed by round-trip docx→plain text (Action Log x22, Psychiatric only in removal contexts).\n- 2026-08-02 (register pass): Nick rejected conversational register (\"too casual... read like documentation / a proposal\"). Full-document sweep: ~18 rewrites removing direct address, rhetorical Q&A, fragments, colour details; stories and reasons-why retained as formal statements. Dedup greps re-verified (all x1, em dashes 0). Re-exported; v0.8 in OneDrive was 423-locked (open in Word), shipped as v0.8.1 to onedrive:00_Outbox, verified by rclone lsl (46631 bytes, 21:35). Feedback memorised: feedback-lsv-proposal-register."
+    },
+    "timestamp": "2026-08-02T11:36:01.787Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo '- [LSV proposal register](feedback-lsv-proposal-register.md) — org proposals read as formal documentation; keep stories, drop conversational devices' >> /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/MEMORY.md && tail -1 /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/MEMORY.md",
+      "description": "Add memory index line for register feedback"
+    },
+    "timestamp": "2026-08-02T11:36:11.788Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ && f=LIMSOC-Incident-Categorisation-Proposal-v0.8.md && for p in \"Simplified Incident Creation\" \"benchmark\" \"National\" \"Non-Final\" \"FAL\" \"resus FAL\" \"five worked\" \"category\" \"Psychiatric\" \"Welfare\"; do printf '%-30s v0.8.1: %-3s v0.7: %s\\n' \"$p\" \"$(rg -ci \"$p\" $f || echo 0)\" \"$(rg -ci \"$p\" $CLAUDE_JOB_DIR/tmp/doc.md || echo 0)\"; done",
+      "description": "Cross-check presence of key phrases in both versions"
+    },
+    "timestamp": "2026-08-03T10:42:25.513Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "**Process.** Stand up the Incident Categorisation and Flow SME group, circulate this pack, and capture decisions in the Decision Log (Annex B) as they are made, so settled points are not relitigated.",
+      "new_string": "**Process.** Stand up the Incident Categorisation and Flow SME group, circulate this pack, and capture decisions in the Decision Log (Annex B) as they are made, so settled points are not relitigated.\n\n**Related work.** This proposal is project 1.1 of the LIMSOC Season Priorities 2026-27. It is closely linked to Simplified Incident Creation, which is a prerequisite, and to the Incident Labels work (priority 1.8), which extends it through the tag taxonomy (Part 2, Tags)."
+    },
+    "timestamp": "2026-08-03T10:50:35.965Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "PD=\"$CLAUDE_JOB_DIR/tmp/pandoc-3.6.4/bin/pandoc\" && cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ && \"$PD\" LIMSOC-Incident-Categorisation-Proposal-v0.8.md --reference-doc=\"$CLAUDE_JOB_DIR/tmp/doc.docx\" --toc --toc-depth=2 -o \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.1.docx\" && rclone copy \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.1.docx\" onedrive:00_Outbox/ && rclone lsl onedrive:00_Outbox/ | rg \"v0.8.1\"",
+      "description": "Re-export and re-push v0.8.1 with related-work addition"
+    },
+    "timestamp": "2026-08-03T10:50:43.096Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ && sed -i 's/Operational Change Proposal, v0.8.1, 2 August 2026/Operational Change Proposal, v0.8.2, 3 August 2026/; s/| status | draft v0.8.1 |/| status | draft v0.8.2 |/; s/| last_updated | 2026-08-02 |/| last_updated | 2026-08-03 |/' LIMSOC-Incident-Categorisation-Proposal-v0.8.md && PD=\"$CLAUDE_JOB_DIR/tmp/pandoc-3.6.4/bin/pandoc\" && \"$PD\" LIMSOC-Incident-Categorisation-Proposal-v0.8.md --reference-doc=\"$CLAUDE_JOB_DIR/tmp/doc.docx\" --toc --toc-depth=2 -o \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.2.docx\" && rclone copy \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.2.docx\" onedrive:00_Outbox/ && rclone lsl onedrive:00_Outbox/ | rg \"v0.8\" && \"$PD\" \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.2.docx\" -t plain | rg -c \"Simplified Incident Creation\"",
+      "description": "Bump to v0.8.2, export, push, verify related-work line present"
+    },
+    "timestamp": "2026-08-03T10:51:07.027Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "PD=\"$CLAUDE_JOB_DIR/tmp/pandoc-3.6.4/bin/pandoc\" && cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ && \"$PD\" \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.2.docx\" -t plain | rg -c \"Simplified Incident Creation\"; rclone copy \"onedrive:00_Outbox/LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.1.docx\" \"$CLAUDE_JOB_DIR/tmp/onedrive-check/\" && \"$PD\" \"$CLAUDE_JOB_DIR/tmp/onedrive-check/LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.1.docx\" -t plain > \"$CLAUDE_JOB_DIR/tmp/v081-onedrive.txt\" && \"$PD\" \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.1.docx\" -t plain > \"$CLAUDE_JOB_DIR/tmp/v081-local.txt\" && diff \"$CLAUDE_JOB_DIR/tmp/v081-local.txt\" \"$CLAUDE_JOB_DIR/tmp/v081-onedrive.txt\" && echo \"IDENTICAL - no Word-side edits\"",
+      "description": "Verify v0.8.2 content and diff OneDrive v0.8.1 against pushed original"
+    },
+    "timestamp": "2026-08-03T10:51:40.013Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "- Recovered from Water and Resuscitation overlap with no rule between them. Today we cannot tell whether a resuscitation was a patient encountered on the beach or a person retrieved from the water. These are operationally distinct situations that the data cannot separate.",
+      "new_string": "- Recovered from Water and Resuscitation overlap with no rule between them. Today we cannot tell whether a resuscitation was a patient encountered on the beach or a person retrieved from the water."
+    },
+    "timestamp": "2026-08-03T10:52:24.968Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "PD=\"$CLAUDE_JOB_DIR/tmp/pandoc-3.6.4/bin/pandoc\" && cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ && \"$PD\" LIMSOC-Incident-Categorisation-Proposal-v0.8.md --reference-doc=\"$CLAUDE_JOB_DIR/tmp/doc.docx\" --toc --toc-depth=2 -o \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.2.docx\" && \"$PD\" \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.2.docx\" -t plain | rg -c \"Simplified Incident\" && rclone copy \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.2.docx\" onedrive:00_Outbox/ && rclone lsl onedrive:00_Outbox/ | rg \"v0.8.2\"",
+      "description": "Re-export v0.8.2 with Word edit folded in and re-push"
+    },
+    "timestamp": "2026-08-03T10:52:31.340Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "PD=\"$CLAUDE_JOB_DIR/tmp/pandoc-3.6.4/bin/pandoc\" && rclone lsl onedrive:00_Outbox/ | rg \"v0.8\" && rm -rf \"$CLAUDE_JOB_DIR/tmp/onedrive-check\" && rclone copy \"onedrive:00_Outbox/LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.2.docx\" \"$CLAUDE_JOB_DIR/tmp/onedrive-check/\" && cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ && \"$PD\" \"$CLAUDE_JOB_DIR/tmp/onedrive-check/LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.2.docx\" -t markdown --wrap=none > \"$CLAUDE_JOB_DIR/tmp/v082-onedrive.md\" && \"$PD\" \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.2.docx\" -t markdown --wrap=none > \"$CLAUDE_JOB_DIR/tmp/v082-local.md\" && diff \"$CLAUDE_JOB_DIR/tmp/v082-local.md\" \"$CLAUDE_JOB_DIR/tmp/v082-onedrive.md\" | head -120",
+      "description": "Pull OneDrive v0.8.2 and diff against local to find Nick's edits"
+    },
+    "timestamp": "2026-08-03T10:56:15.135Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "diff \"$CLAUDE_JOB_DIR/tmp/v082-local.md\" \"$CLAUDE_JOB_DIR/tmp/v082-onedrive.md\" | rg -v \"^[<>] *$|^[<>]   [-A-Za-z_]+ +|^---$|^[0-9,]+[acd][0-9,]+$|^[<>] \\[|^[<>] -{5,}|^[<>]   -{5,}\" | head -80",
+      "description": "Show remaining content-level diff lines only"
+    },
+    "timestamp": "2026-08-03T10:56:43.565Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "diff -w \"$CLAUDE_JOB_DIR/tmp/v082-local.md\" \"$CLAUDE_JOB_DIR/tmp/v082-onedrive.md\" | rg -v \"^[<>] ?\\[|^[<>] ?-{4,}|^[0-9,]+[acd][0-9,]+$|^---$|^[<>] ?$\" | head -40",
+      "description": "Whitespace-insensitive diff to catch any table edits"
+    },
+    "timestamp": "2026-08-03T10:56:52.459Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "The need to redesign incident categorisation has been recognised for years. It has not been done because the problem is genuinely complex: 72 types, years of accumulated practice, and interagency dependencies. The level of detail in this pack reflects that complexity. The underlying solution, however, is simple, and every element of the design follows from a single principle set out in Part 2.",
+      "new_string": "The need to redesign incident categorisation has been recognised for years. It has not been done because the problem is complex. There are 72 types, years of accumulated practice, and various dependencies. The underlying solution, whilst detailed, is simple, and every element of the design follows from a single principle set out in Part 2."
+    },
+    "timestamp": "2026-08-03T10:58:10.048Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "**How to read it.** Part 1 explains the problem we have today. Part 2 explains the proposed model, one concept at a time, and why each piece exists. Part 3 describes what will change for operators, duty officers, and our leadership. Part 4 covers what happens next and what we need from you. The annexes hold the working detail: the full migration map for all 72 current types, the decision log, and the platform notes.",
+      "new_string": "**How to read it.** Part 1 explains the problem we have today. Part 2 explains the proposed model, one concept at a time, and why each piece exists. Part 3 describes what will change for operators, duty officers, and our leadership. Part 4 covers what happens next and what we need from you. The annexes hold the working detail, including the full migration map for all 72 current types, the decision log, and the platform notes."
+    },
+    "timestamp": "2026-08-03T10:58:13.817Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "The current model provides no written definition of what an incident type represents or when it should be updated. In the absence of a definition, the type has been asked to carry every dimension of an incident: what happened, how serious it was, who was involved, how it ended, and who requested our attendance. A field that carries all of these dimensions cannot classify any of them reliably, and each operator's interpretation of it necessarily differs.",
+      "new_string": "The current model provides no written definition of what an incident type represents or when it should be updated. In the absence of a definition, the type has been asked to carry every dimension of an incident, including what happened, how serious it was, who was involved, how it ended, and who requested our attendance. A field that carries all of these dimensions cannot classify any of them reliably, and each operator's interpretation of it necessarily differs."
+    },
+    "timestamp": "2026-08-03T10:58:17.112Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "**The role has changed.** LSV Comms once spent much of its effort signing on every unit. Digital advances in LIMSOC have removed that workload. The principal responsibility of LSV Comms is now data quality: capturing what happened in an incident accurately and consistently. This proposal is a direct exercise of that responsibility.",
+      "new_string": "**The role has changed.** LSV Comms once spent much of its effort signing on every unit. Digital advances in LIMSOC have removed that workload. The principal responsibility of LSV Comms is now data quality, capturing what happened in an incident accurately and consistently. This proposal is a direct exercise of that responsibility."
+    },
+    "timestamp": "2026-08-03T10:58:20.758Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "**The approach is proven.** Last season the first aid form was rebuilt from a rudimentary form that was not fit for purpose. The previous form asked a small set of fixed questions that frequently did not match the situation and gave members no way to record the details that mattered. The replacement asks questions based on what occurred: where oxygen use is recorded, the oxygen questions are presented. The result was visibility that had not existed before. For the first time the data could be interrogated with confidence: which first aid presentations are trending, where forms are completed incorrectly, and what is occurring on our beaches. This proposal applies the same transformation to the incident record.",
+      "new_string": "**The approach is proven.** Last season the first aid form was rebuilt from a rudimentary form that was not fit for purpose. The previous form asked a small set of fixed questions that frequently did not match the situation and gave members no way to record the details that mattered. The replacement asks questions based on what occurred. Where oxygen use is recorded, the oxygen questions are presented. The result was visibility that had not existed before. For the first time the data could be interrogated with confidence, showing which first aid presentations are trending, where forms are completed incorrectly, and what is occurring on our beaches. This proposal applies the same transformation to the incident record."
+    },
+    "timestamp": "2026-08-03T10:58:25.128Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "## One idea: every value answers exactly one question\n\nThe model rests on one principle. Every value attached to an incident answers exactly one question, and no two mechanisms answer the same question. This removes ambiguity, streamlines the workflow for members, and eliminates the duplication that degrades data quality today: a simpler model that is easier to use and produces a better result.",
+      "new_string": "## One idea\n\nThe model rests on one principle. Every value attached to an incident answers exactly one question, and no two mechanisms answer the same question. This removes ambiguity, streamlines the workflow for members, and eliminates the duplication that degrades data quality today. The result is a simpler model that is easier to use and produces better data."
+    },
+    "timestamp": "2026-08-03T10:58:28.127Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "### Agency Status: where we are",
+      "new_string": "### Agency Status"
+    },
+    "timestamp": "2026-08-03T10:58:33.614Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "### Incident Outcome: how it ended",
+      "new_string": "### Incident Outcome"
+    },
+    "timestamp": "2026-08-03T10:58:35.027Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "### Tags: what characterised it",
+      "new_string": "### Tags"
+    },
+    "timestamp": "2026-08-03T10:58:36.913Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "- A Search surfaces: Located, Fatality, Stood Down.\n- A Medical surfaces: Resolved, Referred to Agency, Fatality.",
+      "new_string": "- A Search surfaces Located, Fatality, and Stood Down.\n- A Medical surfaces Resolved, Referred to Agency, and Fatality."
+    },
+    "timestamp": "2026-08-03T10:58:39.274Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "With every other question answered by a purpose-built field, the Type answers only one: **the nature of the situation we are responding to.** The Type reflects the primary driver of the response, not everything that happens during it.",
+      "new_string": "With every other question answered by a purpose-built field, the Type answers only one question, **the nature of the situation we are responding to.** The Type reflects the primary driver of the response, not everything that happens during it."
+    },
+    "timestamp": "2026-08-03T10:58:41.619Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "For example, Medical is Not Final: an incident can be opened as Medical while the presenting problem is still being assessed, but before closure it must be refined to Chest Pain, Breathing Problems, and so on. Search and Rescue is Abstract: a bare SAR cannot be opened, one of its children must be selected. Chest Pain is Final.",
+      "new_string": "For example, Medical is Not Final. An incident can be opened as Medical while the presenting problem is still being assessed, but before closure it must be refined to Chest Pain, Breathing Problems, and so on. Search and Rescue is Abstract, so a bare SAR cannot be opened and one of its children must be selected. Chest Pain is Final."
+    },
+    "timestamp": "2026-08-03T10:58:45.387Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "With the concepts in place, the tree itself:",
+      "new_string": "With the concepts in place, the full tree is set out below."
+    },
+    "timestamp": "2026-08-03T10:58:46.805Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "**State.** Medical is **Not Final**: every closed Medical incident must be refined to a Final child.",
+      "new_string": "**State.** Medical is **Not Final**. Every closed Medical incident must be refined to a Final child."
+    },
+    "timestamp": "2026-08-03T10:58:48.790Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ && rg -n \":\" LIMSOC-Incident-Categorisation-Proposal-v0.8.md | rg -v \"^\\d+:\\||Type:|Tag:|Tags:|Outcome:|Status:|Source:|Responding Agency:|Out\\.|^\\d+:#|^\\d+:- \\*\\*|^\\d+:\\s*- [A-Z][a-z]+ \\[|https|^\\d+:\\*[A-Z]\" | head -40",
+      "description": "List remaining colon lines outside tables and notation"
+    },
+    "timestamp": "2026-08-03T10:59:00.975Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ && sed -i -e 's/^# Part 1: The/# Part 1. The/' -e 's/^# Part 2: The/# Part 2. The/' -e 's/^# Part 3: What/# Part 3. What/' -e 's/^# Part 4: Next/# Part 4. Next/' -e 's/^# Annex A: /# Annex A. /' -e 's/^# Annex B: /# Annex B. /' -e 's/^# Annex C: /# Annex C. /' -e 's/^# Annex D: /# Annex D. /' -e 's/^### Rule 1: /### Rule 1. /' -e 's/^### Rule 2: /### Rule 2. /' -e 's/^### Rule 3: /### Rule 3. /' -e 's/^### Rule 4: /### Rule 4. /' -e 's/drivers genuinely co-occur/drivers co-occur/' LIMSOC-Incident-Categorisation-Proposal-v0.8.md && rg -c \"^#.*: |genuinely\" LIMSOC-Incident-Categorisation-Proposal-v0.8.md || echo \"headings and intensifiers clean\"",
+      "description": "Remove heading colons and genuinely intensifier"
+    },
+    "timestamp": "2026-08-03T10:59:32.718Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "- The same confusion exists between records: there is no clear rule for when something is an incident, a rescue log, or a first aid form, so it is done inconsistently, and our statistics inherit that inconsistency.\n\nThese problems share a single root cause: no field in the current model carries a written definition, so practice on each has drifted into individual interpretation.",
+      "new_string": "- The same confusion exists between records. There is no clear rule for when something is an incident, a rescue log, or a first aid form, so it is done inconsistently, and our statistics inherit that inconsistency.\n\nThese problems share a single root cause. No field in the current model carries a written definition, so practice on each has drifted into individual interpretation."
+    },
+    "timestamp": "2026-08-03T10:59:40.139Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "The effort is substantial, it recurs every season, and it limits what can be delivered: reporting that cannot be produced, trends that cannot be seen, and questions that cannot be answered.",
+      "new_string": "The effort is substantial, it recurs every season, and it limits what can be delivered, leaving reporting that cannot be produced, trends that cannot be seen, and questions that cannot be answered."
+    },
+    "timestamp": "2026-08-03T10:59:42.495Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "Not all incidents will require an event association. Example: Wye River Floods.",
+      "new_string": "Not all incidents will require an event association. An example is the Wye River Floods."
+    },
+    "timestamp": "2026-08-03T10:59:44.506Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "Agency Status also carries the advisory-versus-response distinction: Information Only covers the advisory posture, and every other status is a response.",
+      "new_string": "Agency Status also carries the advisory-versus-response distinction. Information Only covers the advisory posture, and every other status is a response."
+    },
+    "timestamp": "2026-08-03T10:59:46.745Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "With Outcome as its own field, both facts are preserved: the incident was a Rescue, and it ended in a Fatality.",
+      "new_string": "With Outcome as its own field, both facts are preserved. The incident was a Rescue, and it ended in a Fatality."
+    },
+    "timestamp": "2026-08-03T10:59:49.289Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "and Rescue Completed (requiring the rescue detail, including method such as Heli rescue technique, which must flow back to the incident record: a platform requirement).",
+      "new_string": "and Rescue Completed (requiring the rescue detail, including method such as Heli rescue technique, which must flow back to the incident record, a platform requirement)."
+    },
+    "timestamp": "2026-08-03T10:59:51.441Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "The Incident Log is the append-only narrative: timestamped entries with an author, carrying the situational context that does not belong in structured fields.",
+      "new_string": "The Incident Log is the append-only narrative of timestamped entries with an author, carrying the situational context that does not belong in structured fields."
+    },
+    "timestamp": "2026-08-03T10:59:53.344Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "Each answer does one of two things: drills to a child Type, or sets a controlled Tag. No per-incident custom fields are created; the questions populate the existing primitives.",
+      "new_string": "Each answer either drills to a child Type or sets a controlled Tag. No per-incident custom fields are created. The questions populate the existing primitives."
+    },
+    "timestamp": "2026-08-03T10:59:55.539Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "Medical is Not Final: every closed Medical incident must be refined to a Final child.",
+      "new_string": "Medical is Not Final. Every closed Medical incident must be refined to a Final child."
+    },
+    "timestamp": "2026-08-03T11:00:00.175Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "**Cut from the MPDS list, with reason.** Keeping the tree small is a design discipline: a chief complaint earns its place only if it is part of our operating context.\n\n- Stun Gun component of the Assault compound: not our operating context.\n- Pandemic / Epidemic / Outbreak (Surveillance or Triage): not the incident taxonomy. Sits in Advisory Information or system-level messaging if it ever needs a home.\n- Inter-Facility Transfer / Palliative Care, and Inter-Facility Transfer for medically trained callers: patient transfer is not our operating context.\n- Removed on review, 2026-07-09: Heart Problems / AICD, Inaccessible Incident / Entrapments, Pregnancy / Childbirth / Miscarriage, Psychiatric / Suicide Attempt, Sick Person, Traffic / Transportation Incidents, Automatic Crash Notification (ACN), HCP (Health-Care Practitioner) Referral.",
+      "new_string": "**Cut from the MPDS list, with reason.** Keeping the tree small is a design discipline. A chief complaint earns its place only if it is part of our operating context.\n\n- Stun Gun component of the Assault compound. Not our operating context.\n- Pandemic / Epidemic / Outbreak (Surveillance or Triage). Not the incident taxonomy. Sits in Advisory Information or system-level messaging if it ever needs a home.\n- Inter-Facility Transfer / Palliative Care, and Inter-Facility Transfer for medically trained callers. Patient transfer is not our operating context.\n- Removed on review, 2026-07-09. Heart Problems / AICD, Inaccessible Incident / Entrapments, Pregnancy / Childbirth / Miscarriage, Psychiatric / Suicide Attempt, Sick Person, Traffic / Transportation Incidents, Automatic Crash Notification (ACN), HCP (Health-Care Practitioner) Referral."
+    },
+    "timestamp": "2026-08-03T11:00:07.765Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "Supporting principles: human first, vessel second (where a situation involves both people and a vessel, the Type follows the people); clinical detail always rides in the Action Log, never as a competing Type; and multiple separate responses to one situation group under an Event, they are not merged into one incident.",
+      "new_string": "Three principles support the rule.\n\n- Human first, vessel second. Where a situation involves both people and a vessel, the Type follows the people.\n- Clinical detail always rides in the Action Log, never as a competing Type.\n- Multiple separate responses to one situation group under an Event. They are not merged into one incident."
+    },
+    "timestamp": "2026-08-03T11:00:11.071Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "**Worked example.** AV asks us to help carry their patient off the beach. We are a resource on AV's job: External Agency > Tasking, with tags and log notes as required.",
+      "new_string": "**Worked example.** AV asks us to help carry their patient off the beach. We are a resource on AV's job, so the incident is External Agency > Tasking, with tags and log notes as required."
+    },
+    "timestamp": "2026-08-03T11:00:13.422Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "The expectation for members reduces to a single sentence: **one Action Log for each person assisted, every time.**",
+      "new_string": "The expectation for members reduces to a single sentence. **One Action Log for each person assisted, every time.**"
+    },
+    "timestamp": "2026-08-03T11:00:15.871Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "This also extends the guided-questions approach to the per-person record: the adaptive first aid form already built becomes a section of the Action Log, presented when care was provided, alongside rescue detail presented when a rescue was performed.",
+      "new_string": "This also extends the guided-questions approach to the per-person record. The adaptive first aid form already built becomes a section of the Action Log, presented when care was provided, alongside rescue detail presented when a rescue was performed."
+    },
+    "timestamp": "2026-08-03T11:00:18.126Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "That reliability compounds into everything the data touches: how we structure our services, how we support our members, and how we make the case for funding.",
+      "new_string": "That reliability compounds into everything the data touches, from how we structure our services to how we support our members and how we make the case for funding."
+    },
+    "timestamp": "2026-08-03T11:00:20.513Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "- 72 current types collapse into the new tree. Flagged rows: A01/A02 (Land/Water treatment, open item 4) and D21 Welfare (open item 3).",
+      "new_string": "- 72 current types collapse into the new tree. Two rows remain flagged, A01/A02 (Land/Water treatment, open item 4) and D21 Welfare (open item 3)."
+    },
+    "timestamp": "2026-08-03T11:00:23.009Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "- Sections appear conditionally: care sections when treatment was provided (the adaptive first aid form becomes a section), rescue detail when a rescue was performed (method, including Heli technique, flowing back to the incident record).",
+      "new_string": "- Sections appear conditionally, with care sections when treatment was provided (the adaptive first aid form becomes a section) and rescue detail when a rescue was performed (method, including Heli technique, flowing back to the incident record)."
+    },
+    "timestamp": "2026-08-03T11:00:25.395Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ && f=LIMSOC-Incident-Categorisation-Proposal-v0.8.md && echo \"--- remaining prose colons/semicolons:\" && rg -n \":\" $f | rg -v \"^\\d+:\\||Type:|Tag:|Tags:|Outcome:|Status:|Source:|Responding Agency:|^\\d+:#|https|Focus Area 1:\" | rg -v \"definition, for the first time:$|anchor everything else:$|members that either:$|life of the incident:$|Draft groups:$|can be used:$|current practice it is:$\" ; rg -n \";\" $f | rg -v \"^\\d+:\\|\" ; echo \"--- clean if empty; bumping version\" && sed -i 's/Operational Change Proposal, v0.8.2, 3 August 2026/Operational Change Proposal, v0.8.3, 3 August 2026/; s/| status | draft v0.8.2 |/| status | draft v0.8.3 |/' $f && PD=\"$CLAUDE_JOB_DIR/tmp/pandoc-3.6.4/bin/pandoc\" && \"$PD\" $f --reference-doc=\"$CLAUDE_JOB_DIR/tmp/doc.docx\" --toc --toc-depth=2 -o \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.3.docx\" && rclone copy \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.3.docx\" onedrive:00_Outbox/ && rclone lsl onedrive:00_Outbox/ | rg \"v0.8.3\"",
+      "description": "Verify colon/semicolon cleanliness, bump v0.8.3, export, push"
+    },
+    "timestamp": "2026-08-03T11:00:38.590Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "- **Backwards compatibility comes built in.** Every one of the 72 current types maps to exactly one home in the new model: a Type, a Tag, an Outcome, a Status, or a linked-record concept. Nothing is lost, and historical data stays comparable. The full map is Annex A.",
+      "new_string": "- **Backwards compatibility comes built in.** Every one of the 72 current types maps to exactly one home in the new model, whether a Type, a Tag, an Outcome, a Status, or a linked-record concept. Nothing is lost, and historical data stays comparable. The full map is Annex A."
+    },
+    "timestamp": "2026-08-03T11:01:03.564Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "- **AI-enabled features become possible.** Structured, predictable data is the prerequisite for the features we want next: guided incident creation, quality checks at point of entry, automated summaries.",
+      "new_string": "- **AI-enabled features become possible.** Structured, predictable data is the prerequisite for the features we want next, including guided incident creation, quality checks at point of entry, and automated summaries."
+    },
+    "timestamp": "2026-08-03T11:01:05.915Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "The full tag taxonomy is being drafted with the Incident Labels project (priority 1.8); the two are one effort.",
+      "new_string": "The full tag taxonomy is being drafted with the Incident Labels project (priority 1.8), and the two are one effort."
+    },
+    "timestamp": "2026-08-03T11:01:08.276Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "Two stings with identical care pathways are one Type; the animal's identity characterises, it does not classify.",
+      "new_string": "Two stings with identical care pathways are one Type. The animal's identity characterises, it does not classify."
+    },
+    "timestamp": "2026-08-03T11:01:10.232Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "*New in v0.8. Proposed here as a concept; detail to follow as its own piece of work.*",
+      "new_string": "*New in v0.8. Proposed here as a concept, with detail to follow as its own piece of work.*"
+    },
+    "timestamp": "2026-08-03T11:01:12.046Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "The system presents the questions; the operator records what is known.",
+      "new_string": "The system presents the questions, and the operator records what is known."
+    },
+    "timestamp": "2026-08-03T11:01:13.936Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/LIMSOC-Incident-Categorisation-Proposal-v0.8.md",
+      "old_string": "4. Confirm the treatment of Land / Water under Search > Person and Rescue > Person. The tree now carries them as Final children; an earlier draft carried them as Tags on a single Person node. The Migration Map rows A01 and A02 follow the tree and are flagged pending this confirmation.",
+      "new_string": "4. Confirm the treatment of Land / Water under Search > Person and Rescue > Person. The tree now carries them as Final children, while an earlier draft carried them as Tags on a single Person node. The Migration Map rows A01 and A02 follow the tree and are flagged pending this confirmation."
+    },
+    "timestamp": "2026-08-03T11:01:16.689Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/lifesaving/lsv/lsv-comms-officer/projects/limsoc/incident-categorisation/ && f=LIMSOC-Incident-Categorisation-Proposal-v0.8.md && rg -n \":\" $f | rg -v \"^\\d+:\\||Type:|Tag:|Tags:|Outcome:|Status:|Source:|Responding Agency:|^\\d+:#|Focus Area 1:\" | rg -v \"definition, for the first time:$|anchor everything else:$|members that either:$|life of the incident:$|Draft groups:$|can be used:$|current practice it is:$\" ; rg -n \";\" $f | rg -v \"^\\d+:\\|\" ; rg -c \"—|genuinely\" $f; echo \"=== clean above if empty ===\" && PD=\"$CLAUDE_JOB_DIR/tmp/pandoc-3.6.4/bin/pandoc\" && \"$PD\" $f --reference-doc=\"$CLAUDE_JOB_DIR/tmp/doc.docx\" --toc --toc-depth=2 -o \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.3.docx\" && rclone copy \"LIMSOC Incident Categorisation - Operational Change Proposal Pack v0.8.3.docx\" onedrive:00_Outbox/ && rclone lsl onedrive:00_Outbox/ | rg \"v0.8.3\"",
+      "description": "Final cleanliness check, re-export and re-push v0.8.3"
+    },
+    "timestamp": "2026-08-03T11:01:24.326Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/incident-categorisation-restructure/ISA.md",
+      "old_string": "effort: E3\nphase: verify\nprogress: 43/45",
+      "new_string": "effort: E3\nphase: complete\nprogress: 45/45"
+    },
+    "timestamp": "2026-08-04T10:03:18.448Z"
+  }
+]

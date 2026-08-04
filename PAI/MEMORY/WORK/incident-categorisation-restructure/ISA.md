@@ -2,8 +2,8 @@
 task: Restructure LIMSOC Incident Categorisation pack around incident flow for exec readability
 slug: incident-categorisation-restructure
 effort: E3
-phase: verify
-progress: 43/45
+phase: complete
+progress: 45/45
 mode: standard
 started: 2026-08-02T20:10:00+10:00
 updated: 2026-08-02T20:10:00+10:00
