@@ -1,0 +1,85 @@
+import { sql } from "drizzle-orm";
+import type { PgTransaction } from "drizzle-orm/pg-core";
+
+/**
+ * Set the current tenant context for Row-Level Security.
+ *
+ * Call this at the start of every tenant-scoped transaction.
+ * Uses SET LOCAL so the setting is scoped to the current transaction only.
+ *
+ * Usage:
+ *   await db.transaction(async (tx) => {
+ *     await setTenantContext(tx, tenantId);
+ *     // All subsequent queries in this transaction are tenant-scoped
+ *   });
+ */
+export async function setTenantContext(
+  tx: PgTransaction<any, any, any>,
+  tenantId: string
+): Promise<void> {
+  await tx.execute(
+    sql`SELECT set_config('app.current_tenant_id', ${tenantId}, true)`
+  );
+}
+
+/**
+ * SQL to create RLS policies for a tenant-scoped table.
+ * Run this in a migration for each tenant-scoped table.
+ * Only accepts table names from the RLS_TABLES allowlist.
+ */
+export function createRLSPolicy(tableName: (typeof RLS_TABLES)[number]): string {
+  if (!RLS_TABLES.includes(tableName)) {
+    throw new Error(`Table "${tableName}" is not in the RLS allowlist`);
+  }
+  return `
+    ALTER TABLE "${tableName}" ENABLE ROW LEVEL SECURITY;
+
+    CREATE POLICY "tenant_isolation_${tableName}" ON "${tableName}"
+      USING (tenant_id = current_setting('app.current_tenant_id')::uuid);
+
+    CREATE POLICY "tenant_insert_${tableName}" ON "${tableName}"
+      FOR INSERT
+      WITH CHECK (tenant_id = current_setting('app.current_tenant_id')::uuid);
+  `;
+}
+
+/**
+ * Tables that should have RLS policies applied.
+ * Does NOT include:
+ * - users, push_tokens (not tenant-scoped)
+ * - tenants (accessed by global admins without tenant context)
+ * - notification_templates (nullable tenant_id for global defaults;
+ *   RLS would exclude NULL tenant_id rows. Handled at app layer.)
+ *
+ * This allowlist previously drifted from the schema: `reconciliations`,
+ * `reconciliation_discrepancies` (added in migration 0009, ENABLE only, no
+ * FORCE, and never added here) and `attestation_requests` (added in
+ * migration 0002 with NO row-level security at all) were all missing.
+ * `email_configurations` is declared in the schema (ISC-9) but has no
+ * migration yet; it is listed here so RLS coverage is generated correctly
+ * the moment that migration lands — do not remove it when ISC-9 ships,
+ * just add its ENABLE/FORCE/policy statements to that migration.
+ *
+ * Guarded by apps/web/src/__tests__/tenant-isolation.test.ts, which reflects
+ * over the Drizzle schema and fails if any table with a `tenant_id` column
+ * is missing from this list.
+ */
+export const RLS_TABLES = [
+  "tenant_memberships",
+  "admin_assignments",
+  "credential_types",
+  "access_levels",
+  "user_group_rules",
+  "pickup_locations",
+  "fob_requests",
+  "credentials",
+  "audit_log",
+  "notifications",
+  "notification_preferences",
+  "access_control_systems",
+  "reconciliations",
+  "reconciliation_discrepancies",
+  "attestation_requests",
+  "email_configurations",
+  "email_queue",
+] as const;
