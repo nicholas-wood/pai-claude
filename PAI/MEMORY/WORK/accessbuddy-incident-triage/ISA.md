@@ -2,8 +2,8 @@
 task: Investigate three AccessBuddy incidents and deliver a report plus action plan per issue
 slug: accessbuddy-incident-triage
 effort: E3
-phase: build
-progress: 29/37
+phase: complete
+progress: 37/37
 mode: standard
 started: 2026-08-01T00:00:00+10:00
 updated: 2026-08-01T00:00:00+10:00
@@ -77,7 +77,7 @@ Deliver a three-part incident report — login failure, email-limit audit with q
 ### Issue 4 — New defects (added 2026-08-04)
 - [x] ISC-38: Cause of 3001 dual-queue identified (~85% confidence) — two rows: legit deactivation + phantom paired replacement spawned by the paired-replacement backfill that runs on EVERY container start (entrypoint.sh, 85d89b0 in prod); backfill can't distinguish attestation lost-reports from orphan-linked replacements, auto-matched the deactivating fob itself and hijacked credentials.request_id; data-fix SQL + code fixes proposed; bonus latent defect: attestation route omits replacesCredentialId so attested-lost fobs never flip to inactive
 - [x] ISC-39: Attestation expiry label mismatch explained — UTC date-only rendering of a correct midnight-AEST timestamptz; three affected sites (persisted programmingReason, cron warning email, reconciliation audit string); no software early-expiry; human risk via Integriti programming + reconciliation write-back; display-helper fix, no migration
-- [ ] ISC-40: Remediation email updated with how-to-renew-membership instructions and send plan (blocked on recipient list + Nick's renewal-channel wording)
+- [x] ISC-40: Remediation email updated with SLSA Hub renewal instructions (Nick's wording), branded via app layout(), sent 96/96 (85 on 4 Aug + 11 on 5 Aug), idempotent log with Resend IDs
 
 ### Cross-cutting
 - [x] ISC-29: Cross-issue causal chain (blast → limit → login) confirmed or refuted with evidence

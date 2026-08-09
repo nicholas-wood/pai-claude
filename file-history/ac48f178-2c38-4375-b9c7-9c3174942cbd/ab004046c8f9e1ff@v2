@@ -1,0 +1,36 @@
+-- ══════════════════════════════════════════════════════════════════════════
+-- Make fob_requests.requester_id and credential_type_id nullable to match the
+-- ORM and the app's actual write behaviour. Surfaced by the schema-parity
+-- nullability gate added alongside 0015.
+--
+-- THE DEFECT
+-- ----------
+-- Both columns are NOT NULL in the database but nullable in the ORM
+-- (schema/requests.ts:20-23, neither carries .notNull()), and the app writes
+-- NULL to both on real paths:
+--
+--   * requester_id     -- orphan requests (someone submits before they are a
+--                         linked member) are created with no requester and an
+--                         orphan_email instead; transitionRequest resolves or
+--                         creates the user later (services/requests.ts:512-524,
+--                         `if (!memberUserId && request.orphanEmail)`).
+--   * credential_type_id -- the replacement-request path writes the resolved
+--                         old-credential type, which is `string | null` and is
+--                         null when the replaced credential cannot be resolved
+--                         (requests/submit/route.ts:232-252).
+--
+-- Under the database's NOT NULL constraints those writes raise `null value in
+-- column ... violates not-null constraint`. Same drift class as
+-- credentials.owner_id (0015): almost certainly already dropped in prod out of
+-- band, never migrated, so the migration-built CI/DR schema still rejects them.
+--
+-- THE FIX
+-- -------
+-- Drop both NOT NULL constraints. Idempotent: a no-op where the column is
+-- already nullable (production), corrective on a fresh migration-built
+-- database. No consumer changes -- the ORM already types both nullable.
+-- ══════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE "fob_requests" ALTER COLUMN "requester_id" DROP NOT NULL;
+--> statement-breakpoint
+ALTER TABLE "fob_requests" ALTER COLUMN "credential_type_id" DROP NOT NULL;

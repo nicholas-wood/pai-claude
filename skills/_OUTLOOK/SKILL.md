@@ -75,6 +75,7 @@ User: "Email the board the decision and list the next steps in order."
 - **Account selection is not wired.** The draft opens from Outlook's default account. If Nick needs a specific From account, he picks it in the compose window. (Add `--account` support later if this becomes routine.)
 - **HTML is single-lined on purpose.** AppleScript string literals can't span raw newlines, so the converter emits one-line HTML and escapes `"`/`\`. Don't "prettify" the HTML with newlines — it'll break the AppleScript.
 - **`mailto:` body length.** Some setups truncate very long `mailto:` URLs. The fallback is for short notes; long formatted emails need the classic-Outlook path.
+- **Linux sessions CAN open real drafts via `ssh mac`.** The Mac has no `~/.claude` skill tree, so stage first: `scp Tools/DraftOutlook.ts <body>.md mac:~/pai-tmp/`, then `ssh mac '/Users/nicholaswood/.bun/bin/bun ~/pai-tmp/DraftOutlook.ts --to ... --subject ... --body-file ~/pai-tmp/<body>.md'`. Use bun's full path (non-interactive ssh has no PATH setup). Verified 2026-08-09: classic-Outlook HTML path succeeded remotely. CONTACTS.md was empty at that date; recipient addresses may need a workspace search (`rg -o "[a-z.]+@lsv.com.au"`), flag inferred addresses for Nick to verify in the compose window.
 
 ## Skill Type
 

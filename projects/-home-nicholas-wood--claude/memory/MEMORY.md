@@ -22,3 +22,6 @@
 - [Cato codex CLI missing](gotcha-cato-codex-cli-missing.md) — cross-vendor audits skip on the Linux box; install codex or treat Cato output as same-family
 - [Advice not action](feedback-advice-not-action.md) — when Nick asks "should I...?", answer the question and stop; never apply the edit unprompted
 - [LSV proposal register](feedback-lsv-proposal-register.md) — org proposals read as formal documentation; keep stories, drop conversational devices
+- [Outlook draft from Linux](reference-outlook-draft-from-linux.md) — stage DraftOutlook.ts + body to mac:~/pai-tmp, run via ssh with full bun path; verify inferred recipients
+- [AccessBuddy prod access](gotcha-accessbuddy-prod-access.md) — all via ssh mac (Homebrew paths); IP-toggle DB pattern, send-only Resend keys, gh token file, pg_class not pg_tables for FORCE RLS
+- [LSV first aid form analysis](project-lsv-first-aid-form-analysis.md) — report + artifact done 9 Aug; re-derived headlines; colleague Year2Year formulas broken

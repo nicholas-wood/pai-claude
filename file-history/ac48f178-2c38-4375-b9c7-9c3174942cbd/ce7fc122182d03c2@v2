@@ -1,0 +1,144 @@
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { and, eq } from "drizzle-orm";
+
+/**
+ * Regression test for the cancel-a-programmed-fob bug.
+ *
+ * transitionRequest's CANCEL branch unallocates a linked, still-active
+ * credential with `UPDATE credentials SET owner_id = NULL` (services/
+ * requests.ts). credentials.owner_id was NOT NULL in the migration-built
+ * database (a drift from the ORM, which has always typed it nullable), so that
+ * update threw `null value in column "owner_id" violates not-null constraint`
+ * and cancelling a request whose fob had been programmed failed outright.
+ *
+ * 0013_credentials_nullable_fks.sql drops the NOT NULL. This test proves the
+ * cancel path now completes and the fob ends up owner-less and queued for
+ * deactivation. Gated on DATABASE_URL; runs in CI against the migrated
+ * Postgres, skips on a laptop with no database.
+ */
+
+const hasDb = !!process.env.DATABASE_URL;
+
+describe.skipIf(!hasDb)("cancel a request with a linked programmed credential", () => {
+  let db: typeof import("@accessbuddy/db").db;
+  let tenants: typeof import("@accessbuddy/db").tenants;
+  let users: typeof import("@accessbuddy/db").users;
+  let credentialTypes: typeof import("@accessbuddy/db").credentialTypes;
+  let accessLevels: typeof import("@accessbuddy/db").accessLevels;
+  let fobRequests: typeof import("@accessbuddy/db").fobRequests;
+  let credentials: typeof import("@accessbuddy/db").credentials;
+  let transitionRequest: typeof import("@/lib/services/requests").transitionRequest;
+  let withTenant: typeof import("@/lib/with-tenant").withTenant;
+  let CredentialStatus: typeof import("@accessbuddy/shared").CredentialStatus;
+  let RequestType: typeof import("@accessbuddy/shared").RequestType;
+  let RequestStatus: typeof import("@accessbuddy/shared").RequestStatus;
+
+  let tenant: { id: string };
+  let user: { id: string };
+  let credType: { id: string };
+  let accessLevel: { id: string };
+  let request: { id: string };
+  let credential: { id: string };
+
+  beforeAll(async () => {
+    const dbPackage = await import("@accessbuddy/db");
+    const shared = await import("@accessbuddy/shared");
+    db = dbPackage.db;
+    tenants = dbPackage.tenants;
+    users = dbPackage.users;
+    credentialTypes = dbPackage.credentialTypes;
+    accessLevels = dbPackage.accessLevels;
+    fobRequests = dbPackage.fobRequests;
+    credentials = dbPackage.credentials;
+    CredentialStatus = shared.CredentialStatus;
+    RequestType = shared.RequestType;
+    RequestStatus = shared.RequestStatus;
+    ({ transitionRequest } = await import("@/lib/services/requests"));
+    ({ withTenant } = await import("@/lib/with-tenant"));
+
+    const suffix = `${Date.now()}`;
+    [tenant] = await db
+      .insert(tenants)
+      .values({ name: `Cancel Club ${suffix}`, slug: `cancel-${suffix}` })
+      .returning({ id: tenants.id });
+    [user] = await db
+      .insert(users)
+      .values({
+        firebaseUid: `cancel-fb-${suffix}`,
+        email: `cancel-${suffix}@example.com`,
+        firstName: "Cancel",
+        lastName: "Tester",
+      })
+      .returning({ id: users.id });
+    [credType] = await db
+      .insert(credentialTypes)
+      .values({ tenantId: tenant.id, name: "Fob", priceCents: 0 })
+      .returning({ id: credentialTypes.id });
+    [accessLevel] = await db
+      .insert(accessLevels)
+      .values({ tenantId: tenant.id, name: "Standard" })
+      .returning({ id: accessLevels.id });
+    // A request whose fob has been programmed: status AWAITING_PROGRAMMING is a
+    // state CANCEL is valid from, and the credential below is linked to it.
+    [request] = await db
+      .insert(fobRequests)
+      .values({
+        tenantId: tenant.id,
+        requesterId: user.id,
+        credentialTypeId: credType.id,
+        requestType: RequestType.NEW,
+        status: RequestStatus.AWAITING_PROGRAMMING,
+      })
+      .returning({ id: fobRequests.id });
+    [credential] = await db
+      .insert(credentials)
+      .values({
+        tenantId: tenant.id,
+        ownerId: user.id,
+        credentialTypeId: credType.id,
+        accessLevelId: accessLevel.id,
+        requestId: request.id,
+        status: CredentialStatus.ACTIVE,
+        issuedAt: new Date(),
+      })
+      .returning({ id: credentials.id });
+  });
+
+  afterAll(async () => {
+    // FK order: credential references request, so it goes first.
+    const { auditLog } = await import("@accessbuddy/db");
+    await db.delete(auditLog).where(eq(auditLog.tenantId, tenant.id));
+    await db.delete(credentials).where(eq(credentials.tenantId, tenant.id));
+    await db.delete(fobRequests).where(eq(fobRequests.tenantId, tenant.id));
+    await db.delete(accessLevels).where(eq(accessLevels.tenantId, tenant.id));
+    await db.delete(credentialTypes).where(eq(credentialTypes.tenantId, tenant.id));
+    await db.delete(users).where(eq(users.id, user.id));
+    await db.delete(tenants).where(eq(tenants.id, tenant.id));
+  });
+
+  it("cancels without a NOT NULL error and leaves the fob owner-less, queued for deactivation", async () => {
+    await expect(
+      withTenant(tenant.id, (tx) =>
+        transitionRequest(tx, {
+          requestId: request.id,
+          tenantId: tenant.id,
+          event: "CANCEL",
+          actorId: null,
+        })
+      )
+    ).resolves.toBeDefined();
+
+    const [after] = await db
+      .select({
+        ownerId: credentials.ownerId,
+        programmingRequired: credentials.programmingRequired,
+      })
+      .from(credentials)
+      .where(
+        and(eq(credentials.id, credential.id), eq(credentials.tenantId, tenant.id))
+      );
+
+    expect(after.ownerId).toBeNull();
+    expect(after.programmingRequired).toBe(true);
+  });
+});
