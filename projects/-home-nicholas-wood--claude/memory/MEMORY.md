@@ -25,3 +25,4 @@
 - [Outlook draft from Linux](reference-outlook-draft-from-linux.md) — stage DraftOutlook.ts + body to mac:~/pai-tmp, run via ssh with full bun path; verify inferred recipients
 - [AccessBuddy prod access](gotcha-accessbuddy-prod-access.md) — all via ssh mac (Homebrew paths); IP-toggle DB pattern, send-only Resend keys, gh token file, pg_class not pg_tables for FORCE RLS
 - [LSV first aid form analysis](project-lsv-first-aid-form-analysis.md) — report + artifact done 9 Aug; re-derived headlines; colleague Year2Year formulas broken
+- [No ownership-claim phrasing](feedback-no-ownership-claim-phrasing.md) — "I own X" in positioning copy reads try-hard; show scope through verb arcs instead

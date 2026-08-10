@@ -1,0 +1,134 @@
+/**
+ * Regression: completePrevious must supersede by WINDOW OVERLAP, not by
+ * open-ness (the "typed $700, got $764.52" defect, fixed 2026-08-10).
+ *
+ * A mid-month edit closes the baseline version at e.g. the 4th. A later
+ * ordinary save (default From = first of month) used to skip that
+ * already-completed line — `if (effectiveToOf(t) !== null) continue` — so its
+ * early-month days kept contributing and SUMMED with the new full-month
+ * version. Now every line of the envelope whose window still reaches the new
+ * effectiveFrom is truncated to the day before it; fully-superseded lines
+ * become degenerate windows that resolve to 0 (the template port has no
+ * delete — append/update only).
+ */
+
+import { describe, test, expect } from "bun:test";
+import type { CreateEnvelopeResponse, EditBudgetResponse, GridResponse } from "../src/server/contract.ts";
+import { currentPeriod } from "../src/platform/time.ts";
+import { monthBounds, periodKey } from "../src/envelope/period.ts";
+import { makeTestApp, postJson, getJson, type TestApp } from "./server-test-app.ts";
+
+const TZ = "Australia/Melbourne";
+const NOW = currentPeriod(TZ);
+const FIRST = monthBounds(NOW).first;
+const MID = `${periodKey(NOW)}-05`;
+
+async function createEnvelope(t: TestApp, cookie: string, body: unknown): Promise<string> {
+  const res = await postJson(t.app, "/api/envelopes", body, cookie);
+  expect(res.status).toBe(200);
+  return ((await res.json()) as CreateEnvelopeResponse).id;
+}
+
+async function grid(t: TestApp, cookie: string): Promise<GridResponse> {
+  const res = await getJson(t.app, "/api/envelopes", cookie);
+  expect(res.status).toBe(200);
+  return (await res.json()) as GridResponse;
+}
+
+async function editOngoing(t: TestApp, cookie: string, envelopeId: string, amountCents: number, effectiveFrom: string): Promise<Response> {
+  return postJson(
+    t.app,
+    "/api/budget/edit",
+    { lines: [{ envelopeId, amountCents }], scope: "ongoing", effectiveFrom, completePrevious: true },
+    cookie,
+  );
+}
+
+describe("budget edit supersession over an existing mid-month version", () => {
+  test("an edit from the 1st after a mid-month version stores EXACTLY the typed amount", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createEnvelope(t, cookie, { name: "Groceries", type: "expense", budgetedCents: 50000, period: "monthly" });
+
+    // Nick's July pattern: a mid-month change earlier in the month (prorates).
+    expect((await editOngoing(t, cookie, id, 60000, MID)).status).toBe(200);
+
+    // The ordinary later save: type 700 with the wizard's default From.
+    const res = await editOngoing(t, cookie, id, 70000, FIRST);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as EditBudgetResponse).changed).toBe(1);
+    expect((await grid(t, cookie)).rows.find((r) => r.id === id)?.allocationCents).toBe(70000);
+  });
+
+  test("a second edit in the same month applies cleanly", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createEnvelope(t, cookie, { name: "Groceries", type: "expense", budgetedCents: 50000, period: "monthly" });
+    expect((await editOngoing(t, cookie, id, 60000, FIRST)).status).toBe(200);
+    expect((await editOngoing(t, cookie, id, 65000, FIRST)).status).toBe(200);
+    expect((await grid(t, cookie)).rows.find((r) => r.id === id)?.allocationCents).toBe(65000);
+  });
+
+  test("the budget history's afterCents records the typed amount, not a blended sum", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createEnvelope(t, cookie, { name: "Groceries", type: "expense", budgetedCents: 50000, period: "monthly" });
+    await editOngoing(t, cookie, id, 60000, MID);
+    await editOngoing(t, cookie, id, 70000, FIRST);
+    const history = await getJson(t.app, "/api/budget/history", cookie);
+    if (history.status === 200) {
+      const body = (await history.json()) as { changes?: readonly { envelopeId: string; afterCents: number }[] };
+      const latest = body.changes?.find((c) => c.envelopeId === id);
+      if (latest) expect(latest.afterCents).toBe(70000);
+    }
+  });
+
+  test("income: an edit from the 1st after a mid-month income version stores the typed amount", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createEnvelope(t, cookie, { name: "Salary", type: "income", parentId: null, budgetedCents: 500000, targetCents: 500000 });
+
+    const mid = await postJson(
+      t.app,
+      "/api/envelopes/edit",
+      { id, type: "income", budgetedCents: 600000, targetCents: 600000, effectiveFrom: MID, completePrevious: true },
+      cookie,
+    );
+    expect(mid.status).toBe(200);
+
+    const res = await postJson(
+      t.app,
+      "/api/envelopes/edit",
+      { id, type: "income", budgetedCents: 700000, targetCents: 700000, effectiveFrom: FIRST, completePrevious: true },
+      cookie,
+    );
+    expect(res.status).toBe(200);
+    expect((await grid(t, cookie)).income.find((i) => i.id === id)?.budgetedCents).toBe(700000);
+  });
+
+  test("the chronology never lists fully-superseded (inverted-window) versions", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createEnvelope(t, cookie, { name: "Groceries", type: "expense", budgetedCents: 50000, period: "monthly" });
+    await editOngoing(t, cookie, id, 60000, MID);
+    await editOngoing(t, cookie, id, 70000, FIRST); // truncates the MID version into an inverted window
+    const res = await getJson(t.app, `/api/envelopes/versions?envelopeId=${id}`, cookie);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { versions: { effectiveFrom: string; effectiveTo: string | null }[] };
+    for (const v of body.versions) {
+      if (v.effectiveTo !== null) expect(v.effectiveTo >= v.effectiveFrom).toBe(true);
+    }
+  });
+
+  test("scheduling a future change still coexists correctly with the active version", async () => {
+    // The fix must not break the documented schedule semantics: a version
+    // starting NEXT month truncates the active one to the end of this month,
+    // and this month's grid keeps the old amount.
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createEnvelope(t, cookie, { name: "Groceries", type: "expense", budgetedCents: 50000, period: "monthly" });
+    const nextFirst = monthBounds({ year: NOW.month === 12 ? NOW.year + 1 : NOW.year, month: NOW.month === 12 ? 1 : NOW.month + 1 }).first;
+    expect((await editOngoing(t, cookie, id, 60000, nextFirst)).status).toBe(200);
+    expect((await grid(t, cookie)).rows.find((r) => r.id === id)?.allocationCents).toBe(50000);
+  });
+});

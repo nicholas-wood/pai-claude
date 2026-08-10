@@ -1,0 +1,649 @@
+import * as React from "react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, Save, CheckCircle2, AlertTriangle, Wallet, Search, X, TrendingUp, PiggyBank, Receipt, Mail, History } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import type { EditBudgetLine, EnvelopeRow, IncomeEnvelopeView } from "@contract";
+import type { ChangeScope, BudgetPeriod, EnvelopeType } from "@domain";
+import { call, isApiError } from "@/lib/api";
+import { useEnvelopes, useInvalidateBudget } from "@/lib/queries";
+import {
+  cn,
+  formatCents,
+  normalisePeriods,
+  monthlyEquivalentCents,
+  firstOfCurrentMonthIso,
+  midMonthProrationNote,
+  BUDGET_PERIODS,
+  BUDGET_PERIOD_LABELS,
+} from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { VersionChronology } from "@/components/budget/VersionChronology";
+
+/**
+ * Edit Budget wizard (ISC-72). The recurring template is edited here, not inline
+ * on the grid. It now includes INCOME alongside spending, and groups every line
+ * into the same four sections as the budget page (Income / Savings / Expenses /
+ * Envelopes). Income lines edit the expected-income budget (the balancing figure)
+ * via POST /api/envelopes/edit; spending lines edit the template via
+ * POST /api/budget/edit, entered in a per-row period and normalised to a monthly
+ * equivalent (ISC-94). Search, section/category filters, and sort scale the list.
+ * The running zero-based check alerts (never blocks) when unbalanced (ISC-30/32).
+ * Data is the real grid response; nothing is invented (ISC-83).
+ */
+type TypeFilter = "all" | "income" | "expense" | "saving" | "envelope";
+type SortKey = "name" | "amount" | "category";
+
+interface Draft {
+  amountCents: number; // entered in the row's selected period
+  period: BudgetPeriod;
+}
+
+/** The spending sections, rendered in budget-page order under their own headers. */
+const SPENDING_SECTIONS: readonly { type: Exclude<EnvelopeType, "income">; title: string; icon: LucideIcon }[] = [
+  { type: "saving", title: "Savings", icon: PiggyBank },
+  { type: "expense", title: "Expenses", icon: Receipt },
+  { type: "envelope", title: "Envelopes", icon: Mail },
+];
+
+/**
+ * The figure the wizard edits: the row's OWN allocation, never the rolled-up
+ * descendant total. For a leaf own == rolled, so the fallback (older payloads
+ * without the field) is exact there; for a parent the own line is the only
+ * editable figure.
+ */
+const ownAlloc = (r: EnvelopeRow): number => r.ownAllocationCents ?? r.allocationCents;
+
+export function EditBudgetPage() {
+  const navigate = useNavigate();
+  const invalidateBudget = useInvalidateBudget();
+  // Shared this-month grid query (deduped with the other this-month consumers).
+  const { data: grid = null, isLoading: loading } = useEnvelopes({ period: "this-month" });
+  const [draft, setDraft] = React.useState<Record<string, Draft>>({});
+  const [incomeDraft, setIncomeDraft] = React.useState<Record<string, number>>({}); // monthly budget cents
+  const [scope, setScope] = React.useState<ChangeScope>("ongoing");
+  const [saved, setSaved] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  // Budget chronology (Feature A): the effective window for CHANGED lines and
+  // whether the previous version is completed. Default From = first of the
+  // CURRENT month (matches today's edit semantics); the user moves it to a
+  // future date to schedule a change (e.g. income change as of 1 Aug).
+  const [effectiveFrom, setEffectiveFrom] = React.useState<string>(firstOfCurrentMonthIso());
+  const [effectiveTo, setEffectiveTo] = React.useState<string>("");
+  const [completePrevious, setCompletePrevious] = React.useState(true);
+  // Per-row expanded chronology (the History affordance).
+  const [historyOpen, setHistoryOpen] = React.useState<Set<string>>(() => new Set());
+  const toggleHistory = (id: string) =>
+    setHistoryOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  // Toolbar state.
+  const [search, setSearch] = React.useState("");
+  const [typeFilter, setTypeFilter] = React.useState<TypeFilter>("all");
+  const [categoryFilter, setCategoryFilter] = React.useState<string>("all");
+  const [sortKey, setSortKey] = React.useState<SortKey>("category");
+
+  // Seed the editable drafts once from the first loaded grid. A later background
+  // refetch (e.g. after a save invalidates the grid) must not clobber in-progress
+  // edits, so seeding is guarded to run a single time.
+  const seededRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!grid || seededRef.current) return;
+    seededRef.current = true;
+    // Seed each spending row's draft from its native period, converting the
+    // stored monthly allocation back into that period for display.
+    const seed: Record<string, Draft> = {};
+    grid.rows.forEach((r) => {
+      seed[r.id] = { amountCents: normalisePeriods(ownAlloc(r), "monthly")[r.period], period: r.period };
+    });
+    setDraft(seed);
+    // Seed income drafts from each source's monthly budget.
+    const iseed: Record<string, number> = {};
+    grid.income.forEach((i) => (iseed[i.id] = i.budgetedCents));
+    setIncomeDraft(iseed);
+  }, [grid]);
+
+  // Memoised so the derived useMemos below keep a stable identity across renders
+  // (clears the exhaustive-deps warnings on a fresh `[] `/logical expression).
+  const rows = React.useMemo(() => grid?.rows ?? [], [grid]);
+  const income = React.useMemo(() => grid?.income ?? [], [grid]);
+  const nameById = React.useMemo(() => new Map(rows.map((r) => [r.id, r.name])), [rows]);
+
+  /** A row's category label: its group, else its parent's name, else a dash. */
+  const categoryOf = React.useCallback(
+    (r: EnvelopeRow): string => r.group || (r.parentId ? nameById.get(r.parentId) ?? "" : "") || "Uncategorised",
+    [nameById]
+  );
+
+  /** Envelope ids that have at least one child row. */
+  const parentIds = React.useMemo(() => {
+    const set = new Set<string>();
+    rows.forEach((r) => {
+      if (r.parentId !== null) set.add(r.parentId);
+    });
+    return set;
+  }, [rows]);
+
+  // A leaf envelope takes a direct allocation. A parent normally rolls up its
+  // children — but it can ALSO carry its own budget line (e.g. Groceries with
+  // a Supplements child plus its own $505.92), so a parent with a nonzero own
+  // allocation is editable too; a pure-rollup parent stays excluded.
+  const editable = React.useMemo(
+    () => rows.filter((r) => !parentIds.has(r.id) || ownAlloc(r) > 0),
+    [rows, parentIds]
+  );
+
+  const entryFor = React.useCallback(
+    (r: EnvelopeRow): Draft =>
+      draft[r.id] ?? { amountCents: normalisePeriods(ownAlloc(r), "monthly")[r.period], period: r.period },
+    [draft]
+  );
+
+  const monthlyFor = React.useCallback(
+    (r: EnvelopeRow): number => {
+      const d = entryFor(r);
+      return monthlyEquivalentCents(d.amountCents, d.period);
+    },
+    [entryFor]
+  );
+
+  const incomeFor = React.useCallback((i: IncomeEnvelopeView): number => incomeDraft[i.id] ?? i.budgetedCents, [incomeDraft]);
+
+  // Distinct categories present, for the category filter.
+  const categories = React.useMemo(() => {
+    const set = new Set<string>();
+    editable.forEach((r) => set.add(categoryOf(r)));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [editable, categoryOf]);
+
+  // Distinct section types present, for the type filter.
+  const types = React.useMemo(() => {
+    const set = new Set<TypeFilter>();
+    editable.forEach((r) => {
+      if (r.type === "expense" || r.type === "saving" || r.type === "envelope") set.add(r.type);
+    });
+    return Array.from(set);
+  }, [editable]);
+
+  const q = search.trim().toLowerCase();
+
+  const visible = React.useMemo(() => {
+    const list = editable.filter((r) => {
+      if (q && !r.name.toLowerCase().includes(q)) return false;
+      if (typeFilter !== "all" && typeFilter !== "income" && r.type !== typeFilter) return false;
+      if (typeFilter === "income") return false;
+      if (categoryFilter !== "all" && categoryOf(r) !== categoryFilter) return false;
+      return true;
+    });
+    const sorted = [...list];
+    sorted.sort((a, b) => {
+      if (sortKey === "amount") return monthlyFor(b) - monthlyFor(a);
+      if (sortKey === "category") {
+        const c = categoryOf(a).localeCompare(categoryOf(b));
+        return c !== 0 ? c : a.name.localeCompare(b.name);
+      }
+      return a.name.localeCompare(b.name);
+    });
+    return sorted;
+  }, [editable, q, typeFilter, categoryFilter, sortKey, categoryOf, monthlyFor]);
+
+  // Income is shown when not filtered to a spending section, and matches search.
+  const incomeVisible = React.useMemo(() => {
+    if (typeFilter !== "all" && typeFilter !== "income") return [];
+    if (categoryFilter !== "all") return []; // income has no category
+    return income.filter((i) => !q || i.name.toLowerCase().includes(q));
+  }, [income, typeFilter, categoryFilter, q]);
+
+  const sectionRows = (type: Exclude<EnvelopeType, "income">) => visible.filter((r) => r.type === type);
+
+  // Zero-base check sums every editable line's OWN monthly equivalent (a
+  // parent's own budget line, never its rolled-up descendant total — children
+  // are their own lines) against the editable income budget, so the total
+  // matches the server's zero-base allocated figure exactly and stays honest
+  // while you search.
+  const totalAllocated = editable.reduce((s, r) => s + monthlyFor(r), 0);
+  const totalIncome = income.reduce((s, i) => s + incomeFor(i), 0);
+  const remaining = totalIncome - totalAllocated;
+  const balanced = remaining === 0;
+
+  const totalVisible = visible.length + incomeVisible.length;
+  const totalEditable = editable.length + income.length;
+
+  const setAmount = (id: string, dollars: string, r: EnvelopeRow) =>
+    setDraft((prev) => {
+      const cur = prev[id] ?? entryFor(r);
+      return { ...prev, [id]: { ...cur, amountCents: Math.round((parseFloat(dollars) || 0) * 100) } };
+    });
+
+  const setPeriod = (id: string, period: BudgetPeriod, r: EnvelopeRow) =>
+    setDraft((prev) => {
+      const cur = prev[id] ?? entryFor(r);
+      // Keep the entered number; re-interpret it in the new period (ISC-94).
+      return { ...prev, [id]: { ...cur, period } };
+    });
+
+  const setIncomeAmount = (id: string, dollars: string) =>
+    setIncomeDraft((prev) => ({ ...prev, [id]: Math.round((parseFloat(dollars) || 0) * 100) }));
+
+  const clearFilters = () => {
+    setSearch("");
+    setTypeFilter("all");
+    setCategoryFilter("all");
+  };
+  const filtersActive = search !== "" || typeFilter !== "all" || categoryFilter !== "all";
+
+  const onSave = async () => {
+    setBusy(true);
+    setError(null);
+    const lines: EditBudgetLine[] = editable.map((r) => {
+      const d = entryFor(r);
+      return { envelopeId: r.id, amountCents: monthlyEquivalentCents(d.amountCents, d.period), period: d.period };
+    });
+    // The chronology fields apply to ongoing edits only (this-month overrides
+    // are never versioned). effectiveTo is optional: absent = open-ended.
+    const chronology =
+      scope === "ongoing"
+        ? {
+            effectiveFrom,
+            ...(effectiveTo ? { effectiveTo } : {}),
+            completePrevious,
+          }
+        : {};
+    try {
+      // Income budgets: persist any that changed via the envelope-edit endpoint.
+      // The edits are independent, so fire them in parallel (m6) rather than one
+      // serial round-trip per line, then surface the first error if any failed.
+      const incomeChanges = income.filter((i) => incomeFor(i) !== i.budgetedCents);
+      const incomeResults = await Promise.all(
+        incomeChanges.map((i) => {
+          const amt = incomeFor(i);
+          return call("POST /api/envelopes/edit", {
+            id: i.id,
+            type: "income",
+            budgetedCents: amt,
+            targetCents: amt,
+            ...chronology,
+          });
+        })
+      );
+      const firstIncomeError = incomeResults.find(isApiError);
+      if (firstIncomeError) {
+        setError(firstIncomeError.error);
+        return;
+      }
+      const res = await call("POST /api/budget/edit", { lines, scope, ...chronology });
+      if (isApiError(res)) {
+        setError(res.error);
+        return;
+      }
+      setSaved(true);
+      // Budget edits change allocations, so refresh the grid and net position for
+      // every other view (BudgetPage, NetPositionWidget, ...).
+      invalidateBudget();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save the budget.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Header for one grouped section, mirroring the budget page. */
+  function SectionHeader({ icon: Icon, title, count, total }: { icon: LucideIcon; title: string; count: number; total: number }) {
+    return (
+      <div className="flex items-center justify-between gap-3 border-b bg-muted/30 px-4 py-2">
+        <div className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+          <Icon className="h-4 w-4 text-muted-foreground" /> {title}
+          <span className="rounded-full bg-muted px-1.5 text-[10px] font-medium text-muted-foreground">{count}</span>
+        </div>
+        <div className="tnum text-sm font-semibold">{formatCents(total)}/mo</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Button asChild variant="ghost" size="icon">
+            <button onClick={() => navigate(-1)} aria-label="Back">
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+          </Button>
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight md:text-2xl">Edit budget</h1>
+            <p className="text-sm text-muted-foreground">Edit income and the recurring template. It auto-rolls into each month.</p>
+          </div>
+        </div>
+        <div className="w-40">
+          <Select value={scope} onValueChange={(v) => setScope(v as ChangeScope)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ongoing">Every month</SelectItem>
+              <SelectItem value="this_month">This month only</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="py-16 text-center text-sm text-muted-foreground animate-pulse">Loading budget…</div>
+      ) : editable.length === 0 && income.length === 0 ? (
+        <div className="rounded-lg border border-dashed bg-card px-6 py-12 text-center">
+          <Wallet className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+          <p className="text-sm font-medium">No budget set up yet</p>
+          <p className="mt-1 text-sm text-muted-foreground">Add envelopes from the budget screen to edit their allocations.</p>
+        </div>
+      ) : (
+        <>
+          {/* Running zero-based check (alert, not block) */}
+          <div
+            className={cn(
+              "flex items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm",
+              balanced ? "border-success/40 bg-success/10 text-success" : "border-warning/40 bg-warning/10 text-warning"
+            )}
+          >
+            <div className="flex items-center gap-2 font-medium">
+              {balanced ? <CheckCircle2 className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+              {balanced
+                ? "Every dollar allocated."
+                : remaining > 0
+                  ? `${formatCents(remaining)} left to allocate.`
+                  : `Over budget by ${formatCents(Math.abs(remaining))}.`}
+            </div>
+            <div className="tnum text-xs">
+              Income {formatCents(totalIncome)} · Allocated {formatCents(totalAllocated)}
+            </div>
+          </div>
+
+          {/* Budget chronology schedule (Feature A): the effective window for the
+              changed lines. Ongoing edits only — a this-month override is never
+              versioned. Default From = first of the current month (today's edit
+              semantics); move it forward to schedule e.g. an income change as of
+              1 Aug. */}
+          {scope === "ongoing" && (
+            <div className="space-y-3 rounded-lg border bg-card px-4 py-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="version-from" className="text-xs">
+                    From
+                  </Label>
+                  <Input
+                    id="version-from"
+                    type="date"
+                    value={effectiveFrom}
+                    onChange={(e) => setEffectiveFrom(e.target.value)}
+                    className="h-9"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="version-to" className="text-xs">
+                    To (optional)
+                  </Label>
+                  <Input
+                    id="version-to"
+                    type="date"
+                    value={effectiveTo}
+                    min={effectiveFrom}
+                    onChange={(e) => setEffectiveTo(e.target.value)}
+                    className="h-9"
+                  />
+                </div>
+              </div>
+              {/* Mid-month From: the first month is prorated by active days
+                  (owner decision 2026-07-16). */}
+              {midMonthProrationNote(effectiveFrom) && (
+                <p className="text-xs text-muted-foreground">{midMonthProrationNote(effectiveFrom)}</p>
+              )}
+              <div className="space-y-1">
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={completePrevious}
+                    onCheckedChange={(c) => setCompletePrevious(c === true)}
+                    aria-label="Complete the previous budget"
+                  />
+                  Complete the previous budget
+                </label>
+                <p className="pl-6 text-xs text-muted-foreground">
+                  Ends the current budget the day before this one starts. Unticked, both budgets apply and their
+                  amounts combine.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Search / filter / sort toolbar */}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search by name…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-9 pl-8"
+              />
+            </div>
+            <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as TypeFilter)}>
+              <SelectTrigger className="h-9 w-full sm:w-36">
+                <SelectValue placeholder="Section" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All sections</SelectItem>
+                <SelectItem value="income">Income</SelectItem>
+                {types.includes("saving") && <SelectItem value="saving">Savings</SelectItem>}
+                {types.includes("expense") && <SelectItem value="expense">Expenses</SelectItem>}
+                {types.includes("envelope") && <SelectItem value="envelope">Envelopes</SelectItem>}
+              </SelectContent>
+            </Select>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="h-9 w-full sm:w-40">
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All categories</SelectItem>
+                {categories.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
+              <SelectTrigger className="h-9 w-full sm:w-36">
+                <SelectValue placeholder="Sort" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="category">Sort: category</SelectItem>
+                <SelectItem value="name">Sort: name</SelectItem>
+                <SelectItem value="amount">Sort: amount</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              Showing {totalVisible} of {totalEditable}
+            </span>
+            {filtersActive && (
+              <button onClick={clearFilters} className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-accent">
+                <X className="h-3 w-3" /> Clear filters
+              </button>
+            )}
+          </div>
+
+          {totalVisible === 0 ? (
+            <div className="rounded-lg border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
+              No lines match these filters.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Income section */}
+              {incomeVisible.length > 0 && (
+                <div className="overflow-hidden rounded-lg border bg-card">
+                  <SectionHeader
+                    icon={TrendingUp}
+                    title="Income"
+                    count={incomeVisible.length}
+                    total={incomeVisible.reduce((s, i) => s + incomeFor(i), 0)}
+                  />
+                  <div className="divide-y divide-border/40">
+                    {incomeVisible.map((i) => (
+                      <React.Fragment key={i.id}>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-medium">{i.name}</div>
+                            <div className="mt-0.5 truncate text-xs text-muted-foreground">{i.source} · monthly budget</div>
+                          </div>
+                          <button
+                            type="button"
+                            aria-label={`${i.name} budget history`}
+                            aria-expanded={historyOpen.has(i.id)}
+                            title="Budget history"
+                            onClick={() => toggleHistory(i.id)}
+                            className={cn(
+                              "flex h-9 w-9 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground",
+                              historyOpen.has(i.id) && "bg-accent text-foreground"
+                            )}
+                          >
+                            <History className="h-4 w-4" />
+                          </button>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <span className="text-sm text-muted-foreground">$</span>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              inputMode="decimal"
+                              aria-label={`${i.name} monthly budget`}
+                              className="h-9 w-28 text-right tnum"
+                              value={(incomeFor(i) / 100).toFixed(2)}
+                              onChange={(e) => setIncomeAmount(i.id, e.target.value)}
+                            />
+                          </div>
+                        </div>
+                        {historyOpen.has(i.id) && <VersionChronology envelopeId={i.id} />}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Spending sections */}
+              {SPENDING_SECTIONS.map(({ type, title, icon }) => {
+                const list = sectionRows(type);
+                if (list.length === 0) return null;
+                const sectionTotal = list.reduce((s, r) => s + monthlyFor(r), 0);
+                return (
+                  <div key={type} className="overflow-hidden rounded-lg border bg-card">
+                    <SectionHeader icon={icon} title={title} count={list.length} total={sectionTotal} />
+                    <div className="divide-y divide-border/40">
+                      {list.map((r) => {
+                        const d = entryFor(r);
+                        const monthly = monthlyEquivalentCents(d.amountCents, d.period);
+                        return (
+                          <React.Fragment key={r.id}>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="truncate text-sm font-medium">{r.name}</span>
+                                  {parentIds.has(r.id) && (
+                                    <span
+                                      className="rounded bg-muted px-1 text-[10px] text-muted-foreground"
+                                      title="This edits the envelope's own budget line; its sub-envelopes are listed separately."
+                                    >
+                                      has sub-envelopes
+                                    </span>
+                                  )}
+                                  {!r.active && (
+                                    <span className="rounded bg-muted px-1 text-[10px] text-muted-foreground">inactive</span>
+                                  )}
+                                </div>
+                                <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                                  <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-normal">
+                                    {categoryOf(r)}
+                                  </Badge>
+                                  <span className="tnum">≈ {formatCents(monthly)}/mo</span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                aria-label={`${r.name} budget history`}
+                                aria-expanded={historyOpen.has(r.id)}
+                                title="Budget history"
+                                onClick={() => toggleHistory(r.id)}
+                                className={cn(
+                                  "flex h-9 w-9 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground",
+                                  historyOpen.has(r.id) && "bg-accent text-foreground"
+                                )}
+                              >
+                                <History className="h-4 w-4" />
+                              </button>
+                              <Select value={d.period} onValueChange={(v) => setPeriod(r.id, v as BudgetPeriod, r)}>
+                                <SelectTrigger className="h-9 w-32 shrink-0">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {BUDGET_PERIODS.map((p) => (
+                                    <SelectItem key={p} value={p}>
+                                      {BUDGET_PERIOD_LABELS[p]}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <div className="flex shrink-0 items-center gap-1">
+                                <span className="text-sm text-muted-foreground">$</span>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  inputMode="decimal"
+                                  className="h-9 w-28 text-right tnum"
+                                  value={(d.amountCents / 100).toFixed(2)}
+                                  onChange={(e) => setAmount(r.id, e.target.value, r)}
+                                />
+                              </div>
+                            </div>
+                            {historyOpen.has(r.id) && <VersionChronology envelopeId={r.id} />}
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between">
+            {error ? (
+              <span className="text-sm text-destructive">{error}</span>
+            ) : saved ? (
+              <span className="flex items-center gap-1 text-sm text-success">
+                <CheckCircle2 className="h-4 w-4" /> Saved. Recorded to budget history.
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                Saving never blocks on an unbalanced budget; it only raises the alert.
+              </span>
+            )}
+            <Button onClick={onSave} disabled={busy}>
+              <Save className="h-4 w-4" /> {busy ? "Saving…" : "Save budget"}
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

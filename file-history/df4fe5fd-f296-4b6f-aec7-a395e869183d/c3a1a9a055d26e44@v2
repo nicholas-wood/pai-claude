@@ -1,0 +1,28 @@
+---
+task: Rewrite LinkedIn headline keeping substance, removing AI-filler phrasing
+slug: linkedin-headline-rewrite
+effort: E1
+phase: complete
+progress: 4/4
+mode: standard
+started: 2026-08-10T00:00:00+10:00
+updated: 2026-08-10T00:00:00+10:00
+---
+
+## Goal
+
+Deliver a recommended LinkedIn headline rewrite (plus alternatives) that preserves the original's three substance claims (builder/strategist duality, impact orientation, hard problems + ownership + AI leverage) while eliminating abstract LLM-filler phrasing, verified by reading the delivered text against both the original clauses and the banned-phrase list.
+
+## Criteria
+
+- [x] ISC-1: Recommended rewrite preserves all three substance claims of the original headline
+- [x] ISC-2: Every phrase in the recommended option is concrete or checkable, no abstract gerund triplets
+- [x] ISC-3: Response is recommendation-first with at least two alternatives and a one-line diagnosis
+- [x] ISC-4: Anti: recommended option contains no em dashes and none of "aligning visions", "building value", "driven by impact", "passionate"
+
+## Verification
+
+ISC-1: Read — Option A carries duality ("systems and the strategy behind them"), ownership/hard problems/AI clause kept near-verbatim
+ISC-2: Read — every phrase in Option A is a checkable claim or his own established language; middle gerund triplet deleted, not replaced
+ISC-3: Read — diagnosis line + recommended Option A + Options B and C delivered
+ISC-4: Grep of delivered text — zero em dashes, zero banned filler phrases in Option A

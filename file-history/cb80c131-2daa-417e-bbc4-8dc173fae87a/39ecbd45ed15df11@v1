@@ -1,0 +1,65 @@
+/**
+ * New-category detection + adopt routes. A synced transaction can carry a
+ * PocketSmith category that has no envelope mapping yet (distinct from an
+ * uncategorised transaction, which has NO category at all): these routes list
+ * those categories and let the user adopt each into the budget.
+ *
+ *   GET  /api/categories/unmapped  distinct unmapped categories with aggregates
+ *   POST /api/categories/adopt     create envelope + mapping in one transaction
+ *
+ * Every route is scoped to the authenticated user (ISC-49); the adopt body is
+ * validated with zod at the boundary (../validate.ts) before it reaches the
+ * ledger, and the multi-write adopt runs inside one store transaction.
+ */
+
+import { Hono } from "hono";
+import type { Container } from "../../composition.ts";
+import type { Services } from "../services.ts";
+import type { AdoptCategoryResponse, UnmappedCategoriesResponse } from "../contract.ts";
+import { currentPeriod, resolveSession, UNAUTHENTICATED } from "../http.ts";
+import { todayISO } from "../../platform/time.ts";
+import { parseBody, adoptCategorySchema } from "../validate.ts";
+
+export function registerCategories(api: Hono, container: Container, services: Services): void {
+  const tz = container.config.timezone;
+
+  // Distinct categories present on transactions but not in the budget, most
+  // transactions first. Optional from/to (YYYY-MM-DD) scope the scan; read raw
+  // from the query to match the neighbouring grid handler's from/to handling.
+  api.get("/categories/unmapped", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const from = c.req.query("from");
+    const to = c.req.query("to");
+    const categories = await services.envelopes.listUnmappedCategories(session.userId, {
+      ...(from ? { from } : {}),
+      ...(to ? { to } : {}),
+    });
+    const res: UnmappedCategoriesResponse = { categories };
+    return c.json(res);
+  });
+
+  // Adopt one category: create the envelope and seed the category→envelope
+  // mapping in a single store transaction (BudgetService.adoptCategory). The
+  // handler only resolves the timezone-dependent schedule anchor default.
+  api.post("/categories/adopt", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const parsed = await parseBody(c, adoptCategorySchema);
+    if (!parsed.ok) return parsed.response;
+    const req = parsed.value;
+    const envelopeId = await services.budget.adoptCategory(session.userId, currentPeriod(tz), {
+      categoryId: req.categoryId,
+      name: req.name,
+      type: req.type,
+      rolloverStart: todayISO(tz),
+      ...(req.budgetedCents !== undefined ? { budgetedCents: req.budgetedCents } : {}),
+      ...(req.period !== undefined ? { period: req.period } : {}),
+      ...(req.rolloverRule !== undefined ? { rolloverRule: req.rolloverRule } : {}),
+      ...(req.parentId !== undefined ? { parentId: req.parentId } : {}),
+      ...(req.effectiveFrom !== undefined ? { effectiveFrom: req.effectiveFrom } : {}),
+    });
+    const res: AdoptCategoryResponse = { envelopeId };
+    return c.json(res);
+  });
+}
