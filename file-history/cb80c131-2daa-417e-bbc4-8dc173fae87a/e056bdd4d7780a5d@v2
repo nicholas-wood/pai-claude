@@ -1,0 +1,164 @@
+/**
+ * Phase 2 — AS-OF date-targeted editing (owner spec, 2026-08-12):
+ * "If I updated the budget from the master page with the date set to today,
+ *  [with] a new budget starting in September, the August budget would get
+ *  updated. If I set the date for the start of September or later, it should
+ *  edit the September one, because that will be the effective budget for that
+ *  period."
+ * As-of writes are BOUNDED: they end the day before the envelope's next
+ * later-starting version, so schedules on other months survive by construction.
+ */
+
+import { describe, test, expect } from "bun:test";
+import type { CreateEnvelopeResponse, EditBudgetResponse, GridResponse } from "../src/server/contract.ts";
+import { currentPeriod, todayISO } from "../src/platform/time.ts";
+import { monthBounds, nextPeriod } from "../src/envelope/period.ts";
+import { findOverlaps } from "../src/budget/window.ts";
+import { makeTestApp, postJson, getJson, LOCAL_USER_ID, type TestApp } from "./server-test-app.ts";
+
+const TZ = "Australia/Melbourne";
+const NOW = currentPeriod(TZ);
+const TODAY = todayISO(TZ);
+const NEXT = nextPeriod(NOW);
+const NEXT_FIRST = monthBounds(NEXT).first;
+const AFTER = nextPeriod(NEXT);
+const AFTER_FIRST = monthBounds(AFTER).first;
+
+async function createEnvelope(t: TestApp, cookie: string, body: unknown): Promise<string> {
+  const res = await postJson(t.app, "/api/envelopes", body, cookie);
+  expect(res.status).toBe(200);
+  return ((await res.json()) as CreateEnvelopeResponse).id;
+}
+
+async function alloc(t: TestApp, cookie: string, id: string, month: { year: number; month: number }): Promise<number | undefined> {
+  const b = monthBounds(month);
+  const res = await getJson(t.app, `/api/envelopes?from=${b.first}&to=${b.last}`, cookie);
+  expect(res.status).toBe(200);
+  return ((await res.json()) as GridResponse).rows.find((r) => r.id === id)?.allocationCents;
+}
+
+describe("as-of edits target the month containing the date", () => {
+  test("OWNER SCENARIO: as-of today updates August; the scheduled September budget survives untouched", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createEnvelope(t, cookie, { name: "Groceries", type: "expense", budgetedCents: 50000, period: "monthly" });
+    // Schedule September = 600.
+    expect(
+      (await postJson(t.app, "/api/budget/edit", { lines: [{ envelopeId: id, amountCents: 60000 }], scope: "ongoing", asOf: NEXT_FIRST }, cookie)).status,
+    ).toBe(200);
+
+    // Ordinary as-of-today edit: 550. NO conflict, NO flag needed.
+    const res = await postJson(
+      t.app,
+      "/api/budget/edit",
+      { lines: [{ envelopeId: id, amountCents: 55000 }], scope: "ongoing", asOf: TODAY },
+      cookie,
+    );
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as EditBudgetResponse).changed).toBe(1);
+
+    expect(await alloc(t, cookie, id, NOW)).toBe(55000); // this month updated
+    expect(await alloc(t, cookie, id, NEXT)).toBe(60000); // September schedule SURVIVES
+    expect(findOverlaps((await t.store.listTemplate(LOCAL_USER_ID)).filter((l) => l.envelopeId === id))).toHaveLength(0);
+  });
+
+  test("OWNER SCENARIO: as-of the start of September edits the September budget, not August's", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createEnvelope(t, cookie, { name: "Groceries", type: "expense", budgetedCents: 50000, period: "monthly" });
+    await postJson(t.app, "/api/budget/edit", { lines: [{ envelopeId: id, amountCents: 60000 }], scope: "ongoing", asOf: NEXT_FIRST }, cookie);
+
+    // Editing as-of September replaces the September budget.
+    const res = await postJson(
+      t.app,
+      "/api/budget/edit",
+      { lines: [{ envelopeId: id, amountCents: 70000 }], scope: "ongoing", asOf: NEXT_FIRST },
+      cookie,
+    );
+    expect(res.status).toBe(200);
+    expect(await alloc(t, cookie, id, NEXT)).toBe(70000); // September edited
+    expect(await alloc(t, cookie, id, NOW)).toBe(50000); // August untouched
+  });
+
+  test("editing a middle month is bounded on BOTH sides: later schedules survive", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createEnvelope(t, cookie, { name: "Groceries", type: "expense", budgetedCents: 50000, period: "monthly" });
+    // Schedule September 600 and October 800.
+    await postJson(t.app, "/api/budget/edit", { lines: [{ envelopeId: id, amountCents: 60000 }], scope: "ongoing", asOf: NEXT_FIRST }, cookie);
+    await postJson(t.app, "/api/budget/edit", { lines: [{ envelopeId: id, amountCents: 80000 }], scope: "ongoing", asOf: AFTER_FIRST }, cookie);
+
+    // Re-edit September to 650: October's 800 must survive.
+    const res = await postJson(
+      t.app,
+      "/api/budget/edit",
+      { lines: [{ envelopeId: id, amountCents: 65000 }], scope: "ongoing", asOf: NEXT_FIRST },
+      cookie,
+    );
+    expect(res.status).toBe(200);
+    expect(await alloc(t, cookie, id, NEXT)).toBe(65000);
+    expect(await alloc(t, cookie, id, AFTER)).toBe(80000);
+    expect(await alloc(t, cookie, id, NOW)).toBe(50000);
+    expect(findOverlaps((await t.store.listTemplate(LOCAL_USER_ID)).filter((l) => l.envelopeId === id))).toHaveLength(0);
+  });
+
+  test("a month-only override under as-of targets the as-of month", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createEnvelope(t, cookie, { name: "Groceries", type: "expense", budgetedCents: 50000, period: "monthly" });
+    // Materialise September, then override ONLY September to 200.
+    await alloc(t, cookie, id, NEXT);
+    const res = await postJson(
+      t.app,
+      "/api/budget/edit",
+      { lines: [{ envelopeId: id, amountCents: 20000 }], scope: "this_month", asOf: NEXT_FIRST },
+      cookie,
+    );
+    expect(res.status).toBe(200);
+    expect(await alloc(t, cookie, id, NEXT)).toBe(20000); // September overridden
+    expect(await alloc(t, cookie, id, NOW)).toBe(50000); // this month untouched
+    // No version was minted: the template still resolves September to 500.
+    const lines = (await t.store.listTemplate(LOCAL_USER_ID)).filter((l) => l.envelopeId === id);
+    expect(lines).toHaveLength(1);
+  });
+
+  test("income: as-of September edits the September income budget and preserves this month's", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createEnvelope(t, cookie, { name: "Salary", type: "income", parentId: null, budgetedCents: 500000, targetCents: 500000 });
+
+    const res = await postJson(
+      t.app,
+      "/api/envelopes/edit",
+      { id, type: "income", budgetedCents: 600000, targetCents: 600000, asOf: NEXT_FIRST },
+      cookie,
+    );
+    expect(res.status).toBe(200);
+
+    const nb = monthBounds(NEXT);
+    const ng = (await (await getJson(t.app, `/api/envelopes?from=${nb.first}&to=${nb.last}`, cookie)).json()) as GridResponse;
+    expect(ng.income.find((i) => i.id === id)?.budgetedCents).toBe(600000);
+    const cb = monthBounds(NOW);
+    const cg = (await (await getJson(t.app, `/api/envelopes?from=${cb.first}&to=${cb.last}`, cookie)).json()) as GridResponse;
+    expect(cg.income.find((i) => i.id === id)?.budgetedCents).toBe(500000);
+  });
+
+  test("the zero-base alert follows the as-of month", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const inc = await createEnvelope(t, cookie, { name: "Salary", type: "income", parentId: null, budgetedCents: 100000, targetCents: 100000 });
+    const id = await createEnvelope(t, cookie, { name: "Groceries", type: "expense", budgetedCents: 100000, period: "monthly" });
+    expect(inc).toBeTruthy();
+
+    // This month is balanced (1000 in / 1000 out). Editing SEPTEMBER to 900
+    // unbalances September only — and the response alert must say so.
+    const res = await postJson(
+      t.app,
+      "/api/budget/edit",
+      { lines: [{ envelopeId: id, amountCents: 90000 }], scope: "ongoing", asOf: NEXT_FIRST },
+      cookie,
+    );
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as EditBudgetResponse).zeroBasedAlert).toBe(true);
+  });
+});

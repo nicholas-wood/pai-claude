@@ -1,0 +1,301 @@
+/**
+ * zod validation at every mutation boundary. One schema per POST body, derived
+ * from the contract types (src/server/contract.ts), parsed with safeParse so a
+ * malformed body is a uniform 400 ApiError — never an engine exception and
+ * never silently-coerced garbage landing in the money ledger.
+ *
+ * Conventions enforced here:
+ *   - Money is INTEGER cents: z.number().int() (floats and NaN are rejected).
+ *   - Dates are strict YYYY-MM-DD strings.
+ *   - Ids are non-empty strings.
+ *
+ * The schemas must accept everything the UI legitimately sends today (the
+ * web call sites in web/src were read to confirm each optional field), and
+ * reject everything else with a 400 in the existing { error, code } shape.
+ */
+
+import type { Context } from "hono";
+import { z } from "zod";
+import type { ApiError } from "./contract.ts";
+
+// ── Shared field schemas ──────────────────────────────────────────────────────
+
+/** Money: integer cents only. Rejects floats, NaN, and Infinity. */
+export const centsSchema = z.number().int();
+
+/** Strict calendar date, YYYY-MM-DD. */
+export const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD");
+
+/**
+ * A date constrained to the plausible budgeting era. Every budget-window field
+ * uses this: a partially-typed year (0002-08-01) must never mint a version or
+ * materialise a month (the 1.4M-row garbage lesson, 2026-08-12).
+ */
+export const eraDateSchema = isoDateSchema.refine(
+  (d) => d >= "1990-01-01" && d <= "2100-12-31",
+  "date outside the supported era (1990..2100)",
+);
+
+/** Non-empty string id. */
+export const idSchema = z.string().min(1);
+
+export const changeScopeSchema = z.enum(["this_month", "ongoing"]);
+export const budgetPeriodSchema = z.enum(["weekly", "fortnightly", "monthly", "annual"]);
+export const envelopeTypeSchema = z.enum(["income", "expense", "saving", "envelope", "working"]);
+export const rolloverRuleSchema = z.enum(["roll_carry", "drain_to_zero", "annual_reset"]);
+
+// ── Request-body schemas (one per POST endpoint) ─────────────────────────────
+
+/** POST /api/envelopes/move and POST /api/move (MoveMoneyRequest). */
+export const moveMoneySchema = z.object({
+  fromEnvelopeId: idSchema,
+  toEnvelopeId: idSchema,
+  amountCents: centsSchema,
+  scope: changeScopeSchema,
+});
+
+/** POST /api/envelopes/distribute (DistributeRequest). */
+export const distributeSchema = z.object({
+  legs: z.array(z.object({ envelopeId: idSchema, deltaCents: centsSchema })),
+  scope: changeScopeSchema,
+});
+
+/** POST /api/envelopes (CreateEnvelopeRequest). */
+export const createEnvelopeSchema = z.object({
+  name: z.string().trim().min(1),
+  type: envelopeTypeSchema,
+  parentId: idSchema.nullable().optional(),
+  rolloverRule: rolloverRuleSchema.optional(),
+  budgetedCents: centsSchema.optional(),
+  period: budgetPeriodSchema.optional(),
+  rolloverStart: isoDateSchema.optional(),
+  active: z.boolean().optional(),
+  targetCents: centsSchema.optional(),
+  // Budget chronology: the first version's effective window (optional).
+  effectiveFrom: eraDateSchema.optional(),
+  effectiveTo: eraDateSchema.optional(),
+});
+
+/** POST /api/envelopes/edit (EditEnvelopeRequest). */
+export const editEnvelopeSchema = z.object({
+  id: idSchema,
+  name: z.string().trim().min(1).optional(),
+  type: envelopeTypeSchema.optional(),
+  parentId: idSchema.nullable().optional(),
+  active: z.boolean().optional(),
+  budgetedCents: centsSchema.optional(),
+  period: budgetPeriodSchema.optional(),
+  targetCents: centsSchema.optional(),
+  // Budget chronology: a budget change appends a new effective-dated version.
+  effectiveFrom: eraDateSchema.optional(),
+  effectiveTo: eraDateSchema.optional(),
+  completePrevious: z.boolean().optional(),
+  supersedeScheduled: z.boolean().optional(),
+  asOf: eraDateSchema.optional(),
+  expectedDay: z.number().int().min(1).max(31).nullable().optional(),
+});
+
+/** POST /api/envelopes/versions/edit (EditVersionRequest). */
+export const editVersionSchema = z.object({
+  envelopeId: idSchema,
+  versionId: idSchema,
+  amountCents: centsSchema.optional(),
+  period: budgetPeriodSchema.optional(),
+  effectiveFrom: eraDateSchema.optional(),
+  effectiveTo: eraDateSchema.nullable().optional(),
+  acceptAdjustments: z.boolean().optional(),
+});
+
+/** POST /api/envelopes/versions/delete (DeleteVersionRequest). */
+export const deleteVersionSchema = z.object({
+  envelopeId: idSchema,
+  versionId: idSchema,
+  extendPrevious: z.boolean().optional(),
+});
+
+/** POST /api/categories/adopt (AdoptCategoryRequest). */
+export const adoptCategorySchema = z.object({
+  categoryId: idSchema,
+  name: z.string().trim().min(1),
+  existingEnvelopeId: idSchema.optional(),
+  type: envelopeTypeSchema,
+  budgetedCents: centsSchema.optional(),
+  period: budgetPeriodSchema.optional(),
+  rolloverRule: rolloverRuleSchema.optional(),
+  parentId: idSchema.nullable().optional(),
+  effectiveFrom: isoDateSchema.optional(),
+});
+
+/** POST /api/categories/dismiss (DismissCategoryRequest). */
+export const dismissCategorySchema = z.object({
+  categoryId: idSchema,
+  dismissed: z.boolean(),
+});
+
+/** POST /api/envelopes/carryover (SetCarryoverRequest). */
+export const setCarryoverSchema = z.object({
+  envelopeId: idSchema,
+  carryoverCents: centsSchema,
+});
+
+/** POST /api/envelopes/archive (ArchiveEnvelopeRequest). */
+export const archiveEnvelopeSchema = z.object({
+  envelopeId: idSchema,
+  archived: z.boolean(),
+});
+
+/** POST /api/envelopes/rollover (SetRolloverRequest). */
+export const setRolloverSchema = z.object({
+  envelopeId: idSchema,
+  rolloverStart: isoDateSchema,
+  period: budgetPeriodSchema.optional(),
+});
+
+/**
+ * GET /api/carryover/history (CarryoverHistoryQuery). Query params arrive as
+ * strings; an envelopeId, when present, must be non-empty (an explicit
+ * `?envelopeId=` is a 400, never a silent unfiltered read).
+ */
+export const carryoverHistoryQuerySchema = z.object({
+  envelopeId: idSchema.optional(),
+});
+
+/** POST /api/budget/edit (EditBudgetRequest). */
+export const editBudgetSchema = z.object({
+  lines: z.array(
+    z.object({
+      envelopeId: idSchema,
+      amountCents: centsSchema,
+      period: budgetPeriodSchema.optional(),
+    }),
+  ),
+  scope: changeScopeSchema,
+  // Budget chronology: the new version's effective window and whether the
+  // previous open version(s) are completed the day before it starts.
+  effectiveFrom: eraDateSchema.optional(),
+  effectiveTo: eraDateSchema.optional(),
+  completePrevious: z.boolean().optional(),
+  supersedeScheduled: z.boolean().optional(),
+  asOf: eraDateSchema.optional(),
+});
+
+/**
+ * POST /api/reconcile (ReconcileRequest). The preview tolerates a cleared date
+ * input ("" = as of now), matching the tolerant behaviour the UI relied on.
+ */
+export const reconcileSchema = z.object({
+  nabStatementCents: centsSchema,
+  statementDate: z.union([isoDateSchema, z.literal("")]),
+});
+
+/**
+ * POST /api/reconcile/confirm (ReconcileConfirmRequest). Persisted, so the
+ * statement date must be a real date — a "" here would corrupt the ledger.
+ */
+export const reconcileConfirmSchema = z.object({
+  nabStatementCents: centsSchema,
+  statementDate: isoDateSchema,
+});
+
+/** POST /api/settings/pocketsmith-key (SetPocketSmithKeyRequest). */
+export const setPocketSmithKeySchema = z.object({
+  developerKey: z.string().trim().min(1),
+});
+
+/** POST /api/auth/signin (SignInRequest). */
+export const signInSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("pin"), pin: z.string().min(1) }),
+  z.object({ kind: z.literal("email"), email: z.string().min(1) }),
+]);
+
+/** POST /api/auth/verify (VerifyLinkRequest). */
+export const verifyLinkSchema = z.object({ token: z.string().min(1) });
+
+/** POST /api/auth/change-pin (ChangePinRequest). */
+export const changePinSchema = z.object({
+  currentPin: z.string().min(1),
+  newPin: z.string().min(1),
+});
+
+// ── Query-param date guard ────────────────────────────────────────────────────
+
+/**
+ * Validate an optional from/to/asOf date QUERY param. GET params were read raw,
+ * and browser date inputs emit partial years while the user types (0002-08-01,
+ * 0020-08-01, ...) — those reached ensureMonth and materialised ~1.4M garbage
+ * allocation rows spanning years 10..1015. Anything malformed or outside the
+ * plausible era is a 400, never a silent read (or write) of a garbage month.
+ * Returns the value (or undefined when absent); throws DateParamError.
+ */
+export class DateParamError extends Error {
+  constructor(name: string, value: string) {
+    super(`Invalid ${name} date "${value}": expected YYYY-MM-DD between 1990 and 2100.`);
+  }
+}
+
+export function dateParam(name: string, value: string | undefined): string | undefined {
+  if (value === undefined || value === "") return undefined;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value < "1990-01-01" || value > "2100-12-31") {
+    throw new DateParamError(name, value);
+  }
+  return value;
+}
+
+/** Uniform 400 for a DateParamError; rethrows anything else. */
+export function dateParamResponse(c: Context, err: unknown): Response {
+  if (err instanceof DateParamError) {
+    const body: ApiError = { error: err.message, code: "bad_request" };
+    return c.json(body, 400);
+  }
+  throw err;
+}
+
+// ── The boundary helper ───────────────────────────────────────────────────────
+
+export type ParsedBody<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly response: Response };
+
+/**
+ * Parse and validate a JSON request body against a schema. On any failure —
+ * unparseable JSON or a schema violation — returns a ready-made 400 in the
+ * uniform ApiError shape, naming the first offending field (values are never
+ * echoed back).
+ */
+export async function parseBody<S extends z.ZodTypeAny>(
+  c: Context,
+  schema: S,
+): Promise<ParsedBody<z.infer<S>>> {
+  const raw: unknown = await c.req.json().catch(() => undefined);
+  const result = schema.safeParse(raw);
+  if (!result.success) {
+    const issue = result.error.issues[0];
+    const at = issue && issue.path.length > 0 ? ` at ${issue.path.join(".")}` : "";
+    const err: ApiError = {
+      error: `Invalid request body${at}: ${issue?.message ?? "malformed JSON"}.`,
+      code: "bad_request",
+    };
+    return { ok: false, response: c.json(err, 400) };
+  }
+  return { ok: true, value: result.data as z.infer<S> };
+}
+
+/**
+ * The GET twin of parseBody: validate a request's query params against a
+ * schema. Hono's c.req.query() yields Record<string, string>, so schemas here
+ * describe string-shaped fields. Failures return the same uniform 400 ApiError
+ * (first offending field named, values never echoed back).
+ */
+export function parseQuery<S extends z.ZodTypeAny>(c: Context, schema: S): ParsedBody<z.infer<S>> {
+  const result = schema.safeParse(c.req.query());
+  if (!result.success) {
+    const issue = result.error.issues[0];
+    const at = issue && issue.path.length > 0 ? ` at ${issue.path.join(".")}` : "";
+    const err: ApiError = {
+      error: `Invalid query${at}: ${issue?.message ?? "malformed query"}.`,
+      code: "bad_request",
+    };
+    return { ok: false, response: c.json(err, 400) };
+  }
+  return { ok: true, value: result.data as z.infer<S> };
+}

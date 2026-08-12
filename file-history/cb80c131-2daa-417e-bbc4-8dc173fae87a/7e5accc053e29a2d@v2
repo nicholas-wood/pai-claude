@@ -1,0 +1,79 @@
+/**
+ * Edit-modal window seeding (owner correction 2026-08-12): EDITING a budget
+ * seeds the From/To fields from the ACTIVE version's REAL window; only the
+ * ADD-new flow defaults to the first of the current month. Legacy
+ * open-since-forever budgets seed a blank From (change-from-this-month on
+ * save) rather than showing 1970.
+ */
+import * as React from "react";
+import { describe, it, expect, mock, beforeEach } from "bun:test";
+import { render, screen, waitFor } from "@testing-library/react";
+import * as realApi from "@/lib/api";
+import { firstOfCurrentMonthIso } from "@/lib/utils";
+import { TestQueryProvider } from "@/test/utils";
+
+let versions: unknown = { envelopeId: "env-1", versions: [] };
+const call = mock(async (path: string) => {
+  if (path === "GET /api/envelopes/versions") return versions;
+  return {};
+});
+mock.module("@/lib/api", () => ({ ...realApi, call }));
+
+const { AddBudgetModal } = await import("@/components/AddBudgetModal");
+
+const TARGET = {
+  id: "env-1",
+  name: "Groceries",
+  type: "expense" as const,
+  active: true,
+  parentId: null,
+  monthlyCents: 50000,
+  period: "monthly" as const,
+  rolloverStart: null,
+  targetCents: 0,
+};
+
+function renderModal(editTarget: typeof TARGET | null) {
+  return render(
+    <TestQueryProvider>
+      <AddBudgetModal open rows={[]} onOpenChange={() => {}} editTarget={editTarget} />
+    </TestQueryProvider>
+  );
+}
+
+beforeEach(() => {
+  versions = { envelopeId: "env-1", versions: [] };
+});
+
+describe("AddBudgetModal window seeding", () => {
+  it("EDIT seeds the From/To fields from the active version's real window", async () => {
+    versions = {
+      envelopeId: "env-1",
+      versions: [
+        { id: "v2", envelopeId: "env-1", amountCents: 60000, period: "monthly", effectiveFrom: "2026-07-15", effectiveTo: "2026-10-31", status: "active" },
+        { id: "v1", envelopeId: "env-1", amountCents: 50000, period: "monthly", effectiveFrom: "1970-01-01", effectiveTo: "2026-07-14", status: "completed" },
+      ],
+    };
+    renderModal(TARGET);
+    await waitFor(() => expect(screen.getByLabelText("Budget from")).toHaveValue("2026-07-15"));
+    expect(screen.getByLabelText("Budget until (optional)")).toHaveValue("2026-10-31");
+    expect(screen.getByText(/Currently effective from 2026-07-15 until 2026-10-31/)).toBeInTheDocument();
+  });
+
+  it("EDIT of a legacy open-since-forever budget seeds a BLANK From, never 1970 and never the 1st", async () => {
+    versions = {
+      envelopeId: "env-1",
+      versions: [
+        { id: "v1", envelopeId: "env-1", amountCents: 50000, period: "monthly", effectiveFrom: "1970-01-01", effectiveTo: null, status: "active" },
+      ],
+    };
+    renderModal(TARGET);
+    await waitFor(() => expect(screen.getByText(/Currently effective since the start/)).toBeInTheDocument());
+    expect(screen.getByLabelText("Budget from")).toHaveValue("");
+  });
+
+  it("ADD (create) defaults From to the first of the current month", async () => {
+    renderModal(null);
+    expect(screen.getByLabelText("Budget from")).toHaveValue(firstOfCurrentMonthIso());
+  });
+});

@@ -1,0 +1,200 @@
+/**
+ * Phase 3 — per-version editing with neighbour-adjustment prompts (owner spec
+ * 2026-08-12): "If I am editing the dates on either the current or past
+ * budgets, I should be prompted when I save, with suggested updates to the
+ * budgets either side so they continue to line up."
+ */
+
+import { describe, test, expect } from "bun:test";
+import type { ApiError, BudgetVersionsResponse, CreateEnvelopeResponse, EditVersionResponse, GridResponse } from "../src/server/contract.ts";
+import { currentPeriod } from "../src/platform/time.ts";
+import { monthBounds, nextPeriod } from "../src/envelope/period.ts";
+import { findOverlaps } from "../src/budget/window.ts";
+import { makeTestApp, postJson, getJson, LOCAL_USER_ID, type TestApp } from "./server-test-app.ts";
+
+const TZ = "Australia/Melbourne";
+const NOW = currentPeriod(TZ);
+const FIRST = monthBounds(NOW).first;
+const NEXT = nextPeriod(NOW);
+const NEXT_FIRST = monthBounds(NEXT).first;
+
+async function createEnvelope(t: TestApp, cookie: string, body: unknown): Promise<string> {
+  const res = await postJson(t.app, "/api/envelopes", body, cookie);
+  expect(res.status).toBe(200);
+  return ((await res.json()) as CreateEnvelopeResponse).id;
+}
+
+async function versions(t: TestApp, cookie: string, id: string): Promise<BudgetVersionsResponse> {
+  const res = await getJson(t.app, `/api/envelopes/versions?envelopeId=${id}`, cookie);
+  expect(res.status).toBe(200);
+  return (await res.json()) as BudgetVersionsResponse;
+}
+
+/** Seed an envelope with a completed baseline + an active current version. */
+async function seedTwoVersions(t: TestApp, cookie: string): Promise<{ id: string; baselineId: string; activeId: string }> {
+  const id = await createEnvelope(t, cookie, { name: "Groceries", type: "expense", budgetedCents: 50000, period: "monthly" });
+  const edit = await postJson(
+    t.app,
+    "/api/budget/edit",
+    { lines: [{ envelopeId: id, amountCents: 60000 }], scope: "ongoing", asOf: FIRST },
+    cookie,
+  );
+  expect(edit.status).toBe(200);
+  const vs = (await versions(t, cookie, id)).versions;
+  const active = vs.find((v) => v.amountCents === 60000)!;
+  const baseline = vs.find((v) => v.amountCents === 50000)!;
+  return { id, baselineId: baseline.id, activeId: active.id };
+}
+
+describe("POST /api/envelopes/versions/edit", () => {
+  test("an amount-only edit applies in place and updates the month's figures", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const { id, activeId } = await seedTwoVersions(t, cookie);
+
+    const res = await postJson(
+      t.app,
+      "/api/envelopes/versions/edit",
+      { envelopeId: id, versionId: activeId, amountCents: 65000 },
+      cookie,
+    );
+    expect(res.status).toBe(200);
+    const grid = (await (await getJson(t.app, "/api/envelopes", cookie)).json()) as GridResponse;
+    expect(grid.rows.find((r) => r.id === id)?.allocationCents).toBe(65000);
+  });
+
+  test("OWNER SCENARIO: moving a start date earlier prompts to update the previous budget's end date", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const { id, baselineId, activeId } = await seedTwoVersions(t, cookie);
+    expect(baselineId).toBeTruthy();
+
+    // Move the active version's start earlier (mid last month): the baseline's
+    // end (currently day-before-FIRST) now overlaps → REQUIRED adjustment.
+    const prev = NOW.month === 1 ? { year: NOW.year - 1, month: 12 } : { year: NOW.year, month: NOW.month - 1 };
+    const midPrev = `${monthBounds(prev).first.slice(0, 8)}15`;
+    const first = await postJson(
+      t.app,
+      "/api/envelopes/versions/edit",
+      { envelopeId: id, versionId: activeId, effectiveFrom: midPrev },
+      cookie,
+    );
+    expect(first.status).toBe(409);
+    const body = (await first.json()) as ApiError;
+    expect(body.code).toBe("neighbour_adjustments");
+    expect(body.adjustments?.some((a) => a.versionId === baselineId && a.required)).toBe(true);
+
+    // Accept: both changes land, windows line up, invariant holds.
+    const retry = await postJson(
+      t.app,
+      "/api/envelopes/versions/edit",
+      { envelopeId: id, versionId: activeId, effectiveFrom: midPrev, acceptAdjustments: true },
+      cookie,
+    );
+    expect(retry.status).toBe(200);
+    const applied = ((await retry.json()) as EditVersionResponse).applied;
+    expect(applied.some((a) => a.versionId === baselineId)).toBe(true);
+    const lines = (await t.store.listTemplate(LOCAL_USER_ID)).filter((l) => l.envelopeId === id);
+    expect(findOverlaps(lines)).toHaveLength(0);
+  });
+
+  test("moving a start date LATER suggests (optionally) extending the previous budget; declining keeps the gap", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const { id, baselineId, activeId } = await seedTwoVersions(t, cookie);
+
+    // Move the active version's start to the 10th: a 9-day gap appears.
+    const tenth = `${FIRST.slice(0, 8)}10`;
+    const first = await postJson(
+      t.app,
+      "/api/envelopes/versions/edit",
+      { envelopeId: id, versionId: activeId, effectiveFrom: tenth },
+      cookie,
+    );
+    expect(first.status).toBe(409);
+    const body = (await first.json()) as ApiError;
+    expect(body.adjustments?.some((a) => a.versionId === baselineId && !a.required)).toBe(true);
+
+    // Decline the optional extension: the edit lands, the gap stays legal.
+    const retry = await postJson(
+      t.app,
+      "/api/envelopes/versions/edit",
+      { envelopeId: id, versionId: activeId, effectiveFrom: tenth, acceptAdjustments: false },
+      cookie,
+    );
+    expect(retry.status).toBe(200);
+    const lines = (await t.store.listTemplate(LOCAL_USER_ID)).filter((l) => l.envelopeId === id);
+    const baseline = lines.find((l) => l.id === baselineId)!;
+    expect(baseline.effectiveTo).not.toBe(`${FIRST.slice(0, 8)}09`); // not extended
+    expect(findOverlaps(lines)).toHaveLength(0);
+  });
+
+  test("clearing an end date while a later version exists caps this version (required self-adjustment)", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createEnvelope(t, cookie, { name: "Groceries", type: "expense", budgetedCents: 50000, period: "monthly" });
+    await postJson(t.app, "/api/budget/edit", { lines: [{ envelopeId: id, amountCents: 60000 }], scope: "ongoing", asOf: NEXT_FIRST }, cookie);
+    const vs = (await versions(t, cookie, id)).versions;
+    const current = vs.find((v) => v.amountCents === 50000)!; // capped before NEXT
+
+    const res = await postJson(
+      t.app,
+      "/api/envelopes/versions/edit",
+      { envelopeId: id, versionId: current.id, effectiveTo: null },
+      cookie,
+    );
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as ApiError;
+    expect(body.adjustments?.some((a) => a.versionId === current.id && a.required)).toBe(true);
+
+    const retry = await postJson(
+      t.app,
+      "/api/envelopes/versions/edit",
+      { envelopeId: id, versionId: current.id, effectiveTo: null, acceptAdjustments: true },
+      cookie,
+    );
+    expect(retry.status).toBe(200);
+    const lines = (await t.store.listTemplate(LOCAL_USER_ID)).filter((l) => l.envelopeId === id);
+    expect(findOverlaps(lines)).toHaveLength(0);
+  });
+
+  test("D4: editing a PAST version's amount recomputes the past months it covers", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const { id, baselineId } = await seedTwoVersions(t, cookie);
+    // Materialise last month under the baseline 500.
+    const prev = NOW.month === 1 ? { year: NOW.year - 1, month: 12 } : { year: NOW.year, month: NOW.month - 1 };
+    const pb = monthBounds(prev);
+    const before = (await (await getJson(t.app, `/api/envelopes?from=${pb.first}&to=${pb.last}`, cookie)).json()) as GridResponse;
+    expect(before.rows.find((r) => r.id === id)?.allocationCents).toBe(50000);
+
+    const res = await postJson(
+      t.app,
+      "/api/envelopes/versions/edit",
+      { envelopeId: id, versionId: baselineId, amountCents: 55000 },
+      cookie,
+    );
+    expect(res.status).toBe(200);
+    const after = (await (await getJson(t.app, `/api/envelopes?from=${pb.first}&to=${pb.last}`, cookie)).json()) as GridResponse;
+    expect(after.rows.find((r) => r.id === id)?.allocationCents).toBe(55000);
+  });
+
+  test("income versions edit in place and the stored current-month row follows", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createEnvelope(t, cookie, { name: "Salary", type: "income", parentId: null, budgetedCents: 500000, targetCents: 500000 });
+    await postJson(t.app, "/api/envelopes/edit", { id, type: "income", budgetedCents: 600000, targetCents: 600000, asOf: FIRST }, cookie);
+    const vs = (await versions(t, cookie, id)).versions;
+    const active = vs.find((v) => v.amountCents === 600000)!;
+
+    const res = await postJson(
+      t.app,
+      "/api/envelopes/versions/edit",
+      { envelopeId: id, versionId: active.id, amountCents: 620000 },
+      cookie,
+    );
+    expect(res.status).toBe(200);
+    const grid = (await (await getJson(t.app, "/api/envelopes", cookie)).json()) as GridResponse;
+    expect(grid.income.find((i) => i.id === id)?.budgetedCents).toBe(620000);
+  });
+});

@@ -1,0 +1,197 @@
+/**
+ * Budget-history reconstruction (owner request 2026-08-12: "there are a number
+ * of other budgets before [1/1/25] that you have missed").
+ *
+ * PocketSmith's trend analysis yields a category's BUDGETED amount per month
+ * (forecast_amount — the sum of its budget events). These pure helpers turn
+ * that monthly series into non-overlapping budget ERAS (consecutive months
+ * with the same amount collapse into one window) and merge them UNDER an
+ * existing BudgetBuddy chronology:
+ *
+ *   - Eras are imported only for history BEFORE the takeover date (the
+ *     envelope's BudgetBuddy anchor, capped by its earliest hand-authored
+ *     version) — BudgetBuddy-authored budgets are never touched.
+ *   - When the era immediately before the takeover has the SAME amount as the
+ *     takeover-era budget, the existing line is extended BACK to the era's
+ *     start instead of minting a duplicate ("current budget since 1/1/25").
+ *   - Zero-budget months become GAPS (no line), which the model treats as
+ *     no-budget legally.
+ */
+
+import type { BudgetTemplate } from "../domain/types.ts";
+import { previousDay } from "../budget/versions.ts";
+
+export interface MonthBudget {
+  /** First day of the month, YYYY-MM-DD. */
+  readonly month: string;
+  readonly amountCents: number;
+}
+
+export interface BudgetEra {
+  /** First day of the era's first month. */
+  readonly from: string;
+  /** Last day of the era's final month. */
+  readonly to: string;
+  readonly amountCents: number;
+  /** Cadence label the budget was defined in (amounts stay monthly-equivalent). */
+  readonly periodLabel?: "weekly" | "fortnightly" | "monthly" | "annual";
+}
+
+/** One PocketSmith calendar event occurrence of a budget series. */
+export interface SeriesEvent {
+  readonly seriesId: number;
+  readonly date: string;
+  readonly amountCents: number; // absolute rate per occurrence
+  readonly repeatType: string;
+  readonly repeatInterval: number;
+}
+
+const OCCURRENCES_PER_YEAR: Record<string, number> = {
+  daily: 365,
+  weekly: 52,
+  fortnightly: 26,
+  monthly: 12,
+  yearly: 1,
+};
+
+const PERIOD_LABEL: Record<string, BudgetEra["periodLabel"]> = {
+  weekly: "weekly",
+  fortnightly: "fortnightly",
+  monthly: "monthly",
+  yearly: "annual",
+};
+
+/**
+ * Reconstruct budget eras from a category's event SERIES: each series is one
+ * budget definition (rate + cadence) whose era runs from its first occurrence's
+ * month to its last occurrence's month. The era amount is the series' rate
+ * normalised to a monthly equivalent (rate × occurrences-per-year ÷ 12) — the
+ * app's cadence convention — so a fortnightly salary is one steady era, not a
+ * month-by-month smear of pay-cycle counts. Overlapping series in one category
+ * (concurrent budget lines) make faithful non-overlapping windows impossible;
+ * the caller detects that via findEraOverlap and skips with a warning.
+ */
+export function erasFromSeries(events: readonly SeriesEvent[]): BudgetEra[] {
+  const bySeries = new Map<number, SeriesEvent[]>();
+  for (const e of events) {
+    if (!(e.repeatType in OCCURRENCES_PER_YEAR) && e.repeatType !== "once") continue;
+    const arr = bySeries.get(e.seriesId) ?? [];
+    arr.push(e);
+    bySeries.set(e.seriesId, arr);
+  }
+  const eras: BudgetEra[] = [];
+  for (const arr of bySeries.values()) {
+    arr.sort((a, b) => a.date.localeCompare(b.date));
+    const first = arr[0]!;
+    if (first.repeatType === "once") continue; // one-offs are not budgets
+    const last = arr[arr.length - 1]!;
+    const perYear = OCCURRENCES_PER_YEAR[first.repeatType]! / Math.max(1, first.repeatInterval);
+    const monthly = Math.round((first.amountCents * perYear) / 12);
+    if (monthly === 0) continue;
+    eras.push({
+      from: `${first.date.slice(0, 7)}-01`,
+      to: lastDayOfMonth(`${last.date.slice(0, 7)}-01`),
+      amountCents: monthly,
+      periodLabel: PERIOD_LABEL[first.repeatType] ?? "monthly",
+    });
+  }
+  eras.sort((a, b) => a.from.localeCompare(b.from));
+  // Adjacent eras from rate changes may share a boundary month (old series
+  // ends mid-month, new begins mid-month): clip the earlier era to end the
+  // month BEFORE the later one starts, keeping windows disjoint.
+  for (let i = 0; i < eras.length - 1; i++) {
+    const cur = eras[i]!, next = eras[i + 1]!;
+    if (cur.to >= next.from) {
+      const clippedTo = previousDay(next.from);
+      if (clippedTo < cur.from) continue; // fully swallowed: flagged as overlap below
+      eras[i] = { ...cur, to: clippedTo };
+    }
+  }
+  return eras;
+}
+
+/** True when any two eras still overlap (concurrent budget series). */
+export function findEraOverlap(eras: readonly BudgetEra[]): boolean {
+  for (let i = 0; i < eras.length; i++) {
+    for (let j = i + 1; j < eras.length; j++) {
+      if (eras[i]!.from <= eras[j]!.to && eras[j]!.from <= eras[i]!.to) return true;
+    }
+  }
+  return false;
+}
+
+/** Last day of the month containing the given first-day date. */
+export function lastDayOfMonth(firstDay: string): string {
+  const y = Number(firstDay.slice(0, 4));
+  const m = Number(firstDay.slice(5, 7));
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return `${firstDay.slice(0, 8)}${String(last).padStart(2, "0")}`;
+}
+
+/** Collapse a monthly budget series into eras; zero months become gaps. */
+export function erasFromMonthly(series: readonly MonthBudget[]): BudgetEra[] {
+  const sorted = [...series].sort((a, b) => a.month.localeCompare(b.month));
+  const eras: BudgetEra[] = [];
+  for (const p of sorted) {
+    if (p.amountCents === 0) continue; // gap: no budget that month
+    const last = eras[eras.length - 1];
+    const contiguous =
+      last !== undefined &&
+      last.amountCents === p.amountCents &&
+      previousDay(p.month) === last.to;
+    if (contiguous) {
+      eras[eras.length - 1] = { ...last!, to: lastDayOfMonth(p.month) };
+    } else {
+      eras.push({ from: p.month, to: lastDayOfMonth(p.month), amountCents: p.amountCents });
+    }
+  }
+  return eras;
+}
+
+export interface MergePlan {
+  /** New lines to insert (uuid assignment is the caller's job — id left ""). */
+  readonly inserts: readonly Omit<BudgetTemplate, "id" | "userId">[];
+  /** The takeover line extended back (same amount adjacency), when applicable. */
+  readonly extendTakeoverTo: string | null;
+  /** Human-readable era table for the report. */
+  readonly report: readonly string[];
+}
+
+/**
+ * Plan the merge of historical eras UNDER the takeover line. `takeoverFrom` is
+ * the first day the existing BudgetBuddy budget owns; `takeoverAmountCents` its
+ * amount. Eras are clipped to end before takeoverFrom.
+ */
+export function planHistoryMerge(
+  envelopeId: string,
+  eras: readonly BudgetEra[],
+  takeoverFrom: string,
+  takeoverAmountCents: number,
+): MergePlan {
+  const clipped: BudgetEra[] = [];
+  for (const e of eras) {
+    if (e.from >= takeoverFrom) continue; // inside BudgetBuddy-owned history
+    clipped.push(e.to >= takeoverFrom ? { ...e, to: previousDay(takeoverFrom) } : e);
+  }
+  const report: string[] = [];
+  let extendTakeoverTo: string | null = null;
+  const inserts: Omit<BudgetTemplate, "id" | "userId">[] = [];
+  for (const e of clipped) {
+    const adjoinsTakeover = previousDay(takeoverFrom) === e.to;
+    if (adjoinsTakeover && e.amountCents === takeoverAmountCents) {
+      // Same amount right up to the takeover: one continuous budget.
+      extendTakeoverTo = e.from;
+      report.push(`  ${e.from} .. (continues as current) ${(e.amountCents / 100).toFixed(2)}/mo — extends current budget back`);
+      continue;
+    }
+    inserts.push({
+      envelopeId,
+      amountCents: e.amountCents,
+      period: e.periodLabel ?? "monthly",
+      effectiveFrom: e.from,
+      effectiveTo: e.to,
+    });
+    report.push(`  ${e.from} .. ${e.to}  ${(e.amountCents / 100).toFixed(2)}/mo`);
+  }
+  return { inserts, extendTakeoverTo, report };
+}

@@ -1,0 +1,368 @@
+/**
+ * Edit Budget wizard — budget chronology UI (Feature A):
+ *   - the non-overlap explainer replaces the retired coexist checkbox (D2)
+ *   - the schedule date fields post the right body (effectiveFrom defaulting to
+ *     the first of the current month; a user-entered future From rides along)
+ *   - a 409 scheduled_conflict surfaces the explicit replace-and-retry (D3)
+ *   - the per-row History affordance renders the version chronology
+ */
+import * as React from "react";
+import { describe, it, expect, mock, beforeEach } from "bun:test";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import * as realApi from "@/lib/api";
+import { firstOfCurrentMonthIso } from "@/lib/utils";
+import { TestQueryProvider } from "@/test/utils";
+
+const BASE_ROW = {
+  parentId: null as string | null,
+  group: "Lifestyle",
+  rolloverRule: "roll_carry",
+  targetType: "no_target",
+  targetAmountCents: 0,
+  type: "expense",
+  active: true,
+  archived: false,
+  period: "monthly",
+  rolloverStart: null,
+  carryoverCents: 0,
+  depth: 0,
+};
+
+const ROW = {
+  id: "env-groceries",
+  parentId: null,
+  name: "Groceries",
+  group: "Lifestyle",
+  rolloverRule: "roll_carry",
+  targetType: "no_target",
+  targetAmountCents: 0,
+  type: "expense",
+  active: true,
+  archived: false,
+  period: "monthly",
+  rolloverStart: null,
+  carryoverCents: 0,
+  allocationCents: 50000,
+  totalCents: 50000,
+  leftCents: 50000,
+  depth: 0,
+};
+
+const INCOME = {
+  id: "inc-salary",
+  name: "Salary",
+  source: "Salary",
+  budgetedCents: 500000,
+  actualCents: 0,
+  receivedCents: 0,
+  targetCents: 500000,
+  varianceCents: -500000,
+  carryoverCents: 0,
+  leftCents: -500000,
+};
+
+const GRID = {
+  period: "2026-07",
+  from: "2026-07-01",
+  to: "2026-07-31",
+  rows: [ROW],
+  income: [INCOME],
+  isSetUp: true,
+  budgetedIncomeCents: 500000,
+  unallocatedCents: 450000,
+  zeroBasedAlert: true,
+  capitalProvidedCents: 500000,
+  budgetedOutCents: 50000,
+  residualCents: 450000,
+  uncategorisedCount: 0,
+  uncategorisedTotalCents: 0,
+  asOf: Date.now(),
+};
+
+// Parent-with-own-budget fixture (the owner's live shape): Groceries carries
+// its OWN $505.92 line ALONGSIDE its Supplements child, Recreation is a
+// pure-rollup parent (no own line), and income exactly funds the own lines
+// (505.92 + 100 + 200 = 805.92), so the wizard must read as balanced.
+const PARENT_OWN = {
+  ...BASE_ROW,
+  id: "env-groceries-p",
+  name: "Groceries",
+  allocationCents: 60592, // rolled: own 50592 + child 10000
+  ownAllocationCents: 50592,
+  totalCents: 60592,
+  leftCents: 60592,
+};
+const CHILD = {
+  ...BASE_ROW,
+  id: "env-supplements",
+  parentId: "env-groceries-p",
+  name: "Supplements",
+  allocationCents: 10000,
+  ownAllocationCents: 10000,
+  totalCents: 10000,
+  leftCents: 10000,
+  depth: 1,
+};
+const PARENT_ROLLUP = {
+  ...BASE_ROW,
+  id: "env-recreation",
+  name: "Recreation",
+  allocationCents: 20000, // pure rollup of its child
+  ownAllocationCents: 0,
+  totalCents: 20000,
+  leftCents: 20000,
+};
+const ROLLUP_CHILD = {
+  ...BASE_ROW,
+  id: "env-hobby",
+  parentId: "env-recreation",
+  name: "Hobby",
+  allocationCents: 20000,
+  ownAllocationCents: 20000,
+  totalCents: 20000,
+  leftCents: 20000,
+  depth: 1,
+};
+const PARENT_INCOME = { ...INCOME, budgetedCents: 80592, targetCents: 80592, varianceCents: -80592, leftCents: -80592 };
+
+const PARENT_GRID = {
+  ...GRID,
+  rows: [PARENT_OWN, CHILD, PARENT_ROLLUP, ROLLUP_CHILD],
+  income: [PARENT_INCOME],
+  budgetedIncomeCents: 80592,
+  unallocatedCents: 0,
+  zeroBasedAlert: false,
+  capitalProvidedCents: 80592,
+  budgetedOutCents: 80592,
+  residualCents: 0,
+};
+
+const VERSIONS = {
+  envelopeId: "env-groceries",
+  versions: [
+    {
+      id: "v2",
+      envelopeId: "env-groceries",
+      amountCents: 60000,
+      period: "monthly",
+      effectiveFrom: "2026-08-01",
+      effectiveTo: null,
+      status: "scheduled",
+    },
+    {
+      id: "v1",
+      envelopeId: "env-groceries",
+      amountCents: 50000,
+      period: "monthly",
+      effectiveFrom: "1970-01-01",
+      effectiveTo: "2026-07-31",
+      status: "active",
+    },
+  ],
+};
+
+let calls: { path: string; body: unknown }[] = [];
+// The grid the mocked API serves; tests swap it to the parent-own fixture.
+let currentGrid: Record<string, unknown> = GRID;
+// One-shot 409 scheduled_conflict on the next budget/edit post.
+let conflictOnce = false;
+
+const call = mock(async (path: string, body?: unknown) => {
+  calls.push({ path, body });
+  if (path === "GET /api/envelopes") return currentGrid;
+  if (path === "GET /api/envelopes/versions") return VERSIONS;
+  if (path === "POST /api/budget/edit") {
+    if (conflictOnce) {
+      conflictOnce = false;
+      throw new realApi.ApiCallError(
+        409,
+        "A scheduled budget already covers this window: 2026-09-01 onward (600.00/mo).",
+        "scheduled_conflict",
+      );
+    }
+    return { ok: true, changed: 1, zeroBasedAlert: false };
+  }
+  if (path === "POST /api/envelopes/edit") return { id: "inc-salary", ok: true };
+  return {};
+});
+
+mock.module("@/lib/api", () => ({ ...realApi, call }));
+
+const { EditBudgetPage } = await import("@/pages/EditBudgetPage");
+
+function renderPage() {
+  return render(
+    <TestQueryProvider>
+      <MemoryRouter>
+        <EditBudgetPage />
+      </MemoryRouter>
+    </TestQueryProvider>
+  );
+}
+
+async function waitForLoaded() {
+  await waitFor(() => expect(screen.getByText("Groceries")).toBeInTheDocument());
+}
+
+function savedBody(): Record<string, unknown> {
+  const post = calls.find((c) => c.path === "POST /api/budget/edit");
+  expect(post).toBeDefined();
+  return post!.body as Record<string, unknown>;
+}
+
+beforeEach(() => {
+  calls = [];
+  currentGrid = GRID;
+  conflictOnce = false;
+});
+
+describe("EditBudgetPage — budget chronology", () => {
+  it("the coexist checkbox is GONE; the non-overlap explainer stands in its place (D2, 2026-08-12)", async () => {
+    renderPage();
+    await waitForLoaded();
+    expect(screen.queryByRole("checkbox", { name: "Complete the previous budget" })).not.toBeInTheDocument();
+    expect(screen.getByText(/budgets never overlap/)).toBeInTheDocument();
+  });
+
+  it("saving posts the default schedule: From = first of the current month, no retired fields", async () => {
+    renderPage();
+    await waitForLoaded();
+    fireEvent.click(screen.getByRole("button", { name: /Save budget/ }));
+    await waitFor(() => expect(calls.some((c) => c.path === "POST /api/budget/edit")).toBe(true));
+    const body = savedBody();
+    expect(body.scope).toBe("ongoing");
+    expect(body.effectiveFrom).toBe(firstOfCurrentMonthIso());
+    expect(body.completePrevious).toBeUndefined(); // retired field never sent
+    expect(body.supersedeScheduled).toBeUndefined(); // only on the explicit retry
+    expect(body.effectiveTo).toBeUndefined();
+    expect(Array.isArray(body.lines)).toBe(true);
+  });
+
+  it("a future From and an end date post through (the 1-Aug schedule)", async () => {
+    renderPage();
+    await waitForLoaded();
+    fireEvent.change(screen.getByLabelText("From"), { target: { value: "2026-08-01" } });
+    fireEvent.change(screen.getByLabelText("To (optional)"), { target: { value: "2026-12-31" } });
+    fireEvent.click(screen.getByRole("button", { name: /Save budget/ }));
+    await waitFor(() => expect(calls.some((c) => c.path === "POST /api/budget/edit")).toBe(true));
+    const body = savedBody();
+    expect(body.effectiveFrom).toBe("2026-08-01");
+    expect(body.effectiveTo).toBe("2026-12-31");
+  });
+
+  it("a 409 scheduled_conflict surfaces the explicit replace-and-retry, which resends with supersedeScheduled", async () => {
+    conflictOnce = true;
+    renderPage();
+    await waitForLoaded();
+    fireEvent.change(screen.getByDisplayValue("500.00"), { target: { value: "600" } });
+    fireEvent.click(screen.getByRole("button", { name: /Save budget/ }));
+    await waitFor(() => expect(screen.getAllByText(/already covers this window/i).length).toBeGreaterThan(0));
+    // Nothing implicit happened; the user explicitly chooses to replace.
+    fireEvent.click(screen.getByRole("button", { name: /Replace scheduled budgets and save/ }));
+    await waitFor(() => {
+      const retry = calls.filter((c) => c.path === "POST /api/budget/edit").at(-1)!.body as Record<string, unknown>;
+      expect(retry.supersedeScheduled).toBe(true);
+    });
+  });
+
+  it("a CLEARED From date is omitted from the payload, not sent as '' (regression 2026-08-10)", async () => {
+    // Clearing the date input yields value "" — sent through, the server's
+    // strict YYYY-MM-DD schema 400s the ENTIRE save ("can't update a budget").
+    // Omitted, the server defaults to the first of the current month.
+    renderPage();
+    await waitForLoaded();
+    fireEvent.change(screen.getByDisplayValue("500.00"), { target: { value: "600" } });
+    fireEvent.change(screen.getByLabelText("From"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /Save budget/ }));
+    await waitFor(() => expect(calls.some((c) => c.path === "POST /api/budget/edit")).toBe(true));
+    const body = savedBody();
+    expect(body.effectiveFrom).toBeUndefined();
+    expect(body.lines).toContainEqual({ envelopeId: "env-groceries", amountCents: 60000, period: "monthly" });
+  });
+
+  it("an untouched save posts NO spending lines (regression 2026-08-10)", async () => {
+    renderPage();
+    await waitForLoaded();
+    fireEvent.click(screen.getByRole("button", { name: /Save budget/ }));
+    await waitFor(() => expect(calls.some((c) => c.path === "POST /api/budget/edit")).toBe(true));
+    expect(savedBody().lines).toEqual([]);
+  });
+
+  it("a mid-month From shows the proration note; the 1st does not (owner decision 2026-07-16)", async () => {
+    renderPage();
+    await waitForLoaded();
+    const note = /Starts mid-month — July will be prorated by days\./;
+    // Default From is the first of the current month: no note.
+    expect(screen.queryByText(note)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("From"), { target: { value: "2026-07-15" } });
+    expect(screen.getByText(note)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("From"), { target: { value: "2026-07-01" } });
+    expect(screen.queryByText(note)).not.toBeInTheDocument();
+  });
+
+  it("a changed income posts through /api/envelopes/edit with the schedule attached", async () => {
+    renderPage();
+    await waitForLoaded();
+    fireEvent.change(screen.getByLabelText("Salary monthly budget"), { target: { value: "6000" } });
+    fireEvent.change(screen.getByLabelText("From"), { target: { value: "2026-08-01" } });
+    fireEvent.click(screen.getByRole("button", { name: /Save budget/ }));
+    await waitFor(() => expect(calls.some((c) => c.path === "POST /api/envelopes/edit")).toBe(true));
+    const post = calls.find((c) => c.path === "POST /api/envelopes/edit")!.body as Record<string, unknown>;
+    expect(post.id).toBe("inc-salary");
+    expect(post.budgetedCents).toBe(600000);
+    expect(post.effectiveFrom).toBe("2026-08-01");
+    expect(post.completePrevious).toBeUndefined(); // retired field never sent
+  });
+
+  it("a parent with its OWN budget line is editable at the own amount, and the header reconciles as balanced", async () => {
+    currentGrid = PARENT_GRID;
+    renderPage();
+    await waitFor(() => expect(screen.getByText("Supplements")).toBeInTheDocument());
+
+    // Header total sums OWN amounts (505.92 + 100 + 200 = 805.92 = income):
+    // balanced, not the rolled-up 905.92 that previously undercounted/overcounted.
+    expect(screen.getByText("Every dollar allocated.")).toBeInTheDocument();
+    expect(screen.getByText(/Allocated \$805\.92/)).toBeInTheDocument();
+
+    // The parent row renders as editable at its OWN amount, flagged as a parent.
+    expect(screen.getByText("Groceries")).toBeInTheDocument();
+    expect(screen.getByText("has sub-envelopes")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("505.92")).toBeInTheDocument();
+
+    // Editing the parent's OWN line posts through the same budget-edit path —
+    // and ONLY the changed line: untouched rows stay out of the payload (the
+    // period round-trip rounds, so posting them versioned untouched envelopes).
+    fireEvent.change(screen.getByDisplayValue("505.92"), { target: { value: "600" } });
+    fireEvent.click(screen.getByRole("button", { name: /Save budget/ }));
+    await waitFor(() => expect(calls.some((c) => c.path === "POST /api/budget/edit")).toBe(true));
+    const lines = savedBody().lines as { envelopeId: string; amountCents: number; period: string }[];
+    expect(lines).toContainEqual({ envelopeId: "env-groceries-p", amountCents: 60000, period: "monthly" });
+    expect(lines).toHaveLength(1);
+  });
+
+  it("a pure-rollup parent (no own line) stays excluded from the editable list", async () => {
+    currentGrid = PARENT_GRID;
+    renderPage();
+    await waitFor(() => expect(screen.getByText("Hobby")).toBeInTheDocument());
+    expect(screen.queryByText("Recreation")).not.toBeInTheDocument();
+    // 4 rows, 1 pure-rollup parent excluded, plus 1 income line.
+    expect(screen.getByText("Showing 4 of 4")).toBeInTheDocument();
+  });
+
+  it("the History affordance expands the version chronology with status chips", async () => {
+    renderPage();
+    await waitForLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Groceries budget history" }));
+    await waitFor(() =>
+      expect(calls.some((c) => c.path === "GET /api/envelopes/versions")).toBe(true)
+    );
+    const chronology = await screen.findByRole("list", { name: "Budget version chronology" });
+    expect(chronology).toHaveTextContent("2026-08-01 → ongoing");
+    expect(chronology).toHaveTextContent("$600.00/mo");
+    expect(chronology).toHaveTextContent("scheduled");
+    expect(chronology).toHaveTextContent("Start → 2026-07-31");
+    expect(chronology).toHaveTextContent("$500.00/mo");
+    expect(chronology).toHaveTextContent("active");
+  });
+});

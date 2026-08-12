@@ -1,0 +1,225 @@
+/**
+ * Phase 1 engine integrity (owner doctrine 2026-08-12):
+ *   D1 day-level non-overlap; D3 scheduled versions never destroyed implicitly
+ *   (409 scheduled_conflict + explicit supersedeScheduled); D4 past months
+ *   recompute on back-dated edits; override-mask fix; move/scheduled cap;
+ *   garbage-date request rejection.
+ */
+
+import { describe, test, expect } from "bun:test";
+import type { CreateEnvelopeResponse, GridResponse, ApiError } from "../src/server/contract.ts";
+import { currentPeriod, todayISO } from "../src/platform/time.ts";
+import { monthBounds, nextPeriod, periodKey } from "../src/envelope/period.ts";
+import { findOverlaps } from "../src/budget/window.ts";
+import { makeTestApp, postJson, getJson, LOCAL_USER_ID, type TestApp } from "./server-test-app.ts";
+
+const TZ = "Australia/Melbourne";
+const NOW = currentPeriod(TZ);
+const FIRST = monthBounds(NOW).first;
+const NEXT = nextPeriod(NOW);
+const NEXT_FIRST = monthBounds(NEXT).first;
+const TODAY = todayISO(TZ);
+
+async function createEnvelope(t: TestApp, cookie: string, body: unknown): Promise<string> {
+  const res = await postJson(t.app, "/api/envelopes", body, cookie);
+  expect(res.status).toBe(200);
+  return ((await res.json()) as CreateEnvelopeResponse).id;
+}
+
+async function gridFor(t: TestApp, cookie: string, from: string, to: string): Promise<GridResponse> {
+  const res = await getJson(t.app, `/api/envelopes?from=${from}&to=${to}`, cookie);
+  expect(res.status).toBe(200);
+  return (await res.json()) as GridResponse;
+}
+
+async function editOngoing(
+  t: TestApp,
+  cookie: string,
+  envelopeId: string,
+  amountCents: number,
+  opts: { effectiveFrom?: string; effectiveTo?: string; supersedeScheduled?: boolean } = {},
+): Promise<Response> {
+  return postJson(
+    t.app,
+    "/api/budget/edit",
+    { lines: [{ envelopeId, amountCents }], scope: "ongoing", ...opts },
+    cookie,
+  );
+}
+
+describe("D3: scheduled versions are never destroyed implicitly", () => {
+  test("an ordinary edit is REFUSED (409 scheduled_conflict) while a scheduled version stands", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createEnvelope(t, cookie, { name: "Groceries", type: "expense", budgetedCents: 50000, period: "monthly" });
+    expect((await editOngoing(t, cookie, id, 60000, { effectiveFrom: NEXT_FIRST })).status).toBe(200);
+
+    const res = await editOngoing(t, cookie, id, 55000, { effectiveFrom: FIRST });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as ApiError;
+    expect(body.code).toBe("scheduled_conflict");
+    expect(body.conflicts?.[0]).toMatchObject({ envelopeId: id, amountCents: 60000, effectiveFrom: NEXT_FIRST });
+
+    // Refusal is atomic: the scheduled September figure is fully intact.
+    const nb = monthBounds(NEXT);
+    expect((await gridFor(t, cookie, nb.first, nb.last)).rows.find((r) => r.id === id)?.allocationCents).toBe(60000);
+  });
+
+  test("with supersedeScheduled the edit replaces the scheduled version explicitly", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createEnvelope(t, cookie, { name: "Groceries", type: "expense", budgetedCents: 50000, period: "monthly" });
+    await editOngoing(t, cookie, id, 60000, { effectiveFrom: NEXT_FIRST });
+
+    const res = await editOngoing(t, cookie, id, 55000, { effectiveFrom: FIRST, supersedeScheduled: true });
+    expect(res.status).toBe(200);
+    const nb = monthBounds(NEXT);
+    expect((await gridFor(t, cookie, nb.first, nb.last)).rows.find((r) => r.id === id)?.allocationCents).toBe(55000);
+  });
+
+  test("an edit dated AT the scheduled start replaces it silently only once it has started; before then it conflicts", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createEnvelope(t, cookie, { name: "Groceries", type: "expense", budgetedCents: 50000, period: "monthly" });
+    await editOngoing(t, cookie, id, 60000, { effectiveFrom: NEXT_FIRST });
+    // NEXT_FIRST is in the future: editing FROM that same date still covers the
+    // not-yet-started version, so it conflicts without the flag.
+    const res = await editOngoing(t, cookie, id, 65000, { effectiveFrom: NEXT_FIRST });
+    expect(res.status).toBe(409);
+    expect((await editOngoing(t, cookie, id, 65000, { effectiveFrom: NEXT_FIRST, supersedeScheduled: true })).status).toBe(200);
+  });
+});
+
+describe("D1: the non-overlap invariant holds after every write sequence", () => {
+  test("edits, schedules, supersedes and end-dates leave no overlapping live windows", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createEnvelope(t, cookie, { name: "Groceries", type: "expense", budgetedCents: 50000, period: "monthly" });
+    await editOngoing(t, cookie, id, 60000, { effectiveFrom: FIRST });
+    await editOngoing(t, cookie, id, 65000, { effectiveFrom: FIRST });
+    await editOngoing(t, cookie, id, 70000, { effectiveFrom: NEXT_FIRST });
+    await editOngoing(t, cookie, id, 75000, { effectiveFrom: FIRST, supersedeScheduled: true });
+    const { last } = monthBounds(NOW);
+    await editOngoing(t, cookie, id, 75000, { effectiveFrom: FIRST, effectiveTo: last });
+
+    const lines = await t.store.listTemplate(LOCAL_USER_ID);
+    expect(findOverlaps(lines.filter((l) => l.envelopeId === id))).toHaveLength(0);
+  });
+});
+
+describe("override-mask fix: explicitly saving the plan value clears a this-month override", () => {
+  test("template 500, override 300, save 500 ongoing → grid shows 500", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createEnvelope(t, cookie, { name: "Groceries", type: "expense", budgetedCents: 50000, period: "monthly" });
+    // A this-month override drops the month to 300.
+    const override = await postJson(
+      t.app,
+      "/api/budget/edit",
+      { lines: [{ envelopeId: id, amountCents: 30000 }], scope: "this_month" },
+      cookie,
+    );
+    expect(override.status).toBe(200);
+    const { first, last } = monthBounds(NOW);
+    expect((await gridFor(t, cookie, first, last)).rows.find((r) => r.id === id)?.allocationCents).toBe(30000);
+
+    // Explicitly saving the PLAN value must restore it (previously skipped).
+    const res = await editOngoing(t, cookie, id, 50000, { effectiveFrom: FIRST });
+    expect(res.status).toBe(200);
+    expect((await gridFor(t, cookie, first, last)).rows.find((r) => r.id === id)?.allocationCents).toBe(50000);
+  });
+});
+
+describe("moves cannot overlap scheduled versions", () => {
+  test("an ongoing move into an envelope with only a scheduled version caps its fresh line", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const src = await createEnvelope(t, cookie, { name: "Buffer", type: "expense", budgetedCents: 50000, period: "monthly" });
+    // Envelope whose ONLY line is scheduled next month (created with a future start).
+    const dst = await createEnvelope(t, cookie, {
+      name: "Holiday",
+      type: "expense",
+      budgetedCents: 40000,
+      period: "monthly",
+      effectiveFrom: NEXT_FIRST,
+    });
+
+    const move = await postJson(
+      t.app,
+      "/api/move",
+      { fromEnvelopeId: src, toEnvelopeId: dst, amountCents: 10000, scope: "ongoing" },
+      cookie,
+    );
+    expect(move.status).toBe(200);
+
+    // Next month must be EXACTLY the scheduled 400 — not 400 + the moved 100.
+    const nb = monthBounds(NEXT);
+    expect((await gridFor(t, cookie, nb.first, nb.last)).rows.find((r) => r.id === dst)?.allocationCents).toBe(40000);
+    const lines = await t.store.listTemplate(LOCAL_USER_ID);
+    expect(findOverlaps(lines.filter((l) => l.envelopeId === dst))).toHaveLength(0);
+  });
+});
+
+describe("D4: back-dated edits recompute past months", () => {
+  test("a version back-dated into a materialised past month rewrites that month's allocation", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createEnvelope(t, cookie, { name: "Groceries", type: "expense", budgetedCents: 50000, period: "monthly" });
+
+    // Materialise LAST month, then back-date a change into it from its 1st.
+    const prev = NOW.month === 1 ? { year: NOW.year - 1, month: 12 } : { year: NOW.year, month: NOW.month - 1 };
+    const pb = monthBounds(prev);
+    expect((await gridFor(t, cookie, pb.first, pb.last)).rows.find((r) => r.id === id)?.allocationCents).toBe(50000);
+
+    const res = await editOngoing(t, cookie, id, 80000, { effectiveFrom: pb.first });
+    expect(res.status).toBe(200);
+    // The past month now reflects the back-dated version (doctrine D4).
+    expect((await gridFor(t, cookie, pb.first, pb.last)).rows.find((r) => r.id === id)?.allocationCents).toBe(80000);
+  });
+});
+
+describe("garbage-date requests are rejected, never materialised", () => {
+  test("partial-year from/to on the grid is a 400 and writes nothing", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    await createEnvelope(t, cookie, { name: "Groceries", type: "expense", budgetedCents: 50000, period: "monthly" });
+    const res = await getJson(t.app, "/api/envelopes?from=0002-08-01&to=0002-08-31", cookie);
+    expect(res.status).toBe(400);
+    expect((await t.store.listAllocationPeriods(LOCAL_USER_ID)).filter((p) => p < "1990-01")).toHaveLength(0);
+  });
+
+  test("trend and detail date params are validated the same way", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createEnvelope(t, cookie, { name: "Groceries", type: "expense", budgetedCents: 50000, period: "monthly" });
+    expect((await getJson(t.app, `/api/envelopes/trend?id=${id}&from=0020-01-01&to=0020-12-31`, cookie)).status).toBe(400);
+    expect((await getJson(t.app, `/api/envelopes/detail?id=${id}&from=0202-01-01&to=0202-01-31`, cookie)).status).toBe(400);
+  });
+});
+
+describe("active is DERIVED from version dates (owner decision 2026-08-12)", () => {
+  test("covered = active; ended-last-month = inactive now; scheduled-only = inactive now, active in its month", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const covered = await createEnvelope(t, cookie, { name: "Covered", type: "expense", budgetedCents: 10000, period: "monthly" });
+    // Ended: budget ran only through last month.
+    const prev = NOW.month === 1 ? { year: NOW.year - 1, month: 12 } : { year: NOW.year, month: NOW.month - 1 };
+    const ended = await createEnvelope(t, cookie, {
+      name: "Ended", type: "expense", budgetedCents: 5000, period: "monthly",
+      effectiveFrom: monthBounds(prev).first, effectiveTo: monthBounds(prev).last,
+    });
+    // Scheduled: budget starts next month.
+    const scheduled = await createEnvelope(t, cookie, {
+      name: "Scheduled", type: "expense", budgetedCents: 7000, period: "monthly", effectiveFrom: monthBounds(nextPeriod(NOW)).first,
+    });
+
+    const now = await gridFor(t, cookie, monthBounds(NOW).first, monthBounds(NOW).last);
+    expect(now.rows.find((r) => r.id === covered)?.active).toBe(true);
+    expect(now.rows.find((r) => r.id === ended)?.active).toBe(false);
+    expect(now.rows.find((r) => r.id === scheduled)?.active).toBe(false);
+
+    const nb = monthBounds(nextPeriod(NOW));
+    const next = await gridFor(t, cookie, nb.first, nb.last);
+    expect(next.rows.find((r) => r.id === scheduled)?.active).toBe(true);
+  });
+});

@@ -1,0 +1,137 @@
+/**
+ * Unmapped-category detection (new-category wizard, ISC-19/20). A PocketSmith
+ * category present on transactions but covered by no mapping surfaces with its
+ * name (from the verbatim payload's category.title), transaction count, signed
+ * total, and last-seen date. A mapped category does NOT appear; a transfer or a
+ * no-category transaction is ignored; a bad rawJson yields a null name but the
+ * category still counts. The service resolves names defensively — one malformed
+ * payload never throws.
+ */
+
+import { describe, test, expect } from "bun:test";
+import type { Tx } from "../src/platform/store.ts";
+import { MemoryStore } from "./penny-memory-store.ts";
+import { EnvelopeService } from "../src/envelope/service.ts";
+import { USER, CONFIG } from "./penny-fixtures.ts";
+
+/** A transaction with a controllable rawJson (the fixture's tx() hardcodes "{}"). */
+function txRaw(opts: {
+  id: string;
+  date: string;
+  amountCents: number;
+  categoryId: string | null;
+  rawJson: string;
+  isTransfer?: boolean;
+  isPending?: boolean;
+}): Tx {
+  return {
+    id: opts.id,
+    date: opts.date,
+    amountCents: opts.amountCents,
+    accountId: "nab-everyday",
+    categoryId: opts.categoryId,
+    envelopeId: null,
+    payee: "Payee",
+    isTransfer: opts.isTransfer ?? false,
+    isPending: opts.isPending ?? false,
+    rawJson: opts.rawJson,
+  };
+}
+
+function raw(categoryId: number, title: string): string {
+  return JSON.stringify({ id: 1, category: { id: categoryId, title }, amount: -1 });
+}
+
+describe("listUnmappedCategories", () => {
+  test("a 3-txn unmapped category surfaces with name, count, total and last-seen", async () => {
+    const store = new MemoryStore();
+    await store.upsertTransactions(USER, [
+      txRaw({ id: "t1", date: "2026-07-01", amountCents: -1000, categoryId: "cat-beer", rawJson: raw(101, "Beer") }),
+      txRaw({ id: "t2", date: "2026-07-05", amountCents: -2000, categoryId: "cat-beer", rawJson: raw(101, "Beer") }),
+      txRaw({ id: "t3", date: "2026-07-03", amountCents: -500, categoryId: "cat-beer", rawJson: raw(101, "Beer") }),
+    ]);
+    const svc = new EnvelopeService(store, CONFIG);
+
+    const cats = await svc.listUnmappedCategories(USER);
+    expect(cats.length).toBe(1);
+    expect(cats[0]).toEqual({
+      categoryId: "cat-beer",
+      categoryName: "Beer",
+      transactionCount: 3,
+      totalCents: -3500,
+      firstSeenDate: "2026-07-01",
+      lastSeenDate: "2026-07-05",
+    });
+  });
+
+  test("a mapped category does NOT appear; only the unmapped one does", async () => {
+    const store = new MemoryStore();
+    await store.upsertTransactions(USER, [
+      txRaw({ id: "m1", date: "2026-07-02", amountCents: -9000, categoryId: "cat-rent", rawJson: raw(200, "Rent") }),
+      txRaw({ id: "u1", date: "2026-07-02", amountCents: -1500, categoryId: "cat-gym", rawJson: raw(300, "Gym") }),
+    ]);
+    // cat-rent is mapped to an envelope covering the tx date; cat-gym is not.
+    await store.upsertMapping(USER, {
+      id: "map-rent",
+      userId: USER,
+      categoryId: "cat-rent",
+      envelopeId: "rent",
+      effectiveFrom: "2026-01-01",
+      effectiveTo: null,
+    });
+    const svc = new EnvelopeService(store, CONFIG);
+
+    const cats = await svc.listUnmappedCategories(USER);
+    expect(cats.map((c) => c.categoryId)).toEqual(["cat-gym"]);
+  });
+
+  test("transfers and no-category transactions are ignored", async () => {
+    const store = new MemoryStore();
+    await store.upsertTransactions(USER, [
+      txRaw({ id: "tr", date: "2026-07-02", amountCents: -100, categoryId: "cat-x", rawJson: raw(1, "X"), isTransfer: true }),
+      txRaw({ id: "nc", date: "2026-07-02", amountCents: -100, categoryId: null, rawJson: "{}" }),
+    ]);
+    const svc = new EnvelopeService(store, CONFIG);
+    expect(await svc.listUnmappedCategories(USER)).toEqual([]);
+  });
+
+  test("a bad rawJson yields a null name but the category still counts; a later good payload backfills the name", async () => {
+    const store = new MemoryStore();
+    await store.upsertTransactions(USER, [
+      txRaw({ id: "b1", date: "2026-07-01", amountCents: -100, categoryId: "cat-bad", rawJson: "not json {{" }),
+      txRaw({ id: "b2", date: "2026-07-02", amountCents: -200, categoryId: "cat-bad", rawJson: "{}" }),
+      // Same category, a later transaction DOES carry a parseable title.
+      txRaw({ id: "b3", date: "2026-07-03", amountCents: -300, categoryId: "cat-bad", rawJson: raw(9, "Coffee") }),
+      // A category whose payloads are ALL bad stays name-null but is still listed.
+      txRaw({ id: "z1", date: "2026-07-01", amountCents: -50, categoryId: "cat-null", rawJson: "«broken»" }),
+    ]);
+    const svc = new EnvelopeService(store, CONFIG);
+
+    const cats = await svc.listUnmappedCategories(USER);
+    const bad = cats.find((c) => c.categoryId === "cat-bad")!;
+    expect(bad.transactionCount).toBe(3);
+    expect(bad.totalCents).toBe(-600);
+    expect(bad.categoryName).toBe("Coffee"); // backfilled from the later good payload
+    const nul = cats.find((c) => c.categoryId === "cat-null")!;
+    expect(nul.transactionCount).toBe(1);
+    expect(nul.categoryName).toBeNull();
+  });
+
+  test("the period-scoped variant honours an inclusive from/to window", async () => {
+    const store = new MemoryStore();
+    await store.upsertTransactions(USER, [
+      txRaw({ id: "j", date: "2026-06-30", amountCents: -100, categoryId: "cat-a", rawJson: raw(1, "A") }),
+      txRaw({ id: "k", date: "2026-07-15", amountCents: -200, categoryId: "cat-a", rawJson: raw(1, "A") }),
+      txRaw({ id: "l", date: "2026-08-01", amountCents: -400, categoryId: "cat-a", rawJson: raw(1, "A") }),
+    ]);
+    const svc = new EnvelopeService(store, CONFIG);
+
+    const all = await svc.listUnmappedCategories(USER);
+    expect(all[0]?.transactionCount).toBe(3);
+
+    const july = await svc.listUnmappedCategories(USER, { from: "2026-07-01", to: "2026-07-31" });
+    expect(july.length).toBe(1);
+    expect(july[0]?.transactionCount).toBe(1);
+    expect(july[0]?.totalCents).toBe(-200);
+  });
+});

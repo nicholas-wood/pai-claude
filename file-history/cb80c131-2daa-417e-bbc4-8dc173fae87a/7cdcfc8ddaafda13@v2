@@ -1,0 +1,113 @@
+# Budget-history audit — BudgetBuddy vs PocketSmith (2026-08-12)
+
+Read-only audit of every mapped category's budget chronology against PocketSmith's
+budget events (1,695 events, 2023-07 → 2026-08). **19 categories match exactly;
+26 diverge.** The divergences fall into five patterns, in descending priority.
+
+## Pattern 1 — Flattened history (the Gym case): 18 categories, REPAIRABLE
+
+Root cause: the legacy-start backfill gave open-since-forever lines a real *start
+date* (2023-07-01) but kept their **current amount across the whole span**, so
+every historical PocketSmith rate change was flattened into one era. This is
+exactly "Gym shows only one historical budget".
+
+| Category | PocketSmith says | BudgetBuddy has |
+|---|---|---|
+| Gym | 216.67 → 238.33 → 307.67 → 719.33 (Mar-26) → 433.33 | flat 433.33 |
+| Phone | 112 → 130 → 160 | flat 160 |
+| Health Insurance | 105.85 → 110 → 115 | flat 115 |
+| Tolls | 100 → 50 → 20 | flat 20 |
+| Water | 30 → 75 (Apr-26) | flat 75 |
+| Spotify | 20 → 13.99 | flat 13.99 |
+| Dog Food | 160 → 50 (Mar-26) | flat 50 |
+| Doggy Day Care | 238.33 → 162.50 → 75 | flat 75 |
+| Presents | 95 → 60 (Mar-26) | flat 60 |
+| Shopping | 204 → 160 (Mar-26) | flat 160 |
+| Recreation | 480 → 600 (Apr-26) | flat 600 |
+| Healthcare | 300 → 150 → 220 | flat 220 |
+| Internet | 70 → 93 (Apr-26) | flat 93 |
+| Mortgage | 3185 → 3318.71 → 3185 | flat 3185 |
+| Electricity | 66 → 77 | flat 77 |
+| Car Insurance | 194.33 (May-24 only) → 129.54 | flat 129.54 |
+| Car Rego | 75 → 77.56 | flat 77.56 (plus BB-authored 37.81 from Aug-26) |
+| Groceries | 500.09 → 499.92 → 505.92 | flat 505.92 (plus BB-authored 600 from Aug-26) |
+| Public Transport | 173.33 (Feb-25→Feb-26), none since Mar-26 | flat 20 — **amounts disagree entirely; needs your eyes** |
+
+Repair: split each flat span into the PocketSmith eras, **preserving every
+BudgetBuddy-authored version** (Aug-26 changes like Groceries 600, Fuel 100,
+Car Rego 37.81, Gym 95.33 stay untouched). Past months then recompute (D4).
+Public Transport is excluded from auto-repair — PS says $173.33 where BB says
+$20; one of them was never real.
+
+## Pattern 2 — August 2026 "divergences" that are DELIBERATE: no action
+
+Fuel (PS 200 vs BB 100), Car Rego (77.56 vs 37.81), Groceries (505.92 vs 600),
+Gym (433.33 vs 95.33): these are your own BudgetBuddy edits this month.
+BudgetBuddy is the system of record going forward; PocketSmith simply hasn't
+been told. Not defects.
+
+## Pattern 3 — Annual-cadence gaps in PocketSmith: no action
+
+MCC Membership, Microsoft 365 (and the annual set generally) show "PS none"
+months between yearly occurrences — an artefact of how PocketSmith represents
+annual repeats, not missing budgets. BudgetBuddy's continuous monthly-equivalent
+line is the correct amortised view.
+
+## Pattern 4 — Income rows: MATCH once resolved correctly, but one real problem
+
+The audit script day-weighted income (an artefact); resolved by expected day:
+
+- **Salary: MATCHES.** Full chronology imported (6363.61 / 6269.21 / 7323.26 /
+  7454.60). August resolves 7454.60 = PocketSmith. The 9,963 line you authored
+  starts 3 Aug and rules from September. ✓
+- **Rental: CHECK THE AMOUNT.** The 1,170 line ends 31 Jul and a new line
+  starts 12 Aug at **$750/week ($3,250/month equivalent)** — nearly triple the
+  old $1,170/month. Your expected day is the 13th, which the new line covers,
+  so August's expected rental income is **$3,250**. If that line was an
+  experiment during today's session, delete it (the new per-version delete
+  covers this) and reopen the 1,170 line; if the rent genuinely changed,
+  nothing further needed. (There is also a 1..11 Aug window gap, harmless
+  while the expected day sits at 13.)
+- **Salary, August note**: your 9,963 line starts 3 Aug and your expected day
+  is the 17th, so August already expects $9,963 (not 7,454.60). Deliberate
+  by the look of it — just confirming that is what you intended.
+
+## Pattern 5 — Concurrent PocketSmith series: 2 categories, judgement calls
+
+- **Savings**: two identical concurrent $1,500/mo series (2023-07→2024-07) in
+  PS; BudgetBuddy has NO budget lines at all. If Savings should carry that
+  history, one $1,500 era can be imported; the duplicate is PS-side noise.
+- **Gas**: concurrent $60 + $65 series over the same span; BB kept flat $65.
+  Ambiguous — PS was double-budgeting gas that year.
+
+## Pattern 6 — Start dates before the category existed (the Mortgage Fee case): 16 envelopes
+
+The legacy-start backfill anchored every open-since-forever line at its earliest
+*allocation* month — and the garbage-era materialisation had minted allocation
+rows from 2023-07 for everything, so lines were stretched back to 2023-07-01
+regardless of when the category really began. The audit missed this because it
+compared amounts only from PocketSmith's first era forward.
+
+Envelopes whose line says 2023-07-01 but whose first real transaction is later:
+Pocketsmith (Oct-23), SMLSC + USLSC Membership (Nov-23), Microsoft Onedrive
+(Feb-24), Internet + Gas + Fairfax + Electricity (Aug-24), Mortgage (Nov-24),
+**Mortgage Fee (Dec-24)**, OC Fees (Dec-24), Microsoft 365 + Netflix (Feb-25),
+Water (Feb-25), Council Rates (Sep-25), Card Chasing (Mar-26).
+
+Repair: the same era-split pass fixes these — each chronology starts where
+PocketSmith's first budget era starts (that IS the budget history); envelopes
+with no PS eras trim to their first transaction month. Note Water/Gas show PS
+budget eras from 2023-07 despite later first transactions — PS budgets predating
+recorded spend are kept as PS states them.
+
+## Recommended actions (awaiting approval)
+
+1. **Auto-repair Pattern 1 + Pattern 6 together** (one pass): split flat spans
+   into PS eras and trim starts to the first era (or first transaction where no
+   eras), BB-authored versions preserved, D4 recompute, backup first.
+2. **Rental**: tell me whether $750/week is real. Either way the August gap
+   needs closing (reopen 1,170 through 11 Aug at minimum).
+3. **Public Transport, Savings, Gas**: your call per the notes above.
+
+Full month-by-month divergence detail: `~/.claude/jobs/cb80c131/tmp/audit-report.txt`
+(regenerable read-only via the audit script).

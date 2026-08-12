@@ -1,0 +1,204 @@
+/**
+ * One-off budget-history backfill from PocketSmith (owner request 2026-08-12).
+ *
+ *   bun run scripts/backfill-budget-history.ts            # dry-run (report only)
+ *   bun run scripts/backfill-budget-history.ts --apply    # write (after a DB backup)
+ *
+ * For every mapped category, pulls the REAL monthly budget series from
+ * PocketSmith trend analysis (forecast_amount = its budget events), collapses
+ * it into eras, and imports the eras UNDER the existing BudgetBuddy chronology:
+ * history before the envelope's takeover (its anchor date, capped by its
+ * earliest hand-authored version) is filled; BudgetBuddy-authored budgets are
+ * never modified — except extending the takeover line BACK when the adjacent
+ * era carries the same amount ("current budget since 1/1/25"). Historical
+ * materialised months are then recomputed from the final chronology (D4).
+ */
+
+import { copyFileSync, existsSync } from "node:fs";
+import { buildContainer } from "../src/composition.ts";
+import { installSecretLogRedaction } from "../src/server/redaction.ts";
+import { PocketSmithClient } from "../src/ingest/client.ts";
+import { erasFromSeries, findEraOverlap, planHistoryMerge, type SeriesEvent } from "../src/ingest/budget-history.ts";
+import { effectiveFromOf, effectiveToOf, previousDay, resolveTemplateForMonth } from "../src/budget/versions.ts";
+import { findOverlaps, isTombstone } from "../src/budget/window.ts";
+import type { BudgetTemplate } from "../src/domain/types.ts";
+import type { EnvelopeStore } from "../src/envelope/ports.ts";
+import type { BudgetStore } from "../src/budget/ports.ts";
+
+const APPLY = process.argv.includes("--apply");
+const userId = process.env.PENNY_USER_ID ?? "local";
+const DEFAULT_TAKEOVER = "2026-06-01"; // the BudgetBuddy import month
+
+const container = await buildContainer();
+const { secrets } = installSecretLogRedaction(container.secrets);
+const store = container.store as BudgetStore & EnvelopeStore;
+
+if (APPLY) {
+  const dbPath = process.env.PENNY_SQLITE_PATH ?? `${process.env.HOME}/.penny/penny.db`;
+  if (existsSync(dbPath)) {
+    const backup = dbPath.replace(/\.db$/, `.pre-history-backfill.db`);
+    copyFileSync(dbPath, backup);
+    if (existsSync(`${dbPath}-wal`)) copyFileSync(`${dbPath}-wal`, `${backup}-wal`);
+    console.log(`[backfill] backup written: ${backup}`);
+  }
+}
+
+const client = await PocketSmithClient.forUser(secrets, userId);
+const user = await client.getAuthenticatedUser();
+if (user.id === undefined || user.id === null) throw new Error("PocketSmith returned no user id.");
+
+const [mappings, template, incomes, txs] = await Promise.all([
+  store.listMappings(userId),
+  store.listTemplate(userId),
+  store.listIncomeEnvelopes(userId),
+  store.listTransactions(userId),
+]);
+const incomeIds = new Set(incomes.map((i) => i.id));
+const catToEnv = new Map(mappings.map((m) => [m.categoryId, m.envelopeId]));
+const categoryIds = [...catToEnv.keys()];
+
+const firstTxMonth = txs.reduce<string | null>((min, t) => (min === null || t.date < min ? t.date : min), null)?.slice(0, 7);
+if (!firstTxMonth) throw new Error("No transactions — nothing to backfill against.");
+const startDate = `${firstTxMonth}-01`;
+const endDate = new Date().toISOString().slice(0, 10);
+
+const envelopes = await store.listEnvelopes(userId);
+const nameOf = new Map<string, string>([
+  ...envelopes.map((e): [string, string] => [e.id, e.name]),
+  ...incomes.map((i): [string, string] => [i.id, i.name]),
+]);
+
+console.log(`[backfill] events ${startDate}..${endDate} (budget series occurrences)`);
+const events = await client.listEvents(user.id, startDate, endDate);
+console.log(`[backfill] ${events.length} events fetched`);
+
+const byCategory = new Map<string, SeriesEvent[]>();
+for (const ev of events) {
+  const cid = ev.category?.id;
+  if (cid === undefined || ev.date === undefined) continue;
+  const key = String(cid);
+  if (!catToEnv.has(key)) continue;
+  const arr = byCategory.get(key) ?? [];
+  arr.push({
+    seriesId: ev.series_id ?? 0,
+    date: ev.date,
+    amountCents: Math.abs(Math.round((ev.amount ?? 0) * 100)),
+    repeatType: ev.repeat_type ?? "once",
+    repeatInterval: ev.repeat_interval ?? 1,
+  });
+  byCategory.set(key, arr);
+}
+
+let insertedTotal = 0;
+let extendedTotal = 0;
+for (const [catId, evs] of byCategory) {
+  const envelopeId = catToEnv.get(catId)!;
+  const isIncome = incomeIds.has(envelopeId);
+  const eras = erasFromSeries(evs);
+  if (eras.length === 0) continue;
+  const name = nameOf.get(envelopeId) ?? envelopeId;
+  if (findEraOverlap(eras)) {
+    console.log(`\n${name} (${envelopeId}): SKIPPED — concurrent budget series overlap; import by hand if needed`);
+    continue;
+  }
+
+  // The takeover: the envelope's earliest live BudgetBuddy line (its start is
+  // where BudgetBuddy's own chronology begins), else the import default.
+  const live = template.filter((l) => l.envelopeId === envelopeId && !isTombstone(l));
+  const earliest = live.sort((a, b) => effectiveFromOf(a).localeCompare(effectiveFromOf(b)))[0];
+  const takeoverFrom = earliest ? effectiveFromOf(earliest) : DEFAULT_TAKEOVER;
+  const takeoverAmount = earliest?.amountCents ?? -1;
+
+  const plan = planHistoryMerge(envelopeId, eras, takeoverFrom, takeoverAmount);
+  if (plan.inserts.length === 0 && plan.extendTakeoverTo === null) continue;
+
+  console.log(`\n${name} (${envelopeId})${isIncome ? " [income]" : ""} — takeover ${takeoverFrom}:`);
+  for (const line of plan.report) console.log(line);
+
+  if (!APPLY) continue;
+
+  await store.withTransaction(async () => {
+    const working: BudgetTemplate[] = (await store.listTemplate(userId)).filter((l) => l.envelopeId === envelopeId);
+    for (const ins of plan.inserts) {
+      const line: BudgetTemplate = { ...ins, id: crypto.randomUUID(), userId };
+      await store.putTemplateLine(userId, line);
+      working.push(line);
+      insertedTotal++;
+    }
+    if (plan.extendTakeoverTo !== null && earliest) {
+      const extended: BudgetTemplate = {
+        ...earliest,
+        effectiveFrom: plan.extendTakeoverTo,
+        effectiveTo: effectiveToOf(earliest),
+      };
+      await store.putTemplateLine(userId, extended);
+      const idx = working.findIndex((l) => l.id === earliest.id);
+      if (idx >= 0) working[idx] = extended;
+      extendedTotal++;
+    }
+    // An envelope with NO existing BudgetBuddy line must not end up with only
+    // CLOSED history: without an open line, an income's stored-budget fallback
+    // is bypassed the moment any line exists, zeroing its current budget (the
+    // "my active income budgets aren't there" regression, repaired 2026-08-12).
+    // Reopen the final era when it adjoins the takeover at the stored amount,
+    // else append an open takeover line carrying the stored budget.
+    if (earliest === undefined) {
+      const stored = isIncome ? (incomes.find((i) => i.id === envelopeId)?.budgetedCents ?? 0) : 0;
+      const coversNow = working.some((l) => !isTombstone(l) && effectiveToOf(l) === null);
+      if (!coversNow && stored !== 0) {
+        const lastEra = working
+          .filter((l) => !isTombstone(l))
+          .sort((a, b) => effectiveFromOf(a).localeCompare(effectiveFromOf(b)))
+          .at(-1);
+        if (lastEra && effectiveToOf(lastEra) === previousDay(takeoverFrom) && lastEra.amountCents === stored) {
+          const reopened: BudgetTemplate = { ...lastEra, effectiveFrom: effectiveFromOf(lastEra), effectiveTo: null };
+          await store.putTemplateLine(userId, reopened);
+          const i2 = working.findIndex((l) => l.id === lastEra.id);
+          if (i2 >= 0) working[i2] = reopened;
+          console.log(`  (final era continues as the current budget — one continuous line)`);
+        } else {
+          const takeover: BudgetTemplate = {
+            id: crypto.randomUUID(),
+            userId,
+            envelopeId,
+            amountCents: stored,
+            period: "monthly",
+            effectiveFrom: takeoverFrom,
+            effectiveTo: null,
+          };
+          await store.putTemplateLine(userId, takeover);
+          working.push(takeover);
+          console.log(`  (current budget line added from ${takeoverFrom} at ${(stored / 100).toFixed(2)}/mo)`);
+        }
+      }
+    }
+    const overlaps = findOverlaps(working.filter((l) => !isTombstone(l)));
+    if (overlaps.length > 0) throw new Error(`overlap after merge for ${envelopeId} — aborted`);
+
+    // D4: recompute the envelope's materialised months from the final lines
+    // (income envelopes resolve live and materialise nothing).
+    if (!isIncome) {
+      const months = await store.listAllocationPeriods(userId);
+      for (const key of months) {
+        if (key < "1990-01" || key > "2100-12") continue;
+        const m = { year: Number(key.slice(0, 4)), month: Number(key.slice(5, 7)) };
+        const allocs = await store.listAllocations(userId, key);
+        if (allocs.length === 0) continue;
+        const mine = allocs.find((a) => a.envelopeId === envelopeId);
+        if (mine?.scope === "this_month") continue;
+        const resolved = resolveTemplateForMonth(working, m).get(envelopeId) ?? 0;
+        if ((mine?.amountCents ?? 0) === resolved) continue;
+        await store.putAllocation(userId, {
+          id: mine?.id ?? crypto.randomUUID(),
+          envelopeId,
+          period: key,
+          amountCents: resolved,
+          scope: "ongoing",
+        });
+      }
+    }
+  });
+}
+
+console.log(`\n[backfill] ${APPLY ? "APPLIED" : "DRY-RUN"}: ${insertedTotal} historical versions inserted, ${extendedTotal} current budgets extended back.`);
+await store.close();

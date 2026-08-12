@@ -1,0 +1,1132 @@
+/**
+ * Budget engine service. The clean functions the server handlers call.
+ *
+ * Covers: the auto-rolling recurring template (ISC-29, ISC-76), the continuous
+ * zero-based alert (ISC-30, ISC-32), income variance (ISC-31, ISC-65), conserved
+ * move-money with scope (ISC-66..69, ISC-71), the Edit Budget wizard that edits
+ * the template (ISC-72), and the budget history that records every template
+ * change and every auto-roll with before/after (ISC-77).
+ *
+ * Allocations are materialised one row per (envelope, period). The template is
+ * the standing plan; an ongoing change edits the template and the current
+ * period, a this-month change edits only the current period (ISC-68).
+ */
+
+import type { BudgetPeriod, BudgetTemplate, ChangeScope, EnvelopeType, Period } from "../domain/types.ts";
+import type { UserId } from "../platform/auth.ts";
+import type {
+  BudgetHistoryEntry,
+  BudgetHistoryResponse,
+  BudgetVersionView,
+  BudgetVersionsResponse,
+  NeighbourAdjustment,
+  DistributeRequest,
+  DistributeResponse,
+  DistributeResultLeg,
+  EditBudgetRequest,
+  EditBudgetResponse,
+  MoveMoneyRequest,
+  MoveMoneyResponse,
+} from "../server/contract.ts";
+import type { Allocation } from "../envelope/ports.ts";
+import { comparePeriods, monthBounds, nextPeriod, periodKey, periodOfDate } from "../envelope/period.ts";
+import type { EnvelopeService } from "../envelope/service.ts";
+import type { BudgetStore } from "./ports.ts";
+import { makeChange } from "./history.ts";
+import {
+  OPEN_EFFECTIVE_FROM,
+  currentLineFor,
+  effectiveFromOf,
+  effectiveToOf,
+  previousDay,
+  resolveAmountForMonth,
+  resolveIncomeBudgetForMonth,
+  resolveTemplateForMonth,
+  versionStatus,
+} from "./versions.ts";
+import { incomeVariances, zeroBasedCheck, type IncomeVariance, type ZeroBasedState } from "./zerobased.ts";
+import { isConserved, planMove, type MoveRequest } from "./move.ts";
+import { todayISO } from "../platform/time.ts";
+import { isDistributeConserved, planDistribute, type DistributeRequestInput } from "./distribute.ts";
+import { assertWindow, findOverlaps, isTombstone, planVersionWrite, tombstoned, truncated } from "./window.ts";
+
+function uuid(): string {
+  return crypto.randomUUID();
+}
+
+/** A version window a write would cover, surfaced for the explicit-supersede prompt. */
+export interface ScheduledConflict {
+  readonly envelopeId: string;
+  readonly amountCents: number;
+  readonly effectiveFrom: string;
+  readonly effectiveTo: string | null;
+}
+
+/**
+ * Thrown when a version write would cover a SCHEDULED (later-starting) version
+ * and the request did not carry supersedeScheduled: scheduled budgets are never
+ * destroyed implicitly (owner doctrine D3, 2026-08-12). Handlers map this to a
+ * 409 so the client can prompt and retry with the flag.
+ */
+export class ScheduledConflictError extends Error {
+  readonly conflicts: readonly ScheduledConflict[];
+  constructor(conflicts: readonly ScheduledConflict[]) {
+    const what = conflicts
+      .map((c) => `${c.effectiveFrom}${c.effectiveTo ? `..${c.effectiveTo}` : " onward"} (${(c.amountCents / 100).toFixed(2)}/mo)`)
+      .join(", ");
+    super(
+      `A scheduled budget already covers this window: ${what}. ` +
+        `Re-save choosing to replace scheduled budgets, or date the change on or after the scheduled start.`,
+    );
+    this.conflicts = conflicts;
+  }
+}
+
+/** The era of plausible budgeting months. Requests outside it are garbage
+ * (partial years typed into date inputs once materialised centuries of months). */
+export const ERA_MIN = "1990-01-01";
+export const ERA_MAX = "2100-12-31";
+
+/**
+ * Thrown when a version-window edit touches the neighbours and the request has
+ * not yet stated a decision. Handlers map it to a 409 "neighbour_adjustments"
+ * carrying the suggestions, so the client can prompt ("update the previous
+ * budget's end date so they continue to line up?") and retry with
+ * acceptAdjustments true/false (owner requirement, 2026-08-12).
+ */
+export class NeighbourAdjustmentsError extends Error {
+  readonly adjustments: readonly NeighbourAdjustment[];
+  constructor(adjustments: readonly NeighbourAdjustment[]) {
+    super(
+      adjustments.map((a) => a.note).join(" ") +
+        " Confirm to apply the suggested updates, or save without the optional ones.",
+    );
+    this.adjustments = adjustments;
+  }
+}
+
+/**
+ * A validated create-envelope request (ISC-87), as resolved by the handler:
+ * `rolloverStart` arrives already defaulted to today in the user's timezone.
+ */
+export interface CreateEnvelopeInput {
+  readonly name: string;
+  readonly type: EnvelopeType;
+  readonly parentId?: string | null;
+  readonly rolloverRule?: string;
+  readonly budgetedCents?: number;
+  readonly period?: BudgetPeriod;
+  readonly rolloverStart: string;
+  readonly active?: boolean;
+  /** Income target (defaults to the budget — the two stay equal in the modal). */
+  readonly targetCents?: number;
+  /** Budget chronology: the first version's effective window (optional). */
+  readonly effectiveFrom?: string;
+  readonly effectiveTo?: string;
+}
+
+export class BudgetService {
+  constructor(
+    private readonly store: BudgetStore,
+    private readonly envelopes: EnvelopeService,
+    /** Ledger timezone for "today" in the scheduled-version protection rule. */
+    private readonly timezone: string = "Australia/Melbourne",
+  ) {}
+
+  // ── allocation materialisation ────────────────────────────────────────────
+
+  /** One allocation row per envelope for the period (summed if duplicated). */
+  private async allocMap(userId: UserId, period: Period): Promise<Map<string, Allocation>> {
+    const rows = await this.store.listAllocations(userId, periodKey(period));
+    const m = new Map<string, Allocation>();
+    for (const r of rows) {
+      const cur = m.get(r.envelopeId);
+      if (cur === undefined) m.set(r.envelopeId, r);
+      else m.set(r.envelopeId, { ...cur, amountCents: cur.amountCents + r.amountCents });
+    }
+    return m;
+  }
+
+  private async setAllocation(
+    userId: UserId,
+    period: Period,
+    envelopeId: string,
+    amountCents: number,
+    scope: ChangeScope,
+    existing: ReadonlyMap<string, Allocation>,
+  ): Promise<void> {
+    const prior = existing.get(envelopeId);
+    await this.store.putAllocation(userId, {
+      id: prior?.id ?? uuid(),
+      envelopeId,
+      period: periodKey(period),
+      amountCents,
+      scope,
+    });
+  }
+
+  // ── auto-roll (ISC-29, ISC-76, ISC-77) ────────────────────────────────────
+
+  /**
+   * Ensure the period has its budget without any manual step. If the period has
+   * no allocations yet, materialise the recurring template into it and record
+   * each rolled line in the budget history (ISC-29, ISC-76, ISC-77). Idempotent:
+   * an already-populated month is left untouched so edits are never clobbered.
+   * The whole roll is one transaction (all lines land or none do), and even a
+   * raced double-roll cannot double the month: allocations upsert keyed on
+   * (user_id, envelope_id, period), so the second roll re-sets the same rows.
+   */
+  async ensureMonth(userId: UserId, period: Period): Promise<{ rolled: number }> {
+    // Era guard: partial years typed into date inputs once reached here as
+    // requests for year 10, 100, 1000 — materialising 1.4M garbage allocation
+    // rows. Handlers now validate, and this is the engine-level backstop.
+    const key = periodKey(period);
+    if (key < "1990-01" || key > "2100-12") return { rolled: 0 };
+    return this.store.withTransaction(async () => {
+      const existing = await this.allocMap(userId, period);
+      if (existing.size > 0) return { rolled: 0 };
+
+      const template = await this.store.listTemplate(userId);
+      // Day-weighted resolution over the effective-dated versions: a scheduled
+      // version contributes nothing until its month arrives, a completed one
+      // stops, a mid-month window is prorated by its active days, and
+      // overlapping versions SUM. Income envelope versions live in the same
+      // table but never materialise allocations (income budgets are resolved
+      // live from the lines), so they are excluded here.
+      const incomes = await this.store.listIncomeEnvelopes(userId);
+      const incomeIds = new Set(incomes.map((i) => i.id));
+      const wanted = resolveTemplateForMonth(
+        template.filter((t) => !incomeIds.has(t.envelopeId)),
+        period,
+      );
+      let rolled = 0;
+      for (const [envelopeId, amountCents] of wanted) {
+        await this.setAllocation(userId, period, envelopeId, amountCents, "ongoing", existing);
+        await this.store.appendBudgetHistory(
+          userId,
+          makeChange({ userId, envelopeId, beforeCents: 0, afterCents: amountCents, scope: "ongoing", actor: "sync" }),
+        );
+        rolled++;
+      }
+      return { rolled };
+    });
+  }
+
+  // ── Edit Budget wizard (ISC-72, ISC-67, ISC-68, ISC-77) ───────────────────
+
+  /**
+   * Apply the Edit Budget wizard. An ongoing edit APPENDS an effective-dated
+   * VERSION per changed line (budget chronology) and re-resolves the current
+   * period; a this-month edit changes only the current period and leaves the
+   * template alone (ISC-68). Every changed line is recorded with before/after
+   * (ISC-77). Save is never blocked; an imbalance only alerts. All lines commit
+   * atomically: a failure mid-wizard leaves no partial edit.
+   *
+   * Version semantics (locked design):
+   *   - effectiveFrom defaults to the first day of `period` (the current
+   *     month), which reproduces the pre-versioning edit exactly.
+   *   - completePrevious (default true) sets every version of a changed
+   *     envelope whose window still reaches effectiveFrom (open or completed)
+   *     to end the day before effectiveFrom; unticked, the old and new
+   *     versions coexist and SUM in every shared month.
+   *   - A version effective in a FUTURE month contributes nothing now: the
+   *     current period's allocation is untouched, and the future month picks
+   *     the version up when its ensureMonth runs. Months that were ALREADY
+   *     materialised ahead of time (e.g. by a financial-year grid view) are
+   *     re-resolved so the schedule still lands; PAST months are never touched.
+   */
+  async editBudget(
+    userId: UserId,
+    period: Period,
+    req: EditBudgetRequest,
+  ): Promise<EditBudgetResponse> {
+    return this.store.withTransaction(() => this.editBudgetInTx(userId, period, req));
+  }
+
+  private async editBudgetInTx(
+    userId: UserId,
+    period: Period,
+    req: EditBudgetRequest,
+  ): Promise<EditBudgetResponse> {
+    const template = await this.store.listTemplate(userId);
+    const periodAllocs = await this.allocMap(userId, period);
+    // AS-OF MODE (Phase 2, doctrine locked 2026-08-12): the request carries the
+    // date the user is editing "as of". Edits target the MONTH containing it —
+    // figures, version targeting, and the zero-base all follow that month. Each
+    // write is BOUNDED: it starts at the target month's first day and ends the
+    // day before the envelope's next later-starting version, so budgets
+    // scheduled for other months survive an as-of edit by construction.
+    const asOf = req.asOf ?? null;
+    const targetMonth = asOf ? periodOfDate(asOf) : periodOfDate(req.effectiveFrom ?? monthBounds(period).first);
+    const targetAllocs =
+      asOf && periodKey(targetMonth) !== periodKey(period) ? await this.allocMap(userId, targetMonth) : periodAllocs;
+    const effectiveFrom = asOf ? monthBounds(targetMonth).first : (req.effectiveFrom ?? monthBounds(period).first);
+    const effectiveTo = req.effectiveTo ?? null;
+    const effMonth = periodOfDate(effectiveFrom);
+    // Local working copy of the line set, kept in step with the writes so each
+    // subsequent resolution sees the edits made earlier in this save.
+    const lines: BudgetTemplate[] = [...template];
+
+    let changed = 0;
+    for (const line of req.lines) {
+      if (req.scope !== "ongoing") {
+        // Month override: a period-allocation write only, never versioned.
+        // Under as-of it targets the month being edited, not always "now".
+        const beforeCents = targetAllocs.get(line.envelopeId)?.amountCents ?? 0;
+        if (beforeCents === line.amountCents) continue;
+        await this.setAllocation(userId, targetMonth, line.envelopeId, line.amountCents, "this_month", targetAllocs);
+        await this.store.appendBudgetHistory(
+          userId,
+          makeChange({ userId, envelopeId: line.envelopeId, beforeCents, afterCents: line.amountCents, scope: req.scope, actor: "ui" }),
+        );
+        changed++;
+        continue;
+      }
+
+      // Ongoing: version the change. Unchanged lines are skipped — UNLESS the
+      // request carries an explicit end date ("same amount until <date>" is a
+      // real schedule change) or a this-month override is masking the plan (an
+      // explicit save of the plan value must clear the override — previously
+      // the save was silently skipped and the override survived).
+      const beforeCents = resolveAmountForMonth(lines, line.envelopeId, effMonth);
+      const overrideMasksPlan = targetAllocs.get(line.envelopeId)?.scope === "this_month";
+      if (beforeCents === line.amountCents && req.effectiveTo === undefined && !overrideMasksPlan) continue;
+
+      // In as-of mode, bound the write per envelope: end the day before the
+      // envelope's next later-starting live version (min'd with any explicit
+      // end date), and supersede within the bounded window — the user is
+      // editing exactly the month they are looking at, so versions INSIDE it
+      // are replaced deliberately while later schedules stay untouched.
+      let lineEffectiveTo = effectiveTo;
+      let supersede = req.supersedeScheduled === true;
+      if (asOf) {
+        const nextStart = lines
+          .filter((l) => l.envelopeId === line.envelopeId && !isTombstone(l) && effectiveFromOf(l) > asOf)
+          .map((l) => effectiveFromOf(l))
+          .sort()[0];
+        const cap = nextStart !== undefined ? previousDay(nextStart) : null;
+        lineEffectiveTo = cap !== null && effectiveTo !== null ? (cap < effectiveTo ? cap : effectiveTo) : (cap ?? effectiveTo);
+        supersede = true;
+      }
+
+      const prior = currentLineFor(lines, line.envelopeId, effMonth);
+      // The guarded write path: enforces day-level non-overlap, truncates the
+      // predecessor, and REFUSES to cover scheduled versions unless the request
+      // explicitly supersedes them (doctrine D1–D3, 2026-08-12). Coexist-and-sum
+      // is retired: completePrevious is accepted for wire-compat but ignored.
+      await this.applyVersionWrite(userId, lines, {
+        envelopeId: line.envelopeId,
+        amountCents: line.amountCents,
+        period: line.period ?? prior?.period ?? "monthly",
+        effectiveFrom,
+        effectiveTo: lineEffectiveTo,
+        supersedeScheduled: supersede,
+      });
+
+      // Reflect the change into the TARGET month's allocation when that month
+      // is current/past or already materialised (an ongoing write replaces any
+      // this-month override there), then bring every other materialised month
+      // — past included, doctrine D4 — back in line with the chronology.
+      const reflectMonth = asOf ? targetMonth : period;
+      const reflectAllocs = asOf ? targetAllocs : periodAllocs;
+      if (comparePeriods(reflectMonth, period) <= 0 || reflectAllocs.size > 0) {
+        const resolvedNow = resolveAmountForMonth(lines, line.envelopeId, reflectMonth);
+        await this.setAllocation(userId, reflectMonth, line.envelopeId, resolvedNow, "ongoing", reflectAllocs);
+      }
+      await this.rederiveMaterialisedMonths(userId, line.envelopeId, lines);
+
+      await this.store.appendBudgetHistory(
+        userId,
+        makeChange({
+          userId,
+          envelopeId: line.envelopeId,
+          beforeCents,
+          afterCents: resolveAmountForMonth(lines, line.envelopeId, effMonth),
+          scope: req.scope,
+          actor: "ui",
+        }),
+      );
+      changed++;
+    }
+
+    // The balance check follows the month being edited (as-of mode), so the
+    // wizard's alert reflects e.g. September's projected zero-base, not August's.
+    const state = await this.zeroBased(userId, asOf ? targetMonth : period);
+    return { ok: true, changed, zeroBasedAlert: state.zeroBasedAlert };
+  }
+
+  /**
+   * Edit ONE version in place (Phase 3): amount and/or window. Window changes
+   * touching the neighbours surface as NeighbourAdjustmentsError (409) with the
+   * suggested updates unless the request carries an acceptAdjustments decision:
+   * true applies required AND optional suggestions, false only the REQUIRED
+   * ones (overlap fixes — doctrine D1; gaps are legal and stay when declined).
+   * In-place mutation is audited: a budget_history row plus a version.edit
+   * event carry the before/after, so the append-only spirit survives the edit.
+   */
+  async editVersion(
+    userId: UserId,
+    period: Period,
+    input: {
+      readonly envelopeId: string;
+      readonly versionId: string;
+      readonly amountCents?: number;
+      readonly effectiveFrom?: string;
+      readonly effectiveTo?: string | null;
+      readonly acceptAdjustments?: boolean;
+    },
+  ): Promise<{ ok: true; applied: readonly NeighbourAdjustment[] }> {
+    return this.store.withTransaction(async () => {
+      const template = await this.store.listTemplate(userId);
+      const lines = template.filter((t) => t.envelopeId === input.envelopeId && !isTombstone(t));
+      const target = lines.find((l) => l.id === input.versionId);
+      if (!target) throw new Error("Budget version not found.");
+
+      const newFrom = input.effectiveFrom ?? effectiveFromOf(target);
+      const newTo = input.effectiveTo === undefined ? effectiveToOf(target) : input.effectiveTo;
+      const newAmount = input.amountCents ?? target.amountCents;
+      assertWindow(newFrom, newTo);
+
+      // Neighbours by window order (live lines only, excluding the target).
+      const others = lines.filter((l) => l.id !== target.id);
+      const predecessor = others
+        .filter((l) => effectiveFromOf(l) < newFrom)
+        .sort((a, b) => effectiveFromOf(b).localeCompare(effectiveFromOf(a)))[0];
+      const successor = others
+        .filter((l) => effectiveFromOf(l) > newFrom)
+        .sort((a, b) => effectiveFromOf(a).localeCompare(effectiveFromOf(b)))[0];
+
+      type Adjustment = {
+        versionId: string;
+        field: "effectiveTo";
+        current: string | null;
+        suggested: string;
+        required: boolean;
+        note: string;
+      };
+      const adjustments: Adjustment[] = [];
+      if (predecessor) {
+        const predTo = effectiveToOf(predecessor) ?? "9999-12-31";
+        const cutoff = previousDay(newFrom);
+        if (predTo >= newFrom) {
+          adjustments.push({
+            versionId: predecessor.id,
+            field: "effectiveTo",
+            current: effectiveToOf(predecessor),
+            suggested: cutoff,
+            required: true,
+            note: `End the previous budget on ${cutoff} so the two never overlap.`,
+          });
+        } else if (predTo < cutoff) {
+          adjustments.push({
+            versionId: predecessor.id,
+            field: "effectiveTo",
+            current: effectiveToOf(predecessor),
+            suggested: cutoff,
+            required: false,
+            note: `Extend the previous budget to ${cutoff} so the budgets line up with no gap.`,
+          });
+        }
+      }
+      if (successor && (newTo === null || newTo >= effectiveFromOf(successor))) {
+        const cap = previousDay(effectiveFromOf(successor));
+        adjustments.push({
+          versionId: target.id,
+          field: "effectiveTo",
+          current: newTo,
+          suggested: cap,
+          required: true,
+          note: `This budget must end on ${cap} — the next budget starts ${effectiveFromOf(successor)}.`,
+        });
+      }
+
+      if (adjustments.length > 0 && input.acceptAdjustments === undefined) {
+        throw new NeighbourAdjustmentsError(adjustments);
+      }
+      const applied = adjustments.filter((a) => a.required || input.acceptAdjustments === true);
+
+      // Apply: neighbour changes first, then the edited version.
+      const working: BudgetTemplate[] = [...template];
+      const write = async (updated: BudgetTemplate): Promise<void> => {
+        await this.store.putTemplateLine(userId, updated);
+        const idx = working.findIndex((l) => l.id === updated.id);
+        if (idx >= 0) working[idx] = updated;
+      };
+      let finalTo = newTo;
+      for (const a of applied) {
+        if (a.versionId === target.id) {
+          finalTo = a.suggested;
+          continue;
+        }
+        const neighbour = working.find((l) => l.id === a.versionId)!;
+        await write({ ...neighbour, effectiveFrom: effectiveFromOf(neighbour), effectiveTo: a.suggested });
+      }
+      await write({ ...target, amountCents: newAmount, effectiveFrom: newFrom, effectiveTo: finalTo });
+
+      // Sanity: the invariant must hold after every version edit.
+      const overlaps = findOverlaps(working.filter((l) => l.envelopeId === input.envelopeId));
+      if (overlaps.length > 0) throw new Error("Edit would create overlapping budget windows.");
+
+      // Audit the in-place mutation, then bring every materialised month in
+      // line (doctrine D4 — past months recompute too). Income envelopes never
+      // materialise; keep their stored current-month row true instead.
+      await this.store.appendBudgetHistory(
+        userId,
+        makeChange({ userId, envelopeId: input.envelopeId, beforeCents: target.amountCents, afterCents: newAmount, scope: "ongoing", actor: "ui" }),
+      );
+      await this.store.appendEvent(userId, {
+        id: uuid(),
+        ts: Date.now(),
+        actor: "ui",
+        correlationId: uuid(),
+        kind: "version.edit",
+        payloadJson: JSON.stringify({
+          envelopeId: input.envelopeId,
+          versionId: input.versionId,
+          before: { amountCents: target.amountCents, effectiveFrom: effectiveFromOf(target), effectiveTo: effectiveToOf(target) },
+          after: { amountCents: newAmount, effectiveFrom: newFrom, effectiveTo: finalTo },
+          applied,
+        }),
+      });
+      const incomes = await this.store.listIncomeEnvelopes(userId);
+      const income = incomes.find((i) => i.id === input.envelopeId);
+      if (income) {
+        const incomeLines = working.filter((l) => l.envelopeId === income.id);
+        const resolvedNow = resolveIncomeBudgetForMonth(incomeLines, income, period);
+        await this.store.upsertIncomeEnvelope(userId, { ...income, budgetedCents: resolvedNow, targetCents: resolvedNow });
+      } else {
+        await this.rederiveMaterialisedMonths(userId, input.envelopeId, working);
+        // The current month may hold a this-month override; a direct version
+        // edit is an explicit plan change, so refresh the month row as ongoing.
+        const allocs = await this.allocMap(userId, period);
+        const resolvedNow = resolveAmountForMonth(working, input.envelopeId, period);
+        if (allocs.size > 0 || (allocs.get(input.envelopeId)?.amountCents ?? 0) !== resolvedNow) {
+          await this.setAllocation(userId, period, input.envelopeId, resolvedNow, "ongoing", allocs);
+        }
+      }
+
+      return { ok: true, applied };
+    });
+  }
+
+  /**
+   * The ONLY writer of effective-dated version windows. Enforces the day-level
+   * non-overlap invariant (doctrine D1): truncates the predecessor straddling
+   * the new start, refuses to cover scheduled (later-starting) versions unless
+   * the caller explicitly supersedes them (D3, tombstoning the corpses), and
+   * appends the new version. Mutates the working `lines` set so subsequent
+   * resolution inside the same transaction sees the final state.
+   */
+  private async applyVersionWrite(
+    userId: UserId,
+    lines: BudgetTemplate[],
+    input: {
+      envelopeId: string;
+      amountCents: number;
+      period: BudgetPeriod;
+      effectiveFrom: string;
+      effectiveTo: string | null;
+      supersedeScheduled: boolean;
+    },
+  ): Promise<void> {
+    assertWindow(input.effectiveFrom, input.effectiveTo);
+    const plan = planVersionWrite(lines, input.envelopeId, input.effectiveFrom, input.effectiveTo, todayISO(this.timezone));
+    if (plan.conflicts.length > 0 && !input.supersedeScheduled) {
+      throw new ScheduledConflictError(
+        plan.conflicts.map((c) => ({
+          envelopeId: c.envelopeId,
+          amountCents: c.amountCents,
+          effectiveFrom: effectiveFromOf(c),
+          effectiveTo: effectiveToOf(c),
+        })),
+      );
+    }
+    const write = async (updated: BudgetTemplate): Promise<void> => {
+      await this.store.putTemplateLine(userId, updated);
+      const idx = lines.findIndex((l) => l.id === updated.id);
+      if (idx >= 0) lines[idx] = updated;
+      else lines.push(updated);
+    };
+    for (const t of plan.truncate) await write(truncated(t, input.effectiveFrom));
+    for (const v of plan.supersede) await write(tombstoned(v, input.effectiveFrom));
+    for (const c of plan.conflicts) await write(tombstoned(c, input.effectiveFrom));
+    await write({
+      id: uuid(),
+      userId,
+      envelopeId: input.envelopeId,
+      amountCents: input.amountCents,
+      period: input.period,
+      effectiveFrom: input.effectiveFrom,
+      effectiveTo: input.effectiveTo,
+    });
+  }
+
+  /**
+   * Bring every materialised month back in line with the chronology — the ONE
+   * compensation step after any template write, replacing the per-site patch
+   * logic that let the cache drift. Past months recompute too (doctrine D4:
+   * the ledger is a planning tool; budget_history and events stay the audit
+   * trail). this-month overrides are deliberate period-local deviations and
+   * are preserved; the direct-edit path replaces the edited month's own row
+   * explicitly before calling this.
+   */
+  private async rederiveMaterialisedMonths(
+    userId: UserId,
+    envelopeId: string,
+    lines: readonly BudgetTemplate[],
+  ): Promise<void> {
+    const keys = await this.store.listAllocationPeriods(userId);
+    for (const key of keys) {
+      if (key < "1990-01" || key > "2100-12") continue; // era guard
+      const m: Period = { year: Number(key.slice(0, 4)), month: Number(key.slice(5, 7)) };
+      const allocs = await this.allocMap(userId, m);
+      if (allocs.size === 0) continue;
+      const row = allocs.get(envelopeId);
+      if (row?.scope === "this_month") continue;
+      const resolved = resolveAmountForMonth(lines, envelopeId, m);
+      if (row === undefined && resolved === 0) continue;
+      if ((row?.amountCents ?? 0) === resolved) continue;
+      await this.setAllocation(userId, m, envelopeId, resolved, "ongoing", allocs);
+    }
+  }
+
+  // ── Move money (ISC-66, ISC-67, ISC-68, ISC-69, ISC-71) ───────────────────
+
+  /**
+   * Apply a conserved reallocation. Debits the source and credits the
+   * destination by equal amounts (ISC-66). Ongoing edits the template plus the
+   * current period; this-month edits only the current period (ISC-68). The
+   * resulting left figures and the zero-based alert are returned (ISC-69, ISC-71).
+   * The debit and credit commit atomically: a failure between the two legs rolls
+   * both back, so money is never destroyed or created by a half-applied move.
+   */
+  async moveMoney(
+    userId: UserId,
+    period: Period,
+    req: MoveMoneyRequest,
+  ): Promise<MoveMoneyResponse> {
+    return this.store.withTransaction(() => this.moveMoneyInTx(userId, period, req));
+  }
+
+  private async moveMoneyInTx(
+    userId: UserId,
+    period: Period,
+    req: MoveMoneyRequest,
+  ): Promise<MoveMoneyResponse> {
+    const plan = planMove(req as MoveRequest);
+    if (!isConserved(plan)) throw new Error("move plan failed conservation");
+
+    const periodAllocs = await this.allocMap(userId, period);
+    const fromBefore = periodAllocs.get(plan.fromEnvelopeId)?.amountCents ?? 0;
+    const toBefore = periodAllocs.get(plan.toEnvelopeId)?.amountCents ?? 0;
+    const fromAfter = fromBefore + plan.fromDeltaCents;
+    const toAfter = toBefore + plan.toDeltaCents;
+
+    await this.setAllocation(userId, period, plan.fromEnvelopeId, fromAfter, plan.scope === "ongoing" ? "ongoing" : "this_month", periodAllocs);
+    await this.setAllocation(userId, period, plan.toEnvelopeId, toAfter, plan.scope === "ongoing" ? "ongoing" : "this_month", periodAllocs);
+
+    if (plan.scope === "ongoing") {
+      // An ongoing move adjusts the CURRENT version in place (a delta on the
+      // ongoing plan, not a new chronology version): the line contributing to
+      // this month with the latest effectiveFrom absorbs the delta. With no
+      // contributing line, a fresh line starts this month (capped before any
+      // scheduled version). Materialised months are then rederived — moves
+      // previously patched only the current period, silently drifting any
+      // already-materialised future month.
+      const template = await this.store.listTemplate(userId);
+      await this.adjustCurrentLine(userId, template, plan.fromEnvelopeId, plan.fromDeltaCents, period);
+      await this.adjustCurrentLine(userId, template, plan.toEnvelopeId, plan.toDeltaCents, period);
+      await this.rederiveMaterialisedMonths(userId, plan.fromEnvelopeId, template);
+      await this.rederiveMaterialisedMonths(userId, plan.toEnvelopeId, template);
+    }
+
+    await this.store.appendBudgetHistory(
+      userId,
+      makeChange({ userId, envelopeId: plan.fromEnvelopeId, beforeCents: fromBefore, afterCents: fromAfter, scope: plan.scope, actor: "ui" }),
+    );
+    await this.store.appendBudgetHistory(
+      userId,
+      makeChange({ userId, envelopeId: plan.toEnvelopeId, beforeCents: toBefore, afterCents: toAfter, scope: plan.scope, actor: "ui" }),
+    );
+
+    const grid = await this.envelopes.getGrid(userId, period);
+    const fromRow = grid.rows.find((r) => r.id === plan.fromEnvelopeId);
+    const toRow = grid.rows.find((r) => r.id === plan.toEnvelopeId);
+    return {
+      ok: true,
+      fromLeftCents: fromRow?.leftCents ?? fromAfter,
+      toLeftCents: toRow?.leftCents ?? toAfter,
+      zeroBasedAlert: grid.zeroBasedAlert,
+    };
+  }
+
+  /**
+   * Adjust an envelope's CURRENT budget version by a signed delta (the ongoing
+   * move/distribute path). The line contributing to `period` with the latest
+   * effectiveFrom is updated in place — an allowed same-version correction, so
+   * routine rebalances do not spray chronology versions. With no contributing
+   * line, a fresh open-ended line effective the first of `period` is created.
+   * Mutates the passed `lines` working set so later legs resolve consistently.
+   */
+  private async adjustCurrentLine(
+    userId: UserId,
+    lines: BudgetTemplate[],
+    envelopeId: string,
+    deltaCents: number,
+    period: Period,
+  ): Promise<void> {
+    const prior = currentLineFor(lines, envelopeId, period);
+    if (prior !== null) {
+      const updated: BudgetTemplate = { ...prior, amountCents: prior.amountCents + deltaCents };
+      await this.store.putTemplateLine(userId, updated);
+      const idx = lines.findIndex((l) => l.id === prior.id);
+      if (idx >= 0) lines[idx] = updated;
+      return;
+    }
+    // Cap the fresh line at the day before the next scheduled version, so an
+    // ongoing move can never overlap — and silently double — a scheduled
+    // budget (non-overlap invariant, doctrine D1).
+    const first = monthBounds(period).first;
+    const nextScheduled = lines
+      .filter((l) => l.envelopeId === envelopeId && !isTombstone(l) && effectiveFromOf(l) > first)
+      .sort((a, b) => effectiveFromOf(a).localeCompare(effectiveFromOf(b)))[0];
+    const created: BudgetTemplate = {
+      id: uuid(),
+      userId,
+      envelopeId,
+      amountCents: deltaCents,
+      period: "monthly",
+      effectiveFrom: first,
+      effectiveTo: nextScheduled ? previousDay(effectiveFromOf(nextScheduled)) : null,
+    };
+    await this.store.putTemplateLine(userId, created);
+    lines.push(created);
+  }
+
+  // ── Distribute surplus (multi-leg conserved reallocation, ISC-66..69) ─────
+
+  /**
+   * Apply a conserved, multi-leg distribution. Each leg adjusts one envelope's
+   * period allocation by its signed delta using the SAME allocation-adjustment
+   * primitive move-money uses (setAllocation): a positive delta credits, a
+   * negative delta debits. The legs are validated to net to exactly zero before
+   * any write, so the net effect is a conserved redistribution and a rejected
+   * (non-conserved) distribution writes nothing. The legs also apply inside one
+   * store transaction, so a failure mid-loop rolls every leg back — the apply
+   * is all-or-nothing at the persistence layer, not just at validation time.
+   *
+   * An ongoing scope also edits the recurring template for each leg (ISC-67);
+   * this-month edits only the current period (ISC-68). One traceable "distribute"
+   * event records the whole legs payload, and each leg is recorded in the budget
+   * history with before/after (ISC-77). The resulting per-leg left figures and the
+   * zero-based alert are returned (ISC-69).
+   */
+  async distribute(
+    userId: UserId,
+    period: Period,
+    req: DistributeRequest,
+  ): Promise<DistributeResponse> {
+    return this.store.withTransaction(() => this.distributeInTx(userId, period, req));
+  }
+
+  private async distributeInTx(
+    userId: UserId,
+    period: Period,
+    req: DistributeRequest,
+  ): Promise<DistributeResponse> {
+    const plan = planDistribute(req as DistributeRequestInput);
+    if (!isDistributeConserved(plan)) throw new Error("distribute plan failed conservation");
+
+    const periodAllocs = await this.allocMap(userId, period);
+    const allocScope: ChangeScope = plan.scope === "ongoing" ? "ongoing" : "this_month";
+
+    // The template is only read/written for an ongoing distribution.
+    let templateLines: BudgetTemplate[] | null = null;
+    if (plan.scope === "ongoing") {
+      templateLines = await this.store.listTemplate(userId);
+    }
+
+    // Each plan leg targets a distinct envelope (planDistribute summed duplicates),
+    // so the periodAllocs snapshot stays correct across the loop.
+    for (const leg of plan.legs) {
+      const before = periodAllocs.get(leg.envelopeId)?.amountCents ?? 0;
+      const after = before + leg.deltaCents;
+      await this.setAllocation(userId, period, leg.envelopeId, after, allocScope, periodAllocs);
+
+      if (plan.scope === "ongoing" && templateLines) {
+        await this.adjustCurrentLine(userId, templateLines, leg.envelopeId, leg.deltaCents, period);
+        await this.rederiveMaterialisedMonths(userId, leg.envelopeId, templateLines);
+      }
+
+      await this.store.appendBudgetHistory(
+        userId,
+        makeChange({ userId, envelopeId: leg.envelopeId, beforeCents: before, afterCents: after, scope: plan.scope, actor: "ui" }),
+      );
+    }
+
+    // ONE traceable event for the whole distribution, carrying the legs payload.
+    await this.store.appendEvent(userId, {
+      id: uuid(),
+      ts: Date.now(),
+      actor: "ui",
+      correlationId: uuid(),
+      kind: "distribute",
+      payloadJson: JSON.stringify({ scope: plan.scope, legs: plan.legs }),
+    });
+
+    const grid = await this.envelopes.getGrid(userId, period);
+    const leftByEnv = new Map<string, number>();
+    for (const r of grid.rows) leftByEnv.set(r.id, r.leftCents);
+    for (const inc of grid.income) leftByEnv.set(inc.id, inc.leftCents);
+
+    const legs: DistributeResultLeg[] = plan.legs.map((l) => ({
+      envelopeId: l.envelopeId,
+      deltaCents: l.deltaCents,
+      leftCents: leftByEnv.get(l.envelopeId) ?? 0,
+    }));
+    return { ok: true, legs, zeroBasedAlert: grid.zeroBasedAlert };
+  }
+
+  // ── Create envelope (ISC-87) ──────────────────────────────────────────────
+
+  /**
+   * Create a new envelope (income or expense-family) from the budget page.
+   * Moved out of the route handler so the multi-write sequence — envelope row,
+   * carryover baseline, template line, month roll — commits atomically: a
+   * failure at any step leaves NO orphan envelope with a missing schedule or a
+   * template line for a non-existent envelope. Returns the new envelope id.
+   */
+  async createEnvelope(userId: UserId, period: Period, input: CreateEnvelopeInput): Promise<string> {
+    const id = uuid();
+    await this.store.withTransaction(async () => {
+      if (input.type === "income") {
+        await this.store.upsertIncomeEnvelope(userId, {
+          id,
+          userId,
+          name: input.name,
+          source: input.name,
+          budgetedCents: input.budgetedCents ?? 0,
+          actualCents: 0,
+          // Previously dropped: the stored target silently became 0, zeroing
+          // the variance for every unversioned income (fixed 2026-08-12).
+          targetCents: input.targetCents ?? input.budgetedCents ?? 0,
+        });
+        return;
+      }
+      await this.store.upsertEnvelope(userId, {
+        id,
+        parentId: input.parentId ?? null,
+        name: input.name,
+        group: "",
+        // The runtime rollover vocabulary is "roll_carry" (see imported data); the
+        // platform Store.Envelope type still carries the legacy enum. Cast around
+        // that pre-existing divergence rather than fork the value here.
+        rolloverRule: (input.rolloverRule ?? "roll_carry") as never,
+        targetType: "no_target",
+        targetAmountCents: 0,
+        type: input.type,
+        ...(input.active !== undefined ? { active: input.active } : {}),
+      });
+      // The schedule anchor (ISC-25..28): a new budget resets at its interval from
+      // the chosen start date (the handler defaults it to today in the user's
+      // timezone). Carryover starts at zero; setEnvelopeCarryover is the owned
+      // writer for the (carryover, start) pair.
+      await this.store.setEnvelopeCarryover(userId, id, 0, input.rolloverStart);
+      if (typeof input.budgetedCents === "number" && input.budgetedCents !== 0) {
+        await this.store.putTemplateLine(userId, {
+          id: `bt-${id}`,
+          userId,
+          envelopeId: id,
+          amountCents: input.budgetedCents,
+          period: input.period ?? "monthly",
+          // Budget chronology: default is the open-ended back-compat window,
+          // which behaves exactly like the pre-versioning template line.
+          effectiveFrom: input.effectiveFrom ?? OPEN_EFFECTIVE_FROM,
+          effectiveTo: input.effectiveTo ?? null,
+        });
+        await this.ensureMonth(userId, period); // nested: joins this transaction
+      }
+    });
+    return id;
+  }
+
+  // ── Adopt an unmapped PocketSmith category ────────────────────────────────
+
+  /**
+   * Adopt an unmapped PocketSmith category into the budget: in ONE transaction,
+   * create the envelope (income or expense-family, via createEnvelope — whose own
+   * withTransaction JOINS this outer one, so the whole adopt is atomic) and then
+   * seed an effective-dated category→envelope mapping (ISC-19). Once mapped, the
+   * category's transactions resolve to the new envelope and it stops surfacing as
+   * unmapped. effectiveFrom defaults to the first of `period`. The mapping id is
+   * derived from the envelope id, so a retried adopt re-sets the same mapping row
+   * (idempotent, matching upsertMapping's semantics). Returns the new envelope id.
+   */
+  async adoptCategory(
+    userId: UserId,
+    period: Period,
+    input: {
+      readonly categoryId: string;
+      readonly name: string;
+      readonly type: EnvelopeType;
+      readonly budgetedCents?: number;
+      readonly period?: BudgetPeriod;
+      readonly rolloverRule?: string;
+      readonly parentId?: string | null;
+      readonly effectiveFrom?: string;
+      readonly rolloverStart: string;
+    },
+  ): Promise<string> {
+    return this.store.withTransaction(async () => {
+      const envelopeId = await this.createEnvelope(userId, period, {
+        name: input.name,
+        type: input.type,
+        rolloverStart: input.rolloverStart,
+        ...(input.parentId !== undefined ? { parentId: input.parentId } : {}),
+        ...(input.rolloverRule !== undefined ? { rolloverRule: input.rolloverRule } : {}),
+        ...(input.budgetedCents !== undefined ? { budgetedCents: input.budgetedCents } : {}),
+        ...(input.period !== undefined ? { period: input.period } : {}),
+        ...(input.effectiveFrom !== undefined ? { effectiveFrom: input.effectiveFrom } : {}),
+      });
+      await this.store.upsertMapping(userId, {
+        id: `map-${envelopeId}`,
+        userId,
+        categoryId: input.categoryId,
+        envelopeId,
+        effectiveFrom: input.effectiveFrom ?? monthBounds(period).first,
+        effectiveTo: null,
+      });
+      return envelopeId;
+    });
+  }
+
+  // ── Zero-based + income variance (ISC-30, ISC-31, ISC-32, ISC-65) ─────────
+
+  /** The continuous zero-based state for the period (an alert, never a block). */
+  async zeroBased(userId: UserId, period: Period): Promise<ZeroBasedState> {
+    const [incomes, allocs, template] = await Promise.all([
+      this.store.listIncomeEnvelopes(userId),
+      this.allocMap(userId, period),
+      this.store.listTemplate(userId),
+    ]);
+    const allocationsByEnv = new Map<string, number>();
+    for (const [env, a] of allocs) allocationsByEnv.set(env, a.amountCents);
+    // Income budgets are month-resolved through their effective-dated versions
+    // (falling back to the stored figure when an income has none).
+    const resolvedIncomes = incomes.map((i) => ({
+      ...i,
+      budgetedCents: resolveIncomeBudgetForMonth(template, i, period),
+    }));
+    return zeroBasedCheck(resolvedIncomes, allocationsByEnv);
+  }
+
+  /** Per income-envelope surplus/deficit (ISC-31, ISC-65). */
+  async incomeVariances(userId: UserId): Promise<IncomeVariance[]> {
+    const incomes = await this.store.listIncomeEnvelopes(userId);
+    return incomeVariances(incomes);
+  }
+
+  // ── Income budget versions (the "income changes as of 1 Aug" case) ────────
+
+  /**
+   * Version an income envelope's budget through the SAME effective-dated
+   * mechanism expense budgets use: version lines live in the budget template
+   * keyed by the income envelope id (they never materialise allocations — the
+   * grid resolves income budgets live from the lines).
+   *
+   * The FIRST version bootstraps the income's existing stored budget as an
+   * open-ended baseline line, so completePrevious has a real previous version
+   * to complete and coexist-and-sum works uniformly afterwards. When the new
+   * version reaches the current month, the stored income row is also updated
+   * (it stays the legacy fallback/current figure); a future-dated version
+   * leaves it alone until resolution takes over.
+   */
+  async editIncomeBudget(
+    userId: UserId,
+    period: Period,
+    input: {
+      readonly incomeEnvelopeId: string;
+      readonly amountCents: number;
+      readonly effectiveFrom?: string;
+      readonly effectiveTo?: string;
+      /** Accepted for wire-compat; coexist-and-sum is retired and truncation always applies. */
+      readonly completePrevious?: boolean;
+      readonly supersedeScheduled?: boolean;
+      /** As-of mode: target the month containing this date, bounded before the next version. */
+      readonly asOf?: string;
+    },
+  ): Promise<{ ok: true; changed: number }> {
+    return this.store.withTransaction(async () => {
+      const incomes = await this.store.listIncomeEnvelopes(userId);
+      const income = incomes.find((i) => i.id === input.incomeEnvelopeId);
+      if (!income) throw new Error("Income envelope not found.");
+
+      const template = await this.store.listTemplate(userId);
+      const lines: BudgetTemplate[] = template.filter((t) => t.envelopeId === income.id);
+      const asOf = input.asOf ?? null;
+      const effectiveFrom = asOf
+        ? monthBounds(periodOfDate(asOf)).first
+        : (input.effectiveFrom ?? monthBounds(period).first);
+      let effectiveTo = input.effectiveTo ?? null;
+      const effMonth = periodOfDate(effectiveFrom);
+      // As-of mode mirrors the expense path: bound the write the day before
+      // the next later-starting version so other months' schedules survive.
+      if (asOf) {
+        const nextStart = lines
+          .filter((l) => !isTombstone(l) && effectiveFromOf(l) > asOf)
+          .map((l) => effectiveFromOf(l))
+          .sort()[0];
+        const cap = nextStart !== undefined ? previousDay(nextStart) : null;
+        effectiveTo = cap !== null && effectiveTo !== null ? (cap < effectiveTo ? cap : effectiveTo) : (cap ?? effectiveTo);
+      }
+
+      // Same end-date rule as editBudgetInTx: an unchanged amount WITH an
+      // explicit effectiveTo is a schedule change (ending the budget), not a no-op.
+      const beforeCents = resolveIncomeBudgetForMonth(lines, income, effMonth);
+      if (beforeCents === input.amountCents && input.effectiveTo === undefined) return { ok: true, changed: 0 };
+
+      // Bootstrap: materialise the implicit stored budget as the baseline
+      // version so the chronology (and completePrevious) has a real row.
+      if (lines.length === 0 && income.budgetedCents !== 0) {
+        const baseline: BudgetTemplate = {
+          id: uuid(),
+          userId,
+          envelopeId: income.id,
+          amountCents: income.budgetedCents,
+          period: "monthly",
+          effectiveFrom: OPEN_EFFECTIVE_FROM,
+          effectiveTo: null,
+        };
+        await this.store.putTemplateLine(userId, baseline);
+        lines.push(baseline);
+      }
+
+      // The same guarded write path as expense budgets: non-overlap enforced,
+      // predecessor truncated, scheduled versions protected (coexist-and-sum
+      // retired; completePrevious accepted for wire-compat but ignored).
+      await this.applyVersionWrite(userId, lines, {
+        envelopeId: income.id,
+        amountCents: input.amountCents,
+        period: "monthly",
+        effectiveFrom,
+        effectiveTo,
+        supersedeScheduled: asOf !== null || input.supersedeScheduled === true,
+      });
+
+      // Keep the stored income row current when the change reaches this month.
+      if (comparePeriods(effMonth, period) <= 0) {
+        const resolvedNow = resolveIncomeBudgetForMonth(lines, income, period);
+        await this.store.upsertIncomeEnvelope(userId, {
+          ...income,
+          budgetedCents: resolvedNow,
+          targetCents: resolvedNow,
+        });
+      }
+
+      await this.store.appendBudgetHistory(
+        userId,
+        makeChange({
+          userId,
+          envelopeId: income.id,
+          beforeCents,
+          afterCents: resolveIncomeBudgetForMonth(lines, income, effMonth),
+          scope: "ongoing",
+          actor: "ui",
+        }),
+      );
+      return { ok: true, changed: 1 };
+    });
+  }
+
+  // ── Budget chronology read (GET /api/envelopes/versions) ──────────────────
+
+  /**
+   * The version chronology for one envelope (expense-family or income), most
+   * recent first, with status computed against `now` (the current month in the
+   * budget timezone, resolved by the handler). An income envelope that has
+   * never been versioned synthesises its stored budget as a single open-ended
+   * active entry so the chronology is never misleadingly empty; an unknown id
+   * returns null so the handler can 404.
+   */
+  async listVersions(
+    userId: UserId,
+    envelopeId: string,
+    now: Period,
+  ): Promise<BudgetVersionsResponse | null> {
+    const [template, envelopes, incomes] = await Promise.all([
+      this.store.listTemplate(userId),
+      this.store.listEnvelopes(userId),
+      this.store.listIncomeEnvelopes(userId),
+    ]);
+    const income = incomes.find((i) => i.id === envelopeId);
+    const envelope = envelopes.find((e) => e.id === envelopeId);
+    if (!income && !envelope) return null;
+
+    let lines = template.filter((t) => t.envelopeId === envelopeId);
+    if (lines.length === 0 && income !== undefined && income.budgetedCents !== 0) {
+      // Legacy income with no versions yet: its stored budget IS the single
+      // open-ended active version.
+      lines = [
+        {
+          id: `${envelopeId}:current`,
+          userId,
+          envelopeId,
+          amountCents: income.budgetedCents,
+          period: "monthly",
+          effectiveFrom: OPEN_EFFECTIVE_FROM,
+          effectiveTo: null,
+        },
+      ];
+    }
+
+    const versions: BudgetVersionView[] = lines
+      // Fully-superseded versions (window inverted by a later edit's
+      // completePrevious truncation) contribute 0 to every month and are
+      // noise in the chronology: filter them at the query layer — the SAME
+      // place the budget maths already zeroes them (activeDaysInMonth), so
+      // the list and the totals cannot drift apart.
+      .filter((l) => {
+        const to = effectiveToOf(l);
+        return to === null || to >= effectiveFromOf(l);
+      })
+      .map((l) => ({
+        id: l.id,
+        envelopeId: l.envelopeId,
+        amountCents: l.amountCents,
+        period: l.period ?? "monthly",
+        effectiveFrom: effectiveFromOf(l),
+        effectiveTo: effectiveToOf(l),
+        status: versionStatus(l, now),
+      }))
+      .sort((a, b) =>
+        a.effectiveFrom === b.effectiveFrom
+          ? a.id.localeCompare(b.id)
+          : b.effectiveFrom.localeCompare(a.effectiveFrom),
+      );
+    return { envelopeId, versions };
+  }
+
+  // ── Budget history (ISC-77) ───────────────────────────────────────────────
+
+  /** The viewable budget history, newest first, with envelope names. */
+  async getHistory(userId: UserId): Promise<BudgetHistoryResponse> {
+    const [changes, envelopes] = await Promise.all([
+      this.store.listBudgetHistory(userId),
+      this.store.listEnvelopes(userId),
+    ]);
+    const nameOf = new Map(envelopes.map((e) => [e.id, e.name]));
+    const entries: BudgetHistoryEntry[] = [...changes]
+      .sort((a, b) => b.ts - a.ts)
+      .map((c) => ({
+        id: c.id,
+        ts: c.ts,
+        envelopeId: c.envelopeId,
+        envelopeName: nameOf.get(c.envelopeId) ?? c.envelopeId,
+        beforeCents: c.beforeCents,
+        afterCents: c.afterCents,
+        scope: c.scope,
+        actor: c.actor,
+      }));
+    return { entries };
+  }
+}

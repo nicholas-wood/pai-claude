@@ -1,46 +1,50 @@
 {
   "proto": 1,
-  "supervisorPid": 2557592,
-  "updatedAt": 1786403758090,
+  "supervisorPid": 1961371,
+  "updatedAt": 1786521601490,
   "workers": {
     "cb80c131": {
-      "pid": 2023535,
-      "procStart": "77638184",
+      "pid": 2557739,
+      "procStart": "83206416",
       "sessionId": "cb80c131-2daa-417e-bbc4-8dc173fae87a",
       "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/cb80c131.sock",
-      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/e20d92a9.pty.sock",
-      "cliVersion": "2.1.226",
-      "startedAt": 1786360703394,
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/148a610d.pty.sock",
+      "cliVersion": "2.1.227",
+      "startedAt": 1786521521690,
       "attempt": 1,
       "cwd": "/home/nicholas-wood/.claude",
       "dispatch": {
         "proto": 1,
         "short": "cb80c131",
-        "nonce": "dda0c694",
+        "nonce": "46bb13c8",
         "sessionId": "cb80c131-2daa-417e-bbc4-8dc173fae87a",
-        "createdAt": 1786360703391,
+        "createdAt": 1786521521684,
         "source": "fleet",
         "cwd": "/home/nicholas-wood/.claude",
         "launch": {
-          "mode": "prompt",
-          "args": [
-            "--session-id",
-            "cb80c131-2daa-417e-bbc4-8dc173fae87a",
+          "mode": "resume",
+          "sessionId": "cb80c131-2daa-417e-bbc4-8dc173fae87a",
+          "transcriptPath": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/cb80c131-2daa-417e-bbc4-8dc173fae87a.jsonl",
+          "fork": false,
+          "flagArgs": [
             "--agent",
             "claude",
-            "--",
-            "'Budget Buddy, I can't update a budget. Also, when I add a budget through the category sync, I should be able to set a start date. That field is completely missing from that modal. For categories that are sync'd and identified as missing, if I clear them in budget buddy, they should not appear on the main page. Just have a section in settings for not sync'd budgets."
+            "--model",
+            "claude-fable-5[1m]"
           ]
         },
         "env": {},
         "isolation": "none",
         "respawnFlags": [
           "--agent",
-          "claude"
+          "claude",
+          "--model",
+          "claude-fable-5[1m]"
         ],
         "agent": "claude",
         "seed": {
-          "intent": "'Budget Buddy, I can't update a budget. Also, when I add a budget through the category sync, I should be able to set a start date. That field is completely missing from that modal. For categories that are sync'd and identified as missing, if I clear them in budget buddy, they should not appear on the main page. Just have a section in settings for not sync'd budgets."
+          "intent": "",
+          "name": "budgetbuddy sync issues"
         },
         "cols": 214,
         "rows": 50
@@ -54,8 +58,19 @@
         1004,
         2031
       ],
-      "rvAuth": "61a65dd049480904d8b51a3977ccf4a1",
-      "ptyAuth": "62e00105c10a3845130a4a521ea47867"
+      "firedInteractiveMarks": [
+        {
+          "kind": "content_paint",
+          "msgsLoaded": 2124,
+          "msgsInJsonl": 2124,
+          "msgsRenderedAtFirstPaint": 2124
+        },
+        {
+          "kind": "prompt_idle"
+        }
+      ],
+      "rvAuth": "425bca0894bc0dfd75654f0f5db1a8af",
+      "ptyAuth": "02e349cc96f6e24b06016f28d731e06a"
     }
   }
 }

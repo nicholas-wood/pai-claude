@@ -1,0 +1,283 @@
+import * as React from "react";
+import { Wallet, TrendingUp, PiggyBank, Mail, Plus } from "lucide-react";
+import type { EnvelopeRow, UnmappedCategory } from "@contract";
+import type { EnvelopeType, BudgetPeriod } from "@domain";
+import { call, isApiError, ApiCallError } from "@/lib/api";
+import { useInvalidateAfterAdopt } from "@/lib/queries";
+import {
+  cn,
+  formatCents,
+  normalisePeriods,
+  firstOfCurrentMonthIso,
+  BUDGET_PERIODS,
+  BUDGET_PERIOD_LABELS,
+} from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+
+interface Props {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** The unmapped category being adopted (null closes the modal). */
+  category: UnmappedCategory | null;
+  /** Existing envelopes the new one can sit under (expense parent candidates). */
+  rows: readonly EnvelopeRow[];
+}
+
+const TYPE_OPTIONS: readonly { value: EnvelopeType; label: string; icon: typeof Wallet }[] = [
+  { value: "income", label: "Income", icon: TrendingUp },
+  { value: "expense", label: "Expense", icon: Wallet },
+  { value: "saving", label: "Saving", icon: PiggyBank },
+  { value: "envelope", label: "Envelope", icon: Mail },
+];
+
+/**
+ * Infer the default envelope type for a category: a net-positive total reads as
+ * income (money coming in), otherwise an expense. This is the "mostly positive
+ * amounts → income" rule, proxied through the signed total the endpoint returns.
+ */
+export function inferDefaultType(category: UnmappedCategory): EnvelopeType {
+  return category.totalCents > 0 ? "income" : "expense";
+}
+
+/**
+ * Adopt-category wizard. Turns one detected PocketSmith category into a budget
+ * envelope plus a category→envelope mapping (POST /api/categories/adopt). Reuses
+ * AddBudgetModal's field idiom: the name pre-fills from the category, the type
+ * defaults from the transactions' direction (net-positive → income), and the
+ * user sets the type, a budget amount + cadence, and an optional parent. On
+ * success the budget, unmapped-category, and transaction queries all invalidate.
+ */
+export function AdoptCategoryModal({ open, onOpenChange, category, rows }: Props) {
+  const invalidateAfterAdopt = useInvalidateAfterAdopt();
+
+  const [type, setType] = React.useState<EnvelopeType>("expense");
+  const [name, setName] = React.useState("");
+  const [parentId, setParentId] = React.useState<string>("__top__");
+  const [price, setPrice] = React.useState("");
+  const [period, setPeriod] = React.useState<BudgetPeriod>("monthly");
+  // Start date for the budget line AND the category→envelope mapping (and the
+  // rollover anchor server-side). Defaults to the first of the current month.
+  const [effectiveFrom, setEffectiveFrom] = React.useState<string>(firstOfCurrentMonthIso());
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  // Seed the form from the category whenever the modal opens.
+  React.useEffect(() => {
+    if (!open || !category) return;
+    setError(null);
+    setBusy(false);
+    setType(inferDefaultType(category));
+    setName(category.categoryName ?? "");
+    setParentId("__top__");
+    setPrice("");
+    setPeriod("monthly");
+    setEffectiveFrom(firstOfCurrentMonthIso());
+  }, [open, category]);
+
+  const dollarsToCents = (v: string) => Math.round((parseFloat(v) || 0) * 100);
+  const priceCents = dollarsToCents(price);
+  const isIncome = type === "income";
+  const normalised = React.useMemo(() => normalisePeriods(priceCents, period), [priceCents, period]);
+  const canSubmit = name.trim().length > 0 && !busy;
+
+  const onSubmit = async () => {
+    if (!canSubmit || !category) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await call("POST /api/categories/adopt", {
+        categoryId: category.categoryId,
+        name: name.trim(),
+        type,
+        // Guarded like the edit wizard's chronology: a cleared date input
+        // yields "" which the server's strict date schema rejects — omit it
+        // and the server keeps its own defaults.
+        ...(effectiveFrom ? { effectiveFrom } : {}),
+        ...(isIncome
+          ? { budgetedCents: priceCents }
+          : {
+              budgetedCents: priceCents,
+              period,
+              parentId: parentId !== "__top__" ? parentId : null,
+            }),
+      });
+      if (isApiError(res)) {
+        setError(res.error);
+        return;
+      }
+      invalidateAfterAdopt();
+      onOpenChange(false);
+    } catch (e) {
+      setError(
+        e instanceof ApiCallError || e instanceof Error ? e.message : "Could not add the category.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add category to budget</DialogTitle>
+          <DialogDescription>
+            {category?.categoryName
+              ? `“${category.categoryName}” is on your transactions but not in your budget yet. Add it as an envelope.`
+              : "This category is on your transactions but not in your budget yet. Add it as an envelope."}
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Type toggle: Income / Expense / Saving / Envelope (default inferred). */}
+        <div className="space-y-2">
+          <Label>Type</Label>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {TYPE_OPTIONS.map(({ value, label, icon: Icon }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setType(value)}
+                className={cn(
+                  "flex items-center justify-center gap-1.5 rounded-md border px-2 py-2 text-sm font-medium transition-colors",
+                  type === value ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent",
+                )}
+              >
+                <Icon className="h-4 w-4" /> {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="adopt-name">Name</Label>
+          <Input id="adopt-name" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+
+        {!isIncome && (
+          <div className="space-y-2">
+            <Label>Parent / category</Label>
+            <Select value={parentId} onValueChange={setParentId}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__top__">Top level (no parent)</SelectItem>
+                {rows.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {isIncome ? (
+          <div className="space-y-2">
+            <Label htmlFor="adopt-income">Expected income — budget (AUD)</Label>
+            <Input
+              id="adopt-income"
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              The expected income for this source. It is the figure the zero-base balances against.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="adopt-price">Budget (AUD)</Label>
+                <Input
+                  id="adopt-price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Period</Label>
+                <Select value={period} onValueChange={(v) => setPeriod(v as BudgetPeriod)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BUDGET_PERIODS.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {BUDGET_PERIOD_LABELS[p]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {/* Live equivalents across all four periods, recomputed as the user types. */}
+            <div className="grid grid-cols-4 gap-2 rounded-md border bg-muted/40 p-2 text-center">
+              {BUDGET_PERIODS.map((p) => (
+                <div key={p} className={cn("rounded px-1 py-1", p === period && "bg-primary/10")}>
+                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    {BUDGET_PERIOD_LABELS[p]}
+                  </div>
+                  <div className="tnum text-sm font-medium">{formatCents(normalised[p])}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor="adopt-start">Start date</Label>
+          <Input
+            id="adopt-start"
+            type="date"
+            value={effectiveFrom}
+            onChange={(e) => setEffectiveFrom(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            The budget and this category's transactions count from this date. Defaults to the first of the
+            current month.
+          </p>
+          {category?.firstSeenDate && effectiveFrom && category.firstSeenDate < effectiveFrom && (
+            <p className="text-xs text-warning">
+              This category's transactions go back to {category.firstSeenDate}. Ones before the start date
+              stay unbudgeted (back-date the start to include them). The category will not re-appear as new
+              either way.
+            </p>
+          )}
+        </div>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={onSubmit} disabled={!canSubmit}>
+            <Plus className="h-4 w-4" /> {busy ? "Adding…" : "Add to budget"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -1,0 +1,1582 @@
+[
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/ALGORITHM/LATEST"
+    },
+    "timestamp": "2026-08-10T11:18:31.855Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/ALGORITHM/v6.3.0.md"
+    },
+    "timestamp": "2026-08-10T11:18:34.580Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -m 3 -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Algorithm\", \"voice_id\": \"fTtv3eikoepIosk8dTZ5\", \"voice_enabled\": true}' >/dev/null 2>&1; ls ~/Documents/workspace/projects/envelope-os/",
+      "description": "Voice announce and list envelope-os project"
+    },
+    "timestamp": "2026-08-10T11:19:03.481Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/README.md"
+    },
+    "timestamp": "2026-08-10T11:19:15.227Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && ls src web src/* 2>/dev/null | head -80 && echo \"---\" && rg -l \"start\" --glob '*.tsx' -i web/src 2>/dev/null | head",
+      "description": "List envelope-os source tree"
+    },
+    "timestamp": "2026-08-10T11:19:17.154Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -il \"budget\" /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/ | head; echo ---; rg -l -i \"sync|missing\" ~/Documents/workspace/projects/envelope-os/web/src --glob '*.tsx' | head -20; echo ---; cat ~/Documents/workspace/projects/envelope-os/package.json | rg -A20 '\"scripts\"'; echo ---; ss -tlnp 2>/dev/null | rg -i \"bun|3000|8080|31338|4173|5173\" | head",
+      "description": "Consult memory, find sync UI files, check scripts and running ports"
+    },
+    "timestamp": "2026-08-10T11:19:31.789Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/project-budgetbuddy-v140-deployed.md"
+    },
+    "timestamp": "2026-08-10T11:19:41.735Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "description": "Map BudgetBuddy code paths",
+      "subagent_type": "Explore",
+      "prompt": "In ~/Documents/workspace/projects/envelope-os (BudgetBuddy: bun + Hono API in src/, Vite React SPA in web/src/), map three code paths with medium thoroughness. Return file paths with line numbers and concise explanations — conclusions only, no file dumps.\n\n1. BUDGET UPDATE: How an existing budget is edited/updated. Client side: web/src/pages/EditBudgetPage.tsx (form, mutation, API call). Server side: which Hono route handles it (src/server/app.ts, src/server/handlers/*), which service/store function it calls, and any validation (zod?) on the payload. Note the exact HTTP method+path and expected request body shape, and anything that could make updates fail (validation mismatch, missing field, version conflicts, immutable fields).\n\n2. CATEGORY SYNC / ADOPT: web/src/components/AdoptCategoryModal.tsx and BudgetPage new-categories handling. How does adopting a new synced category create a budget? What fields does the modal collect? Does the create-budget API accept a start date / effective-from field (check src/budget/versions.ts, service.ts, server handler)? Note exactly where a start-date field would plug in client and server.\n\n3. MISSING/UNSYNCED CATEGORIES: How categories identified as \"missing\" (no longer coming from sync) are represented and rendered on the main BudgetPage. What does \"clearing/dismissing\" a missing category do today (endpoint, store flag)? How does SettingsPage.tsx currently get its data, and where would a \"not synced budgets\" section fit? Note whether cleared/dismissed categories still render on BudgetPage and why.\n\nAlso report: how auth works for local API calls (PIN/session — how could curl authenticate), and where the version string/changelog lives.",
+      "run_in_background": false
+    },
+    "timestamp": "2026-08-10T11:19:51.410Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -m 3 -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Think phase.\", \"voice_id\": \"fTtv3eikoepIosk8dTZ5\", \"voice_enabled\": true}' >/dev/null 2>&1; cd ~/Documents/workspace/projects/envelope-os && git log --oneline -12 && git status --short | head",
+      "description": "Voice, recent git history and status"
+    },
+    "timestamp": "2026-08-10T11:23:28.103Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && timeout 300 bun test 2>&1 | tail -15",
+      "description": "Run full BudgetBuddy test suite"
+    },
+    "timestamp": "2026-08-10T11:23:34.983Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/EditBudgetPage.tsx",
+      "offset": 240,
+      "limit": 190
+    },
+    "timestamp": "2026-08-10T11:23:35.873Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "systemctl --user list-units 2>/dev/null | rg -i penny; systemctl list-units 2>/dev/null | rg -i penny; journalctl --user -u penny.service --since \"14 days ago\" -n 400 --no-pager 2>/dev/null | rg -i \"error|400|edit|fail|POST\" | tail -40",
+      "description": "Find penny service and search logs for failed requests"
+    },
+    "timestamp": "2026-08-10T11:23:48.661Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "journalctl --user -u penny.service --since \"10 days ago\" --no-pager 2>/dev/null | tail -60",
+      "description": "Read recent penny service logs"
+    },
+    "timestamp": "2026-08-10T11:23:52.753Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "systemctl --user cat penny.service 2>/dev/null | rg -v \"Key=|KEY=\" ; echo ---; systemctl --user show penny.service -p Environment,EnvironmentFiles 2>/dev/null | sed 's/\\(KEY=\\)[^ ]*/\\1<redacted>/g'",
+      "description": "Inspect penny.service unit configuration (secrets redacted)"
+    },
+    "timestamp": "2026-08-10T11:24:02.039Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && ls test src/server/handlers && rg -l \"budget/edit\" test src --glob '*.test.*' | head",
+      "description": "Find existing tests covering budget edit endpoint"
+    },
+    "timestamp": "2026-08-10T11:24:26.247Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/test/routes-budget-versions.test.ts"
+    },
+    "timestamp": "2026-08-10T11:24:30.124Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/EditBudgetPage.tsx",
+      "limit": 130
+    },
+    "timestamp": "2026-08-10T11:25:02.681Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && sed -n '1,120p' web/src/lib/utils.ts | rg -n \"normalisePeriods|monthlyEquivalent|firstOfCurrentMonth\" -A 18",
+      "description": "Read period conversion helpers in web utils"
+    },
+    "timestamp": "2026-08-10T11:25:18.409Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "offset": 160,
+      "limit": 120
+    },
+    "timestamp": "2026-08-10T11:25:29.152Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -m 3 -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Build phase.\", \"voice_id\": \"fTtv3eikoepIosk8dTZ5\", \"voice_enabled\": true}' >/dev/null 2>&1; sed -n '1,80p' ~/Documents/workspace/projects/envelope-os/test/server-test-app.ts",
+      "description": "Voice, read test app harness"
+    },
+    "timestamp": "2026-08-10T11:25:52.964Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/test/repro-budget-update.test.ts",
+      "content": "/**\n * REPRODUCTION MATRIX — \"I can't update a budget\" (2026-08-10).\n * Replays the EXACT save flow EditBudgetPage performs (every editable row\n * posted, chronology defaults: effectiveFrom = first of current month,\n * completePrevious = true) across the realistic scenarios, to find which\n * one breaks. Temporary file; reproducing cases get pinned as regressions.\n */\n\nimport { describe, test, expect } from \"bun:test\";\nimport type { CreateEnvelopeResponse, EditBudgetResponse, GridResponse } from \"../src/server/contract.ts\";\nimport { currentPeriod } from \"../src/platform/time.ts\";\nimport { monthBounds, periodKey } from \"../src/envelope/period.ts\";\nimport { makeTestApp, postJson, getJson, type TestApp } from \"./server-test-app.ts\";\n\nconst TZ = \"Australia/Melbourne\";\nconst NOW = currentPeriod(TZ);\nconst FIRST = monthBounds(NOW).first; // what firstOfCurrentMonthIso() yields in the SPA\nconst MID = `${periodKey(NOW)}-05`;\n\nasync function createEnvelope(t: TestApp, cookie: string, body: unknown): Promise<string> {\n  const res = await postJson(t.app, \"/api/envelopes\", body, cookie);\n  expect(res.status).toBe(200);\n  return ((await res.json()) as CreateEnvelopeResponse).id;\n}\n\nasync function grid(t: TestApp, cookie: string): Promise<GridResponse> {\n  const res = await getJson(t.app, \"/api/envelopes\", cookie);\n  expect(res.status).toBe(200);\n  return (await res.json()) as GridResponse;\n}\n\n/** The SPA's normalisePeriods/monthlyEquivalentCents round-trip, verbatim. */\nconst PERIODS_PER_YEAR = { weekly: 52, fortnightly: 26, monthly: 12, annual: 1 } as const;\ntype P = keyof typeof PERIODS_PER_YEAR;\nconst display = (monthlyCents: number, period: P) =>\n  Math.round((monthlyCents * 12) / PERIODS_PER_YEAR[period]);\nconst monthlyEquivalent = (cents: number, period: P) =>\n  Math.round((cents * PERIODS_PER_YEAR[period]) / 12);\n\n/** Save exactly as the SPA does: ALL rows, chronology defaults. */\nasync function spaSave(\n  t: TestApp,\n  cookie: string,\n  edits: Record<string, number>, // envelopeId -> new amount in the row's period\n  opts: { effectiveFrom?: string } = {},\n): Promise<Response> {\n  const g = await grid(t, cookie);\n  const lines = g.rows.map((r) => {\n    const own = r.ownAllocationCents ?? r.allocationCents;\n    const disp = edits[r.id] ?? display(own, r.period as P);\n    return { envelopeId: r.id, amountCents: monthlyEquivalent(disp, r.period as P), period: r.period };\n  });\n  return postJson(\n    t.app,\n    \"/api/budget/edit\",\n    { lines, scope: \"ongoing\", effectiveFrom: opts.effectiveFrom ?? FIRST, completePrevious: true },\n    cookie,\n  );\n}\n\ndescribe(\"repro matrix: budget update via the SPA's exact flow\", () => {\n  test(\"A: plain first edit applies\", async () => {\n    const t = await makeTestApp();\n    const cookie = await t.signIn();\n    const id = await createEnvelope(t, cookie, { name: \"Groceries\", type: \"expense\", budgetedCents: 50000, period: \"monthly\" });\n    const res = await spaSave(t, cookie, { [id]: 60000 });\n    expect(res.status).toBe(200);\n    expect(((await res.json()) as EditBudgetResponse).changed).toBe(1);\n    expect((await grid(t, cookie)).rows.find((r) => r.id === id)?.allocationCents).toBe(60000);\n  });\n\n  test(\"B: second edit in the same month applies\", async () => {\n    const t = await makeTestApp();\n    const cookie = await t.signIn();\n    const id = await createEnvelope(t, cookie, { name: \"Groceries\", type: \"expense\", budgetedCents: 50000, period: \"monthly\" });\n    expect((await spaSave(t, cookie, { [id]: 60000 })).status).toBe(200);\n    const res = await spaSave(t, cookie, { [id]: 65000 });\n    expect(res.status).toBe(200);\n    expect(((await res.json()) as EditBudgetResponse).changed).toBe(1);\n    expect((await grid(t, cookie)).rows.find((r) => r.id === id)?.allocationCents).toBe(65000);\n  });\n\n  test(\"C: cleared From date (the SPA sends effectiveFrom: '')\", async () => {\n    const t = await makeTestApp();\n    const cookie = await t.signIn();\n    const id = await createEnvelope(t, cookie, { name: \"Groceries\", type: \"expense\", budgetedCents: 50000, period: \"monthly\" });\n    const res = await spaSave(t, cookie, { [id]: 60000 }, { effectiveFrom: \"\" });\n    // What does the server do with the SPA's cleared-field payload?\n    console.log(\"C status:\", res.status, await res.text());\n    expect(res.status).toBe(200); // the user expects the save to work\n  });\n\n  test(\"D: untouched non-monthly row survives a save of a different row\", async () => {\n    const t = await makeTestApp();\n    const cookie = await t.signIn();\n    const weekly = await createEnvelope(t, cookie, { name: \"Gym\", type: \"expense\", budgetedCents: 2308, period: \"weekly\" });\n    const other = await createEnvelope(t, cookie, { name: \"Fuel\", type: \"expense\", budgetedCents: 20000, period: \"monthly\" });\n    const before = (await grid(t, cookie)).rows.find((r) => r.id === weekly)?.allocationCents;\n    const res = await spaSave(t, cookie, { [other]: 25000 });\n    expect(res.status).toBe(200);\n    const body = (await res.json()) as EditBudgetResponse;\n    console.log(\"D changed:\", body.changed, \"weekly before:\", before);\n    expect(body.changed).toBe(1); // ONLY the edited row should version\n    expect((await grid(t, cookie)).rows.find((r) => r.id === weekly)?.allocationCents).toBe(before!);\n  });\n\n  test(\"E: edit after an existing mid-month version applies\", async () => {\n    const t = await makeTestApp();\n    const cookie = await t.signIn();\n    const id = await createEnvelope(t, cookie, { name: \"Groceries\", type: \"expense\", budgetedCents: 50000, period: \"monthly\" });\n    // Nick's July pattern: a mid-month change earlier this month (prorates).\n    const mid = await postJson(\n      t.app,\n      \"/api/budget/edit\",\n      { lines: [{ envelopeId: id, amountCents: 60000 }], scope: \"ongoing\", effectiveFrom: MID, completePrevious: true },\n      cookie,\n    );\n    expect(mid.status).toBe(200);\n    const prorated = (await grid(t, cookie)).rows.find((r) => r.id === id)?.allocationCents;\n    console.log(\"E prorated after mid-month change:\", prorated);\n    // Now the ordinary SPA save: bump to 700 with the default From (first of month).\n    const res = await spaSave(t, cookie, { [id]: 70000 });\n    expect(res.status).toBe(200);\n    const after = (await grid(t, cookie)).rows.find((r) => r.id === id)?.allocationCents;\n    console.log(\"E after save:\", after);\n    expect(after).toBe(70000);\n  });\n\n  test(\"F: untouched rows during E's save do not churn\", async () => {\n    const t = await makeTestApp();\n    const cookie = await t.signIn();\n    const id = await createEnvelope(t, cookie, { name: \"Groceries\", type: \"expense\", budgetedCents: 50000, period: \"monthly\" });\n    const other = await createEnvelope(t, cookie, { name: \"Fuel\", type: \"expense\", budgetedCents: 20000, period: \"monthly\" });\n    await postJson(\n      t.app,\n      \"/api/budget/edit\",\n      { lines: [{ envelopeId: id, amountCents: 60000 }], scope: \"ongoing\", effectiveFrom: MID, completePrevious: true },\n      cookie,\n    );\n    // SPA posts EVERY row: the prorated Groceries row goes back as a \"monthly rate\".\n    const res = await spaSave(t, cookie, { [other]: 25000 });\n    expect(res.status).toBe(200);\n    const body = (await res.json()) as EditBudgetResponse;\n    console.log(\"F changed:\", body.changed);\n    const after = (await grid(t, cookie)).rows.find((r) => r.id === id)?.allocationCents;\n    console.log(\"F groceries after:\", after);\n    expect(body.changed).toBe(1); // only Fuel\n  });\n});\n"
+    },
+    "timestamp": "2026-08-10T11:26:42.623Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && timeout 120 bun test test/repro-budget-update.test.ts 2>&1 | tail -45",
+      "description": "Run budget update reproduction matrix"
+    },
+    "timestamp": "2026-08-10T11:29:14.249Z"
+  },
+  {
+    "name": "Skill",
+    "input": {
+      "skill": "RootCauseAnalysis",
+      "args": "FiveWhys on defect E: budget edit after a mid-month version lands at the wrong amount (700 typed, 764.52 stored)"
+    },
+    "timestamp": "2026-08-10T11:30:05.558Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/versions.ts"
+    },
+    "timestamp": "2026-08-10T11:30:10.747Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -n \"completePrevious|already completed\" src/ | rg -v test",
+      "description": "Find all completePrevious implementations"
+    },
+    "timestamp": "2026-08-10T11:30:20.476Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "offset": 618,
+      "limit": 90
+    },
+    "timestamp": "2026-08-10T11:30:23.976Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/EditBudgetPage.tsx",
+      "offset": 130,
+      "limit": 110
+    },
+    "timestamp": "2026-08-10T11:30:56.465Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/components/AdoptCategoryModal.tsx"
+    },
+    "timestamp": "2026-08-10T11:30:56.590Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/handlers/categories.ts"
+    },
+    "timestamp": "2026-08-10T11:31:01.565Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -n \"unmapped|Unmapped\" src/server/contract.ts src/server/validate.ts src/envelope/service.ts src/platform/store.ts web/src/lib/queries.ts | head -30",
+      "description": "Locate unmapped-category plumbing across layers"
+    },
+    "timestamp": "2026-08-10T11:31:02.712Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts",
+      "offset": 350,
+      "limit": 70
+    },
+    "timestamp": "2026-08-10T11:31:08.032Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -n \"interface Store|listMappings|putMapping|settings|getSetting|setSetting|kv\" src/platform/store.ts | head -30 && echo --- && rg -n \"new-categories|unmapped|Dismiss|dismiss\" web/src/pages/BudgetPage.tsx | head && echo --- && sed -n '290,360p' web/src/pages/BudgetPage.tsx",
+      "description": "Store interface, BudgetPage unmapped card region"
+    },
+    "timestamp": "2026-08-10T11:31:09.957Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/platform/store.ts"
+    },
+    "timestamp": "2026-08-10T11:31:14.332Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -n \"listMappings|PennyStore|interface .*Store|putMapping\" src/domain/types.ts src/store/*.ts src/envelope/ports.ts src/budget/ports.ts 2>/dev/null | head -25 && echo --- && rg -n \"CREATE TABLE|user_version|migration\" src/store/sqlite.ts | head -30",
+      "description": "Find full store contract and sqlite migration pattern"
+    },
+    "timestamp": "2026-08-10T11:31:21.498Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/ports.ts"
+    },
+    "timestamp": "2026-08-10T11:31:26.310Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -n \"migrate\\(|schemaVersion|PRAGMA|ALTER TABLE|CREATE TABLE IF NOT EXISTS\" src/store/sqlite.ts | head -40",
+      "description": "Read envelope ports and sqlite schema management"
+    },
+    "timestamp": "2026-08-10T11:31:27.939Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "old_string": "      const prior = currentLineFor(lines, line.envelopeId, effMonth);\n      if (completePrevious) {\n        const cutoff = previousDay(effectiveFrom);\n        for (let i = 0; i < lines.length; i++) {\n          const t = lines[i]!;\n          if (t.envelopeId !== line.envelopeId) continue;\n          if (effectiveToOf(t) !== null) continue; // already completed\n          const closed: BudgetTemplate = { ...t, effectiveFrom: effectiveFromOf(t), effectiveTo: cutoff };\n          await this.store.putTemplateLine(userId, closed);\n          lines[i] = closed;\n        }\n      }",
+      "new_string": "      const prior = currentLineFor(lines, line.envelopeId, effMonth);\n      if (completePrevious) {\n        const cutoff = previousDay(effectiveFrom);\n        for (let i = 0; i < lines.length; i++) {\n          const t = lines[i]!;\n          if (t.envelopeId !== line.envelopeId) continue;\n          // Truncate every version whose window reaches effectiveFrom — open\n          // AND already-completed ones. A version closed at e.g. the 4th by an\n          // earlier mid-month edit still overlaps a later edit-from-the-1st;\n          // left alone it keeps contributing its early-month days and the two\n          // amounts SUM (the \"typed $700, got $764.52\" defect).\n          const to = effectiveToOf(t);\n          if (to !== null && to < effectiveFrom) continue; // ended before the new window\n          const closed: BudgetTemplate = { ...t, effectiveFrom: effectiveFromOf(t), effectiveTo: cutoff };\n          await this.store.putTemplateLine(userId, closed);\n          lines[i] = closed;\n        }\n      }"
+    },
+    "timestamp": "2026-08-10T11:31:54.801Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "old_string": "      if (completePrevious) {\n        const cutoff = previousDay(effectiveFrom);\n        for (let i = 0; i < lines.length; i++) {\n          const t = lines[i]!;\n          if (effectiveToOf(t) !== null) continue;\n          const closed: BudgetTemplate = { ...t, effectiveFrom: effectiveFromOf(t), effectiveTo: cutoff };\n          await this.store.putTemplateLine(userId, closed);\n          lines[i] = closed;\n        }\n      }",
+      "new_string": "      if (completePrevious) {\n        const cutoff = previousDay(effectiveFrom);\n        for (let i = 0; i < lines.length; i++) {\n          const t = lines[i]!;\n          // Same truncation rule as editBudgetInTx: any version still reaching\n          // effectiveFrom (open OR closed) ends the day before the new one.\n          const to = effectiveToOf(t);\n          if (to !== null && to < effectiveFrom) continue;\n          const closed: BudgetTemplate = { ...t, effectiveFrom: effectiveFromOf(t), effectiveTo: cutoff };\n          await this.store.putTemplateLine(userId, closed);\n          lines[i] = closed;\n        }\n      }"
+    },
+    "timestamp": "2026-08-10T11:31:58.875Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "old_string": "   *   - completePrevious (default true) sets every currently-open version of a\n   *     changed envelope to end the day before effectiveFrom; unticked, the old\n   *     and new versions coexist and SUM in every shared month.",
+      "new_string": "   *   - completePrevious (default true) sets every version of a changed\n   *     envelope whose window still reaches effectiveFrom (open or completed)\n   *     to end the day before effectiveFrom; unticked, the old and new\n   *     versions coexist and SUM in every shared month."
+    },
+    "timestamp": "2026-08-10T11:32:11.081Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/EditBudgetPage.tsx",
+      "old_string": "    // The chronology fields apply to ongoing edits only (this-month overrides\n    // are never versioned). effectiveTo is optional: absent = open-ended.\n    const chronology =\n      scope === \"ongoing\"\n        ? {\n            effectiveFrom,\n            ...(effectiveTo ? { effectiveTo } : {}),\n            completePrevious,\n          }\n        : {};",
+      "new_string": "    // The chronology fields apply to ongoing edits only (this-month overrides\n    // are never versioned). effectiveTo is optional: absent = open-ended.\n    // effectiveFrom is guarded the same way: a cleared date input yields \"\"\n    // which the server's strict date schema 400s — omit it and the server\n    // defaults to the first of the current month (the field's own default).\n    const chronology =\n      scope === \"ongoing\"\n        ? {\n            ...(effectiveFrom ? { effectiveFrom } : {}),\n            ...(effectiveTo ? { effectiveTo } : {}),\n            completePrevious,\n          }\n        : {};"
+    },
+    "timestamp": "2026-08-10T11:32:15.589Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/EditBudgetPage.tsx",
+      "old_string": "  const onSave = async () => {\n    setBusy(true);\n    setError(null);\n    const lines: EditBudgetLine[] = editable.map((r) => {\n      const d = entryFor(r);\n      return { envelopeId: r.id, amountCents: monthlyEquivalentCents(d.amountCents, d.period), period: d.period };\n    });",
+      "new_string": "  /**\n   * True when a row's draft still matches the grid exactly (same period, same\n   * displayed amount). Untouched rows are NOT posted: the monthly↔period\n   * round-trip rounds (weekly 2308/mo displays as 533/wk and comes back as\n   * 2310/mo), so posting every row used to version untouched non-monthly\n   * envelopes on every save. Posting only real edits kills that class.\n   */\n  const untouched = React.useCallback(\n    (r: EnvelopeRow): boolean => {\n      const d = entryFor(r);\n      return d.period === r.period && d.amountCents === normalisePeriods(ownAlloc(r), \"monthly\")[r.period];\n    },\n    [entryFor]\n  );\n\n  const onSave = async () => {\n    setBusy(true);\n    setError(null);\n    const lines: EditBudgetLine[] = editable\n      .filter((r) => !untouched(r))\n      .map((r) => {\n        const d = entryFor(r);\n        return { envelopeId: r.id, amountCents: monthlyEquivalentCents(d.amountCents, d.period), period: d.period };\n      });"
+    },
+    "timestamp": "2026-08-10T11:32:34.849Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && sed -n '1,60p' src/budget/ports.ts && rg -n \"deleteTemplateLine|removeTemplate\" src/ | head",
+      "description": "Check budget ports for template line delete"
+    },
+    "timestamp": "2026-08-10T11:32:57.522Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/test/budget-versions-overlap.test.ts",
+      "content": "/**\n * Regression: completePrevious must supersede by WINDOW OVERLAP, not by\n * open-ness (the \"typed $700, got $764.52\" defect, fixed 2026-08-10).\n *\n * A mid-month edit closes the baseline version at e.g. the 4th. A later\n * ordinary save (default From = first of month) used to skip that\n * already-completed line — `if (effectiveToOf(t) !== null) continue` — so its\n * early-month days kept contributing and SUMMED with the new full-month\n * version. Now every line of the envelope whose window still reaches the new\n * effectiveFrom is truncated to the day before it; fully-superseded lines\n * become degenerate windows that resolve to 0 (the template port has no\n * delete — append/update only).\n */\n\nimport { describe, test, expect } from \"bun:test\";\nimport type { CreateEnvelopeResponse, EditBudgetResponse, GridResponse } from \"../src/server/contract.ts\";\nimport { currentPeriod } from \"../src/platform/time.ts\";\nimport { monthBounds, periodKey } from \"../src/envelope/period.ts\";\nimport { makeTestApp, postJson, getJson, type TestApp } from \"./server-test-app.ts\";\n\nconst TZ = \"Australia/Melbourne\";\nconst NOW = currentPeriod(TZ);\nconst FIRST = monthBounds(NOW).first;\nconst MID = `${periodKey(NOW)}-05`;\n\nasync function createEnvelope(t: TestApp, cookie: string, body: unknown): Promise<string> {\n  const res = await postJson(t.app, \"/api/envelopes\", body, cookie);\n  expect(res.status).toBe(200);\n  return ((await res.json()) as CreateEnvelopeResponse).id;\n}\n\nasync function grid(t: TestApp, cookie: string): Promise<GridResponse> {\n  const res = await getJson(t.app, \"/api/envelopes\", cookie);\n  expect(res.status).toBe(200);\n  return (await res.json()) as GridResponse;\n}\n\nasync function editOngoing(t: TestApp, cookie: string, envelopeId: string, amountCents: number, effectiveFrom: string): Promise<Response> {\n  return postJson(\n    t.app,\n    \"/api/budget/edit\",\n    { lines: [{ envelopeId, amountCents }], scope: \"ongoing\", effectiveFrom, completePrevious: true },\n    cookie,\n  );\n}\n\ndescribe(\"budget edit supersession over an existing mid-month version\", () => {\n  test(\"an edit from the 1st after a mid-month version stores EXACTLY the typed amount\", async () => {\n    const t = await makeTestApp();\n    const cookie = await t.signIn();\n    const id = await createEnvelope(t, cookie, { name: \"Groceries\", type: \"expense\", budgetedCents: 50000, period: \"monthly\" });\n\n    // Nick's July pattern: a mid-month change earlier in the month (prorates).\n    expect((await editOngoing(t, cookie, id, 60000, MID)).status).toBe(200);\n\n    // The ordinary later save: type 700 with the wizard's default From.\n    const res = await editOngoing(t, cookie, id, 70000, FIRST);\n    expect(res.status).toBe(200);\n    expect(((await res.json()) as EditBudgetResponse).changed).toBe(1);\n    expect((await grid(t, cookie)).rows.find((r) => r.id === id)?.allocationCents).toBe(70000);\n  });\n\n  test(\"a second edit in the same month applies cleanly\", async () => {\n    const t = await makeTestApp();\n    const cookie = await t.signIn();\n    const id = await createEnvelope(t, cookie, { name: \"Groceries\", type: \"expense\", budgetedCents: 50000, period: \"monthly\" });\n    expect((await editOngoing(t, cookie, id, 60000, FIRST)).status).toBe(200);\n    expect((await editOngoing(t, cookie, id, 65000, FIRST)).status).toBe(200);\n    expect((await grid(t, cookie)).rows.find((r) => r.id === id)?.allocationCents).toBe(65000);\n  });\n\n  test(\"the budget history's afterCents records the typed amount, not a blended sum\", async () => {\n    const t = await makeTestApp();\n    const cookie = await t.signIn();\n    const id = await createEnvelope(t, cookie, { name: \"Groceries\", type: \"expense\", budgetedCents: 50000, period: \"monthly\" });\n    await editOngoing(t, cookie, id, 60000, MID);\n    await editOngoing(t, cookie, id, 70000, FIRST);\n    const history = await getJson(t.app, \"/api/budget/history\", cookie);\n    if (history.status === 200) {\n      const body = (await history.json()) as { changes?: readonly { envelopeId: string; afterCents: number }[] };\n      const latest = body.changes?.find((c) => c.envelopeId === id);\n      if (latest) expect(latest.afterCents).toBe(70000);\n    }\n  });\n\n  test(\"income: an edit from the 1st after a mid-month income version stores the typed amount\", async () => {\n    const t = await makeTestApp();\n    const cookie = await t.signIn();\n    const id = await createEnvelope(t, cookie, { name: \"Salary\", type: \"income\", parentId: null, budgetedCents: 500000, targetCents: 500000 });\n\n    const mid = await postJson(\n      t.app,\n      \"/api/envelopes/edit\",\n      { id, type: \"income\", budgetedCents: 600000, targetCents: 600000, effectiveFrom: MID, completePrevious: true },\n      cookie,\n    );\n    expect(mid.status).toBe(200);\n\n    const res = await postJson(\n      t.app,\n      \"/api/envelopes/edit\",\n      { id, type: \"income\", budgetedCents: 700000, targetCents: 700000, effectiveFrom: FIRST, completePrevious: true },\n      cookie,\n    );\n    expect(res.status).toBe(200);\n    expect((await grid(t, cookie)).income.find((i) => i.id === id)?.budgetedCents).toBe(700000);\n  });\n\n  test(\"scheduling a future change still coexists correctly with the active version\", async () => {\n    // The fix must not break the documented schedule semantics: a version\n    // starting NEXT month truncates the active one to the end of this month,\n    // and this month's grid keeps the old amount.\n    const t = await makeTestApp();\n    const cookie = await t.signIn();\n    const id = await createEnvelope(t, cookie, { name: \"Groceries\", type: \"expense\", budgetedCents: 50000, period: \"monthly\" });\n    const nextFirst = monthBounds({ year: NOW.month === 12 ? NOW.year + 1 : NOW.year, month: NOW.month === 12 ? 1 : NOW.month + 1 }).first;\n    expect((await editOngoing(t, cookie, id, 60000, nextFirst)).status).toBe(200);\n    expect((await grid(t, cookie)).rows.find((r) => r.id === id)?.allocationCents).toBe(50000);\n  });\n});\n"
+    },
+    "timestamp": "2026-08-10T11:33:39.918Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rm test/repro-budget-update.test.ts && timeout 300 bun test 2>&1 | tail -6",
+      "description": "Remove repro file, run full suite with fix"
+    },
+    "timestamp": "2026-08-10T11:33:43.737Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && timeout 120 bun test web/src/pages/EditBudgetPage.test.tsx 2>&1 | rg -B5 -A25 \"OWN budget line is editable\" | head -70",
+      "description": "Inspect the failing EditBudgetPage component test"
+    },
+    "timestamp": "2026-08-10T11:33:55.848Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/EditBudgetPage.test.tsx",
+      "offset": 225,
+      "limit": 80
+    },
+    "timestamp": "2026-08-10T11:34:00.929Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/EditBudgetPage.test.tsx",
+      "old_string": "    // Saving posts the parent's OWN line through the same budget-edit path.\n    fireEvent.click(screen.getByRole(\"button\", { name: /Save budget/ }));\n    await waitFor(() => expect(calls.some((c) => c.path === \"POST /api/budget/edit\")).toBe(true));\n    const lines = savedBody().lines as { envelopeId: string; amountCents: number; period: string }[];\n    expect(lines).toContainEqual({ envelopeId: \"env-groceries-p\", amountCents: 50592, period: \"monthly\" });\n    expect(lines).toContainEqual({ envelopeId: \"env-supplements\", amountCents: 10000, period: \"monthly\" });\n  });",
+      "new_string": "    // Editing the parent's OWN line posts through the same budget-edit path —\n    // and ONLY the changed line: untouched rows stay out of the payload (the\n    // period round-trip rounds, so posting them versioned untouched envelopes).\n    fireEvent.change(screen.getByDisplayValue(\"505.92\"), { target: { value: \"600\" } });\n    fireEvent.click(screen.getByRole(\"button\", { name: /Save budget/ }));\n    await waitFor(() => expect(calls.some((c) => c.path === \"POST /api/budget/edit\")).toBe(true));\n    const lines = savedBody().lines as { envelopeId: string; amountCents: number; period: string }[];\n    expect(lines).toContainEqual({ envelopeId: \"env-groceries-p\", amountCents: 60000, period: \"monthly\" });\n    expect(lines).toHaveLength(1);\n  });"
+    },
+    "timestamp": "2026-08-10T11:34:13.322Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspaces/projects/envelope-os/web/src/pages/EditBudgetPage.test.tsx",
+      "old_string": "  it(\"a mid-month From shows the proration note; the 1st does not (owner decision 2026-07-16)\", async () => {",
+      "new_string": "  it(\"a CLEARED From date is omitted from the payload, not sent as '' (regression 2026-08-10)\", async () => {\n    // Clearing the date input yields value \"\" — sent through, the server's\n    // strict YYYY-MM-DD schema 400s the ENTIRE save (\"can't update a budget\").\n    // Omitted, the server defaults to the first of the current month.\n    renderPage();\n    await waitForLoaded();\n    fireEvent.change(screen.getByLabelText(\"Groceries budget\"), { target: { value: \"600\" } });\n    fireEvent.change(screen.getByLabelText(\"From\"), { target: { value: \"\" } });\n    fireEvent.click(screen.getByRole(\"button\", { name: /Save budget/ }));\n    await waitFor(() => expect(calls.some((c) => c.path === \"POST /api/budget/edit\")).toBe(true));\n    expect(savedBody().effectiveFrom).toBeUndefined();\n  });\n\n  it(\"an untouched save posts NO spending lines (regression 2026-08-10)\", async () => {\n    renderPage();\n    await waitForLoaded();\n    fireEvent.click(screen.getByRole(\"button\", { name: /Save budget/ }));\n    await waitFor(() => expect(calls.some((c) => c.path === \"POST /api/budget/edit\")).toBe(true));\n    expect(savedBody().lines).toEqual([]);\n  });\n\n  it(\"a mid-month From shows the proration note; the 1st does not (owner decision 2026-07-16)\", async () => {"
+    },
+    "timestamp": "2026-08-10T11:34:25.683Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -n \"getByLabelText|aria-label\" web/src/pages/EditBudgetPage.test.tsx web/src/pages/EditBudgetPage.tsx | rg -i \"budget|amount\" | head",
+      "description": "Find amount input labels in EditBudgetPage"
+    },
+    "timestamp": "2026-08-10T11:34:30.872Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && sed -n '610,640p' web/src/pages/EditBudgetPage.tsx",
+      "description": "Find spending row amount input aria-label"
+    },
+    "timestamp": "2026-08-10T11:34:34.179Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/EditBudgetPage.test.tsx",
+      "limit": 200
+    },
+    "timestamp": "2026-08-10T11:34:39.223Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/EditBudgetPage.test.tsx",
+      "old_string": "  it(\"a mid-month From shows the proration note; the 1st does not (owner decision 2026-07-16)\", async () => {",
+      "new_string": "  it(\"a CLEARED From date is omitted from the payload, not sent as '' (regression 2026-08-10)\", async () => {\n    // Clearing the date input yields value \"\" — sent through, the server's\n    // strict YYYY-MM-DD schema 400s the ENTIRE save (\"can't update a budget\").\n    // Omitted, the server defaults to the first of the current month.\n    renderPage();\n    await waitForLoaded();\n    fireEvent.change(screen.getByDisplayValue(\"500.00\"), { target: { value: \"600\" } });\n    fireEvent.change(screen.getByLabelText(\"From\"), { target: { value: \"\" } });\n    fireEvent.click(screen.getByRole(\"button\", { name: /Save budget/ }));\n    await waitFor(() => expect(calls.some((c) => c.path === \"POST /api/budget/edit\")).toBe(true));\n    const body = savedBody();\n    expect(body.effectiveFrom).toBeUndefined();\n    expect(body.lines).toContainEqual({ envelopeId: \"env-groceries\", amountCents: 60000, period: \"monthly\" });\n  });\n\n  it(\"an untouched save posts NO spending lines (regression 2026-08-10)\", async () => {\n    renderPage();\n    await waitForLoaded();\n    fireEvent.click(screen.getByRole(\"button\", { name: /Save budget/ }));\n    await waitFor(() => expect(calls.some((c) => c.path === \"POST /api/budget/edit\")).toBe(true));\n    expect(savedBody().lines).toEqual([]);\n  });\n\n  it(\"a mid-month From shows the proration note; the 1st does not (owner decision 2026-07-16)\", async () => {"
+    },
+    "timestamp": "2026-08-10T11:34:50.449Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && timeout 300 bun test 2>&1 | tail -5",
+      "description": "Run full suite after D1 fixes"
+    },
+    "timestamp": "2026-08-10T11:34:53.719Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/components/AdoptCategoryModal.tsx",
+      "old_string": "import {\n  cn,\n  formatCents,\n  normalisePeriods,\n  BUDGET_PERIODS,\n  BUDGET_PERIOD_LABELS,\n} from \"@/lib/utils\";",
+      "new_string": "import {\n  cn,\n  formatCents,\n  normalisePeriods,\n  firstOfCurrentMonthIso,\n  BUDGET_PERIODS,\n  BUDGET_PERIOD_LABELS,\n} from \"@/lib/utils\";"
+    },
+    "timestamp": "2026-08-10T11:35:14.139Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/components/AdoptCategoryModal.tsx",
+      "old_string": "  const [price, setPrice] = React.useState(\"\");\n  const [period, setPeriod] = React.useState<BudgetPeriod>(\"monthly\");\n  const [busy, setBusy] = React.useState(false);\n  const [error, setError] = React.useState<string | null>(null);\n\n  // Seed the form from the category whenever the modal opens.\n  React.useEffect(() => {\n    if (!open || !category) return;\n    setError(null);\n    setBusy(false);\n    setType(inferDefaultType(category));\n    setName(category.categoryName ?? \"\");\n    setParentId(\"__top__\");\n    setPrice(\"\");\n    setPeriod(\"monthly\");\n  }, [open, category]);",
+      "new_string": "  const [price, setPrice] = React.useState(\"\");\n  const [period, setPeriod] = React.useState<BudgetPeriod>(\"monthly\");\n  // Start date for the budget line AND the category→envelope mapping (and the\n  // rollover anchor server-side). Defaults to the first of the current month.\n  const [effectiveFrom, setEffectiveFrom] = React.useState<string>(firstOfCurrentMonthIso());\n  const [busy, setBusy] = React.useState(false);\n  const [error, setError] = React.useState<string | null>(null);\n\n  // Seed the form from the category whenever the modal opens.\n  React.useEffect(() => {\n    if (!open || !category) return;\n    setError(null);\n    setBusy(false);\n    setType(inferDefaultType(category));\n    setName(category.categoryName ?? \"\");\n    setParentId(\"__top__\");\n    setPrice(\"\");\n    setPeriod(\"monthly\");\n    setEffectiveFrom(firstOfCurrentMonthIso());\n  }, [open, category]);"
+    },
+    "timestamp": "2026-08-10T11:35:19.744Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/components/AdoptCategoryModal.tsx",
+      "old_string": "      const res = await call(\"POST /api/categories/adopt\", {\n        categoryId: category.categoryId,\n        name: name.trim(),\n        type,\n        ...(isIncome\n          ? { budgetedCents: priceCents }\n          : {\n              budgetedCents: priceCents,\n              period,\n              parentId: parentId !== \"__top__\" ? parentId : null,\n            }),\n      });",
+      "new_string": "      const res = await call(\"POST /api/categories/adopt\", {\n        categoryId: category.categoryId,\n        name: name.trim(),\n        type,\n        // Guarded like the edit wizard's chronology: a cleared date input\n        // yields \"\" which the server's strict date schema rejects — omit it\n        // and the server keeps its own defaults.\n        ...(effectiveFrom ? { effectiveFrom } : {}),\n        ...(isIncome\n          ? { budgetedCents: priceCents }\n          : {\n              budgetedCents: priceCents,\n              period,\n              parentId: parentId !== \"__top__\" ? parentId : null,\n            }),\n      });"
+    },
+    "timestamp": "2026-08-10T11:35:23.983Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/components/AdoptCategoryModal.tsx",
+      "old_string": "        {error && <p className=\"text-sm text-destructive\">{error}</p>}\n\n        <DialogFooter>",
+      "new_string": "        <div className=\"space-y-2\">\n          <Label htmlFor=\"adopt-start\">Start date</Label>\n          <Input\n            id=\"adopt-start\"\n            type=\"date\"\n            value={effectiveFrom}\n            onChange={(e) => setEffectiveFrom(e.target.value)}\n          />\n          <p className=\"text-xs text-muted-foreground\">\n            The budget and this category's transactions count from this date. Defaults to the first of the\n            current month.\n          </p>\n        </div>\n\n        {error && <p className=\"text-sm text-destructive\">{error}</p>}\n\n        <DialogFooter>"
+    },
+    "timestamp": "2026-08-10T11:35:26.436Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/handlers/categories.ts",
+      "old_string": "    const envelopeId = await services.budget.adoptCategory(session.userId, currentPeriod(tz), {\n      categoryId: req.categoryId,\n      name: req.name,\n      type: req.type,\n      rolloverStart: todayISO(tz),",
+      "new_string": "    const envelopeId = await services.budget.adoptCategory(session.userId, currentPeriod(tz), {\n      categoryId: req.categoryId,\n      name: req.name,\n      type: req.type,\n      // The rollover sequence anchors where the budget starts: the client's\n      // chosen start date when given, else today (the pre-start-date default).\n      rolloverStart: req.effectiveFrom ?? todayISO(tz),"
+    },
+    "timestamp": "2026-08-10T11:35:32.561Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -n \"call\\(|adopt\\\"|POST /api/categories/adopt|it\\(|expect\\(body\" web/src/components/AdoptCategoryModal.test.tsx | head -20",
+      "description": "Skim adopt modal test structure"
+    },
+    "timestamp": "2026-08-10T11:35:42.946Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/components/AdoptCategoryModal.test.tsx"
+    },
+    "timestamp": "2026-08-10T11:35:46.957Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/components/AdoptCategoryModal.test.tsx",
+      "old_string": "  it(\"defaults a net-positive category to income\", async () => {",
+      "new_string": "  it(\"carries a start date defaulting to the first of the current month, editable, omitted when cleared\", async () => {\n    const { unmount } = renderModal(cat());\n    const { firstOfCurrentMonthIso } = await import(\"@/lib/utils\");\n    const start = screen.getByLabelText(\"Start date\");\n    expect(start).toHaveValue(firstOfCurrentMonthIso());\n\n    // A user-chosen date rides through the payload.\n    fireEvent.change(start, { target: { value: \"2026-09-01\" } });\n    fireEvent.click(screen.getByRole(\"button\", { name: /Add to budget/ }));\n    await waitFor(() => expect(lastBody).not.toBeNull());\n    expect(lastBody).toMatchObject({ effectiveFrom: \"2026-09-01\" });\n    unmount();\n\n    // Cleared, the key is OMITTED (the server's strict date schema rejects \"\").\n    lastBody = null;\n    renderModal(cat());\n    fireEvent.change(screen.getByLabelText(\"Start date\"), { target: { value: \"\" } });\n    fireEvent.click(screen.getByRole(\"button\", { name: /Add to budget/ }));\n    await waitFor(() => expect(lastBody).not.toBeNull());\n    expect(Object.keys(lastBody!)).not.toContain(\"effectiveFrom\");\n  });\n\n  it(\"defaults a net-positive category to income\", async () => {"
+    },
+    "timestamp": "2026-08-10T11:35:55.668Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/schema.ts"
+    },
+    "timestamp": "2026-08-10T11:36:20.104Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && sed -n '185,230p' src/store/sqlite.ts && sed -n '420,470p' src/store/sqlite.ts && echo ===POSTGRES=== && sed -n '420,470p' src/store/postgres.ts && echo ===MEMORY=== && rg -n \"listMappings|upsertMapping|setEnvelopeArchived\" test/penny-memory-store.ts",
+      "description": "Read adapter idioms for the new methods"
+    },
+    "timestamp": "2026-08-10T11:36:32.451Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/schema.ts",
+      "old_string": "  \"secrets\",\n  \"sync_state\",\n] as const;",
+      "new_string": "  \"secrets\",\n  \"sync_state\",\n  \"dismissed_categories\",\n] as const;"
+    },
+    "timestamp": "2026-08-10T11:36:38.601Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/schema.ts",
+      "old_string": "  // Incremental sync bookmark per tenant (ISC-5).\n  `CREATE TABLE IF NOT EXISTS sync_state (",
+      "new_string": "  // Cleared \"new categories from sync\": a dismissed category stops appearing\n  // in the budget page's new-categories card and is listed under Settings →\n  // Not synced instead. Dismissal is reversible (restore deletes the row).\n  `CREATE TABLE IF NOT EXISTS dismissed_categories (\n    user_id TEXT NOT NULL REFERENCES users(id),\n    category_id TEXT NOT NULL,\n    dismissed_at BIGINT NOT NULL,\n    PRIMARY KEY (user_id, category_id)\n  )`,\n\n  // Incremental sync bookmark per tenant (ISC-5).\n  `CREATE TABLE IF NOT EXISTS sync_state ("
+    },
+    "timestamp": "2026-08-10T11:36:42.048Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/ports.ts",
+      "old_string": "/** Reads/writes the envelope engine needs beyond the base Store interface. */\nexport interface EnvelopeExtrasStore {\n  listMappings(userId: UserId): Promise<CategoryMapping[]>;\n  upsertMapping(userId: UserId, m: CategoryMapping): Promise<void>;",
+      "new_string": "/** Reads/writes the envelope engine needs beyond the base Store interface. */\nexport interface EnvelopeExtrasStore {\n  listMappings(userId: UserId): Promise<CategoryMapping[]>;\n  upsertMapping(userId: UserId, m: CategoryMapping): Promise<void>;\n\n  /** Category ids the user cleared from the new-categories card (persistent). */\n  listDismissedCategoryIds(userId: UserId): Promise<string[]>;\n  /** Set/unset a category's dismissed flag. Unset (restore) deletes the row. */\n  setCategoryDismissed(userId: UserId, categoryId: string, dismissed: boolean): Promise<void>;"
+    },
+    "timestamp": "2026-08-10T11:36:46.064Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/sqlite.ts",
+      "old_string": "  async listCategories(userId: UserId): Promise<Category[]> {\n    const rows = this.db\n      .query(`SELECT id, name FROM categories WHERE user_id = ?`)\n      .all(userId) as { id: string; name: string }[];\n    return rows.map((r) => ({ id: r.id, name: r.name }));\n  }",
+      "new_string": "  async listCategories(userId: UserId): Promise<Category[]> {\n    const rows = this.db\n      .query(`SELECT id, name FROM categories WHERE user_id = ?`)\n      .all(userId) as { id: string; name: string }[];\n    return rows.map((r) => ({ id: r.id, name: r.name }));\n  }\n\n  async listDismissedCategoryIds(userId: UserId): Promise<string[]> {\n    const rows = this.db\n      .query(`SELECT category_id FROM dismissed_categories WHERE user_id = ?`)\n      .all(userId) as { category_id: string }[];\n    return rows.map((r) => r.category_id);\n  }\n\n  async setCategoryDismissed(userId: UserId, categoryId: string, dismissed: boolean): Promise<void> {\n    if (dismissed) {\n      this.db.run(\n        `INSERT INTO dismissed_categories (user_id, category_id, dismissed_at) VALUES (?, ?, ?)\n         ON CONFLICT (user_id, category_id) DO UPDATE SET dismissed_at = excluded.dismissed_at`,\n        [userId, categoryId, Date.now()],\n      );\n    } else {\n      this.db.run(`DELETE FROM dismissed_categories WHERE user_id = ? AND category_id = ?`, [userId, categoryId]);\n    }\n  }"
+    },
+    "timestamp": "2026-08-10T11:37:52.016Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/postgres.ts",
+      "old_string": "  async listCategories(userId: UserId): Promise<Category[]> {\n    const res = await this.q<{ id: string; name: string }>(\n      `SELECT id, name FROM categories WHERE user_id = $1`,\n      [userId],\n    );\n    return res.rows.map((r) => ({ id: r.id, name: r.name }));\n  }",
+      "new_string": "  async listCategories(userId: UserId): Promise<Category[]> {\n    const res = await this.q<{ id: string; name: string }>(\n      `SELECT id, name FROM categories WHERE user_id = $1`,\n      [userId],\n    );\n    return res.rows.map((r) => ({ id: r.id, name: r.name }));\n  }\n\n  async listDismissedCategoryIds(userId: UserId): Promise<string[]> {\n    const res = await this.q<{ category_id: string }>(\n      `SELECT category_id FROM dismissed_categories WHERE user_id = $1`,\n      [userId],\n    );\n    return res.rows.map((r) => r.category_id);\n  }\n\n  async setCategoryDismissed(userId: UserId, categoryId: string, dismissed: boolean): Promise<void> {\n    if (dismissed) {\n      await this.q(\n        `INSERT INTO dismissed_categories (user_id, category_id, dismissed_at) VALUES ($1, $2, $3)\n         ON CONFLICT (user_id, category_id) DO UPDATE SET dismissed_at = excluded.dismissed_at`,\n        [userId, categoryId, Date.now()],\n      );\n    } else {\n      await this.q(`DELETE FROM dismissed_categories WHERE user_id = $1 AND category_id = $2`, [userId, categoryId]);\n    }\n  }"
+    },
+    "timestamp": "2026-08-10T11:37:57.207Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/test/penny-memory-store.ts",
+      "offset": 180,
+      "limit": 90
+    },
+    "timestamp": "2026-08-10T11:38:01.330Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && sed -n '1,110p' test/penny-memory-store.ts | rg -n \"interface Tenant|Map<|Set<|lastSyncAt|private t\\(|= \\{\" ",
+      "description": "Find tenant state shape in memory store"
+    },
+    "timestamp": "2026-08-10T11:38:07.572Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && sed -n '35,135p' test/penny-memory-store.ts",
+      "description": "Read tenant construction and snapshot logic"
+    },
+    "timestamp": "2026-08-10T11:38:14.164Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && python3 - <<'EOF'\nimport re\np='test/penny-memory-store.ts'\ns=open(p).read()\ns=s.replace(\"\"\"  reconciliations: ReconciliationRecord[];\n  lastSyncAt: string | null;\n}\"\"\",\"\"\"  reconciliations: ReconciliationRecord[];\n  dismissedCategories: Set<string>;\n  lastSyncAt: string | null;\n}\"\"\")\ns=s.replace(\"\"\"        reconciliations: [...t.reconciliations],\n        lastSyncAt: t.lastSyncAt,\n      });\"\"\",\"\"\"        reconciliations: [...t.reconciliations],\n        dismissedCategories: new Set(t.dismissedCategories),\n        lastSyncAt: t.lastSyncAt,\n      });\"\"\")\ns=s.replace(\"\"\"        reconciliations: [],\n        lastSyncAt: null,\n      };\"\"\",\"\"\"        reconciliations: [],\n        dismissedCategories: new Set(),\n        lastSyncAt: null,\n      };\"\"\")\ns=s.replace(\"\"\"  async upsertCategory(userId: UserId, c: Category): Promise<void> {\n    this.t(userId).categories.set(c.id, c);\n  }\"\"\",\"\"\"  async upsertCategory(userId: UserId, c: Category): Promise<void> {\n    this.t(userId).categories.set(c.id, c);\n  }\n\n  async listDismissedCategoryIds(userId: UserId): Promise<string[]> {\n    return [...this.t(userId).dismissedCategories];\n  }\n\n  async setCategoryDismissed(userId: UserId, categoryId: string, dismissed: boolean): Promise<void> {\n    if (dismissed) this.t(userId).dismissedCategories.add(categoryId);\n    else this.t(userId).dismissedCategories.delete(categoryId);\n  }\"\"\")\nopen(p,'w').write(s)\nprint(\"done\")\nEOF",
+      "description": "Add dismissed-categories support to memory store"
+    },
+    "timestamp": "2026-08-10T11:38:24.252Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts",
+      "old_string": "  async listUnmappedCategories(\n    userId: UserId,\n    opts: { from?: string; to?: string } = {},\n  ): Promise<UnmappedCategory[]> {\n    const [txs, mappings] = await Promise.all([\n      this.store.listTransactions(userId),\n      this.store.listMappings(userId),\n    ]);",
+      "new_string": "  async listUnmappedCategories(\n    userId: UserId,\n    opts: { from?: string; to?: string } = {},\n  ): Promise<UnmappedCategory[]> {\n    const dismissed = new Set(await this.store.listDismissedCategoryIds(userId));\n    return (await this.aggregateUnmappedCategories(userId, opts)).filter(\n      (c) => !dismissed.has(c.categoryId),\n    );\n  }\n\n  /**\n   * The DISMISSED complement of listUnmappedCategories: categories the user\n   * cleared from the budget page's new-categories card. Same aggregates, so the\n   * Settings \"Not synced\" section shows the identical figures. A dismissed\n   * category that is later adopted gains a mapping and drops out of both lists\n   * naturally (its transactions stop resolving to no envelope).\n   */\n  async listDismissedCategories(userId: UserId): Promise<UnmappedCategory[]> {\n    const dismissed = new Set(await this.store.listDismissedCategoryIds(userId));\n    return (await this.aggregateUnmappedCategories(userId, {})).filter((c) =>\n      dismissed.has(c.categoryId),\n    );\n  }\n\n  /** Set/unset a category's persistent dismissed flag (clear / restore). */\n  async setCategoryDismissed(userId: UserId, categoryId: string, dismissed: boolean): Promise<void> {\n    await this.store.setCategoryDismissed(userId, categoryId, dismissed);\n  }\n\n  private async aggregateUnmappedCategories(\n    userId: UserId,\n    opts: { from?: string; to?: string } = {},\n  ): Promise<UnmappedCategory[]> {\n    const [txs, mappings] = await Promise.all([\n      this.store.listTransactions(userId),\n      this.store.listMappings(userId),\n    ]);"
+    },
+    "timestamp": "2026-08-10T11:38:43.879Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/contract.ts",
+      "offset": 898,
+      "limit": 80
+    },
+    "timestamp": "2026-08-10T11:38:48.515Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && sed -n '985,1075p' src/server/contract.ts",
+      "description": "Read contract map categories entries and GET map"
+    },
+    "timestamp": "2026-08-10T11:38:52.576Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/contract.ts",
+      "old_string": "export interface AdoptCategoryResponse {\n  readonly envelopeId: string;\n}",
+      "new_string": "export interface AdoptCategoryResponse {\n  readonly envelopeId: string;\n}\n\n/**\n * Clear (dismiss) or restore one detected category (POST /api/categories/dismiss).\n * A dismissed category stops appearing in the budget page's new-categories card\n * and is listed under Settings → Not synced instead; restoring reverses it.\n */\nexport interface DismissCategoryRequest {\n  readonly categoryId: string;\n  readonly dismissed: boolean;\n}\n\nexport interface DismissCategoryResponse {\n  readonly ok: true;\n}\n\n/** The cleared categories (same aggregates as unmapped), for Settings → Not synced. */\nexport interface DismissedCategoriesResponse {\n  readonly categories: readonly UnmappedCategory[];\n}"
+    },
+    "timestamp": "2026-08-10T11:38:59.158Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/contract.ts",
+      "old_string": "  \"GET /api/categories/unmapped\": { req: UnmappedCategoriesQuery; res: UnmappedCategoriesResponse };\n  \"POST /api/categories/adopt\": { req: AdoptCategoryRequest; res: AdoptCategoryResponse | ApiError };",
+      "new_string": "  \"GET /api/categories/unmapped\": { req: UnmappedCategoriesQuery; res: UnmappedCategoriesResponse };\n  \"POST /api/categories/adopt\": { req: AdoptCategoryRequest; res: AdoptCategoryResponse | ApiError };\n  \"GET /api/categories/dismissed\": { req: void; res: DismissedCategoriesResponse };\n  \"POST /api/categories/dismiss\": { req: DismissCategoryRequest; res: DismissCategoryResponse | ApiError };"
+    },
+    "timestamp": "2026-08-10T11:39:02.104Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/contract.ts",
+      "old_string": "  \"GET /api/categories/unmapped\": true,\n  \"POST /api/categories/adopt\": true,",
+      "new_string": "  \"GET /api/categories/unmapped\": true,\n  \"POST /api/categories/adopt\": true,\n  \"GET /api/categories/dismissed\": true,\n  \"POST /api/categories/dismiss\": true,"
+    },
+    "timestamp": "2026-08-10T11:39:03.973Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && sed -n '80,110p' src/server/validate.ts",
+      "description": "Read adopt schema region of validate.ts"
+    },
+    "timestamp": "2026-08-10T11:39:55.818Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/validate.ts",
+      "old_string": "/** POST /api/envelopes/carryover (SetCarryoverRequest). */\nexport const setCarryoverSchema = z.object({",
+      "new_string": "/** POST /api/categories/dismiss (DismissCategoryRequest). */\nexport const dismissCategorySchema = z.object({\n  categoryId: idSchema,\n  dismissed: z.boolean(),\n});\n\n/** POST /api/envelopes/carryover (SetCarryoverRequest). */\nexport const setCarryoverSchema = z.object({"
+    },
+    "timestamp": "2026-08-10T11:40:02.008Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/handlers/categories.ts",
+      "old_string": "import type { AdoptCategoryResponse, UnmappedCategoriesResponse } from \"../contract.ts\";\nimport { currentPeriod, resolveSession, UNAUTHENTICATED } from \"../http.ts\";\nimport { todayISO } from \"../../platform/time.ts\";\nimport { parseBody, adoptCategorySchema } from \"../validate.ts\";",
+      "new_string": "import type {\n  AdoptCategoryResponse,\n  DismissCategoryResponse,\n  DismissedCategoriesResponse,\n  UnmappedCategoriesResponse,\n} from \"../contract.ts\";\nimport { currentPeriod, resolveSession, UNAUTHENTICATED } from \"../http.ts\";\nimport { todayISO } from \"../../platform/time.ts\";\nimport { parseBody, adoptCategorySchema, dismissCategorySchema } from \"../validate.ts\";"
+    },
+    "timestamp": "2026-08-10T11:40:05.490Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/handlers/categories.ts",
+      "old_string": "  // Adopt one category: create the envelope and seed the category→envelope",
+      "new_string": "  // The cleared categories (Settings → Not synced): same aggregates as the\n  // unmapped list, restricted to dismissed ids.\n  api.get(\"/categories/dismissed\", async (c) => {\n    const session = await resolveSession(c, container);\n    if (!session) return c.json(UNAUTHENTICATED, 401);\n    const categories = await services.envelopes.listDismissedCategories(session.userId);\n    const res: DismissedCategoriesResponse = { categories };\n    return c.json(res);\n  });\n\n  // Clear (dismiss) or restore one detected category. Dismissed categories\n  // stop appearing on the budget page and list under Settings → Not synced.\n  api.post(\"/categories/dismiss\", async (c) => {\n    const session = await resolveSession(c, container);\n    if (!session) return c.json(UNAUTHENTICATED, 401);\n    const parsed = await parseBody(c, dismissCategorySchema);\n    if (!parsed.ok) return parsed.response;\n    await services.envelopes.setCategoryDismissed(session.userId, parsed.value.categoryId, parsed.value.dismissed);\n    const res: DismissCategoryResponse = { ok: true };\n    return c.json(res);\n  });\n\n  // Adopt one category: create the envelope and seed the category→envelope"
+    },
+    "timestamp": "2026-08-10T11:40:09.812Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && timeout 300 bun test test/contract-parity.test.ts test/unmapped-categories.test.ts test/routes-categories.test.ts test/memory-store.test.ts test/sqlite.test.ts 2>&1 | tail -8",
+      "description": "Run server-side tests touching contract and categories"
+    },
+    "timestamp": "2026-08-10T11:40:14.786Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/lib/queries.ts",
+      "offset": 100,
+      "limit": 140
+    },
+    "timestamp": "2026-08-10T11:40:21.635Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -n \"unmappedCategories|unmappedCategoriesRoot\" web/src/lib/queries.ts | head -5 && rg -n \"export const qk\" -A 5 web/src/lib/queries.ts | head -8 && rg -n \"unmappedCategories\" web/src/lib/*.ts | rg \"qk|keys\" | head",
+      "description": "Find query-key registry location"
+    },
+    "timestamp": "2026-08-10T11:40:26.743Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -rn \"qk\" web/src/lib/query-keys.ts 2>/dev/null | head; rg -ln \"unmappedCategoriesRoot\" web/src | head; rg -n \"unmappedCategoriesRoot|unmappedCategories:\" web/src/lib/*.ts*",
+      "description": "Locate qk definition file"
+    },
+    "timestamp": "2026-08-10T11:40:31.752Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/lib/queryKeys.ts",
+      "offset": 50,
+      "limit": 30
+    },
+    "timestamp": "2026-08-10T11:40:35.831Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/lib/queryKeys.ts",
+      "old_string": "  /** Root prefix for invalidating every unmapped-categories query. */\n  unmappedCategoriesRoot: [\"unmapped-categories\"] as const,",
+      "new_string": "  /** Root prefix for invalidating every unmapped-categories query. */\n  unmappedCategoriesRoot: [\"unmapped-categories\"] as const,\n  /** Cleared categories (GET /api/categories/dismissed) — Settings → Not synced. */\n  dismissedCategories: [\"dismissed-categories\"] as const,"
+    },
+    "timestamp": "2026-08-10T11:40:41.324Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/lib/queries.ts",
+      "old_string": "/**\n * Invalidate the queries adopting a category changes: the budget grid family\n * (a new envelope + mapping shifts figures), the just-shrunk unmapped-category\n * list, and every filtered transactions list (rows now resolve to the envelope).\n */\nexport function useInvalidateAfterAdopt(): () => void {\n  const qc = useQueryClient();\n  const invalidateBudget = useInvalidateBudget();\n  return React.useCallback(() => {\n    invalidateBudget();\n    void qc.invalidateQueries({ queryKey: qk.unmappedCategoriesRoot });\n    void qc.invalidateQueries({ queryKey: [\"transactions\"] });\n  }, [qc, invalidateBudget]);\n}",
+      "new_string": "/**\n * Invalidate the queries adopting a category changes: the budget grid family\n * (a new envelope + mapping shifts figures), the just-shrunk unmapped-category\n * list (and its dismissed complement — an adopted category leaves both), and\n * every filtered transactions list (rows now resolve to the envelope).\n */\nexport function useInvalidateAfterAdopt(): () => void {\n  const qc = useQueryClient();\n  const invalidateBudget = useInvalidateBudget();\n  return React.useCallback(() => {\n    invalidateBudget();\n    void qc.invalidateQueries({ queryKey: qk.unmappedCategoriesRoot });\n    void qc.invalidateQueries({ queryKey: qk.dismissedCategories });\n    void qc.invalidateQueries({ queryKey: [\"transactions\"] });\n  }, [qc, invalidateBudget]);\n}\n\n/**\n * The cleared categories (Settings → Not synced): same aggregates as the\n * unmapped list, restricted to what the user dismissed from the budget page.\n */\nexport function useDismissedCategories(options?: { enabled?: boolean }) {\n  return useQuery({\n    queryKey: qk.dismissedCategories,\n    queryFn: () => call(\"GET /api/categories/dismissed\"),\n    enabled: options?.enabled ?? true,\n  });\n}\n\n/**\n * Clear (dismiss) or restore one detected category. On success both sides of\n * the split refresh: the budget page's new-categories card and the Settings\n * Not-synced list.\n */\nexport function useSetCategoryDismissed(): (categoryId: string, dismissed: boolean) => Promise<void> {\n  const qc = useQueryClient();\n  return React.useCallback(\n    async (categoryId: string, dismissed: boolean) => {\n      await call(\"POST /api/categories/dismiss\", { categoryId, dismissed });\n      void qc.invalidateQueries({ queryKey: qk.unmappedCategoriesRoot });\n      void qc.invalidateQueries({ queryKey: qk.dismissedCategories });\n    },\n    [qc]\n  );\n}"
+    },
+    "timestamp": "2026-08-10T11:40:50.192Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && sed -n '1,40p' web/src/pages/BudgetPage.tsx && sed -n '60,90p' web/src/pages/BudgetPage.tsx && sed -n '130,150p' web/src/pages/BudgetPage.tsx",
+      "description": "Read BudgetPage imports and state regions"
+    },
+    "timestamp": "2026-08-10T11:40:58.095Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/BudgetPage.tsx",
+      "old_string": "import {\n  useEnvelopes,\n  useEnvelopesAsOf,\n  useArchivedEnvelopes,\n  useCarryoverHistory,\n  useUnmappedCategories,\n} from \"@/lib/queries\";",
+      "new_string": "import {\n  useEnvelopes,\n  useEnvelopesAsOf,\n  useArchivedEnvelopes,\n  useCarryoverHistory,\n  useUnmappedCategories,\n  useSetCategoryDismissed,\n} from \"@/lib/queries\";"
+    },
+    "timestamp": "2026-08-10T11:41:03.730Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/BudgetPage.tsx",
+      "old_string": "  // The adopt-category wizard: the category being adopted (null = closed), plus a\n  // client-side dismiss of the whole \"new categories detected\" card (no server state).\n  const [adoptCategory, setAdoptCategory] = React.useState<UnmappedCategory | null>(null);\n  const [newCategoriesDismissed, setNewCategoriesDismissed] = React.useState(false);",
+      "new_string": "  // The adopt-category wizard: the category being adopted (null = closed).\n  // Clearing a category is SERVER state (POST /api/categories/dismiss): it\n  // survives reloads and the cleared category lists under Settings → Not synced.\n  const [adoptCategory, setAdoptCategory] = React.useState<UnmappedCategory | null>(null);\n  const setCategoryDismissed = useSetCategoryDismissed();"
+    },
+    "timestamp": "2026-08-10T11:41:06.944Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/BudgetPage.tsx",
+      "old_string": "          {newCategories.length > 0 && !newCategoriesDismissed && (\n            <div className=\"rounded-lg border border-primary/40 bg-primary/5 px-4 py-3\">\n              <div className=\"mb-2 flex items-start justify-between gap-3\">\n                <div className=\"flex items-center gap-2 text-sm font-semibold\">\n                  <Tags className=\"h-4 w-4 text-primary\" />\n                  {newCategories.length} PocketSmith categor{newCategories.length === 1 ? \"y isn't\" : \"ies aren't\"} in your\n                  budget yet\n                </div>\n                <button\n                  onClick={() => setNewCategoriesDismissed(true)}\n                  title=\"Dismiss\"\n                  aria-label=\"Dismiss new categories\"\n                  className=\"rounded p-0.5 text-muted-foreground hover:bg-accent\"\n                >\n                  <X className=\"h-4 w-4\" />\n                </button>\n              </div>\n              <ul className=\"divide-y divide-border/40\">\n                {newCategories.map((cat) => (\n                  <li key={cat.categoryId} className=\"flex items-center justify-between gap-3 py-2\">\n                    <div className=\"min-w-0\">\n                      <div className=\"truncate text-sm font-medium\">\n                        {cat.categoryName ?? `Category ${cat.categoryId}`}\n                      </div>\n                      <div className=\"text-xs text-muted-foreground\">\n                        {cat.transactionCount} transaction{cat.transactionCount === 1 ? \"\" : \"s\"} ·{\" \"}\n                        <span className=\"tnum\">{formatCents(cat.totalCents)}</span>\n                      </div>\n                    </div>\n                    <Button variant=\"outline\" size=\"sm\" onClick={() => setAdoptCategory(cat)}>\n                      <Plus className=\"h-4 w-4\" /> Add to budget\n                    </Button>\n                  </li>\n                ))}\n              </ul>\n            </div>\n          )}",
+      "new_string": "          {newCategories.length > 0 && (\n            <div className=\"rounded-lg border border-primary/40 bg-primary/5 px-4 py-3\">\n              <div className=\"mb-2 flex items-start justify-between gap-3\">\n                <div className=\"flex items-center gap-2 text-sm font-semibold\">\n                  <Tags className=\"h-4 w-4 text-primary\" />\n                  {newCategories.length} PocketSmith categor{newCategories.length === 1 ? \"y isn't\" : \"ies aren't\"} in your\n                  budget yet\n                </div>\n                <button\n                  onClick={() => {\n                    // Clear ALL listed categories persistently: they move to\n                    // Settings → Not synced and stay off this page after reload.\n                    for (const cat of newCategories) void setCategoryDismissed(cat.categoryId, true);\n                  }}\n                  title=\"Clear all — move to Settings → Not synced\"\n                  aria-label=\"Clear all new categories\"\n                  className=\"rounded p-0.5 text-muted-foreground hover:bg-accent\"\n                >\n                  <X className=\"h-4 w-4\" />\n                </button>\n              </div>\n              <ul className=\"divide-y divide-border/40\">\n                {newCategories.map((cat) => (\n                  <li key={cat.categoryId} className=\"flex items-center justify-between gap-3 py-2\">\n                    <div className=\"min-w-0\">\n                      <div className=\"truncate text-sm font-medium\">\n                        {cat.categoryName ?? `Category ${cat.categoryId}`}\n                      </div>\n                      <div className=\"text-xs text-muted-foreground\">\n                        {cat.transactionCount} transaction{cat.transactionCount === 1 ? \"\" : \"s\"} ·{\" \"}\n                        <span className=\"tnum\">{formatCents(cat.totalCents)}</span>\n                      </div>\n                    </div>\n                    <div className=\"flex shrink-0 items-center gap-1\">\n                      <Button variant=\"outline\" size=\"sm\" onClick={() => setAdoptCategory(cat)}>\n                        <Plus className=\"h-4 w-4\" /> Add to budget\n                      </Button>\n                      <button\n                        onClick={() => void setCategoryDismissed(cat.categoryId, true)}\n                        title=\"Clear — move to Settings → Not synced\"\n                        aria-label={`Clear ${cat.categoryName ?? cat.categoryId}`}\n                        className=\"rounded p-1 text-muted-foreground hover:bg-accent\"\n                      >\n                        <X className=\"h-4 w-4\" />\n                      </button>\n                    </div>\n                  </li>\n                ))}\n              </ul>\n            </div>\n          )}"
+    },
+    "timestamp": "2026-08-10T11:41:23.898Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/SettingsPage.tsx",
+      "offset": 1,
+      "limit": 100
+    },
+    "timestamp": "2026-08-10T11:41:30.102Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/SettingsPage.tsx",
+      "offset": 340,
+      "limit": 55
+    },
+    "timestamp": "2026-08-10T11:41:34.414Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/SettingsPage.tsx",
+      "old_string": "import {\n  Settings as SettingsIcon,\n  KeyRound,\n  RefreshCw,\n  CreditCard,\n  ShieldCheck,\n  HardDriveDownload,\n  CheckCircle2,\n  Lock,\n} from \"lucide-react\";\nimport type { SettingsResponse, GridResponse } from \"@contract\";\nimport { call, isApiError, ApiCallError } from \"@/lib/api\";\nimport { useBackupStatus, useEnvelopes, useInvalidateAfterSync, useSettings } from \"@/lib/queries\";",
+      "new_string": "import {\n  Settings as SettingsIcon,\n  KeyRound,\n  RefreshCw,\n  CreditCard,\n  ShieldCheck,\n  HardDriveDownload,\n  CheckCircle2,\n  Lock,\n  Tags,\n  RotateCcw,\n} from \"lucide-react\";\nimport type { SettingsResponse, GridResponse } from \"@contract\";\nimport { call, isApiError, ApiCallError } from \"@/lib/api\";\nimport {\n  useBackupStatus,\n  useDismissedCategories,\n  useEnvelopes,\n  useInvalidateAfterSync,\n  useSetCategoryDismissed,\n  useSettings,\n} from \"@/lib/queries\";"
+    },
+    "timestamp": "2026-08-10T11:41:42.004Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/SettingsPage.tsx",
+      "old_string": "        <TabsContent value=\"connection\" className=\"space-y-4\">\n          <PocketSmithSection settings={settings} />\n          <SyncSection settings={settings} />\n        </TabsContent>",
+      "new_string": "        <TabsContent value=\"connection\" className=\"space-y-4\">\n          <PocketSmithSection settings={settings} />\n          <SyncSection settings={settings} />\n          <NotSyncedSection />\n        </TabsContent>"
+    },
+    "timestamp": "2026-08-10T11:41:43.644Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/SettingsPage.tsx",
+      "old_string": "function SyncSection({ settings }: { settings: SettingsResponse }) {",
+      "new_string": "/**\n * Not synced: PocketSmith categories detected on transactions but CLEARED from\n * the budget page's new-categories card. They stay off the main page until\n * restored. Same aggregates as the unmapped list (GET /api/categories/dismissed),\n * never fabricated (ISC-83).\n */\nfunction NotSyncedSection() {\n  const categories = useDismissedCategories().data?.categories ?? [];\n  const setCategoryDismissed = useSetCategoryDismissed();\n\n  return (\n    <Card>\n      <CardHeader>\n        <CardTitle className=\"flex items-center gap-2\">\n          <Tags className=\"h-4 w-4\" /> Not synced\n        </CardTitle>\n        <CardDescription>\n          Categories cleared from the budget page. They stay hidden there until you restore them.\n        </CardDescription>\n      </CardHeader>\n      <CardContent>\n        {categories.length === 0 ? (\n          <p className=\"text-sm text-muted-foreground\">\n            Nothing here. Clearing a detected category on the budget page moves it to this list.\n          </p>\n        ) : (\n          <ul className=\"divide-y divide-border/40\">\n            {categories.map((cat) => (\n              <li key={cat.categoryId} className=\"flex items-center justify-between gap-3 py-2\">\n                <div className=\"min-w-0\">\n                  <div className=\"truncate text-sm font-medium\">{cat.categoryName ?? `Category ${cat.categoryId}`}</div>\n                  <div className=\"text-xs text-muted-foreground\">\n                    {cat.transactionCount} transaction{cat.transactionCount === 1 ? \"\" : \"s\"} ·{\" \"}\n                    <span className=\"tnum\">{formatCents(cat.totalCents)}</span> · last seen {cat.lastSeenDate}\n                  </div>\n                </div>\n                <Button\n                  variant=\"outline\"\n                  size=\"sm\"\n                  onClick={() => void setCategoryDismissed(cat.categoryId, false)}\n                >\n                  <RotateCcw className=\"h-4 w-4\" /> Restore\n                </Button>\n              </li>\n            ))}\n          </ul>\n        )}\n      </CardContent>\n    </Card>\n  );\n}\n\nfunction SyncSection({ settings }: { settings: SettingsResponse }) {"
+    },
+    "timestamp": "2026-08-10T11:41:54.914Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && sed -n '1,60p' test/routes-categories.test.ts",
+      "description": "Read categories route test harness"
+    },
+    "timestamp": "2026-08-10T11:42:00.403Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && cat >> test/routes-categories.test.ts <<'EOF'\n\ndescribe(\"category dismissal (clear / Not synced / restore)\", () => {\n  test(\"requires auth on both routes\", async () => {\n    const t = await makeTestApp();\n    expect((await getJson(t.app, \"/api/categories/dismissed\")).status).toBe(401);\n    expect((await postJson(t.app, \"/api/categories/dismiss\", { categoryId: \"x\", dismissed: true })).status).toBe(401);\n  });\n\n  test(\"a cleared category leaves unmapped, lists under dismissed, and restore reverses it\", async () => {\n    const t = await makeTestApp();\n    const cookie = await t.signIn();\n    await t.store.upsertTransactions(LOCAL_USER_ID, [\n      txRaw(\"g1\", \"cat-gym\", \"Gym\", -1500, MID),\n      txRaw(\"c1\", \"cat-coffee\", \"Coffee\", -500, MID),\n    ]);\n\n    // Clear Gym: it disappears from unmapped (the budget page card)…\n    const dismiss = await postJson(t.app, \"/api/categories/dismiss\", { categoryId: \"cat-gym\", dismissed: true }, cookie);\n    expect(dismiss.status).toBe(200);\n    const afterClear = await unmapped(t, cookie);\n    expect(afterClear.categories.map((c) => c.categoryId)).toEqual([\"cat-coffee\"]);\n\n    // …and appears under Settings → Not synced with the SAME aggregates.\n    const dismissed = await getJson(t.app, \"/api/categories/dismissed\", cookie);\n    expect(dismissed.status).toBe(200);\n    const list = (await dismissed.json()) as { categories: { categoryId: string; transactionCount: number; totalCents: number }[] };\n    expect(list.categories).toHaveLength(1);\n    expect(list.categories[0]).toMatchObject({ categoryId: \"cat-gym\", transactionCount: 1, totalCents: -1500 });\n\n    // Restore: back on the budget page, gone from Not synced.\n    const restore = await postJson(t.app, \"/api/categories/dismiss\", { categoryId: \"cat-gym\", dismissed: false }, cookie);\n    expect(restore.status).toBe(200);\n    const afterRestore = await unmapped(t, cookie);\n    expect(afterRestore.categories.map((c) => c.categoryId).sort()).toEqual([\"cat-coffee\", \"cat-gym\"]);\n    const dismissedAfter = (await (await getJson(t.app, \"/api/categories/dismissed\", cookie)).json()) as { categories: unknown[] };\n    expect(dismissedAfter.categories).toHaveLength(0);\n  });\n\n  test(\"adopting a dismissed category removes it from the Not synced list too\", async () => {\n    const t = await makeTestApp();\n    const cookie = await t.signIn();\n    await t.store.upsertTransactions(LOCAL_USER_ID, [txRaw(\"g1\", \"cat-gym\", \"Gym\", -1500, MID)]);\n    await postJson(t.app, \"/api/categories/dismiss\", { categoryId: \"cat-gym\", dismissed: true }, cookie);\n    const adopt = await postJson(\n      t.app,\n      \"/api/categories/adopt\",\n      { categoryId: \"cat-gym\", name: \"Gym\", type: \"expense\", budgetedCents: 5000, period: \"monthly\" },\n      cookie,\n    );\n    expect(adopt.status).toBe(200);\n    const dismissedAfter = (await (await getJson(t.app, \"/api/categories/dismissed\", cookie)).json()) as { categories: unknown[] };\n    expect(dismissedAfter.categories).toHaveLength(0);\n  });\n\n  test(\"a malformed dismiss body is a 400\", async () => {\n    const t = await makeTestApp();\n    const cookie = await t.signIn();\n    expect((await postJson(t.app, \"/api/categories/dismiss\", { categoryId: \"x\" }, cookie)).status).toBe(400);\n  });\n});\nEOF\ntimeout 300 bun test 2>&1 | tail -5",
+      "description": "Append dismissal route tests, run full suite"
+    },
+    "timestamp": "2026-08-10T11:42:15.893Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && timeout 300 bun run typecheck 2>&1 | tail -5 && timeout 120 bun run lint 2>&1 | tail -5 && rg -n \"dist|serveWeb|serveStatic\" src/server/app.ts src/server/index.ts | head -10 && ls web/dist 2>/dev/null | head -5",
+      "description": "Typecheck, lint, find SPA serving mechanism"
+    },
+    "timestamp": "2026-08-10T11:42:31.237Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/package.json",
+      "old_string": "  \"version\": \"1.6.0\",",
+      "new_string": "  \"version\": \"1.7.0\","
+    },
+    "timestamp": "2026-08-10T11:43:07.834Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/package.json",
+      "limit": 6
+    },
+    "timestamp": "2026-08-10T11:43:11.114Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/package.json",
+      "old_string": "  \"version\": \"1.6.0\",",
+      "new_string": "  \"version\": \"1.7.0\","
+    },
+    "timestamp": "2026-08-10T11:43:14.551Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && timeout 300 bunx vite build 2>&1 | tail -6",
+      "description": "Build the SPA bundle"
+    },
+    "timestamp": "2026-08-10T11:43:42.261Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -n \"migrate|dbPath|sqlite\" src/server/index.ts src/composition.ts src/platform/config.ts | head -12",
+      "description": "Confirm migrate-on-boot and DB path"
+    },
+    "timestamp": "2026-08-10T11:43:58.628Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "systemctl --user restart penny.service && sleep 2 && systemctl --user is-active penny.service && curl -s http://127.0.0.1:8787/ | rg -o 'assets/index-[A-Za-z0-9_-]+\\.js' | head -1",
+      "description": "Restart penny service and confirm it serves the new bundle"
+    },
+    "timestamp": "2026-08-10T11:44:05.562Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s http://127.0.0.1:8787/assets/index-DY2h7TBX.js | rg -o 'v1\\.7\\.0[^\"]{0,30}' | head -2; echo \"--- routes:\"; curl -s -o /dev/null -w \"dismissed:%{http_code} \" http://127.0.0.1:8787/api/categories/dismissed; curl -s -o /dev/null -w \"dismiss:%{http_code} \" -X POST -H \"Content-Type: application/json\" -d '{\"categoryId\":\"x\",\"dismissed\":true}' http://127.0.0.1:8787/api/categories/dismiss; echo; echo \"--- table:\"; cd ~/Documents/workspace/projects/envelope-os && bun -e 'import {Database} from \"bun:sqlite\"; const db=new Database(process.env.HOME+\"/.penny/penny.db\",{readonly:true}); console.log(db.query(\"SELECT name FROM sqlite_master WHERE type=\\\"table\\\" AND name=\\\"dismissed_categories\\\"\").all()); db.close()'",
+      "description": "Verify deployed version, new routes respond, migration created table"
+    },
+    "timestamp": "2026-08-10T11:44:14.302Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -n \"^## |^### \" ISA.md | head -20 && rg -n \"ISC-1[23][0-9]\" ISA.md | tail -8 && rg -n \"^## Decisions\" -A 6 ISA.md | head -10",
+      "description": "Read ISA structure and latest ISC numbering"
+    },
+    "timestamp": "2026-08-10T11:44:30.991Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -o \"ISC-1[0-9][0-9]\" ISA.md | sort -u | tail -4 && rg -n \"^## Changelog|^## Verification\" ISA.md && wc -l ISA.md && rg -n \"ISC-136\" ISA.md | head -3",
+      "description": "Find highest ISC id and section line numbers"
+    },
+    "timestamp": "2026-08-10T11:44:36.393Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "offset": 440,
+      "limit": 20
+    },
+    "timestamp": "2026-08-10T11:44:40.617Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -n \"^## Test Strategy|^## Features|^## Goal\" ISA.md && sed -n '191,196p' ISA.md && rg -n \"checked=|\\- \\[x\\]|\\- \\[ \\]\" ISA.md | head -3 && sed -n '325,343p' ISA.md",
+      "description": "Locate Criteria end and test strategy table format"
+    },
+    "timestamp": "2026-08-10T11:44:59.066Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "## Test Strategy",
+      "new_string": "### Budget editing integrity and sync hygiene (v1.7.0, 2026-08-10)\n\n- [x] ISC-137: An ongoing budget edit made after an existing mid-month version stores EXACTLY the typed amount — completePrevious supersedes by window overlap, not open-ness, so closed-but-overlapping versions never sum into the result\n- [x] ISC-138: The income budget edit path applies the same window-overlap supersession\n- [x] ISC-139: Anti: a budget save never creates versions for rows the user did not touch (the wizard posts only changed lines; the monthly↔period rounding round-trip cannot version untouched envelopes)\n- [x] ISC-140: A cleared From date in the edit wizard omits effectiveFrom from the payload instead of sending \"\" (which the server's strict date schema would 400, failing the whole save)\n- [x] ISC-141: The adopt-category modal carries a Start date field, defaulting to the first of the current month, posted as effectiveFrom (omitted when cleared)\n- [x] ISC-142: The adopt handler anchors rolloverStart to the chosen start date when one is given (today otherwise)\n- [x] ISC-143: Clearing a detected category persists server-side (dismissed_categories table) and removes it from GET /api/categories/unmapped — it stays off the budget page across reloads\n- [x] ISC-144: Cleared categories list under Settings → Not synced (GET /api/categories/dismissed) with the same aggregates, and Restore reverses the dismissal\n- [x] ISC-145: Anti: an adopted category appears in NEITHER the new-categories card NOR the Not synced list (the mapping removes it from both)\n\n## Test Strategy"
+    },
+    "timestamp": "2026-08-10T11:45:15.679Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "| ISC-128 | anti | onboarding needs no PS dev key | no dev-key prompt | flow review, Grep |",
+      "new_string": "| ISC-128 | anti | onboarding needs no PS dev key | no dev-key prompt | flow review, Grep |\n| ISC-137 | logic | edit after mid-month version stores typed amount | grid equals typed cents | bun test budget-versions-overlap |\n| ISC-138 | logic | income edit same supersession | income budget equals typed | bun test budget-versions-overlap |\n| ISC-139 | anti | untouched rows never version | payload lines only changed | bun test EditBudgetPage |\n| ISC-140 | api | cleared From omitted, not \"\" | effectiveFrom undefined | bun test EditBudgetPage |\n| ISC-141 | ui | adopt modal start date, default 1st | effectiveFrom in payload | bun test AdoptCategoryModal |\n| ISC-142 | logic | rolloverStart anchors to start date | handler uses effectiveFrom | Read handlers/categories.ts |\n| ISC-143 | data | dismissal persists, off unmapped | row in dismissed_categories | bun test routes-categories |\n| ISC-144 | ui | Not synced lists + Restore reverses | dismissed list round-trip | bun test routes-categories |\n| ISC-145 | anti | adopted category in neither list | both lists empty of it | bun test routes-categories |"
+    },
+    "timestamp": "2026-08-10T11:45:21.315Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "## Changelog",
+      "new_string": "- 2026-08-10: v1.7.0 \"can't update a budget\" root-caused by reproduction matrix (test harness replaying the SPA's exact save flow). Three distinct defects: (a) completePrevious skipped already-completed versions whose windows still overlapped the new one, so amounts double-counted (typed $700, stored $764.52 — the killer after any mid-month change); (b) the wizard posted EVERY row, and the monthly↔period rounding round-trip versioned untouched non-monthly envelopes on every save; (c) a cleared From date sent effectiveFrom \"\" which zod 400ed the whole save. Fixes: window-overlap supersession in both completePrevious loops (budget + income), changed-rows-only posting, and truthy-guarded chronology fields. Fully-superseded versions become degenerate windows resolving to 0 — the template port is append/update-only by design, so no delete surface was added for cosmetics.\n- 2026-08-10: Category dismissal is SERVER state (dismissed_categories table, POST /api/categories/dismiss, GET /api/categories/dismissed), replacing the ephemeral card-level useState that reset on reload. Per-category clear buttons added to the new-categories card (Nick: no per-category clear existed); the card-level X now clears all listed persistently. Settings → Connection gains a \"Not synced\" section listing cleared categories with Restore. Adopt modal gains a Start date (effectiveFrom) field, and the adopt handler anchors rolloverStart to it.\n- 2026-08-10: refined: RootCauseAnalysis (5 Whys) confirmed the supersession root cause and flagged two deferred design points: (1) putTemplateLine validation rejecting inverted windows conflicts with the truncation approach and was skipped; (2) the wizard's default From (first of month) after a mid-month boundary means \"make the whole month the typed amount\", which matches user intent — surfacing existing boundaries in the edit UI is a possible future refinement.\n\n## Changelog"
+    },
+    "timestamp": "2026-08-10T11:45:35.800Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "## Verification\n\n_Pending EXECUTE. Evidence per ISC captured here as each criterion transitions to [x]._",
+      "new_string": "- conjectured: completePrevious closing only OPEN versions at the day before effectiveFrom fully implements \"replace my budget from this date\" (v1.4.x budget chronology design).\n  refuted_by: Reproduction 2026-08-10 — after a mid-month version boundary (which closes the baseline as a COMPLETED version ending inside the month), a later ordinary save left the completed window contributing its early-month days; overlap-sums then blended old and new amounts (typed 70000, stored 76452). Independently confirmed by 5-Whys analysis: supersession was keyed on line STATE (open/completed) instead of window OVERLAP with [effectiveFrom, ∞).\n  learned: The invariant is \"no prior version of this envelope contributes on or after effectiveFrom\". Supersede by window overlap: truncate every version whose effectiveTo is null OR >= effectiveFrom; fully-superseded lines become degenerate windows that resolve to zero contribution.\n  criterion_now: ISC-137, ISC-138, ISC-139.\n\n## Verification\n\n- ISC-137: bun test — test/budget-versions-overlap.test.ts \"stores EXACTLY the typed amount\": grid allocationCents 70000 after mid-month version + ordinary save (was 76452). 391/391 suite green 2026-08-10.\n- ISC-138: bun test — same file, income variant: budgetedCents 700000 after mid-month income version + save.\n- ISC-139: bun test — EditBudgetPage.test.tsx \"untouched save posts NO spending lines\" (lines []) and parent-own test (payload length 1 on single edit).\n- ISC-140: bun test — EditBudgetPage.test.tsx \"CLEARED From date is omitted from the payload\" (effectiveFrom undefined, edit still posted).\n- ISC-141: bun test — AdoptCategoryModal.test.tsx start-date test: defaults firstOfCurrentMonthIso, user date rides payload, cleared key omitted.\n- ISC-142: Read — src/server/handlers/categories.ts: rolloverStart: req.effectiveFrom ?? todayISO(tz).\n- ISC-143: bun test — routes-categories.test.ts dismissal suite; live probe: dismissed_categories table present in ~/.penny/penny.db after deploy migration (bun:sqlite readonly SELECT).\n- ISC-144: bun test — routes-categories.test.ts: dismissed list carries same aggregates; restore round-trips both lists.\n- ISC-145: bun test — routes-categories.test.ts: adopt after dismiss leaves dismissed list empty.\n- Deploy: curl 127.0.0.1:8787 serves bundle index-DY2h7TBX.js containing \"v1.7.0 (a0a8833 · 2026-08-10)\"; penny.service active; new routes respond 401 unauthenticated (session-gated, registered). Authenticated-UI screenshot probe DEFERRED-VERIFY — PIN is Nick's; follow-up: Nick's next sign-in to v1.7.0 (this task's report)."
+    },
+    "timestamp": "2026-08-10T11:45:50.223Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -m 3 -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Verify phase.\", \"voice_id\": \"fTtv3eikoepIosk8dTZ5\", \"voice_enabled\": true}' >/dev/null 2>&1; cd ~/Documents/workspace/projects/envelope-os && git add -A && git commit -q -m \"budgetbuddy v1.7.0: budget-edit supersession by window overlap (typed-amount fix), changed-rows-only saves, cleared-date guard, adopt start date, persistent category dismissal + Settings Not-synced\" && git log --oneline -1",
+      "description": "Voice, commit v1.7.0 work"
+    },
+    "timestamp": "2026-08-10T11:45:59.019Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 180 bun ~/.claude/PAI/TOOLS/Inference.ts --mode advisor --auto-state \"TASK: BudgetBuddy v1.7.0 shipped: fixed budget-update double-count (completePrevious now supersedes by window overlap), changed-rows-only wizard saves, cleared-date guard, adopt-modal start date wired to existing effectiveFrom+rolloverStart, persistent per-category dismissal (new table/routes) with Settings Not-synced section. 391 tests green, typecheck+lint clean, deployed to penny.service, bundle v1.7.0 verified, migration confirmed.\" \"QUESTION: any gaps before declaring done? Specifically: degenerate (inverted-window) versions left in the template by the new supersession, the chronology UI showing them, and clear-all firing N parallel dismiss POSTs.\" 2>&1 | tail -30",
+      "description": "Advisor call before phase complete"
+    },
+    "timestamp": "2026-08-10T11:46:08.190Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && bun -e '\nimport {Database} from \"bun:sqlite\";\nconst db=new Database(process.env.HOME+\"/.penny/penny.db\",{readonly:true});\nconsole.log(\"== inverted windows ==\");\nconsole.log(db.query(\"SELECT COUNT(*) n FROM budget_template WHERE effective_to IS NOT NULL AND effective_to < effective_from\").get());\nconsole.log(\"== envelopes with >1 template line touching the current month (2026-08) ==\");\nconsole.log(db.query(`SELECT e.name, COUNT(*) n FROM budget_template t JOIN envelopes e ON e.id=t.envelope_id AND e.user_id=t.user_id WHERE substr(t.effective_from,1,7) <= \\\"2026-08\\\" AND (t.effective_to IS NULL OR substr(t.effective_to,1,7) >= \\\"2026-08\\\") GROUP BY t.envelope_id HAVING n>1`).all());\nconsole.log(\"== relocation categories ==\");\nconsole.log(db.query(\"SELECT id, name FROM categories WHERE name LIKE \\\"%elocation%\\\"\").all());\nconsole.log(\"== relocation-named tx categories on transactions ==\");\nconsole.log(db.query(`SELECT category_id, COUNT(*) n, MIN(txn_date) first, MAX(txn_date) last FROM transactions WHERE raw_json LIKE \\\"%elocation%\\\" GROUP BY category_id`).all());\nconsole.log(\"== relocation envelopes/mappings ==\");\nconsole.log(db.query(\"SELECT id,name,archived FROM envelopes WHERE name LIKE \\\"%elocation%\\\"\").all());\nconsole.log(db.query(\"SELECT id,category_id,envelope_id,effective_from,effective_to FROM mappings WHERE category_id IN (SELECT id FROM categories WHERE name LIKE \\\"%elocation%\\\")\").all());\ndb.close()'",
+      "description": "Prod DB checks: inverted windows, overlaps, Relocation categories"
+    },
+    "timestamp": "2026-08-10T11:47:44.868Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -n \"versionStatus|listVersions|BudgetVersionsResponse\" src/server/handlers/envelopes.ts src/budget/*.ts | head",
+      "description": "Find chronology listing implementation"
+    },
+    "timestamp": "2026-08-10T11:48:09.395Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "offset": 742,
+      "limit": 50
+    },
+    "timestamp": "2026-08-10T11:48:31.426Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "old_string": "    const versions: BudgetVersionView[] = lines\n      .map((l) => ({",
+      "new_string": "    const versions: BudgetVersionView[] = lines\n      // Fully-superseded versions (window inverted by a later edit's\n      // completePrevious truncation) contribute 0 to every month and are\n      // noise in the chronology: filter them at the query layer — the SAME\n      // place the budget maths already zeroes them (activeDaysInMonth), so\n      // the list and the totals cannot drift apart.\n      .filter((l) => {\n        const to = effectiveToOf(l);\n        return to === null || to >= effectiveFromOf(l);\n      })\n      .map((l) => ({"
+    },
+    "timestamp": "2026-08-10T11:48:37.928Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/BudgetPage.tsx",
+      "old_string": "                <button\n                  onClick={() => {\n                    // Clear ALL listed categories persistently: they move to\n                    // Settings → Not synced and stay off this page after reload.\n                    for (const cat of newCategories) void setCategoryDismissed(cat.categoryId, true);\n                  }}",
+      "new_string": "                <button\n                  onClick={() => {\n                    // Clear ALL listed categories persistently: they move to\n                    // Settings → Not synced and stay off this page after reload.\n                    // Sequential, not parallel: a mid-list failure stops the\n                    // loop and the per-call invalidation refetches true server\n                    // state, so the card never shows an optimistic half-clear.\n                    void (async () => {\n                      for (const cat of newCategories) await setCategoryDismissed(cat.categoryId, true);\n                    })();\n                  }}"
+    },
+    "timestamp": "2026-08-10T11:48:45.464Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/test/budget-versions-overlap.test.ts",
+      "old_string": "  test(\"scheduling a future change still coexists correctly with the active version\", async () => {",
+      "new_string": "  test(\"the chronology never lists fully-superseded (inverted-window) versions\", async () => {\n    const t = await makeTestApp();\n    const cookie = await t.signIn();\n    const id = await createEnvelope(t, cookie, { name: \"Groceries\", type: \"expense\", budgetedCents: 50000, period: \"monthly\" });\n    await editOngoing(t, cookie, id, 60000, MID);\n    await editOngoing(t, cookie, id, 70000, FIRST); // truncates the MID version into an inverted window\n    const res = await getJson(t.app, `/api/envelopes/versions?envelopeId=${id}`, cookie);\n    expect(res.status).toBe(200);\n    const body = (await res.json()) as { versions: { effectiveFrom: string; effectiveTo: string | null }[] };\n    for (const v of body.versions) {\n      if (v.effectiveTo !== null) expect(v.effectiveTo >= v.effectiveFrom).toBe(true);\n    }\n  });\n\n  test(\"scheduling a future change still coexists correctly with the active version\", async () => {"
+    },
+    "timestamp": "2026-08-10T11:48:55.217Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && timeout 300 bun test 2>&1 | tail -4 && timeout 300 bun run typecheck 2>&1 | tail -2 && timeout 300 bunx vite build 2>&1 | tail -1 && systemctl --user restart penny.service && sleep 2 && systemctl --user is-active penny.service && curl -s http://127.0.0.1:8787/ | rg -o 'assets/index-[A-Za-z0-9_-]+\\.js' | head -1",
+      "description": "Full test, typecheck, rebuild, redeploy"
+    },
+    "timestamp": "2026-08-10T11:48:59.701Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && curl -s http://127.0.0.1:8787/assets/index-CbYS4rQa.js | rg -o 'v1\\.7\\.0[^\"]{0,28}' | head -1 && git add -A && git commit -q -m \"budgetbuddy v1.7.0 advisor pass: filter superseded inverted-window versions from chronology at query layer; serialise clear-all dismissals\" && git log --oneline -1",
+      "description": "Verify redeployed bundle, commit advisor fixes"
+    },
+    "timestamp": "2026-08-10T11:49:38.633Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "- 2026-08-10: refined: RootCauseAnalysis (5 Whys) confirmed the supersession root cause and flagged two deferred design points:",
+      "new_string": "- 2026-08-10: Advisor pass outcomes: (1) prod DB audited clean — 0 inverted-window template rows, 0 envelopes with multiple lines touching 2026-08, so no data repair needed; (2) superseded versions are filtered from the chronology at the query layer (listVersions), the same layer whose maths already zeroes them, so list and totals cannot drift; (3) clear-all serialises its dismiss POSTs (bulk endpoint deferred — single-user local, upsert semantics, per-call invalidation refetches truth on failure).\n- 2026-08-10: PRODUCT GAP surfaced by Nick's \"multiple relocation categories\": a manually-added envelope creates NO category mapping, so the identically-named PocketSmith category keeps appearing in the new-categories card (Relocation: envelope 575bffc3 exists, category 34728510 with 14 transactions since 2026-07-22 unmapped). The adopt wizard only creates NEW envelopes; there is no \"map to existing envelope\" path. Candidate fix: adopt modal offers link-to-existing. Awaiting Nick's call on mapping Relocation now vs building the feature.\n- 2026-08-10: refined: RootCauseAnalysis (5 Whys) confirmed the supersession root cause and flagged two deferred design points:"
+    },
+    "timestamp": "2026-08-10T11:49:58.183Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && git add ISA.md && git commit -q -m \"budgetbuddy ISA: v1.7.0 decisions — advisor outcomes, relocation map-to-existing gap\" && echo '{\"timestamp\":\"'$(date -Iseconds)'\",\"effort_level\":\"E3\",\"effort_source\":\"classifier\",\"task_description\":\"BudgetBuddy: fix budget update, adopt start date, persistent category dismissal + Settings Not-synced\",\"criteria_count\":9,\"criteria_passed\":9,\"criteria_failed\":0,\"prd_id\":\"envelope-os\",\"implied_sentiment\":7,\"satisfaction_prediction\":8,\"reflection_q1\":\"Reproduce-first found three real defects where theory suggested one\",\"reflection_q2\":\"Run the repro matrix before reading any suspect code\",\"reflection_q3\":\"Advisor caught clear-all atomicity and chronology drift\",\"knowledge_flags\":1,\"within_budget\":true,\"living_doc_refinements\":3,\"doctrine_fired\":{\"live_probe\":true,\"advisor\":true,\"cato\":false,\"conflict\":false,\"thinking_floor_met\":true,\"completeness_gate_met\":true}}' >> ~/.claude/PAI/MEMORY/LEARNING/REFLECTIONS/algorithm-reflections.jsonl && curl -s -m 3 -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Learn phase.\", \"voice_id\": \"fTtv3eikoepIosk8dTZ5\", \"voice_enabled\": true}' >/dev/null 2>&1; echo done",
+      "description": "Commit ISA, write reflection, Learn voice"
+    },
+    "timestamp": "2026-08-10T11:50:08.729Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -sk -m 3 -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Executing using PAI native mode\", \"voice_id\": \"pNInz6obpgDQGcFmaJgB\", \"voice_enabled\": true}' >/dev/null 2>&1; cd ~/Documents/workspace/projects/envelope-os && bun -e '\nimport {Database} from \"bun:sqlite\";\nconst db=new Database(process.env.HOME+\"/.penny/penny.db\");\nconst env=db.query(\"SELECT user_id,id,name FROM envelopes WHERE id=\\\"575bffc3-334e-42cd-83cb-883898d06484\\\"\").get();\nconsole.log(\"envelope:\",env);\nconst existing=db.query(\"SELECT * FROM mappings WHERE category_id=\\\"34728510\\\"\").all();\nconsole.log(\"existing mappings:\",existing.length);\nif(existing.length===0){\n  db.run(\"INSERT INTO mappings (user_id,id,category_id,envelope_id,effective_from,effective_to) VALUES (?,?,?,?,?,?)\",\n    [env.user_id, crypto.randomUUID(), \"34728510\", env.id, \"2026-07-01\", null]);\n}\nconsole.log(\"mapping now:\", db.query(\"SELECT id,category_id,envelope_id,effective_from,effective_to FROM mappings WHERE category_id=\\\"34728510\\\"\").all());\nconsole.log(\"covered txs:\", db.query(\"SELECT COUNT(*) n, MIN(txn_date) f, MAX(txn_date) l FROM transactions WHERE category_id=\\\"34728510\\\" AND txn_date>=\\\"2026-07-01\\\"\").get());\ndb.close()'",
+      "description": "Create Relocation category→envelope mapping in prod DB"
+    },
+    "timestamp": "2026-08-10T11:55:49.378Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && bun -e '\nimport {Database} from \"bun:sqlite\";\nconst db=new Database(process.env.HOME+\"/.penny/penny.db\");\ndb.run(\"UPDATE mappings SET effective_from=\\\"2026-07-01\\\" WHERE id=\\\"map-575bffc3-334e-42cd-83cb-883898d06484\\\" AND category_id=\\\"34728510\\\"\");\nconsole.log(\"mapping:\", db.query(\"SELECT id,category_id,envelope_id,effective_from,effective_to FROM mappings WHERE category_id=\\\"34728510\\\"\").all());\nconsole.log(\"txs outside window:\", db.query(\"SELECT COUNT(*) n FROM transactions WHERE category_id=\\\"34728510\\\" AND txn_date<\\\"2026-07-01\\\"\").get());\ndb.close()'",
+      "description": "Extend Relocation mapping window back to 1 July"
+    },
+    "timestamp": "2026-08-10T11:56:14.162Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "- 2026-08-10: PRODUCT GAP surfaced by Nick's \"multiple relocation categories\": a manually-added envelope creates NO category mapping, so the identically-named PocketSmith category keeps appearing in the new-categories card (Relocation: envelope 575bffc3 exists, category 34728510 with 14 transactions since 2026-07-22 unmapped). The adopt wizard only creates NEW envelopes; there is no \"map to existing envelope\" path. Candidate fix: adopt modal offers link-to-existing. Awaiting Nick's call on mapping Relocation now vs building the feature.",
+      "new_string": "- 2026-08-10: Nick's \"multiple relocation categories\" root cause CORRECTED after his approval to map: a mapping DID exist (map-575bffc3, category 34728510 → envelope Relocation) but only from 2026-08-01, so the July transactions (22–31 Jul) resolved to no envelope and kept the category in the new-categories card. (The initial \"no mapping\" read was wrong — the diagnostic joined through the categories table, which has no Relocation row.) Fix applied with Nick's approval: mapping effective_from extended to 2026-07-01; all 14 transactions verified inside the window, 0 outside. LESSON + candidate feature: a mapping whose window starts AFTER the category's earliest unmapped transactions re-lists the category — the adopt flow (or card) should surface \"N earlier transactions predate the start date\" and offer to back-date."
+    },
+    "timestamp": "2026-08-10T11:56:27.647Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && git add ISA.md && git commit -q -m \"budgetbuddy ISA: relocation root cause corrected — mapping window started 1 Aug, back-dated to 1 Jul with owner approval\" && git log --oneline -1",
+      "description": "Commit ISA correction"
+    },
+    "timestamp": "2026-08-10T11:56:31.881Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && bun -e '\nimport {Database} from \"bun:sqlite\";\nconst db=new Database(process.env.HOME+\"/.penny/penny.db\",{readonly:true});\nconsole.log(\"envelopes:\", db.query(\"SELECT id,name FROM envelopes WHERE name LIKE \\\"%ar %hange%\\\" OR name LIKE \\\"%hangeover%\\\"\").all());\nconst rows=db.query(\"SELECT category_id, COUNT(*) n, MIN(txn_date) f, MAX(txn_date) l FROM transactions WHERE raw_json LIKE \\\"%ar Change%\\\" OR raw_json LIKE \\\"%hangeover%\\\" GROUP BY category_id\").all();\nconsole.log(\"tx categories:\", rows);\nfor(const r of rows) console.log(\"mappings for\",r.category_id,\":\", db.query(\"SELECT id,envelope_id,effective_from,effective_to FROM mappings WHERE category_id=?\").all(r.category_id));\ndb.close()'",
+      "description": "Locate Car Change Over category, envelope, mapping, transaction range"
+    },
+    "timestamp": "2026-08-10T12:05:20.574Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -ln \"BudgetEditTarget|AddBudgetModal|EditBudgetModal\" web/src/components web/src/pages | head && rg -n \"effectiveTo|effectiveFrom|end date|End date\" web/src/components/AddBudgetModal.tsx 2>/dev/null | head",
+      "description": "Find the per-envelope budget edit modal and its chronology fields"
+    },
+    "timestamp": "2026-08-10T12:05:52.197Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/components/AddBudgetModal.tsx",
+      "offset": 60,
+      "limit": 180
+    },
+    "timestamp": "2026-08-10T12:06:01.388Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/handlers/envelopes.ts",
+      "offset": 200,
+      "limit": 90
+    },
+    "timestamp": "2026-08-10T12:06:20.836Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && bun -e 'import {Database} from \"bun:sqlite\"; const db=new Database(process.env.HOME+\"/.penny/penny.db\",{readonly:true}); console.log(\"dismissed rows:\", db.query(\"SELECT * FROM dismissed_categories\").all()); db.close()'",
+      "description": "Check existing dismissed rows in prod"
+    },
+    "timestamp": "2026-08-10T12:07:00.230Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/ports.ts",
+      "old_string": "  /** Category ids the user cleared from the new-categories card (persistent). */\n  listDismissedCategoryIds(userId: UserId): Promise<string[]>;\n  /** Set/unset a category's dismissed flag. Unset (restore) deletes the row. */\n  setCategoryDismissed(userId: UserId, categoryId: string, dismissed: boolean): Promise<void>;",
+      "new_string": "  /**\n   * The categories the user cleared from the new-categories card, with WHEN\n   * (epoch ms). The dismissal is activity-aware: a transaction dated after the\n   * dismissal day re-shows the category (service-level rule), so the timestamp\n   * is part of the contract, not bookkeeping.\n   */\n  listDismissedCategoryMarks(userId: UserId): Promise<{ categoryId: string; dismissedAt: number }[]>;\n  /** Set/unset a category's dismissed flag. Unset (restore) deletes the row; re-set refreshes the timestamp. */\n  setCategoryDismissed(userId: UserId, categoryId: string, dismissed: boolean): Promise<void>;"
+    },
+    "timestamp": "2026-08-10T12:07:45.747Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/sqlite.ts",
+      "old_string": "  async listDismissedCategoryIds(userId: UserId): Promise<string[]> {\n    const rows = this.db\n      .query(`SELECT category_id FROM dismissed_categories WHERE user_id = ?`)\n      .all(userId) as { category_id: string }[];\n    return rows.map((r) => r.category_id);\n  }",
+      "new_string": "  async listDismissedCategoryMarks(userId: UserId): Promise<{ categoryId: string; dismissedAt: number }[]> {\n    const rows = this.db\n      .query(`SELECT category_id, dismissed_at FROM dismissed_categories WHERE user_id = ?`)\n      .all(userId) as { category_id: string; dismissed_at: number }[];\n    return rows.map((r) => ({ categoryId: r.category_id, dismissedAt: r.dismissed_at }));\n  }"
+    },
+    "timestamp": "2026-08-10T12:07:49.192Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/postgres.ts",
+      "old_string": "  async listDismissedCategoryIds(userId: UserId): Promise<string[]> {\n    const res = await this.q<{ category_id: string }>(\n      `SELECT category_id FROM dismissed_categories WHERE user_id = $1`,\n      [userId],\n    );\n    return res.rows.map((r) => r.category_id);\n  }",
+      "new_string": "  async listDismissedCategoryMarks(userId: UserId): Promise<{ categoryId: string; dismissedAt: number }[]> {\n    const res = await this.q<{ category_id: string; dismissed_at: number | string }>(\n      `SELECT category_id, dismissed_at FROM dismissed_categories WHERE user_id = $1`,\n      [userId],\n    );\n    return res.rows.map((r) => ({ categoryId: r.category_id, dismissedAt: Number(r.dismissed_at) }));\n  }"
+    },
+    "timestamp": "2026-08-10T12:07:52.075Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && python3 - <<'EOF'\np='test/penny-memory-store.ts'\ns=open(p).read()\nold=\"\"\"  dismissedCategories: Set<string>;\"\"\"\nnew=\"\"\"  dismissedCategories: Map<string, number>;\"\"\"\nassert old in s; s=s.replace(old,new)\nold=\"\"\"        dismissedCategories: new Set(t.dismissedCategories),\"\"\"\nnew=\"\"\"        dismissedCategories: new Map(t.dismissedCategories),\"\"\"\nassert old in s; s=s.replace(old,new)\nold=\"\"\"        dismissedCategories: new Set(),\"\"\"\nnew=\"\"\"        dismissedCategories: new Map(),\"\"\"\nassert old in s; s=s.replace(old,new)\nold=\"\"\"  async listDismissedCategoryIds(userId: UserId): Promise<string[]> {\n    return [...this.t(userId).dismissedCategories];\n  }\n\n  async setCategoryDismissed(userId: UserId, categoryId: string, dismissed: boolean): Promise<void> {\n    if (dismissed) this.t(userId).dismissedCategories.add(categoryId);\n    else this.t(userId).dismissedCategories.delete(categoryId);\n  }\"\"\"\nnew=\"\"\"  async listDismissedCategoryMarks(userId: UserId): Promise<{ categoryId: string; dismissedAt: number }[]> {\n    return [...this.t(userId).dismissedCategories].map(([categoryId, dismissedAt]) => ({ categoryId, dismissedAt }));\n  }\n\n  async setCategoryDismissed(userId: UserId, categoryId: string, dismissed: boolean): Promise<void> {\n    if (dismissed) this.t(userId).dismissedCategories.set(categoryId, Date.now());\n    else this.t(userId).dismissedCategories.delete(categoryId);\n  }\"\"\"\nassert old in s; s=s.replace(old,new)\nopen(p,'w').write(s)\nprint(\"memory store updated\")\nEOF",
+      "description": "Update memory store to dismissal marks with timestamps"
+    },
+    "timestamp": "2026-08-10T12:08:00.844Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts",
+      "old_string": "  async listUnmappedCategories(\n    userId: UserId,\n    opts: { from?: string; to?: string } = {},\n  ): Promise<UnmappedCategory[]> {\n    const dismissed = new Set(await this.store.listDismissedCategoryIds(userId));\n    return (await this.aggregateUnmappedCategories(userId, opts)).filter(\n      (c) => !dismissed.has(c.categoryId),\n    );\n  }\n\n  /**\n   * The DISMISSED complement of listUnmappedCategories: categories the user\n   * cleared from the budget page's new-categories card. Same aggregates, so the\n   * Settings \"Not synced\" section shows the identical figures. A dismissed\n   * category that is later adopted gains a mapping and drops out of both lists\n   * naturally (its transactions stop resolving to no envelope).\n   */\n  async listDismissedCategories(userId: UserId): Promise<UnmappedCategory[]> {\n    const dismissed = new Set(await this.store.listDismissedCategoryIds(userId));\n    return (await this.aggregateUnmappedCategories(userId, {})).filter((c) =>\n      dismissed.has(c.categoryId),\n    );\n  }",
+      "new_string": "  /**\n   * The Melbourne-calendar (or given tz) day an epoch instant falls on, for the\n   * activity-aware dismissal rule: a dismissal suppresses a category only while\n   * its newest transaction is dated ON OR BEFORE the dismissal day; a newer\n   * transaction re-shows it (it \"needs to be dismissed again\").\n   */\n  private dismissalCutoff(dismissedAt: number, tz: string): string {\n    return new Intl.DateTimeFormat(\"en-CA\", {\n      timeZone: tz,\n      year: \"numeric\",\n      month: \"2-digit\",\n      day: \"2-digit\",\n    }).format(new Date(dismissedAt));\n  }\n\n  async listUnmappedCategories(\n    userId: UserId,\n    opts: { from?: string; to?: string; tz?: string } = {},\n  ): Promise<UnmappedCategory[]> {\n    const tz = opts.tz ?? \"Australia/Melbourne\";\n    const marks = await this.store.listDismissedCategoryMarks(userId);\n    const cutoff = new Map(marks.map((m) => [m.categoryId, this.dismissalCutoff(m.dismissedAt, tz)]));\n    return (await this.aggregateUnmappedCategories(userId, opts)).filter((c) => {\n      const cut = cutoff.get(c.categoryId);\n      return cut === undefined || c.lastSeenDate > cut;\n    });\n  }\n\n  /**\n   * The SUPPRESSED complement of listUnmappedCategories: categories the user\n   * cleared from the budget page's new-categories card whose dismissal is still\n   * in force (no transaction newer than the dismissal day). Same aggregates, so\n   * the Settings \"Not synced\" section shows the identical figures. A dismissed\n   * category that is later adopted gains a mapping and drops out of both lists;\n   * one with NEW activity moves back to the budget page card instead.\n   */\n  async listDismissedCategories(userId: UserId, tz = \"Australia/Melbourne\"): Promise<UnmappedCategory[]> {\n    const marks = await this.store.listDismissedCategoryMarks(userId);\n    const cutoff = new Map(marks.map((m) => [m.categoryId, this.dismissalCutoff(m.dismissedAt, tz)]));\n    return (await this.aggregateUnmappedCategories(userId, {})).filter((c) => {\n      const cut = cutoff.get(c.categoryId);\n      return cut !== undefined && c.lastSeenDate <= cut;\n    });\n  }"
+    },
+    "timestamp": "2026-08-10T12:08:24.770Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts",
+      "old_string": "  private async aggregateUnmappedCategories(\n    userId: UserId,\n    opts: { from?: string; to?: string } = {},\n  ): Promise<UnmappedCategory[]> {\n    const [txs, mappings] = await Promise.all([\n      this.store.listTransactions(userId),\n      this.store.listMappings(userId),\n    ]);\n    // Mutable accumulator; frozen into the readonly UnmappedCategory on return.\n    const byCat = new Map<\n      string,\n      { categoryId: string; categoryName: string | null; transactionCount: number; totalCents: number; lastSeenDate: string }\n    >();\n    for (const t of txs) {\n      if (t.isTransfer) continue;\n      if (t.categoryId === null) continue;\n      if (opts.from !== undefined && t.date < opts.from) continue;\n      if (opts.to !== undefined && t.date > opts.to) continue;\n      if (resolveEnvelopeId(t, mappings) !== null) continue;\n      const name = categoryNameFromRaw(t.rawJson);\n      const existing = byCat.get(t.categoryId);\n      if (existing === undefined) {\n        byCat.set(t.categoryId, {\n          categoryId: t.categoryId,\n          categoryName: name,\n          transactionCount: 1,\n          totalCents: t.amountCents,\n          lastSeenDate: t.date,\n        });\n      } else {\n        existing.transactionCount += 1;\n        existing.totalCents += t.amountCents;\n        if (t.date > existing.lastSeenDate) existing.lastSeenDate = t.date;\n        // Keep the first non-null name; backfill it if only a later row carries one.\n        if (existing.categoryName === null && name !== null) existing.categoryName = name;\n      }\n    }",
+      "new_string": "  private async aggregateUnmappedCategories(\n    userId: UserId,\n    opts: { from?: string; to?: string } = {},\n  ): Promise<UnmappedCategory[]> {\n    const [txs, mappings] = await Promise.all([\n      this.store.listTransactions(userId),\n      this.store.listMappings(userId),\n    ]);\n    // A category with ANY mapping is adopted/known and is never \"new\" again —\n    // even when the mapping's window starts AFTER some of its transactions\n    // (those stay unbudgeted by the user's chosen start date; they must not\n    // re-list the category, which is how Relocation/Car Change Over kept\n    // reappearing after adoption).\n    const mappedIds = new Set(mappings.map((m) => m.categoryId));\n    // Mutable accumulator; frozen into the readonly UnmappedCategory on return.\n    const byCat = new Map<\n      string,\n      { categoryId: string; categoryName: string | null; transactionCount: number; totalCents: number; firstSeenDate: string; lastSeenDate: string }\n    >();\n    for (const t of txs) {\n      if (t.isTransfer) continue;\n      if (t.categoryId === null) continue;\n      if (opts.from !== undefined && t.date < opts.from) continue;\n      if (opts.to !== undefined && t.date > opts.to) continue;\n      if (mappedIds.has(t.categoryId)) continue;\n      if (resolveEnvelopeId(t, mappings) !== null) continue;\n      const name = categoryNameFromRaw(t.rawJson);\n      const existing = byCat.get(t.categoryId);\n      if (existing === undefined) {\n        byCat.set(t.categoryId, {\n          categoryId: t.categoryId,\n          categoryName: name,\n          transactionCount: 1,\n          totalCents: t.amountCents,\n          firstSeenDate: t.date,\n          lastSeenDate: t.date,\n        });\n      } else {\n        existing.transactionCount += 1;\n        existing.totalCents += t.amountCents;\n        if (t.date < existing.firstSeenDate) existing.firstSeenDate = t.date;\n        if (t.date > existing.lastSeenDate) existing.lastSeenDate = t.date;\n        // Keep the first non-null name; backfill it if only a later row carries one.\n        if (existing.categoryName === null && name !== null) existing.categoryName = name;\n      }\n    }"
+    },
+    "timestamp": "2026-08-10T12:08:42.873Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/contract.ts",
+      "old_string": "  readonly transactionCount: number;\n  /** Signed integer cents summed across the category's unmapped transactions. */\n  readonly totalCents: number;\n  /** Most-recent transaction date for the category (YYYY-MM-DD). */\n  readonly lastSeenDate: string;\n}",
+      "new_string": "  readonly transactionCount: number;\n  /** Signed integer cents summed across the category's unmapped transactions. */\n  readonly totalCents: number;\n  /** Earliest transaction date for the category (YYYY-MM-DD) — how far back a start date could reach. */\n  readonly firstSeenDate: string;\n  /** Most-recent transaction date for the category (YYYY-MM-DD). */\n  readonly lastSeenDate: string;\n}"
+    },
+    "timestamp": "2026-08-10T12:08:50.252Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "old_string": "      // Ongoing: version the change. Unchanged lines (the wizard posts every\n      // row) resolve to their current amount for the effective month and are\n      // skipped, so a save creates versions only for real changes.\n      const beforeCents = resolveAmountForMonth(lines, line.envelopeId, effMonth);\n      if (beforeCents === line.amountCents) continue;",
+      "new_string": "      // Ongoing: version the change. Unchanged lines (the wizard posts every\n      // row) resolve to their current amount for the effective month and are\n      // skipped — UNLESS the request carries an explicit end date: \"same\n      // amount until <date>\" is a real schedule change (this is how a budget\n      // is ENDED without touching its amount), so it must not no-op.\n      const beforeCents = resolveAmountForMonth(lines, line.envelopeId, effMonth);\n      if (beforeCents === line.amountCents && req.effectiveTo === undefined) continue;"
+    },
+    "timestamp": "2026-08-10T12:08:55.172Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "old_string": "      const beforeCents = resolveIncomeBudgetForMonth(lines, income, effMonth);\n      if (beforeCents === input.amountCents) return { ok: true, changed: 0 };",
+      "new_string": "      // Same end-date rule as editBudgetInTx: an unchanged amount WITH an\n      // explicit effectiveTo is a schedule change (ending the budget), not a no-op.\n      const beforeCents = resolveIncomeBudgetForMonth(lines, income, effMonth);\n      if (beforeCents === input.amountCents && input.effectiveTo === undefined) return { ok: true, changed: 0 };"
+    },
+    "timestamp": "2026-08-10T12:08:58.129Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/handlers/categories.ts",
+      "old_string": "    const categories = await services.envelopes.listUnmappedCategories(session.userId, {\n      ...(from ? { from } : {}),\n      ...(to ? { to } : {}),\n    });",
+      "new_string": "    const categories = await services.envelopes.listUnmappedCategories(session.userId, {\n      ...(from ? { from } : {}),\n      ...(to ? { to } : {}),\n      tz,\n    });"
+    },
+    "timestamp": "2026-08-10T12:09:01.458Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/handlers/categories.ts",
+      "old_string": "    const categories = await services.envelopes.listDismissedCategories(session.userId);",
+      "new_string": "    const categories = await services.envelopes.listDismissedCategories(session.userId, tz);"
+    },
+    "timestamp": "2026-08-10T12:09:01.620Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/components/AddBudgetModal.tsx",
+      "old_string": "          ...(isIncome\n            ? { targetCents, budgetedCents: targetCents }\n            : { budgetedCents: priceCents, period }),\n          effectiveFrom,\n          ...(effectiveTo ? { effectiveTo } : {}),\n          completePrevious,\n        });",
+      "new_string": "          ...(isIncome\n            ? { targetCents, budgetedCents: targetCents }\n            : { budgetedCents: priceCents, period }),\n          // A cleared date input yields \"\" which the strict date schema 400s —\n          // omit it and the server defaults to the first of the current month.\n          ...(effectiveFrom ? { effectiveFrom } : {}),\n          ...(effectiveTo ? { effectiveTo } : {}),\n          completePrevious,\n        });"
+    },
+    "timestamp": "2026-08-10T12:09:10.682Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/components/AddBudgetModal.tsx",
+      "old_string": "                ...(rolloverStart ? { rolloverStart } : {}),\n                // A new envelope's first budget version starts here.\n                effectiveFrom,\n                ...(effectiveTo ? { effectiveTo } : {}),",
+      "new_string": "                ...(rolloverStart ? { rolloverStart } : {}),\n                // A new envelope's first budget version starts here (\"\" omitted).\n                ...(effectiveFrom ? { effectiveFrom } : {}),\n                ...(effectiveTo ? { effectiveTo } : {}),"
+    },
+    "timestamp": "2026-08-10T12:09:13.486Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/components/AdoptCategoryModal.tsx",
+      "old_string": "          <p className=\"text-xs text-muted-foreground\">\n            The budget and this category's transactions count from this date. Defaults to the first of the\n            current month.\n          </p>",
+      "new_string": "          <p className=\"text-xs text-muted-foreground\">\n            The budget and this category's transactions count from this date. Defaults to the first of the\n            current month.\n          </p>\n          {category?.firstSeenDate && effectiveFrom && category.firstSeenDate < effectiveFrom && (\n            <p className=\"text-xs text-warning\">\n              This category's transactions go back to {category.firstSeenDate}. Ones before the start date\n              stay unbudgeted (back-date the start to include them). The category will not re-appear as new\n              either way.\n            </p>\n          )}"
+    },
+    "timestamp": "2026-08-10T12:09:16.371Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && sed -n '11,25p' test/routes-categories.test.ts && rg -n \"describe\\(\\\"category dismissal\" test/routes-categories.test.ts",
+      "description": "Check imports and dismissal block location"
+    },
+    "timestamp": "2026-08-10T12:09:48.861Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && python3 - <<'EOF'\np='test/routes-categories.test.ts'\ns=open(p).read()\nold='''const TZ = \"Australia/Melbourne\";\nconst NOW = currentPeriod(TZ);\nconst MID = `${periodKey(NOW)}-15`;'''\nnew='''const TZ = \"Australia/Melbourne\";\nconst NOW = currentPeriod(TZ);\nconst MID = `${periodKey(NOW)}-15`;\nconst FIRST = monthBounds(NOW).first;\n/** A calendar date strictly after \"today\" in TZ, for the re-show-on-new-activity rule. */\nconst TOMORROW = new Date(Date.now() + 86_400_000).toLocaleDateString(\"en-CA\", { timeZone: TZ });'''\nassert old in s; s=s.replace(old,new)\n\n# Dismissal suppression compares tx dates against the dismissal DAY: fixtures must predate it.\nold='''    await t.store.upsertTransactions(LOCAL_USER_ID, [\n      txRaw(\"g1\", \"cat-gym\", \"Gym\", -1500, MID),\n      txRaw(\"c1\", \"cat-coffee\", \"Coffee\", -500, MID),\n    ]);\n\n    // Clear Gym: it disappears from unmapped (the budget page card)…'''\nnew='''    await t.store.upsertTransactions(LOCAL_USER_ID, [\n      txRaw(\"g1\", \"cat-gym\", \"Gym\", -1500, FIRST),\n      txRaw(\"c1\", \"cat-coffee\", \"Coffee\", -500, FIRST),\n    ]);\n\n    // Clear Gym: it disappears from unmapped (the budget page card)…'''\nassert old in s; s=s.replace(old,new)\n\nold='''    await t.store.upsertTransactions(LOCAL_USER_ID, [txRaw(\"g1\", \"cat-gym\", \"Gym\", -1500, MID)]);\n    await postJson(t.app, \"/api/categories/dismiss\", { categoryId: \"cat-gym\", dismissed: true }, cookie);'''\nnew='''    await t.store.upsertTransactions(LOCAL_USER_ID, [txRaw(\"g1\", \"cat-gym\", \"Gym\", -1500, FIRST)]);\n    await postJson(t.app, \"/api/categories/dismiss\", { categoryId: \"cat-gym\", dismissed: true }, cookie);'''\nassert old in s; s=s.replace(old,new)\n\n# New coverage appended.\ns += '''\ndescribe(\"adopted categories never re-list; dismissals re-show on new activity\", () => {\n  test(\"a category adopted with a start date AFTER old transactions stays off the unmapped list\", async () => {\n    const t = await makeTestApp();\n    const cookie = await t.signIn();\n    // Two years of history, then adopt effective this month (the Car Change Over shape).\n    await t.store.upsertTransactions(LOCAL_USER_ID, [\n      txRaw(\"o1\", \"cat-car\", \"Car Change Over\", -100000, \"2024-06-24\"),\n      txRaw(\"o2\", \"cat-car\", \"Car Change Over\", -50000, MID),\n    ]);\n    const adopt = await postJson(\n      t.app,\n      \"/api/categories/adopt\",\n      { categoryId: \"cat-car\", name: \"Car Change Over\", type: \"expense\", budgetedCents: 10000, period: \"monthly\", effectiveFrom: FIRST },\n      cookie,\n    );\n    expect(adopt.status).toBe(200);\n    // The 2024 transaction predates the mapping window, but the category is\n    // adopted/known: it must NOT re-list as new.\n    const list = await unmapped(t, cookie);\n    expect(list.categories.map((c) => c.categoryId)).not.toContain(\"cat-car\");\n  });\n\n  test(\"a transaction dated after the dismissal day re-shows the category and empties Not synced\", async () => {\n    const t = await makeTestApp();\n    const cookie = await t.signIn();\n    await t.store.upsertTransactions(LOCAL_USER_ID, [txRaw(\"g1\", \"cat-gym\", \"Gym\", -1500, FIRST)]);\n    await postJson(t.app, \"/api/categories/dismiss\", { categoryId: \"cat-gym\", dismissed: true }, cookie);\n    expect((await unmapped(t, cookie)).categories).toHaveLength(0);\n\n    // New activity lands (dated after the dismissal day): it needs dismissing again.\n    await t.store.upsertTransactions(LOCAL_USER_ID, [txRaw(\"g2\", \"cat-gym\", \"Gym\", -2000, TOMORROW)]);\n    const reshown = await unmapped(t, cookie);\n    expect(reshown.categories.map((c) => c.categoryId)).toContain(\"cat-gym\");\n    const dismissed = (await (await getJson(t.app, \"/api/categories/dismissed\", cookie)).json()) as { categories: unknown[] };\n    expect(dismissed.categories).toHaveLength(0);\n\n    // Dismissing again re-suppresses it.\n    await postJson(t.app, \"/api/categories/dismiss\", { categoryId: \"cat-gym\", dismissed: true }, cookie);\n    expect((await unmapped(t, cookie)).categories).toHaveLength(0);\n  });\n\n  test(\"unmapped aggregates carry firstSeenDate (earliest transaction)\", async () => {\n    const t = await makeTestApp();\n    const cookie = await t.signIn();\n    await t.store.upsertTransactions(LOCAL_USER_ID, [\n      txRaw(\"a1\", \"cat-x\", \"X\", -100, \"2025-01-05\"),\n      txRaw(\"a2\", \"cat-x\", \"X\", -100, MID),\n    ]);\n    const list = await unmapped(t, cookie);\n    const cat = list.categories.find((c) => c.categoryId === \"cat-x\");\n    expect(cat?.firstSeenDate).toBe(\"2025-01-05\");\n    expect(cat?.lastSeenDate).toBe(MID);\n  });\n});\n\ndescribe(\"ending a budget without changing its amount\", () => {\n  test(\"an edit carrying ONLY an end date applies: same amount now, zero after the window\", async () => {\n    const t = await makeTestApp();\n    const cookie = await t.signIn();\n    const create = await postJson(t.app, \"/api/envelopes\", { name: \"Car Change Over\", type: \"expense\", budgetedCents: 50000, period: \"monthly\" }, cookie);\n    expect(create.status).toBe(200);\n    const id = ((await create.json()) as { id: string }).id;\n\n    const { last } = monthBounds(NOW);\n    const res = await postJson(\n      t.app,\n      \"/api/budget/edit\",\n      { lines: [{ envelopeId: id, amountCents: 50000 }], scope: \"ongoing\", effectiveFrom: FIRST, effectiveTo: last, completePrevious: true },\n      cookie,\n    );\n    expect(res.status).toBe(200);\n    expect(((await res.json()) as { changed: number }).changed).toBe(1);\n\n    // This month keeps the full amount (window covers the whole month)…\n    const g = await getJson(t.app, \"/api/envelopes\", cookie);\n    expect(((await g.json()) as GridResponse).rows.find((r) => r.id === id)?.allocationCents).toBe(50000);\n\n    // …and next month resolves to zero: the budget has ENDED.\n    const next = NOW.month === 12 ? { year: NOW.year + 1, month: 1 } : { year: NOW.year, month: NOW.month + 1 };\n    const nb = monthBounds(next);\n    const ng = await getJson(t.app, `/api/envelopes?from=${nb.first}&to=${nb.last}`, cookie);\n    expect(((await ng.json()) as GridResponse).rows.find((r) => r.id === id)?.allocationCents).toBe(0);\n  });\n});\n'''\nopen(p,'w').write(s)\nprint(\"tests updated\")\nEOF\ntimeout 300 bun test 2>&1 | tail -8",
+      "description": "Update and extend category/end-date tests, run suite"
+    },
+    "timestamp": "2026-08-10T12:10:17.139Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && timeout 300 bun test 2>&1 | rg -B2 -A12 \"^✗|✗ \" | head -60",
+      "description": "Show the two failing tests"
+    },
+    "timestamp": "2026-08-10T12:10:27.000Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && timeout 300 bun test 2>&1 | rg -i \"fail|error:\" -A 8 | head -60",
+      "description": "Locate failing tests in output"
+    },
+    "timestamp": "2026-08-10T12:10:36.558Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && timeout 300 bun test 2>&1 | grep -a \"(fail)\" ",
+      "description": "Grep for failing test names"
+    },
+    "timestamp": "2026-08-10T12:10:47.363Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && timeout 300 bun test 2>&1 | sed 's/\\x1b\\[[0-9;]*m//g' | grep -B1 -A14 \"^✗\" | head -80",
+      "description": "Strip ANSI and show failures"
+    },
+    "timestamp": "2026-08-10T12:10:57.288Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && sed -n '35,70p' test/unmapped-categories.test.ts",
+      "description": "Read failing unmapped-categories service test"
+    },
+    "timestamp": "2026-08-10T12:11:30.443Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/test/unmapped-categories.test.ts",
+      "old_string": "    expect(cats[0]).toEqual({\n      categoryId: \"cat-beer\",\n      categoryName: \"Beer\",\n      transactionCount: 3,\n      totalCents: -3500,\n      lastSeenDate: \"2026-07-05\",\n    });",
+      "new_string": "    expect(cats[0]).toEqual({\n      categoryId: \"cat-beer\",\n      categoryName: \"Beer\",\n      transactionCount: 3,\n      totalCents: -3500,\n      firstSeenDate: \"2026-07-01\",\n      lastSeenDate: \"2026-07-05\",\n    });"
+    },
+    "timestamp": "2026-08-10T12:11:36.265Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/schema.ts",
+      "old_string": "  `CREATE TABLE IF NOT EXISTS dismissed_categories (\n    user_id TEXT NOT NULL REFERENCES users(id),\n    category_id TEXT NOT NULL,\n    dismissed_at BIGINT NOT NULL,\n    PRIMARY KEY (user_id, category_id)\n  )`,",
+      "new_string": "  `CREATE TABLE IF NOT EXISTS dismissed_categories (\n    user_id TEXT NOT NULL REFERENCES users(id),\n    category_id TEXT NOT NULL,\n    dismissed_at BIGINT NOT NULL,\n    last_seen_date TEXT NOT NULL DEFAULT '',\n    PRIMARY KEY (user_id, category_id)\n  )`,"
+    },
+    "timestamp": "2026-08-10T12:11:42.905Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/schema.ts",
+      "old_string": "  { table: \"budget_template\", column: \"effective_from\", ddl: \"TEXT NOT NULL DEFAULT '1970-01-01'\" },\n  { table: \"budget_template\", column: \"effective_to\", ddl: \"TEXT\" },\n];",
+      "new_string": "  { table: \"budget_template\", column: \"effective_from\", ddl: \"TEXT NOT NULL DEFAULT '1970-01-01'\" },\n  { table: \"budget_template\", column: \"effective_to\", ddl: \"TEXT\" },\n  // Activity-aware dismissal: the category's newest transaction date AT\n  // dismissal time. A transaction newer than this re-shows the category.\n  // Legacy rows ('' after backfill) fall back to the dismissed_at calendar day.\n  { table: \"dismissed_categories\", column: \"last_seen_date\", ddl: \"TEXT NOT NULL DEFAULT ''\" },\n];"
+    },
+    "timestamp": "2026-08-10T12:11:46.291Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/ports.ts",
+      "old_string": "  /**\n   * The categories the user cleared from the new-categories card, with WHEN\n   * (epoch ms). The dismissal is activity-aware: a transaction dated after the\n   * dismissal day re-shows the category (service-level rule), so the timestamp\n   * is part of the contract, not bookkeeping.\n   */\n  listDismissedCategoryMarks(userId: UserId): Promise<{ categoryId: string; dismissedAt: number }[]>;\n  /** Set/unset a category's dismissed flag. Unset (restore) deletes the row; re-set refreshes the timestamp. */\n  setCategoryDismissed(userId: UserId, categoryId: string, dismissed: boolean): Promise<void>;",
+      "new_string": "  /**\n   * The categories the user cleared from the new-categories card: WHEN (epoch\n   * ms) and the category's newest transaction date AT dismissal ('' for legacy\n   * rows). The dismissal is activity-aware: a transaction newer than the\n   * snapshot re-shows the category (service-level rule), so both fields are\n   * part of the contract, not bookkeeping.\n   */\n  listDismissedCategoryMarks(userId: UserId): Promise<{ categoryId: string; dismissedAt: number; lastSeenDate: string }[]>;\n  /**\n   * Set/unset a category's dismissed flag. Unset (restore) deletes the row;\n   * re-set refreshes the timestamp and the last-seen snapshot.\n   */\n  setCategoryDismissed(userId: UserId, categoryId: string, dismissed: boolean, lastSeenDate?: string): Promise<void>;"
+    },
+    "timestamp": "2026-08-10T12:11:52.010Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/sqlite.ts",
+      "old_string": "  async listDismissedCategoryMarks(userId: UserId): Promise<{ categoryId: string; dismissedAt: number }[]> {\n    const rows = this.db\n      .query(`SELECT category_id, dismissed_at FROM dismissed_categories WHERE user_id = ?`)\n      .all(userId) as { category_id: string; dismissed_at: number }[];\n    return rows.map((r) => ({ categoryId: r.category_id, dismissedAt: r.dismissed_at }));\n  }\n\n  async setCategoryDismissed(userId: UserId, categoryId: string, dismissed: boolean): Promise<void> {\n    if (dismissed) {\n      this.db.run(\n        `INSERT INTO dismissed_categories (user_id, category_id, dismissed_at) VALUES (?, ?, ?)\n         ON CONFLICT (user_id, category_id) DO UPDATE SET dismissed_at = excluded.dismissed_at`,\n        [userId, categoryId, Date.now()],\n      );\n    } else {\n      this.db.run(`DELETE FROM dismissed_categories WHERE user_id = ? AND category_id = ?`, [userId, categoryId]);\n    }\n  }",
+      "new_string": "  async listDismissedCategoryMarks(userId: UserId): Promise<{ categoryId: string; dismissedAt: number; lastSeenDate: string }[]> {\n    const rows = this.db\n      .query(`SELECT category_id, dismissed_at, last_seen_date FROM dismissed_categories WHERE user_id = ?`)\n      .all(userId) as { category_id: string; dismissed_at: number; last_seen_date: string }[];\n    return rows.map((r) => ({ categoryId: r.category_id, dismissedAt: r.dismissed_at, lastSeenDate: r.last_seen_date ?? \"\" }));\n  }\n\n  async setCategoryDismissed(userId: UserId, categoryId: string, dismissed: boolean, lastSeenDate = \"\"): Promise<void> {\n    if (dismissed) {\n      this.db.run(\n        `INSERT INTO dismissed_categories (user_id, category_id, dismissed_at, last_seen_date) VALUES (?, ?, ?, ?)\n         ON CONFLICT (user_id, category_id) DO UPDATE SET\n           dismissed_at = excluded.dismissed_at,\n           last_seen_date = excluded.last_seen_date`,\n        [userId, categoryId, Date.now(), lastSeenDate],\n      );\n    } else {\n      this.db.run(`DELETE FROM dismissed_categories WHERE user_id = ? AND category_id = ?`, [userId, categoryId]);\n    }\n  }"
+    },
+    "timestamp": "2026-08-10T12:12:03.306Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/postgres.ts",
+      "old_string": "  async listDismissedCategoryMarks(userId: UserId): Promise<{ categoryId: string; dismissedAt: number }[]> {\n    const res = await this.q<{ category_id: string; dismissed_at: number | string }>(\n      `SELECT category_id, dismissed_at FROM dismissed_categories WHERE user_id = $1`,\n      [userId],\n    );\n    return res.rows.map((r) => ({ categoryId: r.category_id, dismissedAt: Number(r.dismissed_at) }));\n  }\n\n  async setCategoryDismissed(userId: UserId, categoryId: string, dismissed: boolean): Promise<void> {\n    if (dismissed) {\n      await this.q(\n        `INSERT INTO dismissed_categories (user_id, category_id, dismissed_at) VALUES ($1, $2, $3)\n         ON CONFLICT (user_id, category_id) DO UPDATE SET dismissed_at = excluded.dismissed_at`,\n        [userId, categoryId, Date.now()],\n      );\n    } else {\n      await this.q(`DELETE FROM dismissed_categories WHERE user_id = $1 AND category_id = $2`, [userId, categoryId]);\n    }\n  }",
+      "new_string": "  async listDismissedCategoryMarks(userId: UserId): Promise<{ categoryId: string; dismissedAt: number; lastSeenDate: string }[]> {\n    const res = await this.q<{ category_id: string; dismissed_at: number | string; last_seen_date: string | null }>(\n      `SELECT category_id, dismissed_at, last_seen_date FROM dismissed_categories WHERE user_id = $1`,\n      [userId],\n    );\n    return res.rows.map((r) => ({ categoryId: r.category_id, dismissedAt: Number(r.dismissed_at), lastSeenDate: r.last_seen_date ?? \"\" }));\n  }\n\n  async setCategoryDismissed(userId: UserId, categoryId: string, dismissed: boolean, lastSeenDate = \"\"): Promise<void> {\n    if (dismissed) {\n      await this.q(\n        `INSERT INTO dismissed_categories (user_id, category_id, dismissed_at, last_seen_date) VALUES ($1, $2, $3, $4)\n         ON CONFLICT (user_id, category_id) DO UPDATE SET\n           dismissed_at = excluded.dismissed_at,\n           last_seen_date = excluded.last_seen_date`,\n        [userId, categoryId, Date.now(), lastSeenDate],\n      );\n    } else {\n      await this.q(`DELETE FROM dismissed_categories WHERE user_id = $1 AND category_id = $2`, [userId, categoryId]);\n    }\n  }"
+    },
+    "timestamp": "2026-08-10T12:12:11.005Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && python3 - <<'EOF'\np='test/penny-memory-store.ts'\ns=open(p).read()\nold=\"\"\"  dismissedCategories: Map<string, number>;\"\"\"\nnew=\"\"\"  dismissedCategories: Map<string, { dismissedAt: number; lastSeenDate: string }>;\"\"\"\nassert old in s; s=s.replace(old,new)\nold=\"\"\"  async listDismissedCategoryMarks(userId: UserId): Promise<{ categoryId: string; dismissedAt: number }[]> {\n    return [...this.t(userId).dismissedCategories].map(([categoryId, dismissedAt]) => ({ categoryId, dismissedAt }));\n  }\n\n  async setCategoryDismissed(userId: UserId, categoryId: string, dismissed: boolean): Promise<void> {\n    if (dismissed) this.t(userId).dismissedCategories.set(categoryId, Date.now());\n    else this.t(userId).dismissedCategories.delete(categoryId);\n  }\"\"\"\nnew=\"\"\"  async listDismissedCategoryMarks(userId: UserId): Promise<{ categoryId: string; dismissedAt: number; lastSeenDate: string }[]> {\n    return [...this.t(userId).dismissedCategories].map(([categoryId, m]) => ({ categoryId, ...m }));\n  }\n\n  async setCategoryDismissed(userId: UserId, categoryId: string, dismissed: boolean, lastSeenDate = \"\"): Promise<void> {\n    if (dismissed) this.t(userId).dismissedCategories.set(categoryId, { dismissedAt: Date.now(), lastSeenDate });\n    else this.t(userId).dismissedCategories.delete(categoryId);\n  }\"\"\"\nassert old in s; s=s.replace(old,new)\nopen(p,'w').write(s)\nprint(\"ok\")\nEOF",
+      "description": "Update memory store to snapshot marks"
+    },
+    "timestamp": "2026-08-10T12:12:21.172Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts",
+      "old_string": "  /**\n   * The Melbourne-calendar (or given tz) day an epoch instant falls on, for the\n   * activity-aware dismissal rule: a dismissal suppresses a category only while\n   * its newest transaction is dated ON OR BEFORE the dismissal day; a newer\n   * transaction re-shows it (it \"needs to be dismissed again\").\n   */\n  private dismissalCutoff(dismissedAt: number, tz: string): string {\n    return new Intl.DateTimeFormat(\"en-CA\", {\n      timeZone: tz,\n      year: \"numeric\",\n      month: \"2-digit\",\n      day: \"2-digit\",\n    }).format(new Date(dismissedAt));\n  }\n\n  async listUnmappedCategories(\n    userId: UserId,\n    opts: { from?: string; to?: string; tz?: string } = {},\n  ): Promise<UnmappedCategory[]> {\n    const tz = opts.tz ?? \"Australia/Melbourne\";\n    const marks = await this.store.listDismissedCategoryMarks(userId);\n    const cutoff = new Map(marks.map((m) => [m.categoryId, this.dismissalCutoff(m.dismissedAt, tz)]));\n    return (await this.aggregateUnmappedCategories(userId, opts)).filter((c) => {\n      const cut = cutoff.get(c.categoryId);\n      return cut === undefined || c.lastSeenDate > cut;\n    });\n  }\n\n  /**\n   * The SUPPRESSED complement of listUnmappedCategories: categories the user\n   * cleared from the budget page's new-categories card whose dismissal is still\n   * in force (no transaction newer than the dismissal day). Same aggregates, so\n   * the Settings \"Not synced\" section shows the identical figures. A dismissed\n   * category that is later adopted gains a mapping and drops out of both lists;\n   * one with NEW activity moves back to the budget page card instead.\n   */\n  async listDismissedCategories(userId: UserId, tz = \"Australia/Melbourne\"): Promise<UnmappedCategory[]> {\n    const marks = await this.store.listDismissedCategoryMarks(userId);\n    const cutoff = new Map(marks.map((m) => [m.categoryId, this.dismissalCutoff(m.dismissedAt, tz)]));\n    return (await this.aggregateUnmappedCategories(userId, {})).filter((c) => {\n      const cut = cutoff.get(c.categoryId);\n      return cut !== undefined && c.lastSeenDate <= cut;\n    });\n  }\n\n  /** Set/unset a category's persistent dismissed flag (clear / restore). */\n  async setCategoryDismissed(userId: UserId, categoryId: string, dismissed: boolean): Promise<void> {\n    await this.store.setCategoryDismissed(userId, categoryId, dismissed);\n  }",
+      "new_string": "  /**\n   * A dismissal's suppression cutoff: the category's newest transaction date AT\n   * dismissal (the snapshot), so any transaction NEWER than what the user saw\n   * when clearing re-shows the category (\"it needs to be dismissed again\").\n   * Legacy rows written before the snapshot column fall back to the dismissal's\n   * calendar day in the given timezone.\n   */\n  private dismissalCutoff(mark: { dismissedAt: number; lastSeenDate: string }, tz: string): string {\n    if (mark.lastSeenDate !== \"\") return mark.lastSeenDate;\n    return new Intl.DateTimeFormat(\"en-CA\", {\n      timeZone: tz,\n      year: \"numeric\",\n      month: \"2-digit\",\n      day: \"2-digit\",\n    }).format(new Date(mark.dismissedAt));\n  }\n\n  async listUnmappedCategories(\n    userId: UserId,\n    opts: { from?: string; to?: string; tz?: string } = {},\n  ): Promise<UnmappedCategory[]> {\n    const tz = opts.tz ?? \"Australia/Melbourne\";\n    const marks = await this.store.listDismissedCategoryMarks(userId);\n    const cutoff = new Map(marks.map((m) => [m.categoryId, this.dismissalCutoff(m, tz)]));\n    return (await this.aggregateUnmappedCategories(userId, opts)).filter((c) => {\n      const cut = cutoff.get(c.categoryId);\n      return cut === undefined || c.lastSeenDate > cut;\n    });\n  }\n\n  /**\n   * The SUPPRESSED complement of listUnmappedCategories: categories the user\n   * cleared from the budget page's new-categories card whose dismissal is still\n   * in force (nothing newer than the dismissal snapshot). Same aggregates, so\n   * the Settings \"Not synced\" section shows the identical figures. A dismissed\n   * category that is later adopted gains a mapping and drops out of both lists;\n   * one with NEW activity moves back to the budget page card instead.\n   */\n  async listDismissedCategories(userId: UserId, tz = \"Australia/Melbourne\"): Promise<UnmappedCategory[]> {\n    const marks = await this.store.listDismissedCategoryMarks(userId);\n    const cutoff = new Map(marks.map((m) => [m.categoryId, this.dismissalCutoff(m, tz)]));\n    return (await this.aggregateUnmappedCategories(userId, {})).filter((c) => {\n      const cut = cutoff.get(c.categoryId);\n      return cut !== undefined && c.lastSeenDate <= cut;\n    });\n  }\n\n  /**\n   * Set/unset a category's persistent dismissed flag (clear / restore). A\n   * dismissal snapshots the category's CURRENT newest transaction date so the\n   * activity-aware re-show rule has its baseline; this also correctly handles\n   * future-dated (scheduled/pending) transactions, which a wall-clock cutoff\n   * could never suppress.\n   */\n  async setCategoryDismissed(userId: UserId, categoryId: string, dismissed: boolean): Promise<void> {\n    if (!dismissed) {\n      await this.store.setCategoryDismissed(userId, categoryId, false);\n      return;\n    }\n    const current = (await this.aggregateUnmappedCategories(userId, {})).find((c) => c.categoryId === categoryId);\n    await this.store.setCategoryDismissed(userId, categoryId, true, current?.lastSeenDate ?? \"\");\n  }"
+    },
+    "timestamp": "2026-08-10T12:12:45.127Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -n \"lastSeenDate\" web/src/components/AdoptCategoryModal.test.tsx web/src/pages/BudgetPage.new-categories.test.tsx web/src/pages/SettingsPage.test.tsx 2>/dev/null",
+      "description": "Find UnmappedCategory fixtures needing firstSeenDate"
+    },
+    "timestamp": "2026-08-10T12:12:52.579Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/BudgetPage.new-categories.test.tsx",
+      "old_string": "      { categoryId: \"cat-gym\", categoryName: \"Gym\", transactionCount: 3, totalCents: -15000, lastSeenDate: \"2026-07-10\" },",
+      "new_string": "      { categoryId: \"cat-gym\", categoryName: \"Gym\", transactionCount: 3, totalCents: -15000, firstSeenDate: \"2026-07-01\", lastSeenDate: \"2026-07-10\" },"
+    },
+    "timestamp": "2026-08-10T12:12:59.069Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/components/AdoptCategoryModal.test.tsx",
+      "old_string": "    lastSeenDate: \"2026-07-10\",",
+      "new_string": "    firstSeenDate: \"2026-07-01\",\n    lastSeenDate: \"2026-07-10\","
+    },
+    "timestamp": "2026-08-10T12:13:00.003Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && timeout 300 bun test 2>&1 | sed 's/\\x1b\\[[0-9;]*m//g' | grep -E \"^✗|pass$|fail$|expect|Ran \" | tail -8 && timeout 300 bun run typecheck 2>&1 | tail -2",
+      "description": "Run full suite and typecheck"
+    },
+    "timestamp": "2026-08-10T12:13:08.342Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && timeout 120 bun run lint 2>&1 | tail -2 && python3 -c \"\nimport re\ns=open('package.json').read()\nopen('package.json','w').write(s.replace('\\\"version\\\": \\\"1.7.0\\\"','\\\"version\\\": \\\"1.8.0\\\"'))\nprint('bumped 1.8.0')\" && timeout 300 bunx vite build 2>&1 | tail -1 && systemctl --user restart penny.service && sleep 2 && systemctl --user is-active penny.service",
+      "description": "Lint, bump to 1.8.0, build, restart service"
+    },
+    "timestamp": "2026-08-10T12:13:38.356Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && BUNDLE=$(curl -s http://127.0.0.1:8787/ | rg -o 'assets/index-[A-Za-z0-9_-]+\\.js' | head -1) && echo \"bundle: $BUNDLE\" && curl -s \"http://127.0.0.1:8787/$BUNDLE\" | rg -o 'v1\\.8\\.0[^\"]{0,28}' | head -1 && bun -e 'import {Database} from \"bun:sqlite\"; const db=new Database(process.env.HOME+\"/.penny/penny.db\",{readonly:true}); const cols=db.query(\"PRAGMA table_info(dismissed_categories)\").all().map(c=>c.name); console.log(\"columns:\",cols); console.log(\"rows with empty snapshot (legacy fallback):\", db.query(\"SELECT COUNT(*) n FROM dismissed_categories WHERE last_seen_date=\\\"\\\"\").get()); db.close()'",
+      "description": "Verify v1.8.0 bundle live and migration column applied"
+    },
+    "timestamp": "2026-08-10T12:13:58.907Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && cat >> test/routes-categories.test.ts <<'EOF'\n\ndescribe(\"ending an INCOME budget without changing its amount\", () => {\n  test(\"an income edit carrying only an end date zeroes the following month\", async () => {\n    const t = await makeTestApp();\n    const cookie = await t.signIn();\n    const create = await postJson(\n      t.app,\n      \"/api/envelopes\",\n      { name: \"Contract Income\", type: \"income\", parentId: null, budgetedCents: 300000, targetCents: 300000 },\n      cookie,\n    );\n    expect(create.status).toBe(200);\n    const id = ((await create.json()) as { id: string }).id;\n\n    const { last } = monthBounds(NOW);\n    const res = await postJson(\n      t.app,\n      \"/api/envelopes/edit\",\n      { id, type: \"income\", budgetedCents: 300000, targetCents: 300000, effectiveFrom: FIRST, effectiveTo: last, completePrevious: true },\n      cookie,\n    );\n    expect(res.status).toBe(200);\n\n    const next = NOW.month === 12 ? { year: NOW.year + 1, month: 1 } : { year: NOW.year, month: NOW.month + 1 };\n    const nb = monthBounds(next);\n    const ng = await getJson(t.app, `/api/envelopes?from=${nb.first}&to=${nb.last}`, cookie);\n    expect(((await ng.json()) as GridResponse).income.find((i) => i.id === id)?.budgetedCents).toBe(0);\n  });\n});\nEOF\ntimeout 300 bun test test/routes-categories.test.ts 2>&1 | sed 's/\\x1b\\[[0-9;]*m//g' | grep -E \"pass$|fail$|Ran|^✗\" | tail -4",
+      "description": "Add income end-date probe, run categories route tests"
+    },
+    "timestamp": "2026-08-10T12:14:21.830Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && timeout 300 bun test 2>&1 | sed 's/\\x1b\\[[0-9;]*m//g' | grep -E \"pass$|fail$|Ran \" | tail -3",
+      "description": "Full suite final run"
+    },
+    "timestamp": "2026-08-10T12:14:26.736Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "## Test Strategy",
+      "new_string": "### Category lifecycle and budget windows (v1.8.0, 2026-08-10)\n\n- [x] ISC-146: An adopted (mapped) category NEVER re-lists as new — even when the mapping window starts after older transactions (the Car Change Over shape: 2024 history, adopted from this month)\n- [x] ISC-147: Unmapped-category aggregates carry firstSeenDate (earliest transaction), alongside lastSeenDate\n- [x] ISC-148: The adopt modal warns when the category's transactions predate the chosen start date, naming the earliest date\n- [x] ISC-149: Dismissing a category snapshots its newest transaction date; a transaction newer than the snapshot re-shows the category on the budget page (it must be dismissed again)\n- [x] ISC-150: A re-shown category leaves Settings → Not synced until it is re-dismissed (the two lists stay exact complements)\n- [x] ISC-151: A budget edit carrying ONLY an end date applies — same amount through the window, zero after — instead of no-opping on the unchanged amount (expense path)\n- [x] ISC-152: The income edit path honours the same end-date-only rule\n- [x] ISC-153: Anti: the per-envelope Add/Edit budget modal never sends effectiveFrom \"\" (cleared date omitted, both create and edit paths)\n\n## Test Strategy"
+    },
+    "timestamp": "2026-08-10T12:14:43.326Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "| ISC-145 | anti | adopted category in neither list | both lists empty of it | bun test routes-categories |",
+      "new_string": "| ISC-145 | anti | adopted category in neither list | both lists empty of it | bun test routes-categories |\n| ISC-146 | logic | mapped category never re-lists | not in unmapped despite old txs | bun test routes-categories |\n| ISC-147 | api | aggregates carry firstSeenDate | earliest date returned | bun test routes-categories |\n| ISC-148 | ui | modal warns on pre-start txs | warning names earliest date | Read AdoptCategoryModal.tsx |\n| ISC-149 | logic | newer tx re-shows dismissed category | back in unmapped list | bun test routes-categories |\n| ISC-150 | logic | re-shown absent from Not synced | dismissed list empty | bun test routes-categories |\n| ISC-151 | logic | end-date-only edit applies (expense) | next month zero | bun test routes-categories |\n| ISC-152 | logic | end-date-only edit applies (income) | next month zero | bun test routes-categories |\n| ISC-153 | anti | modal never sends effectiveFrom \"\" | \"\" guarded both paths | Grep AddBudgetModal.tsx |"
+    },
+    "timestamp": "2026-08-10T12:14:47.888Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "## Changelog",
+      "new_string": "- 2026-08-10: v1.8.0 (same-day follow-up from Nick's live usage). (1) Car Change Over reproduced the Relocation shape — adopt created the mapping from 2026-08-01 while transactions run back to 2024-06-24 — root fix: a category with ANY mapping is adopted/known and never re-lists as \"new\"; the adopt modal now warns when transactions predate the chosen start date (firstSeenDate added to aggregates) instead of silently leaving history unbudgeted. Car Change Over mapping left at 2026-08-01 pending Nick's call (back-dating would pull two years of spend into the envelope). (2) Dismissal is activity-aware per Nick's request: dismissing snapshots the category's newest transaction date; anything newer re-shows it on the budget page and drops it from Not synced until re-dismissed. Snapshot chosen over a wall-clock cutoff because future-dated (scheduled/pending) transactions could never be suppressed by a clock rule — caught by the reproduction test failing. Legacy rows (21 pre-snapshot dismissals) fall back to the dismissed-day rule. (3) Nick's \"how do I set an end date\" exposed a real no-op: editBudget skipped any line whose amount was unchanged, so an end-date-only edit did nothing. An explicit effectiveTo now always applies (expense + income paths). The Add/Edit modal's To field therefore works; its From default (first of current month) is the change-effective date, not the budget's start. Same \"\"-guard applied to that modal's cleared dates.\n\n## Changelog"
+    },
+    "timestamp": "2026-08-10T12:14:59.097Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "- Deploy: curl 127.0.0.1:8787 serves bundle index-DY2h7TBX.js containing \"v1.7.0 (a0a8833 · 2026-08-10)\"; penny.service active; new routes respond 401 unauthenticated (session-gated, registered). Authenticated-UI screenshot probe DEFERRED-VERIFY — PIN is Nick's; follow-up: Nick's next sign-in to v1.7.0 (this task's report).",
+      "new_string": "- Deploy: curl 127.0.0.1:8787 serves bundle index-DY2h7TBX.js containing \"v1.7.0 (a0a8833 · 2026-08-10)\"; penny.service active; new routes respond 401 unauthenticated (session-gated, registered). Authenticated-UI screenshot probe DEFERRED-VERIFY — PIN is Nick's; follow-up: Nick's next sign-in to v1.7.0 (this task's report).\n- ISC-146: bun test — routes-categories \"adopted with a start date AFTER old transactions stays off the unmapped list\" (2024 tx + adopt from FIRST → not listed).\n- ISC-147: bun test — routes-categories firstSeenDate test (2025-01-05 earliest returned).\n- ISC-148: Read — AdoptCategoryModal.tsx warning block gated on firstSeenDate < effectiveFrom.\n- ISC-149/150: bun test — routes-categories re-show test: dismiss → suppressed; TOMORROW-dated tx → re-shown, Not synced empty; re-dismiss → suppressed again.\n- ISC-151: bun test — routes-categories \"edit carrying ONLY an end date\": changed 1, this month 50000, next month 0.\n- ISC-152: bun test — routes-categories income end-date test: next month income budget 0.\n- ISC-153: Grep — AddBudgetModal.tsx both payloads use ...(effectiveFrom ? { effectiveFrom } : {}).\n- v1.8.0 deploy: 397/397 tests green, typecheck + lint clean; bundle index-Czv3dmpr.js serves \"v1.8.0 (6a5e6d9 · 2026-08-10)\"; dismissed_categories.last_seen_date column present after migration; 21 legacy rows on the dismissed-day fallback."
+    },
+    "timestamp": "2026-08-10T12:15:11.999Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && git add -A && git commit -q -m \"budgetbuddy v1.8.0: adopted categories never re-list, adopt-modal pre-start warning (firstSeenDate), activity-aware dismissal snapshots, end-date-only budget edits apply, AddBudgetModal cleared-date guard\" && git log --oneline -1",
+      "description": "Commit v1.8.0"
+    },
+    "timestamp": "2026-08-10T12:15:16.775Z"
+  }
+]

@@ -1,0 +1,128 @@
+/**
+ * Phase 4 — income expected receipt day (owner spec + answers, 2026-08-12):
+ * PLAN-BASED. "Prior to the 11th, that envelope should be rollover − spend
+ * [received]. After that date, rollover + income − spend" — and because it
+ * runs off the plan, a missing payment shows as a deficit from the expected
+ * day. Expense envelopes are never gated (answer 1).
+ */
+
+import { describe, test, expect } from "bun:test";
+import type { CreateEnvelopeResponse, GridResponse } from "../src/server/contract.ts";
+import { currentPeriod, todayISO } from "../src/platform/time.ts";
+import { monthBounds, nextPeriod } from "../src/envelope/period.ts";
+import { makeTestApp, postJson, getJson, type TestApp } from "./server-test-app.ts";
+
+const TZ = "Australia/Melbourne";
+const NOW = currentPeriod(TZ);
+const TODAY = todayISO(TZ);
+const DAY = Number(TODAY.slice(8, 10));
+
+async function createIncome(t: TestApp, cookie: string, budget: number): Promise<string> {
+  const res = await postJson(
+    t.app,
+    "/api/envelopes",
+    { name: "Rental Income", type: "income", parentId: null, budgetedCents: budget, targetCents: budget },
+    cookie,
+  );
+  expect(res.status).toBe(200);
+  return ((await res.json()) as CreateEnvelopeResponse).id;
+}
+
+async function setExpectedDay(t: TestApp, cookie: string, id: string, day: number | null): Promise<void> {
+  const res = await postJson(
+    t.app,
+    "/api/envelopes/edit",
+    { id, type: "income", expectedDay: day },
+    cookie,
+  );
+  expect(res.status).toBe(200);
+}
+
+async function incomeRow(t: TestApp, cookie: string) {
+  const res = await getJson(t.app, "/api/envelopes", cookie);
+  expect(res.status).toBe(200);
+  return ((await res.json()) as GridResponse).income[0]!;
+}
+
+describe("income expected receipt day (D5, plan-based)", () => {
+  test("BEFORE the expected day: nothing due — Left reads carryover + received, variance 0", async () => {
+    // Skip the boundary case where today is the 31st (no later day exists).
+    if (DAY >= 31) return;
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createIncome(t, cookie, 117000);
+    await setExpectedDay(t, cookie, id, DAY + 1); // due tomorrow
+
+    const row = await incomeRow(t, cookie);
+    expect(row.expectedDay).toBe(DAY + 1);
+    expect(row.budgetedCents).toBe(117000); // the PLAN column is untouched
+    expect(row.leftCents).toBe(0); // carry 0 + received 0 − due 0 (NOT −1170)
+    expect(row.varianceCents).toBe(0); // no deficit before payday
+    expect(row.awaitingCents).toBe(117000);
+    expect(id).toBeTruthy();
+  });
+
+  test("ON/AFTER the expected day with NO payment: the deficit shows (missing income is visible)", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createIncome(t, cookie, 117000);
+    await setExpectedDay(t, cookie, id, DAY); // due today
+    expect(id).toBeTruthy();
+
+    const row = await incomeRow(t, cookie);
+    expect(row.leftCents).toBe(-117000); // due, not received → deficit
+    expect(row.varianceCents).toBe(-117000);
+    expect(row.awaitingCents).toBe(0);
+  });
+
+  test("no expected day = due from day 1 (the pre-feature behaviour)", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createIncome(t, cookie, 117000);
+    expect(id).toBeTruthy();
+    const row = await incomeRow(t, cookie);
+    expect(row.expectedDay ?? null).toBeNull();
+    expect(row.leftCents).toBe(-117000);
+  });
+
+  test("clearing the expected day restores due-from-day-1", async () => {
+    if (DAY >= 31) return;
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createIncome(t, cookie, 117000);
+    await setExpectedDay(t, cookie, id, DAY + 1);
+    expect((await incomeRow(t, cookie)).leftCents).toBe(0);
+    await setExpectedDay(t, cookie, id, null);
+    expect((await incomeRow(t, cookie)).leftCents).toBe(-117000);
+  });
+
+  test("a FUTURE month's grid is never due regardless of the expected day", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const id = await createIncome(t, cookie, 117000);
+    await setExpectedDay(t, cookie, id, 1); // long past in the current month
+    expect(id).toBeTruthy();
+    const nb = monthBounds(nextPeriod(NOW));
+    const res = await getJson(t.app, `/api/envelopes?from=${nb.first}&to=${nb.last}`, cookie);
+    const row = ((await res.json()) as GridResponse).income[0]!;
+    expect(row.budgetedCents).toBe(117000); // plan shown
+    expect(row.leftCents).toBe(0); // nothing due in a future month
+  });
+
+  test("expense envelopes are never gated by income timing (answer 1)", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const inc = await createIncome(t, cookie, 117000);
+    if (DAY < 31) await setExpectedDay(t, cookie, inc, DAY + 1);
+    const exp = await postJson(
+      t.app,
+      "/api/envelopes",
+      { name: "Groceries", type: "expense", budgetedCents: 50000, period: "monthly" },
+      cookie,
+    );
+    const expId = ((await exp.json()) as CreateEnvelopeResponse).id;
+    const grid = (await (await getJson(t.app, "/api/envelopes", cookie)).json()) as GridResponse;
+    expect(grid.rows.find((r) => r.id === expId)?.allocationCents).toBe(50000);
+    expect(grid.rows.find((r) => r.id === expId)?.leftCents).toBe(50000);
+  });
+});
