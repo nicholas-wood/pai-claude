@@ -1,0 +1,289 @@
+/**
+ * Shared store suite. Runs against ANY Store implementation, proving the SQLite
+ * and Postgres adapters behave identically (ISC-58). Covers:
+ *   - all schema tables present (when the adapter exposes introspection)
+ *   - cross-tenant isolation: tenant B never sees tenant A's rows (ISC-49)
+ *   - last-sync round-trip per tenant (ISC-5 plumbing)
+ *   - envelope + transaction + snapshot round-trips through the interface
+ *
+ * The harness supplies a factory, a user seeder (FKs require a users row first),
+ * and an optional table introspector.
+ */
+
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import type { Store, Tx, Envelope } from "../src/platform/store.ts";
+import type { BudgetStore } from "../src/budget/ports.ts";
+import { TENANT_TABLES, TABLES } from "../src/store/schema.ts";
+
+export interface StoreHarness {
+  readonly name: string;
+  make(): Promise<Store> | Store;
+  seedUser(store: Store, userId: string, email?: string): Promise<void>;
+  listTables?(store: Store): Promise<string[]>;
+}
+
+function sampleTx(id: string, envelopeId: string | null): Tx {
+  return {
+    id,
+    date: "2026-06-01",
+    amountCents: -1234,
+    accountId: "acc-nab",
+    categoryId: null,
+    envelopeId,
+    payee: "Coles",
+    isTransfer: false,
+    isPending: false,
+    rawJson: JSON.stringify({ id, amount: -12.34 }),
+  };
+}
+
+function sampleEnvelope(id: string): Envelope {
+  return {
+    id,
+    name: "Groceries",
+    parentId: null,
+    group: "Lifestyle",
+    rolloverRule: "roll_all",
+    targetType: "monthly",
+    targetAmountCents: 50000,
+  };
+}
+
+export function runStoreSuite(h: StoreHarness): void {
+  describe(`Store suite: ${h.name}`, () => {
+    let store: Store;
+    const A = "tenant-a";
+    const B = "tenant-b";
+
+    beforeAll(async () => {
+      store = await h.make();
+      await store.migrate();
+      await h.seedUser(store, A, "a@penny.test");
+      await h.seedUser(store, B, "b@penny.test");
+    });
+
+    afterAll(async () => {
+      await store.close();
+    });
+
+    test("all schema tables present", async () => {
+      if (!h.listTables) return; // adapter without introspection: skipped
+      const present = new Set(await h.listTables(store));
+      for (const table of TABLES) {
+        expect(present.has(table)).toBe(true);
+      }
+      // Sanity: every declared tenant table is also there.
+      for (const table of TENANT_TABLES) {
+        expect(present.has(table)).toBe(true);
+      }
+    });
+
+    test("envelope round-trips through the interface", async () => {
+      await store.upsertEnvelope(A, sampleEnvelope("env-1"));
+      const got = await store.listEnvelopes(A);
+      expect(got.length).toBe(1);
+      expect(got[0]?.name).toBe("Groceries");
+      expect(got[0]?.targetAmountCents).toBe(50000);
+    });
+
+    test("cross-tenant isolation: B never sees A's data", async () => {
+      await store.upsertTransactions(A, [sampleTx("tx-a1", "env-1")]);
+      const aTx = await store.listTransactions(A);
+      const bTx = await store.listTransactions(B);
+      expect(aTx.length).toBe(1);
+      expect(bTx.length).toBe(0);
+
+      const bEnv = await store.listEnvelopes(B);
+      expect(bEnv.length).toBe(0);
+    });
+
+    test("transaction fields survive the round-trip", async () => {
+      const list = await store.listTransactions(A, { envelopeId: "env-1" });
+      expect(list.length).toBe(1);
+      const tx = list[0];
+      expect(tx?.amountCents).toBe(-1234);
+      expect(tx?.isTransfer).toBe(false);
+      expect(tx?.isPending).toBe(false);
+      expect(tx?.rawJson).toContain("tx-a1");
+    });
+
+    test("deletePendingTransactions removes only pending rows, tenant-scoped (ISC-250/251)", async () => {
+      const pending = { ...sampleTx("tx-pending-1", null), isPending: true };
+      const posted = sampleTx("tx-posted-1", null);
+      await store.upsertTransactions(A, [pending, posted]);
+      await store.upsertTransactions(B, [{ ...sampleTx("tx-pending-1", null), isPending: true }]);
+
+      // Posted id offered for deletion is ignored; pending id deleted; count exact.
+      const deleted = await store.deletePendingTransactions(A, ["tx-pending-1", "tx-posted-1", "tx-nonexistent"]);
+      expect(deleted).toBe(1);
+      const aIds = (await store.listTransactions(A)).map((t) => t.id);
+      expect(aIds).toContain("tx-posted-1");
+      expect(aIds).not.toContain("tx-pending-1");
+
+      // Tenant B's identically-numbered pending row is untouched.
+      const bIds = (await store.listTransactions(B)).map((t) => t.id);
+      expect(bIds).toContain("tx-pending-1");
+
+      // Empty id list is a no-op returning 0.
+      expect(await store.deletePendingTransactions(A, [])).toBe(0);
+    });
+
+    test("daily snapshot writes without error", async () => {
+      await store.writeDailySnapshot(A, "2026-06-01");
+    });
+
+    test("last-sync round-trip is per tenant", async () => {
+      expect(await store.getLastSyncAt(A)).toBeNull();
+      const iso = "2026-06-26T00:00:00.000Z";
+      await store.setLastSyncAt(A, iso);
+      expect(await store.getLastSyncAt(A)).toBe(iso);
+      // B is untouched.
+      expect(await store.getLastSyncAt(B)).toBeNull();
+    });
+
+    test("append event scoped to tenant", async () => {
+      await store.appendEvent(A, {
+        id: "evt-1",
+        ts: Date.now(),
+        actor: "ui",
+        correlationId: "corr-1",
+        kind: "envelope.created",
+        payloadJson: "{}",
+      });
+    });
+
+    test("listEventsByKind returns only that kind, newest first, tenant-scoped", async () => {
+      // Two carryover.reset events out of ts order plus one other-kind event.
+      await store.appendEvent(A, {
+        id: "evt-cr-old",
+        ts: 1_000,
+        actor: "ui",
+        correlationId: "corr-cr-1",
+        kind: "carryover.reset",
+        payloadJson: JSON.stringify({ envelopeId: "env-1", beforeCents: 0, afterCents: 500, on: "2026-07-01" }),
+      });
+      await store.appendEvent(A, {
+        id: "evt-cr-new",
+        ts: 2_000,
+        actor: "ui",
+        correlationId: "corr-cr-2",
+        kind: "carryover.reset",
+        payloadJson: JSON.stringify({ envelopeId: "env-1", beforeCents: 500, afterCents: 700, on: "2026-07-02" }),
+      });
+      await store.appendEvent(A, {
+        id: "evt-other",
+        ts: 3_000,
+        actor: "sync",
+        correlationId: "corr-other",
+        kind: "rollover.set",
+        payloadJson: "{}",
+      });
+
+      const got = await store.listEventsByKind(A, "carryover.reset");
+      expect(got.map((e) => e.id)).toEqual(["evt-cr-new", "evt-cr-old"]); // newest first
+      expect(got.every((e) => e.kind === "carryover.reset")).toBe(true);
+      // The full row round-trips (payload string, actor, correlation).
+      expect(got[0]?.payloadJson).toContain("\"afterCents\":700");
+      expect(got[0]?.actor).toBe("ui");
+      expect(got[0]?.correlationId).toBe("corr-cr-2");
+      // Tenant isolation holds for the event read too.
+      expect(await store.listEventsByKind(B, "carryover.reset")).toEqual([]);
+    });
+
+    test("allocation upsert is keyed on (user, envelope, period): one row, replaced not summed", async () => {
+      // Both adapters implement the richer BudgetStore surface; the suite's
+      // harness type stays the base Store, so narrow here.
+      const bs = store as unknown as BudgetStore;
+      await bs.putAllocation(A, {
+        id: "alloc-first",
+        envelopeId: "env-suite-alloc",
+        period: "2026-09",
+        amountCents: 10000,
+        scope: "ongoing",
+      });
+      // A second write for the SAME (envelope, period) under a DIFFERENT id must
+      // land as an update of the one row. Chosen conflict semantics: REPLACE —
+      // amount and scope are overwritten (a set is a set, never a sum) and the
+      // surviving row keeps its ORIGINAL id.
+      await bs.putAllocation(A, {
+        id: "alloc-second",
+        envelopeId: "env-suite-alloc",
+        period: "2026-09",
+        amountCents: 12500,
+        scope: "this_month",
+      });
+      const rows = (await bs.listAllocations(A, "2026-09")).filter(
+        (r) => r.envelopeId === "env-suite-alloc",
+      );
+      expect(rows.length).toBe(1);
+      expect(rows[0]?.amountCents).toBe(12500);
+      expect(rows[0]?.scope).toBe("this_month");
+      expect(rows[0]?.id).toBe("alloc-first");
+      // Tenant isolation holds for allocations too.
+      expect(await bs.listAllocations(B, "2026-09")).toEqual([]);
+    });
+
+    test("template lines are effective-dated, append-only versions (budget chronology)", async () => {
+      const bs = store as unknown as BudgetStore;
+      // A legacy write (no dates) round-trips with the back-compat defaults:
+      // effectiveFrom '1970-01-01', effectiveTo null (open-ended).
+      await bs.putTemplateLine(A, {
+        id: "tpl-v1",
+        userId: A,
+        envelopeId: "env-suite-tpl",
+        amountCents: 50000,
+        period: "monthly",
+      });
+      // A second version for the SAME envelope under a NEW id coexists
+      // (append-only), carrying its own effective window.
+      await bs.putTemplateLine(A, {
+        id: "tpl-v2",
+        userId: A,
+        envelopeId: "env-suite-tpl",
+        amountCents: 60000,
+        period: "monthly",
+        effectiveFrom: "2026-08-01",
+        effectiveTo: null,
+      });
+      // Completing a version updates it in place under its id.
+      await bs.putTemplateLine(A, {
+        id: "tpl-v1",
+        userId: A,
+        envelopeId: "env-suite-tpl",
+        amountCents: 50000,
+        period: "monthly",
+        effectiveFrom: "1970-01-01",
+        effectiveTo: "2026-07-31",
+      });
+
+      const lines = (await bs.listTemplate(A)).filter((t) => t.envelopeId === "env-suite-tpl");
+      expect(lines.length).toBe(2);
+      const v1 = lines.find((l) => l.id === "tpl-v1");
+      const v2 = lines.find((l) => l.id === "tpl-v2");
+      expect(v1?.effectiveFrom).toBe("1970-01-01");
+      expect(v1?.effectiveTo).toBe("2026-07-31");
+      expect(v2?.effectiveFrom).toBe("2026-08-01");
+      expect(v2?.effectiveTo).toBeNull();
+      expect(v2?.amountCents).toBe(60000);
+      // Tenant isolation holds for template versions too.
+      expect((await bs.listTemplate(B)).filter((t) => t.envelopeId === "env-suite-tpl")).toEqual([]);
+    });
+
+    test("withTransaction rolls a mid-sequence failure back to a clean state", async () => {
+      const bs = store as unknown as BudgetStore;
+      await expect(
+        store.withTransaction(async () => {
+          await bs.putAllocation(A, {
+            id: "alloc-tx",
+            envelopeId: "env-suite-tx",
+            period: "2026-10",
+            amountCents: 777,
+            scope: "ongoing",
+          });
+          throw new Error("suite: fail after first write");
+        }),
+      ).rejects.toThrow("suite: fail after first write");
+      expect(await bs.listAllocations(A, "2026-10")).toEqual([]);
+    });
+  });
+}

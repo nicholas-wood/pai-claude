@@ -1,0 +1,788 @@
+---
+task: "Zero-based envelope budgeting with direct Australian bank feeds via Basiq (CDR), local-first, cloud-ready"
+project: envelope-os
+slug: 20260618-050156_penny-envelope-os
+effort: deep
+effort_source: context-override
+phase: complete
+progress: 35/35 (dropdown UX overhaul ISC-213..247)
+mode: background
+started: 2026-06-18T05:01:56Z
+updated: 2026-08-13T00:00:00Z
+---
+
+# BudgetBuddy (envelope-os) — Project ISA
+
+> Surface name **BudgetBuddy**. Codebase folder `envelope-os`. Zero-based envelope budgeting layer on direct Australian bank feeds (Basiq / CDR, migrating off PocketSmith), feeding PAI Pulse. AUD, personal-finance-grade security. **Local-first now, cloud-ready by construction.** One codebase ships to two deployment targets — Local (Tailscale, single principal at runtime) and Cloud (public at `nicholaswood.com.au/budget`, multi-tenant) — and the only difference between them is configuration plus two swapped adapters, never the data model or the business logic.
+
+## Problem
+
+PocketSmith owns Nick's bank feeds and categorisation across ANZ (primary), NAB (credit card), and Macquarie, but its envelope handling is weak and it does not implement zero-based envelope budgeting. Dave Ramsey's EveryDollar and similar apps do implement the methodology but cannot connect to Australian banks. The result is that Nick runs envelope budgeting in his head on top of PocketSmith, which does not scale, does not survive a credit-card statement cycle cleanly, and gives no trustworthy single number for "where am I against budget right now". There is no time-travel view of envelope balances at a past date, no enforced every-dollar-allocated discipline, and no surface that feeds the state into Pulse. Secondly, the original build was scoped local-only and single-user; if it works, Nick wants the option to let another person use it by handing over only their email and their own PocketSmith developer key, which a local-only, single-tenant design cannot do without a painful retrofit.
+
+## Vision
+
+Nick opens Pulse and sees one honest line. Unallocated dollars, the worst three overspends, and whether the credit-card holding balance still matches NAB. He opens BudgetBuddy on his phone — installed as a PWA, reached over Tailscale. He never plans a month; the budget is the recurring template and it simply rolls into each new month on its own. When something changes he adjusts one envelope or moves money, the change is remembered going forward, and it lands in a budget history he can scroll back through. When a late transaction lands weeks later, the envelope it belongs to moves on the day it was spent, not when the statement closes, so the budget never lies about the past. The euphoric surprise is twofold: the holding-versus-NAB tripwire — a single number that, when it drifts, tells Nick something is wrong before he would otherwise have noticed — and the realisation that the day he decides to let someone else use BudgetBuddy, it is already a per-user multi-tenant app; he adds them with an email and their dev key, flips one config value, deploys to GCP, and nothing in the ledger, the envelope engine, or the UI had to change.
+
+## Out of Scope
+
+The MVP does not split one category across multiple envelopes. Mapping stays many categories to one envelope. A dedicated sinking-fund target type is not built. Annual envelopes are treated as monthly target divided by twelve for the MVP. There is no mobile quick-add of purchases and no offline transaction capture — the PWA is read-and-allocate over Tailscale, not an offline write queue. There is no auto-allocation engine and no agent-proposed allocations. There is no reporting suite beyond what the grid and detail pages show, no PDF or CSV export, and no what-if replay queries against the event log. There is no multi-currency support. There is no joint-finance surface; the data model is multi-tenant per-user, not joint-account shared-ledger. **Cloud hosting is built-ready, not deployed.** The cloud adapters (email magic-link auth, KMS-encrypted per-user secrets, Postgres data layer) are written and unit-tested behind their interfaces so the switch is config-only, but standing up the public GCP service, registering the `/budget` route on `nicholaswood.com.au`, and onboarding a second human are deliberate later steps, not MVP deliverables. Direct bank-CSV reconciliation against PocketSmith feeds is a later trust layer, not MVP.
+
+## Principles
+
+- The envelope is the user-facing primitive. PocketSmith categories are inputs. Envelopes are how Nick thinks and decides.
+- Cash-basis fidelity to the envelope metaphor. A swipe decrements the envelope on the day it happens, regardless of which card moved.
+- Every dollar is conserved. A forgiven overspend is not free money. The deficit is always booked somewhere, never silently leaked.
+- Local-first. Personal financial data does not leave the owner's machine without a deliberate, per-action choice. In local mode there is no cloud egress of transactions at all.
+- **Cloud-ready by construction, not by rewrite.** The data model is multi-tenant from the first migration; every piece of identity-bearing state carries a `user_id`. Deployment differences (who authenticates, where secrets live, which database backs the store) sit behind interfaces. Business logic never knows or branches on which deployment target it is running in.
+- **One tenant per principal.** Each user owns their own PocketSmith developer key, their own transactions, their own envelopes and budget. There is no shared data between tenants. Onboarding a person is: their email plus their PocketSmith dev key.
+- The event log is the source of truth and the audit log. Future-Nick can always ask why an envelope went negative on a given day and get an answer.
+- The thing is the source of truth, not the task. This ISA at the project root is iterated continuously, not recreated per task.
+
+## Constraints
+
+- bun plus TypeScript only. No Python. No npm or npx. Australian English. AUD only. No em dashes in prose.
+- **Single codebase, two deployment targets, one switch.** A `DEPLOY_MODE` value of `local` or `cloud` is the only thing that selects deployment behaviour. No business module reads `DEPLOY_MODE`; only the composition root (dependency wiring) does.
+- **Multi-tenant schema from the first migration.** A `users` table exists. Every tenant-scoped table carries a non-null `user_id` foreign key to `users.id`. Local mode seeds exactly one user (Nick) and runs single-tenant at runtime over a multi-tenant schema. There is no separate single-tenant schema that later needs migrating.
+- **Auth sits behind an `AuthProvider` interface.** Local implementation: Tailscale device trust plus a PIN held in the secret store, thirty-minute idle session. Cloud implementation: passwordless email magic-link sign-in (request link, verify token, mint httpOnly+Secure+SameSite session cookie). No route handler or business module depends on which implementation is active; they depend only on the resolved authenticated `user_id`.
+- **Secrets sit behind a `SecretStore` interface, keyed per user.** Each user's PocketSmith `X-Developer-Key` is fetched through the store for the authenticated `user_id` at request time. Local implementation: the PAI secrets store / OS keychain / an encrypted local file. Cloud implementation: envelope encryption via GCP KMS with ciphertext stored in the database. A developer key never appears in env files, git, logs, or as plaintext at rest.
+- **Data access sits behind a thin store layer; SQL stays Postgres-portable.** Local persistence is SQLite via `bun:sqlite`, single file, single writer owned by one Bun process. No business module imports `bun:sqlite` directly — they depend on the store interface. Business queries avoid SQLite-only syntax so the Postgres adapter (cloud) is a drop-in. The cloud Postgres adapter is written and unit-tested but not the local default.
+- The PocketSmith client is generated from the published OpenAPI 3 spec `openapi.json` at `github.com/pocketsmith/api`, pinned to commit SHA `8e964ca0107444e4d797b75fbc30fb969d488d9d` in-repo. The client is regenerated manually on a spec bump, never auto-tracked. Base URL `https://api.pocketsmith.com/v2`. Auth is the `X-Developer-Key` header (not OAuth) in local and cloud alike — the key is the per-user secret.
+- Sync is daily pull only. PocketSmith publishes no webhooks, so no push or listener code path may exist. Incremental sync uses `updated_since`.
+- **The UI is a PWA, optimised for web app and installed app alike.** It ships a web manifest and a service worker, is installable on iOS and Android home screens, and serves an offline app shell. It is served over HTTPS in both modes: locally via `tailscale serve` on a `*.ts.net` hostname (a real cert, so service workers register and install works); in cloud via the platform certificate at `nicholaswood.com.au/budget`. Remote access in local mode is Tailscale-only; no public internet exposure in local mode.
+- No cloud SaaS storage of financial data and no cloud AI inference over transactions in local mode. In cloud mode, financial data is stored in the user's own tenant rows and protected per the security ISCs; cloud AI inference over transactions stays off by default and opt-in per query.
+
+## Goal
+
+Ship a local-first BudgetBuddy that replaces Nick's PocketSmith-plus-mental-model setup with a real zero-based envelope view, built on a multi-tenant, adapter-seamed architecture that becomes a public per-user cloud app by changing configuration rather than code. Done means: a daily PocketSmith pull lands transactions into a SQLite event-sourced ledger scoped to the authenticated user; envelopes decrement on spend-date with a visible Credit Card Holding envelope for NAB; the recurring budget template auto-rolls into each new month with no manual ritual, a continuous zero-based check alerts when the budget is unbalanced rather than blocking, and actual-versus-budget income variance is carried as surplus/deficit on per-source income envelopes; the grid and a time-travel view render envelope balances; the app runs as an installable PWA reachable over Tailscale HTTPS; a read-only Pulse widget surfaces unallocated dollars, top overspends, and the holding-versus-NAB tripwire; and the cloud-ready seams (multi-tenant schema, `AuthProvider`, `SecretStore`, portable store layer, `DEPLOY_MODE` switch) are in place and unit-tested such that the cloud adapters compile and pass their tests without any business-logic change.
+
+## Criteria
+
+### Ingest and sync (Weekend 1)
+
+- [ ] ISC-1: PocketSmith TypeScript client generated from the pinned OpenAPI 3 commit SHA (superseded 2026-06-29 by the Basiq pivot; see Changelog and ISC-105/107)
+- [ ] ISC-2: Client authenticates using the X-Developer-Key header (superseded 2026-06-29 by the Basiq pivot; see Changelog and ISC-108)
+- [ ] ISC-3: Developer key resolved through the SecretStore for the authenticated user at runtime (superseded 2026-06-29 by the Basiq pivot; secret is now app-level, see Changelog and ISC-109/128)
+- [ ] ISC-4: Backfill pages through the transactions endpoint to completion
+- [ ] ISC-5: Incremental sync passes updated_since equal to last successful run timestamp
+- [ ] ISC-6: Backfill script pulls two years from a parameterised start date
+- [ ] ISC-7: Daily sync runs from PAI cron at a fixed local time
+- [ ] ISC-8: Two consecutive failed syncs raise a Pulse or Telegram alert
+- [ ] ISC-9: Anti: No webhook listener or push-sync code path exists anywhere in the repo
+
+### Data model and store (Weekend 1 to 2)
+
+- [ ] ISC-10: SQLite database opens via bun:sqlite as a single file at a known path
+- [ ] ISC-11: Schema declares events, snapshots, transactions, categories, mappings, envelopes tables
+- [ ] ISC-12: Each transaction row stores the raw PocketSmith JSON for diffing
+- [ ] ISC-13: transaction_overrides table is keyed on pocketsmith id and field
+- [ ] ISC-14: An owner column exists on ledger entities, defaulted to the single principal
+- [ ] ISC-15: Every state change appends an event with timestamp, actor, and correlation id
+- [ ] ISC-16: End-of-day job writes one snapshot balance row per envelope per day
+- [ ] ISC-17: Anti: Re-sync never mutates a transaction beyond base-field refresh plus overlay
+
+### Envelope semantics (Weekend 2)
+
+- [ ] ISC-18: Envelope CRUD persists name, parent_id, group, rollover_rule, target_type, target_amount
+- [ ] ISC-73: Envelopes form a tree via a self-referential parent_id; a parent envelope is itself spendable and allocatable, not just a header
+- [ ] ISC-74: A parent envelope's carryover, allocation, total, and left roll up as the sum of its children plus any allocation or activity directly on the parent
+- [ ] ISC-19: Category-to-envelope mapping is many-to-one and effective-dated
+- [ ] ISC-20: Unmapped category transactions resolve to the Inbox envelope at import
+- [ ] ISC-21: NAB card spend decrements the Credit Card Holding envelope on transaction date
+- [ ] ISC-22: Transactions flagged is_transfer are excluded from envelope decrement
+- [ ] ISC-23: Pending transactions appear in lists but do not decrement balances
+- [ ] ISC-24: Posted transactions decrement the mapped envelope on transaction date
+- [ ] ISC-25: Default rollover carries both surplus and deficit to the next month as the envelope's explicit starting carryover
+- [ ] ISC-26: Per-envelope overrides to the default carry: drain_to_zero drops surplus at period end (use-it-or-lose-it); annual_reset carries within the year and resets in January
+- [ ] ISC-71: Any envelope in surplus or deficit can be balanced via the move-money flow in either direction, or left to carry over
+- [ ] ISC-27: Annual envelopes display as monthly target divided by twelve for the MVP
+- [ ] ISC-28: Anti: A forgiven overspend never leaves the ledger unbalanced
+
+### Allocation and every-dollar rule (Weekend 4)
+
+- [ ] ISC-29: The recurring budget template auto-rolls into each new month; allocations carry forward with no manual plan-the-month ritual
+- [ ] ISC-76: Anti: A new month never requires a manual allocation step to have a budget; the template applies automatically
+- [ ] ISC-77: Every change to the budget template is recorded with timestamp and before/after values and is viewable as a budget history
+- [ ] ISC-30: Zero-based check compares total spending allocations to total budgeted income; an imbalance raises an alert, never a hard block on save or view
+- [ ] ISC-31: Actual income above or below budgeted appears as surplus/deficit on the relevant income envelope
+- [ ] ISC-32: Anti: Neither viewing nor saving an allocation is ever blocked by an unbalanced or non-zero-based budget
+- [ ] ISC-65: Income envelopes are a first-class envelope type, one per income source, each carrying a budgeted amount and an actual balance whose variance is the surplus/deficit
+- [ ] ISC-66: A reallocation names an explicit source and destination; the amount leaving the source equals the amount entering the destination
+- [ ] ISC-67: Every allocation change carries a scope of this-month-only or ongoing
+- [ ] ISC-68: An ongoing change updates the recurring budget template that apply-last-month reads; a this-month change applies only to the current period and leaves the template unchanged
+- [ ] ISC-69: Increasing an allocation prompts for a source (another envelope, an income surplus, or a raised income expectation) so the plan stays balanced; proceeding without one is allowed but raises the zero-based alert
+- [ ] ISC-72: The recurring budget template is edited through a dedicated Edit Budget wizard, not inline
+
+### UI (Weekend 3)
+
+- [ ] ISC-33: Vite plus React plus shadcn SPA is served by Hono on a single port
+- [ ] ISC-34: Envelope grid renders current-period balances in a Dave Ramsey layout
+- [ ] ISC-70: Each envelope row shows four figures: starting carryover, this-period allocation, total available (carryover plus allocation), and left (total minus spent)
+- [ ] ISC-75: The grid renders the envelope hierarchy with parents expandable and collapsible, rolled-up figures shown on the parent row
+- [ ] ISC-35: Per-envelope detail page lists that envelope's transactions
+- [ ] ISC-36: Time-travel date picker renders envelope balances as at end-of-day T
+- [ ] ISC-37: Statement-period reconcile click confirms Holding matches NAB balance
+- [ ] ISC-38: In local mode the app is reachable only over Tailscale, not the public internet
+- [ ] ISC-39: Session idle timeout is thirty minutes, unlocked by the active AuthProvider
+
+### Pulse (Weekend 4)
+
+- [ ] ISC-40: Pulse job writes widget JSON to a known path on the daily cycle
+- [ ] ISC-41: Pulse tile A shows unallocated dollars for the current period
+- [ ] ISC-42: Pulse tile B shows the top three envelopes by overspend percent
+- [ ] ISC-43: Pulse tile C shows Holding balance against NAB statement balance
+- [ ] ISC-44: Every Pulse tile carries an as-of timestamp
+
+### Security and data lifecycle (cross-cutting)
+
+- [ ] ISC-45: Anti: No financial data is sent to cloud SaaS or cloud AI in local mode by default
+- [ ] ISC-46: A daily encrypted backup of the SQLite file runs via rclone crypt remote
+
+### Cloud-ready architecture (cross-cutting, MVP build)
+
+- [ ] ISC-47: A `users` table exists with id, email, created_at, and status
+- [ ] ISC-48: Every tenant-scoped table (transactions, categories, mappings, envelopes, allocations, events, snapshots, overrides) carries a non-null user_id foreign key to users.id
+- [ ] ISC-49: Every store query that reads or writes tenant data is scoped by the authenticated user_id
+- [ ] ISC-50: A `DEPLOY_MODE` config value of local or cloud selects deployment behaviour at the composition root only
+- [ ] ISC-51: Anti: No business module (envelope engine, allocation, sync, store queries) reads DEPLOY_MODE
+- [ ] ISC-52: An `AuthProvider` interface exists with a working local implementation (Tailscale-trust plus PIN)
+- [ ] ISC-53: A cloud `AuthProvider` implementation does passwordless email magic-link request-and-verify and compiles and passes unit tests
+- [ ] ISC-54: A `SecretStore` interface exists, keyed by user_id, with a working local implementation for the PocketSmith dev key
+- [ ] ISC-55: A cloud `SecretStore` implementation envelope-encrypts the dev key via KMS and stores ciphertext, compiles, and passes unit tests
+- [ ] ISC-56: Anti: A PocketSmith developer key never appears as plaintext at rest, in env files, git, or logs in either mode
+- [ ] ISC-57: A store interface abstracts persistence; no business module imports bun:sqlite directly
+- [ ] ISC-58: A Postgres store adapter exists for cloud, compiles, and passes the same store unit-test suite as the SQLite adapter
+- [ ] ISC-59: Anti: Business SQL uses no SQLite-only syntax that the Postgres adapter cannot run
+
+### PWA (Weekend 3)
+
+- [ ] ISC-60: The app ships a valid web app manifest with name, icons, theme, and standalone display
+- [ ] ISC-61: A service worker registers and caches an offline app shell
+- [ ] ISC-62: The app is installable to an iOS or Android home screen (passes an installability audit)
+- [ ] ISC-63: The app is served over HTTPS locally via tailscale serve on a *.ts.net hostname so the service worker registers
+- [ ] ISC-64: Anti: The PWA does not implement offline transaction capture or a mobile write queue in the MVP
+
+### Transactions and period views
+
+- [ ] ISC-78: A Transactions list screen shows all of the tenant's transactions newest-first with date, payee, amount, account, and mapped envelope
+- [ ] ISC-79: The transactions list filters by date period (from/to) and by envelope and account
+- [ ] ISC-80: GET /api/transactions returns tenant-scoped transactions filtered by from/to/envelope/account
+- [ ] ISC-81: The store transaction query supports a date range (from, to) scoped by user_id
+- [ ] ISC-82: The budget view can be set to a given date period and lists the transactions that fall within it
+
+### Real-data setup and placeholder removal
+
+- [ ] ISC-83: Anti: No screen renders placeholder or demo data; absent data shows an explicit empty state, never invented numbers
+- [ ] ISC-84: A setup importer seeds envelopes from the PocketSmith category tree, preserving parent/child, classifying each as income or expense (note: envelope seeding is now spreadsheet-driven per ISC-96; category sourcing superseded 2026-06-29, see ISC-120/127)
+- [ ] ISC-85: The importer sets each envelope's budgeted amount from the PocketSmith budget forecast and its starting carryover from the rollover baseline (docs/pocketsmith-rollover-baseline.md)
+- [ ] ISC-86: The loaded transactions map to envelopes by PocketSmith category so each decrements the right envelope (superseded 2026-06-29: category source is now the Categoriser, see ISC-120/123/127)
+- [ ] ISC-87: The budget page can add a new envelope and specify its type (income or expense) and its parent
+- [ ] ISC-88: The status distinguishes "no budget set up yet" from "balanced", computed from real budgeted income
+- [ ] ISC-89: Money can be moved freely between any two envelopes in either direction (free rebalancing, e.g. +200 and +300 to 250/250); the amount leaving equals the amount entering
+- [ ] ISC-90: Every money movement is recorded as a traceable ledger entry (from envelope, to envelope, amount, timestamp, actor, correlation id) and is viewable in history
+
+### Three envelope types and income capital
+
+- [ ] ISC-91: Every envelope has a type — income, expense, or saving; a saving envelope behaves identically to an expense envelope (label/grouping only)
+- [ ] ISC-92: Each income envelope carries a budget (the expected income); that budget IS the amount used to balance against expense/saving/envelope budgets — there is no separate capital-allocation step
+- [ ] ISC-93: The zero-base compares total income budget to total expense-plus-saving-plus-envelope budget; the residual is the surplus/deficit (under-budget = surplus, over-budget = deficit)
+- [ ] ISC-94: Expense and saving envelope budgets carry a period of weekly, monthly, or annual, normalised to a monthly equivalent for the capital and zero-based maths
+- [ ] ISC-95: Child spend rolls up against the nearest budgeted ancestor envelope, so a parent budget is consumed by spend booked to its children (fixes the PocketSmith parent-budget/child-spend leak)
+
+### Spreadsheet replacement (the real budget model)
+
+- [ ] ISC-96: The budget structure is seeded from Nick's Expenses spreadsheet (the curated real budget), not the raw PocketSmith tree; the PocketSmith "Old" group is excluded entirely
+- [ ] ISC-97: An expense/saving budget entered in any one period normalises to all four: weekly = MAX(weekly, fortnightly/2, monthly*12/52, annual/52), fortnightly = weekly*2, monthly = weekly*52/12, annual = monthly*12
+- [ ] ISC-98: A budget-balancing tool implements the zero-base (the spreadsheet Full Budget E2): total income capital minus total expense-plus-saving budgeted equals zero when balanced; the residual is shown when it is not
+- [ ] ISC-99: The income envelope row shows actual income minus target; the budget-balancing tool shows capital provided minus amount budgeted out (both surplus/deficit views exist)
+- [ ] ISC-100: Each expense/saving envelope carries an Active flag; inactive envelopes are excluded from the budget total
+
+### Income parity, drill-down, and period selection
+
+- [ ] ISC-101: Income rows show the same four figures as expense rows — carryover, budget (the target), received (actual income, in place of spent), and left — with the received figure clickable to open the same transaction popover/drill-down
+- [ ] ISC-102: The transaction drill-down opens from any envelope's spent/received figure, income and expense alike
+- [ ] ISC-103: The budget page has a period selector defaulting to This Month, offering Last Month, This Financial Year (Jul–Jun AU), Last Financial Year, and a custom start/end date range
+- [ ] ISC-104: Selecting a period recomputes the whole grid (carryover, budget, spent/received, left, and the zero-base) for that period, including multi-month ranges
+
+### Direct bank feeds via Basiq (provider migration, 2026-06-29)
+
+- [ ] ISC-105: An `IngestProvider` interface exists; `runSync` and `runBackfill` depend on it, not on `PocketSmithClient`
+- [ ] ISC-106: Anti: No ingest module (sync, backfill) imports a provider-concrete client type directly
+- [ ] ISC-107: A `BasiqProvider` implements `IngestProvider`, compiles, and passes the provider test suite
+- [ ] ISC-108: The Basiq server token is obtained via POST /token with the app API key, cached to expiry, and refreshed on 401
+- [ ] ISC-109: Anti: The Basiq app API key never appears as plaintext at rest, in env files, git, or logs
+- [ ] ISC-110: A Basiq user is created per tenant and the Basiq userId persisted in the tenant-scoped Store
+- [ ] ISC-111: A bank connection is established via the Basiq Consent UI; Anti: no bank credential ever reaches BudgetBuddy
+- [ ] ISC-112: Connection state (connectionId, institution, consent expiresAt) is persisted per tenant
+- [ ] ISC-113: A connection refresh issues a job and polls GET /jobs/{id} to terminal success before any data read
+- [ ] ISC-114: Anti: An expired CDR consent surfaces a re-consent prompt and is never reported as a successful empty sync
+- [ ] ISC-115: Backfill pages the Basiq transactions endpoint to completion via links.next
+- [ ] ISC-116: Incremental sync filters Basiq transactions by postDate greater than the last successful run bookmark
+- [ ] ISC-117: A Basiq transaction maps to the store Tx shape (signed amount to cents, postDate to date, status to isPending, class transfer to isTransfer, merchant to payee, verbatim JSON to rawJson)
+- [ ] ISC-118: Anti: The mapper preserves negative=outflow; a debit never lands as a positive amount
+- [ ] ISC-119: Anti: No webhook or push listener for Basiq events exists; sync stays pull-poll only (preserves ISC-9 for the new provider)
+- [ ] ISC-120: A Categoriser assigns every ingested transaction a stable internal categoryId from BudgetBuddy's own category set, independent of any provider taxonomy
+- [ ] ISC-121: The Categoriser derives a default category from Basiq enrich, then lets a matching user rule override it
+- [ ] ISC-122: A user-editable category rule maps a payee/merchant pattern to an internal categoryId; rules are tenant-scoped and effective-dated
+- [ ] ISC-123: An uncategorised transaction resolves to the Inbox envelope via the existing effective-dated category-to-envelope mapping (preserves ISC-19, ISC-20)
+- [ ] ISC-124: Anti: The envelope engine and the category-to-envelope mapping are unchanged by the swap; Tx.categoryId stays the only coupling point
+- [ ] ISC-125: Anti: Re-running the Categoriser never overwrites a user's explicit category override or rules (mirrors ISC-17)
+- [ ] ISC-126: PocketSmith ingest (client, /me, X-Developer-Key) is removed from the runtime path once Basiq backfill verifies data parity on Nick's own data
+- [ ] ISC-127: A one-time migration maps existing PocketSmith-categorised transactions onto the internal category set so historical envelope balances are preserved
+- [ ] ISC-128: Anti: No per-user PocketSmith developer key is required to onboard a tenant; onboarding is email plus in-app bank consent only
+
+### Budget editing integrity and sync hygiene (v1.7.0, 2026-08-10)
+
+- [x] ISC-137: An ongoing budget edit made after an existing mid-month version stores EXACTLY the typed amount — completePrevious supersedes by window overlap, not open-ness, so closed-but-overlapping versions never sum into the result
+- [x] ISC-138: The income budget edit path applies the same window-overlap supersession
+- [x] ISC-139: Anti: a budget save never creates versions for rows the user did not touch (the wizard posts only changed lines; the monthly↔period rounding round-trip cannot version untouched envelopes)
+- [x] ISC-140: A cleared From date in the edit wizard omits effectiveFrom from the payload instead of sending "" (which the server's strict date schema would 400, failing the whole save)
+- [x] ISC-141: The adopt-category modal carries a Start date field, defaulting to the first of the current month, posted as effectiveFrom (omitted when cleared)
+- [x] ISC-142: The adopt handler anchors rolloverStart to the chosen start date when one is given (today otherwise)
+- [x] ISC-143: Clearing a detected category persists server-side (dismissed_categories table) and removes it from GET /api/categories/unmapped — it stays off the budget page across reloads
+- [x] ISC-144: Cleared categories list under Settings → Not synced (GET /api/categories/dismissed) with the same aggregates, and Restore reverses the dismissal
+- [x] ISC-145: Anti: an adopted category appears in NEITHER the new-categories card NOR the Not synced list (the mapping removes it from both)
+
+### Category lifecycle and budget windows (v1.8.0, 2026-08-10)
+
+- [x] ISC-146: An adopted (mapped) category NEVER re-lists as new — even when the mapping window starts after older transactions (the Car Change Over shape: 2024 history, adopted from this month)
+- [x] ISC-147: Unmapped-category aggregates carry firstSeenDate (earliest transaction), alongside lastSeenDate
+- [x] ISC-148: The adopt modal warns when the category's transactions predate the chosen start date, naming the earliest date
+- [x] ISC-149: Dismissing a category snapshots its newest transaction date; a transaction newer than the snapshot re-shows the category on the budget page (it must be dismissed again)
+- [x] ISC-150: A re-shown category leaves Settings → Not synced until it is re-dismissed (the two lists stay exact complements)
+- [x] ISC-151: A budget edit carrying ONLY an end date applies — same amount through the window, zero after — instead of no-opping on the unchanged amount (expense path)
+- [x] ISC-152: The income edit path honours the same end-date-only rule
+- [x] ISC-153: Anti: the per-envelope Add/Edit budget modal never sends effectiveFrom "" (cleared date omitted, both create and edit paths)
+
+### Phase 1 — engine integrity (v1.9.0, 2026-08-12)
+
+- [x] ISC-154: One guarded version write path (applyVersionWrite) is the ONLY writer of effective-dated windows; all four writers (wizard, income, move/distribute, create) route through it
+- [x] ISC-155: Day-level non-overlap invariant — after any write sequence, an envelope's live (non-tombstone) windows are pairwise disjoint
+- [x] ISC-156: A write covering a NOT-YET-STARTED (scheduled) version is refused with 409 scheduled_conflict carrying the conflicting windows; nothing is written (atomic refusal)
+- [x] ISC-157: The same write with supersedeScheduled tombstones the scheduled version explicitly; already-STARTED versions are silently replaceable (ordinary backdated edits)
+- [x] ISC-158: The wizard and modal surface the 409 as a warning with an explicit "Replace scheduled budgets and save" retry
+- [x] ISC-159: Anti: completePrevious=false no longer produces overlap-and-sum; the field is accepted and ignored (coexist retired, D2); the coexist checkbox is gone from both edit surfaces
+- [x] ISC-160: One rederiveMaterialisedMonths pass after every template write replaces per-site compensation; materialised PAST months recompute too (D4); this-month overrides are preserved (scope column now read)
+- [x] ISC-161: Explicitly saving the plan value while a this-month override masks it clears the override (previously silently skipped)
+- [x] ISC-162: An ongoing move/distribute into an envelope with only a scheduled version caps its fresh line the day before the scheduled start (no silent doubling) and rederives materialised months
+- [x] ISC-163: GET date params (from/to/date) are validated — malformed or outside 1990..2100 is a 400; ranges over 120 months are a 400; ensureMonth carries an engine-level era backstop
+- [x] ISC-164: Migration purged out-of-era allocations (1,433,975 rows) and mechanical sync-roll history (1.44M rows), then VACUUM; kept-era rows conservation-verified EXACT against the pre-migration backup
+- [x] ISC-165: Anti: the purge never touches kept-era (2023-01..2030-12) allocations, human (ui/agent) history rows, or template lines
+
+### Phase 2 — as-of date-targeted editing (v1.10.0, 2026-08-12)
+
+- [x] ISC-166: The master edit wizard carries ONE "Editing as of" date (default today) driving the month shown, the drafts seeded, the version each edit targets, the override month, and the balance banner
+- [x] ISC-167: As-of writes are BOUNDED per envelope — first of the target month through the day before the envelope's next later-starting version — so budgets scheduled for other months survive an as-of edit by construction (no 409 in the ordinary flow)
+- [x] ISC-168: Owner scenario A — with a September budget scheduled, an as-of-today edit updates August and September survives untouched
+- [x] ISC-169: Owner scenario B — an as-of-September edit replaces the September budget and leaves August untouched
+- [x] ISC-170: Editing a middle month preserves LATER schedules too (September re-edit leaves October intact)
+- [x] ISC-171: A month-only override under as-of targets the as-of month's allocation (never versioned, other months untouched)
+- [x] ISC-172: The income edit path honours asOf with the same bounded semantics
+- [x] ISC-173: The save response's zero-base alert evaluates the as-of month, not always the current one
+- [x] ISC-174: Switching the as-of month reseeds the wizard's drafts from that month's figures; a same-month refetch never clobbers in-progress edits
+- [x] ISC-175: Anti: every budget-window date field (effectiveFrom/effectiveTo/asOf) is era-bounded at the zod boundary — a partially-typed year can never mint a version or target a garbage month
+
+### Phases 3–5 — chronology UX, income receipt dates, adjacent repairs (v1.11.0, 2026-08-12)
+
+- [x] ISC-176: The envelope detail page shows the full budget timeline — completed, active, and scheduled versions — for both expense and income envelopes
+- [x] ISC-177: Each real version is editable in place (amount and/or window) via POST /api/envelopes/versions/edit; the legacy synthetic income row is view-only
+- [x] ISC-178: A window edit that overlaps the previous version returns 409 neighbour_adjustments with a REQUIRED suggestion ("end the previous budget on X"); accepting applies both changes atomically
+- [x] ISC-179: A window edit that opens a gap returns an OPTIONAL suggestion; declining keeps the gap (gaps are legal), and the invariant holds either way
+- [x] ISC-180: Clearing an end date under a later version caps the edited version (required self-adjustment); the non-overlap invariant is asserted after every version edit
+- [x] ISC-181: Editing a past version's amount recomputes the past months it covers (D4); in-place edits are audited via budget_history + a version.edit event
+- [x] ISC-182: Income envelopes carry an expected receipt day (1..31, per envelope, editable in the income modal, clearable); the grid shows a "due Nth" chip
+- [x] ISC-183: PLAN-BASED due-gating (D5): before the expected day the income row reads carryover + received (never the pre-payday deficit); on/after it the full month is due, so missing income shows as a deficit; the Budget column always shows the plan
+- [x] ISC-184: Future months are never due; months before the current one are fully due; no expected day = due from day 1 (pre-feature behaviour)
+- [x] ISC-185: Anti: expense envelopes are never gated by income timing (owner answer 1)
+- [x] ISC-186: Net position compensates with awaitingIncomeCents so the reconciled delta is exact across the expected-day boundary; the widget shows "Awaiting expected income"
+- [x] ISC-187: Pulse reads the ENGINE's figures — materialised allocations (template fallback) and budgeted income — replacing targetAmountCents (always 0 for engine-created envelopes) and the payday-swinging inflow proxy
+- [x] ISC-188: Grid/detail edit paths seed a parent's OWN allocation, never the descendant-rolled total (double-count fix); income create persists targetCents (was silently dropped)
+- [x] ISC-189: The wizard's allocated total excludes working and inactive envelopes, matching the server's zero-base
+- [x] ISC-190: Running-balance boundaries derive from the current version's RATE (not the prorated month figure); the cadence endpoint reports the period that ACTUALLY applied
+
+### Edit-modal window seeding (v1.11.1, 2026-08-12)
+
+- [x] ISC-191: EDITING a budget seeds the modal's From/To fields from the ACTIVE version's real window, with a "Currently effective …" info line naming it
+- [x] ISC-192: A legacy open-since-forever (1970) budget seeds a BLANK From — saving applies the change from the first of this month, preserving earlier months — never displaying 1970 and never rewriting all history by default
+- [x] ISC-193: Anti: only the ADD-new-budget flow defaults the From field to the first of the current month
+- [x] ISC-194: Anti: the async chronology fetch never clobbers dates the user already typed (seed fires once per open), and a malformed/mocked versions response degrades to no seeding, never a crash
+
+### Category-page Add budget + always-prefilled edit modal (v1.11.2, 2026-08-12)
+
+- [x] ISC-195: The category page's Budget history card carries an "Add budget" button opening the modal in ADD-VERSION mode ("Add budget — <name>", add-flow window defaults) to append the category's next budget
+- [x] ISC-196: The edit modal is ALWAYS prefilled: a real dated active version seeds its actual window; a legacy open-since-forever budget keeps the familiar first-of-month prefill with the "Currently effective since the start" note (never a blank field, never 1970)
+- [x] ISC-197: Anti: add-version mode never seeds the active version's dates, and the amount/name/period fields prefill in every edit mode
+
+### Real start dates for legacy budgets (v1.11.3, 2026-08-12)
+
+- [x] ISC-198: No open-1970 budget lines remain — migration backfilled each legacy line's REAL start: expense lines to their earliest real materialised month, income lines to their rollover anchor, stragglers to their creation anchor; pre-history artifact allocations (months before the tenant's first transaction) purged first
+- [x] ISC-199: The budget chronology and the edit modal show ACTUAL start dates (no more "Start → ongoing" for real budgets); the income baseline bootstrap and the synthetic no-versions income row anchor at the rollover start so new 1970 lines are never minted
+- [x] ISC-200: An envelope created into an already-materialised month materialises its OWN allocation (previously $0 on the grid until its next edit — the Apple TV defect, whose missing month was also data-repaired with correct proration)
+
+### Modal reset identity fix (v1.11.4, 2026-08-12)
+
+- [x] ISC-201: The edit modal's reset is keyed by VALUE (envelope id + mode), never object identity — a parent re-rendering with a fresh editTarget object cannot clobber the seeded start date (the inc-rental "note says June, field says August" defect) or in-progress typing
+- [x] ISC-202: Anti: the detail page's edit-target memos are hoisted above its early returns (hook order unconditional; pinned by lint and the four page suites)
+
+### Free typing + income cadence entry (v1.12.0, 2026-08-12)
+
+- [x] ISC-203: Wizard amount fields hold RAW text while typing (format on blur) — partial entries like "2" or "2604" are never snapped to "2.00" mid-keystroke, for spending and income rows alike
+- [x] ISC-204: Income rows in the wizard carry a cadence selector (weekly/fortnightly/monthly/annual); entries normalise to their monthly equivalent so the zero-base stays monthly ($600 weekly = $2,600/mo)
+- [x] ISC-205: The income version's cadence label persists (engine period pass-through; a cadence-only relabel is not skipped) and round-trips into the wizard's seeding via IncomeEnvelopeView.period
+
+### Net-position parent-own summation (v1.12.1, 2026-08-12)
+
+- [x] ISC-206: Net position sums TOP-LEVEL rolled rows (every envelope once, parents' own balances included) for the total and every section line — leaves-only summation silently dropped parent envelopes' own money (Recreation's own −$5,674.10), making the widget disagree with the budget page and skewing the reconciled delta by that amount
+
+### Income starts from real history (v1.12.2, 2026-08-12)
+
+- [x] ISC-207: An income's displayed and bootstrapped start is its REAL history start — the first of the month of its earliest mapped inflow (PocketSmith history as authority) — falling back to the import anchor, then the epoch; live values: salary 2023-07-01, rental 2024-11-01, adhoc 2024-12-01
+
+### PocketSmith budget-history backfill (v1.13.0, 2026-08-12)
+
+- [x] ISC-208: A backfill reconstructs REAL budget eras from PocketSmith budget-event SERIES (rate × cadence → monthly equivalent, real period labels — a fortnightly salary is one steady era, never a month-by-month forecast smear) and imports them UNDER the BudgetBuddy takeover; BudgetBuddy-authored budgets are never modified; overlapping concurrent series are skipped with a warning, never imported wrongly
+- [x] ISC-209: Applied live with automatic backup: 6 historical versions (Salary 2023-07/2023-10/2024-08/2025-01 eras — the owner's "current budget started 1/1/25 with a number before it" verbatim; Rental 2024-12/2025-07); dry-run-first workflow; non-overlap asserted per envelope after merge; materialised months recomputed (D4)
+- [x] ISC-210: The budget page's edit path passes rolloverStart into the modal (it showed "unset" from the main page while the category page showed the real anchor)
+
+### Derived active flag (v1.13.1, 2026-08-12)
+
+- [x] ISC-212: An envelope's `active` flag is DERIVED — true when a live version window intersects the viewed range; ended budgets read inactive, scheduled ones activate in their month; the manual Active toggle is removed from the edit modal (dates decide, ISC-100 superseded)
+
+### Dropdown UX overhaul — modal close-through, mobile scroll, searchable sorted selects (v1.18.0, 2026-08-13)
+
+Bug A — closing a dropdown by re-clicking its trigger closes the whole modal:
+
+- [x] ISC-213: A reproduction harness (headless Chrome against an ISOLATED dev instance — own SQLite, own port) captures the pre-fix defect: with the add-budget modal open, clicking an open Select's trigger a second time closes the entire modal
+- [x] ISC-214: Post-fix, the same probe leaves the modal open — first trigger click opens the dropdown, second click closes only the dropdown
+- [x] ISC-215: The fix lives in the shared ui components (dialog.tsx / select.tsx), not per-modal patches — grep shows no onPointerDownOutside/onInteractOutside handlers scattered in the five modal components
+- [x] ISC-216: Clicking the dialog overlay with NO dropdown open still dismisses the modal (outside-click close preserved)
+- [x] ISC-217: Escape with a dropdown open closes only the dropdown; a second Escape closes the modal
+- [x] ISC-218: Anti: the fix never disables outside-dismissal wholesale (no unconditional preventDefault on every outside interaction)
+
+Bug B — modal unusable on mobile because it does not scroll:
+
+- [x] ISC-219: DialogContent bounds its height to the small viewport (dvh-based max-height) and scrolls internally (overflow-y-auto) — shared component, one place
+- [x] ISC-220: Harness at 375×667: the add-budget modal's submit button is reachable by scrolling WITHIN the modal
+- [x] ISC-221: The page behind the modal does not scroll while the modal content scrolls (Radix scroll-lock intact)
+- [x] ISC-222: Desktop 1280×800: the add-budget modal shows no internal scrollbar (clientHeight equals scrollHeight) — desktop layout unchanged
+- [x] ISC-223: All modals inherit the fix via the shared DialogContent (no per-modal max-h overrides required)
+
+Feature C — dropdowns app-wide alphabetically sorted with a search bar:
+
+- [x] ISC-224: A shared searchable select lives in web/src/components/ui/select.tsx, rendering a search input inside the dropdown content
+- [x] ISC-225: Options filter case-insensitively on label substring as the user types
+- [x] ISC-226: Options render alphabetically by label regardless of source order (locale-aware compare)
+- [x] ISC-227: Pinned sentinel options (e.g. "Top level (no parent)") stay above the sorted remainder while they match the query
+- [x] ISC-228: Keystrokes in the search input never trigger Radix Select typeahead item-jumping (events contained to the input)
+- [x] ISC-229: The search input receives focus when the dropdown opens
+- [x] ISC-230: ArrowDown moves from the search input into the option list; Enter selects the highlighted option
+- [x] ISC-231: A query with no matches shows an explicit "No matches" row, never a crash or empty popover collapse
+- [x] ISC-232: The query resets when the dropdown closes; reopening shows the full list
+- [x] ISC-233: Every dynamic entity-list dropdown app-wide (category/envelope pickers across pages and modals — exact callsite list in Features) adopts the searchable sorted select
+- [x] ISC-234: Semantically-ordered dropdowns (budget cadence/period, version chronology, period navigation) keep their natural order; the decision and the list are logged in Decisions
+- [x] ISC-235: Anti: no dropdown loses existing custom item rendering (icons, formatted amounts, disabled states, grouped sections) in the refactor
+- [x] ISC-236: Anti: no callsite's value semantics change — the same value string is posted to the same endpoint; only presentation changes
+
+Feature C lens-pass refinements (IterativeDepth: a11y/keyboard + mobile/touch, 2026-08-13):
+
+- [x] ISC-242: The search input does NOT autofocus on coarse-pointer (touch) devices — no keyboard popup on the phone; ISC-229's autofocus is desktop (fine-pointer) only
+- [x] ISC-243: The search input's font-size is at least 16px (prevents iOS focus zoom)
+- [x] ISC-244: The dropdown list's max-height derives from Radix's available-height variable so a small viewport or open on-screen keyboard never clips options off-screen
+- [x] ISC-245: Enter in the search input selects the FIRST visible filtered option, never a hidden one; with no matches, Enter is a no-op
+- [x] ISC-246: The "No matches" row is a plain non-focusable element, not a SelectItem
+- [x] ISC-247: The search input carries an aria-label
+
+### Stale-pending pruning (v1.19.0, 2026-08-13)
+
+Sync is updated_since-incremental and upsert-only, so a pending PocketSmith later drops (re-posted under a new id) lingers locally forever — 15 ghosts (−$362.36, 12–14 Jul) found during the card-7280 drift investigation.
+
+- [x] ISC-248: runSync prunes local pending rows whose ids are absent from PocketSmith's CURRENT view of the pending date window
+- [x] ISC-249: The prune window spans oldest-pending −14 days through max(newest-pending +7 days, today) so date-shifted reposts and UTC/Melbourne boundary effects cannot orphan a live pending
+- [x] ISC-250: A deletePendingTransactions store method deletes ONLY is_pending=1 rows, tenant-scoped, returns the deleted count — implemented in sqlite, postgres, and the memory test store
+- [x] ISC-251: Anti: a POSTED row can never be deleted by the prune (SQL is_pending guard; unit test hands it posted ids)
+- [x] ISC-252: Anti: a pending still present in PocketSmith is never deleted (unit test)
+- [x] ISC-253: A pending that posted under the SAME id is upserted by the drain, not pruned (pendings are read after the drain)
+- [x] ISC-254: Zero local pendings → the prune makes NO extra PocketSmith call (fake-client call count)
+- [x] ISC-255: A failed window fetch fails the sync before any delete — no pruning on partial data
+- [x] ISC-256: The sync completion event payload carries the pruned count (audit trail)
+- [x] ISC-257: The store contract suite covers deletePendingTransactions on both engines
+- [x] ISC-258: typecheck, lint, and bun test all green
+- [x] ISC-259: Live after deploy + sync: card 7280's local pending set equals PocketSmith's live pending set; the July ghosts are gone
+- [x] ISC-260: Anti: the reconcile drift formula inputs are unaffected (pendings were already excluded) — posted net unchanged by the prune
+- [x] ISC-261: Anti: live posted row count for card 7280 unchanged by the prune sync
+
+Cross-cutting:
+
+- [x] ISC-237: bun run typecheck passes across all three tsconfigs
+- [x] ISC-238: bun test passes with zero failures
+- [x] ISC-239: bun run lint (eslint web/src) passes clean
+- [x] ISC-240: Version bumped, web built, and the LIVE instance serves the new version string (live probe)
+- [x] ISC-241: Anti: the harness never writes to the live database — it runs against its own PENNY_SQLITE_PATH; ~/.penny/penny.db is untouched by this task's testing
+
+## Test Strategy
+
+| isc | type | check | threshold | tool |
+|-----|------|-------|-----------|------|
+| ISC-1 | build | generated client file exists, OpenAPI SHA pinned in config | file present, SHA matches | Read, Grep |
+| ISC-2 | api | request carries X-Developer-Key header | header present | curl -i against a live endpoint |
+| ISC-3 | security | key read from SecretStore by user_id, absent from source | resolved at runtime, zero matches in repo | Grep, unit test |
+| ISC-4 | api | backfill consumes all pages | page cursor exhausted | Bash run, count rows |
+| ISC-5 | api | sync request includes updated_since param | param equals last run ts | Grep request log |
+| ISC-6 | functional | backfill arg controls start date | two-year window pulled | Bash run with arg |
+| ISC-7 | operational | cron entry fires the sync at fixed time | job registered | Read cron config |
+| ISC-8 | operational | two failed runs trigger alert | alert emitted | Bash inject failure, observe |
+| ISC-9 | anti | no webhook or listener code present | zero matches | Grep webhook, listen, push |
+| ISC-10 | data | db file opens via bun:sqlite | connection succeeds | Bash open and query |
+| ISC-11 | data | all six core tables present | schema matches | SELECT from sqlite_master |
+| ISC-12 | data | raw_json column populated | non-null on imported rows | SELECT raw_json |
+| ISC-13 | data | overrides keyed on id and field | composite key enforced | SELECT, attempt dup |
+| ISC-14 | data | owner/user_id column present, defaulted | default applied | SELECT user_id |
+| ISC-15 | data | event rows carry ts, actor, correlation | columns non-null | SELECT from events |
+| ISC-16 | data | snapshot rows per envelope per day | one row per pair | SELECT count grouped |
+| ISC-17 | anti | re-sync leaves base row plus overlay only | no destructive update | Bash re-sync, diff rows |
+| ISC-18 | functional | envelope CRUD persists all fields incl parent_id | round-trip equal | SELECT after write |
+| ISC-73 | data | envelope tree via parent_id; parent allocatable | tree + direct alloc | SELECT parent_id, allocation |
+| ISC-74 | logic | parent totals roll up children plus direct | rollup correct | SELECT parent vs sum children |
+| ISC-19 | data | mapping is many-to-one effective-dated | constraint holds | SELECT, attempt second |
+| ISC-20 | functional | unmapped lands in Inbox | envelope_id is Inbox | SELECT on unmapped |
+| ISC-21 | logic | NAB spend decrements Holding on tx date | balance moved on date | SELECT balance delta |
+| ISC-22 | logic | is_transfer excluded from decrement | no envelope change | SELECT on transfer row |
+| ISC-23 | logic | pending shown not counted | listed, balance unchanged | SELECT, compare |
+| ISC-24 | logic | posted decrements on tx date | balance moved | SELECT balance delta |
+| ISC-25 | logic | surplus and deficit both carry as starting carryover | both directions carried | SELECT next-month carryover |
+| ISC-26 | logic | drain_to_zero drops surplus; annual_reset resets Jan | override behaviour holds | SELECT envelope by rule |
+| ISC-71 | logic | imbalanced envelope can be balanced either way or carried | move or carry both work | Interceptor move-money + SELECT |
+| ISC-27 | logic | annual shows target over twelve | monthly figure correct | SELECT computed target |
+| ISC-28 | anti | sum of envelopes plus available equals income | invariant holds | SELECT conservation check |
+| ISC-29 | logic | template auto-rolls into new month | allocations carried, no ritual | SELECT new-month allocations |
+| ISC-76 | anti | new month has budget without manual step | auto-populated | SELECT new month, no user action |
+| ISC-77 | data | budget changes recorded with before/after | history rows present | SELECT budget_history |
+| ISC-78 | ui | transactions list renders all txns newest-first | list visible | Interceptor screenshot |
+| ISC-79 | ui | list filters by date/envelope/account | filtered results | Interceptor + SELECT |
+| ISC-80 | api | GET /api/transactions returns filtered scoped txns | correct shape | curl -i |
+| ISC-81 | data | store query honours from/to range per user | range rows only | SELECT with range |
+| ISC-82 | ui | budget for a chosen period lists its transactions | period txns shown | Interceptor screenshot |
+| ISC-30 | logic | imbalance raises alert, save still succeeds | alert shown, not blocked | Interceptor attempt save unbalanced |
+| ISC-31 | logic | actual≠budgeted shows as income-envelope surplus/deficit | variance on income envelope | SELECT income envelope balance |
+| ISC-32 | anti | view and save never blocked by imbalance | both succeed unbalanced | Interceptor load + save |
+| ISC-65 | data | income envelope type persists budgeted + actual | variance computed | SELECT income envelope |
+| ISC-66 | logic | move debits source, credits destination equally | amounts conserved | SELECT both balances |
+| ISC-67 | functional | change records scope flag | this-month or ongoing stored | SELECT allocation change |
+| ISC-68 | logic | ongoing edits template, this-month does not | template changes only when ongoing | SELECT template vs period override |
+| ISC-69 | logic | allocation increase prompts source; unbalanced allowed with alert | source offered, alert on skip | Interceptor move-money flow |
+| ISC-72 | functional | template edited via Edit Budget wizard | wizard updates template | Interceptor wizard |
+| ISC-33 | build | SPA served by Hono on one port | 200 at root | curl -i root |
+| ISC-34 | ui | grid renders current balances | grid visible | Interceptor screenshot |
+| ISC-70 | ui | row shows carryover, allocation, total, left | four figures present | Interceptor screenshot |
+| ISC-75 | ui | hierarchy expandable, rolled-up parent row | tree renders | Interceptor screenshot |
+| ISC-35 | ui | detail lists envelope transactions | list visible | Interceptor screenshot |
+| ISC-36 | logic | as-of date renders past balances | snapshot matches | Interceptor plus SELECT |
+| ISC-37 | functional | reconcile click confirms holding vs NAB | confirmation recorded | Interceptor click |
+| ISC-38 | security | not reachable off Tailscale in local mode | refused publicly | curl from non-tailnet |
+| ISC-39 | security | idle session locks at thirty minutes | re-auth required | Bash time-advance test |
+| ISC-40 | integration | widget JSON at known path | file present and valid | Read, jq |
+| ISC-41 | ui | tile A unallocated dollars | value matches db | Interceptor plus SELECT |
+| ISC-42 | ui | tile B top three overspends | order correct | Interceptor plus SELECT |
+| ISC-43 | ui | tile C holding vs NAB | both values shown | Interceptor screenshot |
+| ISC-44 | ui | as-of timestamp on every tile | timestamp present | Interceptor screenshot |
+| ISC-45 | anti | no cloud egress of financial data in local mode | zero external posts | Grep, egress inspector |
+| ISC-46 | operational | daily encrypted backup runs | backup file appears | Bash run, ls crypt remote |
+| ISC-47 | data | users table present with required columns | columns exist | SELECT from sqlite_master |
+| ISC-48 | data | user_id FK on every tenant table | FK present and non-null | PRAGMA foreign_key_list per table |
+| ISC-49 | security | tenant queries scoped by user_id | no unscoped tenant read in store | Grep store, unit test cross-tenant isolation |
+| ISC-50 | build | DEPLOY_MODE switches wiring at composition root | local and cloud both wire | Read composition root, unit test both modes |
+| ISC-51 | anti | no business module reads DEPLOY_MODE | zero matches outside composition root | Grep DEPLOY_MODE |
+| ISC-52 | auth | local AuthProvider authenticates via PIN | session minted | unit test, Bash run |
+| ISC-53 | auth | cloud AuthProvider magic-link request+verify | token verifies, compiles, tests pass | bun test cloud-auth |
+| ISC-54 | security | SecretStore returns per-user dev key locally | correct key per user_id | unit test |
+| ISC-55 | security | cloud SecretStore encrypts via KMS, stores ciphertext | ciphertext only, compiles, tests pass | bun test cloud-secret |
+| ISC-56 | anti | dev key never plaintext at rest or in logs | zero plaintext matches | Grep key value across repo, db, logs |
+| ISC-57 | build | no business module imports bun:sqlite | imports only in store adapter | Grep import bun:sqlite |
+| ISC-58 | build | Postgres adapter passes the store test suite | same suite green | bun test store --adapter pg |
+| ISC-59 | anti | business SQL has no SQLite-only syntax | portable SQL only | Grep for sqlite-only constructs, pg adapter test |
+| ISC-60 | pwa | manifest valid with required fields | manifest parses, fields present | Read manifest, Interceptor audit |
+| ISC-61 | pwa | service worker registers, caches shell | SW active, shell cached | Interceptor application-tab check |
+| ISC-62 | pwa | app passes installability audit | installable=true | Interceptor Lighthouse-style audit |
+| ISC-63 | pwa | served HTTPS via tailscale serve on ts.net | https reachable, SW registers | curl -i https ts.net host |
+| ISC-64 | anti | no offline capture or mobile write queue | no such code path | Grep for offline-write, queue, sync-on-reconnect |
+| ISC-105 | build | sync/backfill typed to IngestProvider | no concrete client import | Grep, Read |
+| ISC-106 | anti | no provider-concrete import in ingest modules | zero matches | Grep |
+| ISC-107 | build | BasiqProvider passes provider suite | suite green | bun test |
+| ISC-108 | api | token fetched, cached, refreshed on 401 | refresh fires on 401 | unit test stubbed 401 |
+| ISC-109 | security | app key never plaintext | zero matches | Grep across repo, db, logs |
+| ISC-110 | data | Basiq userId persisted per tenant | row present | SELECT |
+| ISC-111 | security | consent links bank, no credential to BudgetBuddy | no credential field | Grep + flow review |
+| ISC-112 | data | connection state persisted | columns non-null | SELECT |
+| ISC-113 | api | job polled to success before read | read gated on job done | unit test job poll |
+| ISC-114 | anti | expired consent prompts re-consent, not silent success | prompt raised | unit test expiry |
+| ISC-115 | api | backfill drains links.next | cursor exhausted | Bash run, count rows |
+| ISC-116 | api | incremental filters postDate > bookmark | filter equals bookmark | Grep request, unit test |
+| ISC-117 | logic | Basiq tx maps to Tx fields | round-trip correct | unit test mapper |
+| ISC-118 | anti | debit stays negative cents | sign preserved | unit test debit row |
+| ISC-119 | anti | no webhook/listener for Basiq | zero matches | Grep webhook, listen, push |
+| ISC-120 | logic | categoryId assigned from own set | non-null internal id | unit test categoriser |
+| ISC-121 | logic | enrich default, user rule overrides | rule wins | unit test override |
+| ISC-122 | data | rule pattern to category, effective-dated, scoped | rule applies by date | SELECT, unit test |
+| ISC-123 | logic | uncategorised resolves to Inbox | envelope_id is Inbox | SELECT on uncategorised |
+| ISC-124 | anti | engine + mapping unchanged | only categoryId coupling | Grep diff, unit test |
+| ISC-125 | anti | re-run keeps overrides/rules | overlay untouched | unit test re-run |
+| ISC-126 | build | PocketSmith gone from runtime after parity | no PS in runtime path | Grep, parity report |
+| ISC-127 | data | historical PS categories mapped to internal set | balances preserved | SELECT pre/post balances |
+| ISC-128 | anti | onboarding needs no PS dev key | no dev-key prompt | flow review, Grep |
+| ISC-137 | logic | edit after mid-month version stores typed amount | grid equals typed cents | bun test budget-versions-overlap |
+| ISC-138 | logic | income edit same supersession | income budget equals typed | bun test budget-versions-overlap |
+| ISC-139 | anti | untouched rows never version | payload lines only changed | bun test EditBudgetPage |
+| ISC-140 | api | cleared From omitted, not "" | effectiveFrom undefined | bun test EditBudgetPage |
+| ISC-141 | ui | adopt modal start date, default 1st | effectiveFrom in payload | bun test AdoptCategoryModal |
+| ISC-142 | logic | rolloverStart anchors to start date | handler uses effectiveFrom | Read handlers/categories.ts |
+| ISC-143 | data | dismissal persists, off unmapped | row in dismissed_categories | bun test routes-categories |
+| ISC-144 | ui | Not synced lists + Restore reverses | dismissed list round-trip | bun test routes-categories |
+| ISC-145 | anti | adopted category in neither list | both lists empty of it | bun test routes-categories |
+| ISC-146 | logic | mapped category never re-lists | not in unmapped despite old txs | bun test routes-categories |
+| ISC-147 | api | aggregates carry firstSeenDate | earliest date returned | bun test routes-categories |
+| ISC-148 | ui | modal warns on pre-start txs | warning names earliest date | Read AdoptCategoryModal.tsx |
+| ISC-149 | logic | newer tx re-shows dismissed category | back in unmapped list | bun test routes-categories |
+| ISC-150 | logic | re-shown absent from Not synced | dismissed list empty | bun test routes-categories |
+| ISC-151 | logic | end-date-only edit applies (expense) | next month zero | bun test routes-categories |
+| ISC-152 | logic | end-date-only edit applies (income) | next month zero | bun test routes-categories |
+| ISC-153 | anti | modal never sends effectiveFrom "" | "" guarded both paths | Grep AddBudgetModal.tsx |
+
+## Features
+
+| name | description | satisfies | depends_on | parallelizable |
+|------|-------------|-----------|------------|----------------|
+| platform-seams | DEPLOY_MODE composition root, AuthProvider + SecretStore + Store interfaces, local impls, cloud impl stubs+tests | ISC-47..59 | none | no |
+| ingest-spine | OpenAPI-codegen client, X-Developer-Key auth via SecretStore, backfill, daily sync, alert | ISC-1..9 | platform-seams | no |
+| store-schema | SQLite schema, multi-tenant user_id, event log, overrides, snapshot job | ISC-10..17, 47, 48 | platform-seams | partly |
+| envelope-engine | CRUD, parent/child hierarchy + rollup, mapping, Inbox, holding model, carryover, transfers, pending | ISC-18..28, 71, 73, 74 | store-schema | no |
+| budget-engine | auto-rolling recurring template, continuous zero-based alert, move-money, Edit Budget wizard, budget history | ISC-29..32, 65..69, 72, 76, 77 | envelope-engine | no |
+| ui-pwa | Vite React shadcn SPA, grid, detail, time-travel, reconcile, manifest+SW, Tailscale HTTPS, auth | ISC-33..39, 60..64 | envelope-engine | partly |
+| pulse-widget | daily widget JSON plus three tiles with as-of timestamp | ISC-40..44 | envelope-engine, ui-pwa | yes |
+| security-baseline | no-cloud-egress guarantee (local), encrypted backup, key-never-plaintext | ISC-45, 46, 56 | store-schema | yes |
+| ingest-provider-port | IngestProvider interface; sync/backfill provider-typed; PocketSmith client retired from runtime | ISC-105, 106, 126 | ingest-spine | no |
+| dialog-dismiss-guard | shared DialogContent guard: a pointerdown landing on html/body (page pointer-events suspended by an open nested layer) never dismisses the dialog; overlay clicks still close | ISC-213..218 | none | no |
+| dialog-mobile-scroll | shared DialogContent dvh max-height + internal overflow-y-auto; all modals inherit | ISC-219..223 | none | yes |
+| searchable-select | SearchableSelectContent in ui/select.tsx: options-prop API (value/label/render/pin/group), locale sort, contained search input, first-match Enter, touch-aware autofocus, available-height max-h | ISC-224..232, 242..247 | none | no |
+| searchable-callsites | adopt at 9 entity-list sites: AddBudgetModal:367, EditCategoryModal:175, AdoptCategoryModal:162+217, MoveMoneyModal:122+140, TransactionsPage:303+320, EditBudgetPage:522; enums and period selectors untouched | ISC-233..236 | searchable-select | partly |
+| repro-harness | headless-Chrome harness against isolated dev instance (own SQLite, own port, seeded PIN); probes bug A, mobile scroll, search behaviour | ISC-213, 220..222, 241 | none | yes |
+| basiq-provider | Basiq token/user/consent/job-poll/fetch/mapper | ISC-107..119 | ingest-provider-port, platform-seams | no |
+| categorisation | Categoriser, enrich default, user rules, internal category set, Inbox fallback, non-destructive re-run | ISC-120..125 | basiq-provider, store-schema | partly |
+| feed-migration | one-time historical category map, parity verify, decommission PocketSmith, app-level Basiq key in SecretStore | ISC-109, 127, 128 | categorisation | no |
+
+Weekend mapping. Weekend 1 ships platform-seams plus ingest-spine plus the schema half of store-schema. Weekend 2 ships envelope-engine plus the snapshot job. Weekend 3 ships ui-pwa. Weekend 4 ships allocation-wizard plus pulse-widget. security-baseline is woven across all four. The cloud adapters (magic-link auth, KMS secret store, Postgres store) are written and unit-tested as part of platform-seams but are not the local runtime default.
+
+## Decisions
+
+- 2026-06-18 05:07: Persisted the project to `~/Documents/workspace/projects/envelope-os/`, alongside accessbuddy, life-os-console, lifesaveroncall, and inkwell. Nick corrected the home to `workspace/projects/`.
+- 2026-06-18 05:07: Authored this ISA directly rather than via the ISA Scaffold workflow. A full architect review and requirements clarification already existed in `docs/`, so direct authoring is more faithful than a generic scaffold.
+- 2026-06-18 05:07: LOAD-1 locked. Period is the calendar month. Every-dollar-allocated is a hard rule, enforced at wizard completion against expected income (see Changelog FLAG-2), not on every intermediate save.
+- 2026-06-18 05:07: LOAD-2 locked. Credit-card model A, spend-date decrement, with a visible Credit Card Holding envelope. The holding-versus-NAB drift is the system's most valuable invariant and the named euphoric surprise.
+- 2026-06-18 05:07: LOAD-3 locked with a contradiction fixed (Changelog FLAG-1). Default rollover rolls positive and zeroes negative by booking the deficit into the next period's available-to-allocate. Standing per-envelope debt applies only under the roll_all override.
+- 2026-06-18 05:07: LOAD-4 locked. Mapping is many categories to one envelope. Splits are out of MVP, in for v1.0.
+- 2026-06-18 05:07: LOAD-5 locked. Unmapped categories land in an Inbox envelope at import.
+- 2026-06-18 05:07: LOAD-6 locked. Primary UI is the envelope grid (Dave Ramsey). Allocation ritual is a beginning-of-month wizard with apply-last-month as the default.
+- 2026-06-18 05:07: LOAD-7 locked. Three Pulse tiles. Unallocated dollars, top three overspends by percent, and Holding-versus-NAB drift.
+- 2026-06-18 05:07: S1 locked. Storage is SQLite via bun:sqlite, not Postgres, for local. JSON1 and window functions cover the time-travel queries.
+- 2026-06-26 00:00: refined: DEPLOYMENT DUALITY decided per Nick's direction (2026-06-26). Nick chose local-first now but required the build be "ready to put on the cloud if I decide". Resolution: one codebase, two targets, `DEPLOY_MODE` switch at the composition root only. This supersedes the original "single user, local-only" framing in the requirements doc assumptions 1 and 7 without contradicting local-first — local remains the default and the only mode that runs financial data through cloud infrastructure is the deliberately-deferred cloud mode.
+- 2026-06-26 00:00: refined: MULTI-TENANCY promoted from the dormant `owner` column (NEW-3 insurance) to a first-class `users` table with `user_id` on every tenant table from migration one. Cost is near-zero now; the alternative (retrofitting multi-principal into an event-sourced single-principal ledger) was explicitly called painful in the architect review. Local seeds one user and runs single-tenant over the multi-tenant schema.
+- 2026-06-26 00:00: refined: PER-USER POCKETSMITH KEY. ISC-3 changed from "key in the PAI secrets store" to "key resolved through the SecretStore for the authenticated user". This is what makes "give someone access with just their email and their dev key" true. The key becomes per-tenant secret material, not a single global env value.
+- 2026-06-26 00:00: refined: AUTH ABSTRACTION. Local is Tailscale-trust plus PIN (architect §9.4). Cloud is passwordless email magic-link per Nick's explicit "log in should be by email link only". Both sit behind `AuthProvider`; the magic-link impl is built and unit-tested now so the cloud switch needs no new auth work later. Firebase Auth email-link was considered for the cloud impl (GCP-native, free) and remains the likely concrete backend, but the interface keeps that choice swappable.
+- 2026-06-26 00:00: refined: PWA PROMOTED INTO SCOPE. The original Out of Scope said "no PWA". Nick now requires "optimised for both web app and PWA". PWA (manifest, service worker, installable, offline shell) is in MVP. What stays out is offline transaction *capture* / a mobile write queue (ISC-64 anti). Local HTTPS for service-worker registration is solved by `tailscale serve` on a `*.ts.net` hostname rather than self-signed certs.
+- 2026-06-26 00:00: refined: PORTABLE STORE LAYER. SQLite stays the local default, but business modules depend on a `Store` interface, not `bun:sqlite`. A Postgres adapter is written and passes the same unit-test suite, so cloud is a wiring change. Business SQL avoids SQLite-only syntax (ISC-59 anti).
+- 2026-06-26 00:00: CLOUD HOSTING NOT DEPLOYED IN MVP. The cloud adapters are built and tested but the public GCP service, the `nicholaswood.com.au/budget` route, and second-user onboarding are deferred. Nick framed sharing as conditional ("if I wanted to"); building the seams now is cheap insurance, deploying the public service now is premium tax on an unconfirmed need. Recommended cloud target when it is built: Cloud Run (scales to zero) + Firebase Auth email-link + a cheap managed Postgres + GCP KMS for keys, routed at `/budget` from the existing site.
+- 2026-06-26 00:00: Tier escalated to E4 (deep) via conversation-context override. The classifier returned NATIVE then ALGORITHM/E3 across the thread, but the work is a cross-cutting re-architecture (multi-tenancy, auth/secret/store abstraction, deployment duality, PWA) layered on a greenfield build — E4 by the v6.3.0 tier-intent table.
+- 2026-06-26 00:00: PROVISIONAL FLAGS carried, not yet independently re-confirmed by Nick. The two architect calls below (FLAG-1 rollover deficit-booking, FLAG-2 every-dollar at wizard completion) are encoded as the working default. Nick's "build it with the updated spec" is read as confirming the working defaults; they remain cheaply reversible and are surfaced for explicit confirm.
+- 2026-06-26 00:00: show-your-math (delegation floor): the ingest-spine implementation is delegated to one engineering agent against this ISA; the platform-seams skeleton and schema are authored by the primary because they are the architecturally load-bearing surface where the cloud-ready contract must be exact. Council/RedTeam delegation was not selected; the design space here is already resolved by the existing architect review, so adversarial idea-generation would add noise rather than signal.
+- 2026-06-29: PROVIDER PIVOT to direct Australian bank feeds via Basiq (CDR), off PocketSmith. Nick's drivers: drop the dependency, kill the PocketSmith cost, and stop building on a bridge if BudgetBuddy may serve other people later. Decisive fact: BudgetBuddy is already multi-tenant (Store scoped by userId, ISC-47/48; cloud magic-link onboarding), so PocketSmith was the only per-user external blocker to a product. Resolution: abstract the provider behind an `IngestProvider` port, implement `BasiqProvider`, and have BudgetBuddy own categorisation (Basiq enrich + user rules) since a product cannot inherit each user's pre-categorised tree. Build single-user now (Nick only), product-shaped; defer multi-user CDR-representative onboarding. Full design in docs/BASIQ_MIGRATION_SPEC.md. Supersedes ISC-1, ISC-2, ISC-3, ISC-84 (category source), ISC-86; adds ISC-105..ISC-128.
+- 2026-06-29: SECRET MODEL INVERTED. PocketSmith required a per-user developer key in the SecretStore; Basiq uses one app-level API key plus per-user in-app CDR consent. ISC-3 superseded; ISC-54/55 re-pointed at the app-level Basiq key; ISC-56 carries over to it. Per-user material (Basiq userId, connectionId, consent expiry) lives in the Store, not the SecretStore. This removes user onboarding friction entirely (ISC-128) and is why Basiq enables the product where PocketSmith could not.
+- 2026-06-29: SCOPE. This task delivered the ISA extension plus the design spec only (Nick approved "scaffold the ISA + spec the provider"). No production code written; BUILD of the provider and Categoriser is the next gated step. Basiq API field names and sign conventions are marked confirm-in-sandbox in the spec and MUST be verified against the live Basiq sandbox before the matching ISCs (ISC-108, 111, 113, 115, 116, 117, 118) pass.
+- 2026-06-29: EXTERNAL PREREQUISITE (BUILD gate, owner: Nick). Starting the Basiq build requires a free Basiq developer account to obtain sandbox API keys (dashboard.basiq.io). Sandbox/development is free and needs no accreditation; production CDR data access is a separate paid onboarding (per-connection pricing, use-case review) for which Basiq holds the accreditation. The dev-account signup is the only external blocker to starting BUILD and requires Nick's identity/billing; production onboarding is deferred until multi-user. Once the account exists, the app-level Basiq API key goes into the SecretStore (ISC-109) and BUILD can begin.
+
+- 2026-08-10: v1.7.0 "can't update a budget" root-caused by reproduction matrix (test harness replaying the SPA's exact save flow). Three distinct defects: (a) completePrevious skipped already-completed versions whose windows still overlapped the new one, so amounts double-counted (typed $700, stored $764.52 — the killer after any mid-month change); (b) the wizard posted EVERY row, and the monthly↔period rounding round-trip versioned untouched non-monthly envelopes on every save; (c) a cleared From date sent effectiveFrom "" which zod 400ed the whole save. Fixes: window-overlap supersession in both completePrevious loops (budget + income), changed-rows-only posting, and truthy-guarded chronology fields. Fully-superseded versions become degenerate windows resolving to 0 — the template port is append/update-only by design, so no delete surface was added for cosmetics.
+- 2026-08-10: Category dismissal is SERVER state (dismissed_categories table, POST /api/categories/dismiss, GET /api/categories/dismissed), replacing the ephemeral card-level useState that reset on reload. Per-category clear buttons added to the new-categories card (Nick: no per-category clear existed); the card-level X now clears all listed persistently. Settings → Connection gains a "Not synced" section listing cleared categories with Restore. Adopt modal gains a Start date (effectiveFrom) field, and the adopt handler anchors rolloverStart to it.
+- 2026-08-10: Advisor pass outcomes: (1) prod DB audited clean — 0 inverted-window template rows, 0 envelopes with multiple lines touching 2026-08, so no data repair needed; (2) superseded versions are filtered from the chronology at the query layer (listVersions), the same layer whose maths already zeroes them, so list and totals cannot drift; (3) clear-all serialises its dismiss POSTs (bulk endpoint deferred — single-user local, upsert semantics, per-call invalidation refetches truth on failure).
+- 2026-08-10: Nick's "multiple relocation categories" root cause CORRECTED after his approval to map: a mapping DID exist (map-575bffc3, category 34728510 → envelope Relocation) but only from 2026-08-01, so the July transactions (22–31 Jul) resolved to no envelope and kept the category in the new-categories card. (The initial "no mapping" read was wrong — the diagnostic joined through the categories table, which has no Relocation row.) Fix applied with Nick's approval: mapping effective_from extended to 2026-07-01; all 14 transactions verified inside the window, 0 outside. LESSON + candidate feature: a mapping whose window starts AFTER the category's earliest unmapped transactions re-lists the category — the adopt flow (or card) should surface "N earlier transactions predate the start date" and offer to back-date.
+- 2026-08-12: BUDGET MODEL DOCTRINE locked by Nick (spec review + 6 answers). (D1) Budgets never overlap at DAY granularity — at most one non-degenerate version window covers any calendar day per envelope; mid-month changeovers (proration) preserved. (D2) Coexist-and-sum (completePrevious=false additive stacking) RETIRED; migration merges existing stacked windows into piecewise segments preserving resolved totals. (D3) Scheduled future versions are never implicitly destroyed — superseding one is an explicit, flagged action (engine refuses otherwise with a structured error; Phase 2 UI turns that into a prompt). (D4) Editing past budgets RECOMPUTES past months' materialised figures (past-frozen doctrine dropped; budget_history + events remain the audit trail); income and expense now symmetric. (D5) Income gets an expected receipt date; PLAN-based recognition (income counts from the expected date, so missing income shows as a deficit after the date, never before). Expense funds are NOT gated by income arrival; surfaces limited to income row Left/Variance, Net Position income line, Pulse. (D6) Rollover cadence stays as-is (calendar-month fold; cadence in charts only). (D7) Working defaults pending Nick veto: expected receipt day stored per income envelope (day-of-month, versionable later); tombstones (degenerate windows) remain the supersession mechanism (no template delete surface). Five-phase plan approved 2026-08-12: P1 engine integrity (single guarded version write path + single cache rederive + migration), P2 date-targeted editing (as-of control, per-line end dates, version-targeted API), P3 chronology UX (detail-page timeline, neighbour-adjustment prompts), P4 income receipt dates, P5 adjacent repairs (parent rolled/own seeding, Pulse rewiring, cadence endpoint, wizard totals, chart proration).
+- 2026-08-12 (Phase 2): AS-OF EDITING semantics locked. The wizard's single "Editing as of" date replaces the old From field entirely; the wizard is MONTH-UNIFORM (an as-of edit replaces the whole target month's budget from its first day, bounded before the next scheduled version). Mid-month prorated scheduling (the July $500-to-$600-on-the-15th pattern) remains available in the per-envelope Add/Edit modal, which keeps its explicit From/To window fields. In as-of mode supersession within the bounded window is implicit (the user is editing exactly what they see); the 409 protection remains for raw-API writes with explicit windows. this_month scope under as-of overrides the AS-OF month. The end-without-successor wizard path still requires an amount change or end date on a CHANGED line; per-version ending lands with Phase 3's chronology editor.
+- 2026-08-10: refined: RootCauseAnalysis (5 Whys) confirmed the supersession root cause and flagged two deferred design points: (1) putTemplateLine validation rejecting inverted windows conflicts with the truncation approach and was skipped; (2) the wizard's default From (first of month) after a mid-month boundary means "make the whole month the typed amount", which matches user intent — surfacing existing boundaries in the edit UI is a possible future refinement.
+
+- 2026-08-10: v1.8.0 (same-day follow-up from Nick's live usage). (1) Car Change Over reproduced the Relocation shape — adopt created the mapping from 2026-08-01 while transactions run back to 2024-06-24 — root fix: a category with ANY mapping is adopted/known and never re-lists as "new"; the adopt modal now warns when transactions predate the chosen start date (firstSeenDate added to aggregates) instead of silently leaving history unbudgeted. Car Change Over mapping left at 2026-08-01 pending Nick's call (back-dating would pull two years of spend into the envelope). (2) Dismissal is activity-aware per Nick's request: dismissing snapshots the category's newest transaction date; anything newer re-shows it on the budget page and drops it from Not synced until re-dismissed. Snapshot chosen over a wall-clock cutoff because future-dated (scheduled/pending) transactions could never be suppressed by a clock rule — caught by the reproduction test failing. Legacy rows (21 pre-snapshot dismissals) fall back to the dismissed-day rule. (3) Nick's "how do I set an end date" exposed a real no-op: editBudget skipped any line whose amount was unchanged, so an end-date-only edit did nothing. An explicit effectiveTo now always applies (expense + income paths). The Add/Edit modal's To field therefore works; its From default (first of current month) is the change-effective date, not the budget's start. Same ""-guard applied to that modal's cleared dates.
+
+- 2026-08-13: v1.18.0 dropdown UX task (bg session, E3). (1) Refuted the duplicate-dismissable-layer theory for the modal close-through: bun.lock resolves exactly one @radix-ui/react-dismissable-layer (1.1.13), no nested copies — the mechanism must be observed in the harness before the fix is chosen (root-cause-at-ingestion: guard belongs in shared ui/dialog.tsx, never per modal). (2) Interceptor is currently broken for tab-level control from this box (extension answers tab_list only; every content-script command times out after daemon restart and Profile 3 relaunch) — reproduction and UI verification fall back to headless Chrome (puppeteer's chrome from the PDF pipeline) against an ISOLATED dev instance (own PENNY_SQLITE_PATH, own PENNY_PORT, seeded PIN); the live DB is never touched (ISC-241). (3) Sorting scope decision: Nick asked for "across the app" alphabetical + search; the callsite audit shows 10 of 22 dropdowns are 2-5-item fixed enums where a search bar regresses usability, and the period/cadence selectors are semantically ordered (alphabetising gives annual/fortnightly/monthly/weekly). Scope: the 9 dynamic entity-list sites get search + locale sort with pinned sentinels; enums and period selectors keep natural order. Flagged for Nick's review in the report. (4) Delegation floor show-your-math: Forge (E3 auto-include) is unavailable — codex CLI missing on this box (documented gotcha); Explore ran the callsite audit; remaining code is single-author against shared components. (5) Skipped EnterPlanMode despite E3: autonomous background session, approval would block indefinitely; work is frontend-only and git-tracked. (6) AdoptCategoryModal:162 concatenates categories + incomes into one flat list — sorting keeps the two blocks separate (sort within group), never interleaved.
+
+## Changelog
+
+- conjectured: LOAD-3 as originally written said default rollover rolls positive, zeroes negative, and carries the negative as visible debt with no auto-true-up.
+  refuted_by: Those are two different rules. Zeroing a negative and carrying it as debt cannot both hold. Under zero-based budgeting a forgiven overspend is not free, so the deficit must be booked somewhere or the ledger leaks and the holding tripwire loses meaning.
+  learned: The YNAB resolution is correct here. Default zeroes the envelope by booking the deficit into next period available-to-allocate, surfaced as a visible line in the wizard. Standing per-envelope debt is the roll_all override only.
+  criterion_now: ISC-25, ISC-26, ISC-28.
+
+- conjectured: LOAD-1 every-dollar rule should hard-block save whenever income does not equal the sum of allocations.
+  refuted_by: With expected-versus-actual income (NEW-2) a hard per-save block fights reality. Mid-month edits, late actuals, and partial wizard sessions would all be blocked, and viewing must never be blocked.
+  learned: Enforce the every-dollar rule at wizard completion against expected income, not on every intermediate save. Divergence of actual from expected is shown as a dashboard delta and prompts re-allocation, never blocks viewing.
+  criterion_now: ISC-30, ISC-31, ISC-32.
+
+- conjectured: The project was scoped single-user and local-only, with a dormant unused `owner` column as the sole concession to a possible future multi-principal need.
+  refuted_by: Nick now wants the option to onboard another person with only their email and their PocketSmith dev key. A dormant column does not deliver that; tenant scoping has to be threaded through every read and write, auth has to resolve a user, and each user's dev key has to be isolated secret material. Retrofitting that into an event-sourced single-principal ledger after the fact is the exact painful migration the architect review warned against.
+  learned: Build multi-tenant from migration one and run single-tenant locally. Promote `owner` to a real `users` table with `user_id` on every tenant table, scope every store query by the authenticated user, put auth and secrets behind interfaces, and make deployment a one-switch config. Local-first is preserved as the default; cloud becomes additive. This is the cheapest path to "ready to put on the cloud if I decide".
+  criterion_now: ISC-47, ISC-48, ISC-49, ISC-50, ISC-51, ISC-52, ISC-53, ISC-54, ISC-55, ISC-56, ISC-57, ISC-58, ISC-59.
+
+- conjectured: The MVP UI explicitly excluded a PWA; mobile was Tailscale-reachable desktop web only.
+  refuted_by: Nick requires the surface be optimised for both web app and installed PWA, on his phone. A PWA needs HTTPS for service-worker registration, which a localhost or self-signed local deploy does not cleanly provide.
+  learned: Promote the PWA into MVP scope (manifest, service worker, installable, offline shell). Solve local HTTPS with tailscale serve on a *.ts.net hostname, which issues a real cert. Keep offline transaction capture and any mobile write queue out of scope so the PWA stays read-and-allocate, not a sync-conflict surface.
+  criterion_now: ISC-60, ISC-61, ISC-62, ISC-63, ISC-64.
+
+- conjectured: The every-dollar rule should be enforced at wizard completion (block save until allocations balance expected income), and actual-vs-expected income variance should show as a dashboard delta line.
+  refuted_by: Nick (2026-06-26): zero-based applies to the budget (the plan), not to actual cash flow. A non-zero-based budget should raise an alert, never block. And income variance should not live on a dashboard line; income is itself an envelope per source, and actual differing from budgeted is a surplus/deficit on that income envelope.
+  learned: Two separable rules. (1) The zero-based check compares total spending allocations to total budgeted income and raises an alert on imbalance; saving and viewing are never blocked. (2) Income envelopes are first-class, one per source, each holding a budgeted amount and an actual balance; the variance is the surplus/deficit. This keeps the envelope metaphor whole on the income side and removes the only hard wall the design still had.
+  criterion_now: ISC-30, ISC-31, ISC-32, ISC-65.
+
+- conjectured: Mid-month allocation editing is just editing an envelope's budgeted number in place.
+  refuted_by: Nick (2026-06-26): a reallocation must say where the money comes from and whether the change is one-off or ongoing. Extra income parked in Savings could be a one-time move of this month's surplus, or a permanent decision to expect more income and save more every month. Editing a single number cannot express either the source or the recurrence.
+  learned: A reallocation is a move with three parts: destination, named source, and scope (this-month-only vs ongoing). The named source keeps the plan zero-based by construction. There is a recurring budget template behind the months; an ongoing change edits the template (so apply-last-month carries it forward), a this-month change is a period override that leaves the template untouched. Skipping the source is allowed but raises the zero-based alert, consistent with alert-not-block.
+  criterion_now: ISC-66, ISC-67, ISC-68, ISC-69.
+
+- conjectured: FLAG-1 default rollover zeroes an overspent envelope and books the deficit into the next period's available-to-allocate pool; carrying a per-envelope negative is the roll_all exception.
+  refuted_by: Nick (2026-06-26): any envelope in surplus or deficit should either be balanced by a move (either direction) or carry over, and the carryover must be shown explicitly per envelope. Silently zeroing an envelope and docking a pooled number hides the deficit; Nick wants it visible on the envelope it belongs to.
+  learned: Carryover in both directions is the default, shown as an explicit starting-carryover figure on every envelope row. Surplus and deficit both roll unless the user moves money to balance them. drain_to_zero (use-it-or-lose-it) and annual_reset remain per-envelope overrides. Each envelope row shows four figures: starting carryover, this-period allocation, total available (carryover + allocation), and left (total - spent). The deficit is still conserved (it is the negative carryover, not a leak), so ISC-28 holds. The Edit Budget wizard, not an inline baseline edit, is where the recurring template is changed.
+  criterion_now: ISC-25, ISC-26, ISC-70, ISC-71, ISC-72.
+
+- conjectured: Envelopes are a flat list organised under text "group" labels (Bills, Lifestyle, Annual).
+  refuted_by: Nick (2026-06-26): envelopes should be able to be parents of others, the totals should roll up, and a parent should also be summable with any allocation made directly to it. A text group label is just a header; it cannot hold money or roll up.
+  learned: Envelopes form a tree via a self-referential parent_id. A parent is a first-class spendable, allocatable envelope. All four figures (carryover, allocation, total, left) roll up as sum-of-children plus any direct parent allocation/activity. The grid renders an expandable/collapsible hierarchy with rolled-up parent rows. The flat group string is subsumed by the tree (top-level envelopes act as groups).
+  criterion_now: ISC-18, ISC-73, ISC-74, ISC-75.
+
+- conjectured: LOAD-6 set the allocation ritual as a beginning-of-month wizard with apply-last-month as the default action.
+  refuted_by: Nick (2026-06-26): the budget should just roll over to the next month; that is the entire purpose of a budget. No plan-a-month function is wanted. And budget changes should be viewable as a history.
+  learned: The recurring budget template auto-applies to each new month with no manual step (ISC-29 refined from apply-last-month wizard to auto-roll; ISC-76 anti guards it). The zero-based check runs continuously and alerts rather than gating a wizard. Budget changes happen only through the Edit Budget wizard or move-money (ongoing scope), and every change — including the automatic monthly rolls — is recorded in a viewable budget history (ISC-77). This supersedes the LOAD-6 allocation-ritual decision.
+  criterion_now: ISC-29, ISC-76, ISC-77.
+
+- conjectured: The parallel build's UI placeholder seams (income shown as demo data, Reconcile fully placeholder) were an acceptable interim, and the engine-level ISC verification (71/77) meant the app was substantially done.
+  refuted_by: Nick (2026-06-26), using it live: the budget read "balanced" with three income categories and no envelopes, because the income section was hardcoded placeholder never wired to the API while the real backend had zero envelopes. Engine unit tests passed but the user-facing surfaces were not real. The placeholders were actively misleading.
+  learned: Remove all placeholder/demo data; a screen with no data shows an explicit empty state, never invented numbers. Seed the real budget from PocketSmith: the category tree (105 categories) becomes the envelope tree with parent/child preserved; income vs expense is read from the budget endpoint's income/expense block; budgeted amounts come from the budget forecast; starting carryover comes from the rollover baseline doc (balances + start dates Nick captured); the 6038 loaded transactions map to envelopes by category. Add a real create-envelope flow with an income/expense type toggle. The empty/zero-based status must distinguish "not set up" from "balanced". Verification must drive the real browser, not just engine tests.
+  criterion_now: ISC-83, ISC-84, ISC-85, ISC-86, ISC-87, ISC-88, ISC-31, ISC-65.
+
+- conjectured: There are two envelope kinds (income, expense), income variance is actual-minus-budgeted, and budgets are monthly; importing PocketSmith forecasts as monthly allocations is sufficient.
+  refuted_by: Nick (2026-06-27) plus the reconciliation session fbf081be. (a) There are THREE types: income, expense, and saving (saving is an expense envelope with a different label) — this is why Emergency Fund imported as an absurd $20k/month budget; it is a saving envelope holding a balance, not a monthly allocation. (b) Income works as capital: each income envelope has a target and a specified portion that flows to a shared expense-capital pool; expense and saving envelopes draw from that pool, and the income surplus/deficit is capital-provided minus total allocations (over/under BUDGETING, not actual-vs-target). (c) Expense budgets are weekly, monthly, or annual, not all monthly. (d) The reconciliation proved PocketSmith does not roll child spend up to a parent budget (Recreation shows +$2,660 left while ~$7,350 over across its unbudgeted children) — envelope-os must roll child spend up to the nearest budgeted ancestor. PocketSmith's post-2026-02-28 reorg also makes its displayed rollover balances approximate, so imported carryover is a baseline, not a ledger truth.
+  learned: Model envelopes with an explicit type (income/expense/saving). Income = target + capital-to-expense; expense/saving draw from pooled capital; surplus/deficit = capital minus allocations. Budgets carry a period (weekly/monthly/annual) normalised to monthly. Roll child spend up to the budgeted ancestor. Re-import savings-group categories as saving envelopes (balance, not monthly budget), and treat annual/weekly PocketSmith budgets by their real period.
+  criterion_now: ISC-91, ISC-92, ISC-93, ISC-94, ISC-95.
+
+- conjectured: Income works as a two-step capital model — each income envelope has a target and a specified portion routed into a shared expense-capital pool, and expense/saving/envelope budgets draw from that pool.
+  refuted_by: Nick (2026-06-27): the capital-allocation step is unnecessary complexity. His spreadsheet's Full Budget sheet simply balances total income against total expenses; there is no sub-pool. Scrap capitalToExpense.
+  learned: The income budget itself is the balancing figure. Zero-base = sum(income budgets) minus sum(expense + saving + envelope budgets); residual is the surplus/deficit. Remove the capitalToExpenseCents field from the model, API, seeder, and UI. The income "received minus budget" variance view is retained.
+  criterion_now: ISC-92, ISC-93.
+
+- conjectured: BudgetBuddy's bank feeds and categorisation come from PocketSmith; each tenant supplies their own PocketSmith developer key (ISC-3), the client is generated from the pinned PocketSmith OpenAPI spec (ISC-1, ISC-2), and categories source from the PocketSmith category tree (ISC-84, ISC-86).
+  refuted_by: Nick (2026-06-29): PocketSmith is a paid dependency and, critically, a per-user external account. A product cannot require every user to hold their own PocketSmith subscription and key. BudgetBuddy is already multi-tenant (Store scoped by userId, ISC-47/48), so PocketSmith was the sole structural blocker to serving other people; it is "essentially just a bridge".
+  learned: Replace PocketSmith with direct Australian bank feeds via Basiq (CDR) behind a new `IngestProvider` port, so the provider is swappable and the envelope/budget/store/UI layers stay untouched (Tx.categoryId is the only coupling point). The app holds one Basiq API key; users link banks via the in-app CDR Consent UI with no key to obtain and no credential reaching BudgetBuddy. BudgetBuddy now owns categorisation (Basiq enrich plus user-editable effective-dated rules) because inherited per-user categorisation is unavailable; the existing category-to-envelope mapping and Inbox fallback are preserved by synthesising a stable internal categoryId. Build single-user now, product-shaped; defer multi-user CDR-representative onboarding.
+  criterion_now: ISC-105, ISC-106, ISC-107, ISC-108, ISC-109, ISC-110, ISC-111, ISC-112, ISC-113, ISC-114, ISC-115, ISC-116, ISC-117, ISC-118, ISC-119, ISC-120, ISC-121, ISC-122, ISC-123, ISC-124, ISC-125, ISC-126, ISC-127, ISC-128.
+
+- conjectured: completePrevious closing only OPEN versions at the day before effectiveFrom fully implements "replace my budget from this date" (v1.4.x budget chronology design).
+  refuted_by: Reproduction 2026-08-10 — after a mid-month version boundary (which closes the baseline as a COMPLETED version ending inside the month), a later ordinary save left the completed window contributing its early-month days; overlap-sums then blended old and new amounts (typed 70000, stored 76452). Independently confirmed by 5-Whys analysis: supersession was keyed on line STATE (open/completed) instead of window OVERLAP with [effectiveFrom, ∞).
+  learned: The invariant is "no prior version of this envelope contributes on or after effectiveFrom". Supersede by window overlap: truncate every version whose effectiveTo is null OR >= effectiveFrom; fully-superseded lines become degenerate windows that resolve to zero contribution.
+  criterion_now: ISC-137, ISC-138, ISC-139.
+
+## Verification
+
+- ISC-137: bun test — test/budget-versions-overlap.test.ts "stores EXACTLY the typed amount": grid allocationCents 70000 after mid-month version + ordinary save (was 76452). 391/391 suite green 2026-08-10.
+- ISC-138: bun test — same file, income variant: budgetedCents 700000 after mid-month income version + save.
+- ISC-139: bun test — EditBudgetPage.test.tsx "untouched save posts NO spending lines" (lines []) and parent-own test (payload length 1 on single edit).
+- ISC-140: bun test — EditBudgetPage.test.tsx "CLEARED From date is omitted from the payload" (effectiveFrom undefined, edit still posted).
+- ISC-141: bun test — AdoptCategoryModal.test.tsx start-date test: defaults firstOfCurrentMonthIso, user date rides payload, cleared key omitted.
+- ISC-142: Read — src/server/handlers/categories.ts: rolloverStart: req.effectiveFrom ?? todayISO(tz).
+- ISC-143: bun test — routes-categories.test.ts dismissal suite; live probe: dismissed_categories table present in ~/.penny/penny.db after deploy migration (bun:sqlite readonly SELECT).
+- ISC-144: bun test — routes-categories.test.ts: dismissed list carries same aggregates; restore round-trips both lists.
+- ISC-145: bun test — routes-categories.test.ts: adopt after dismiss leaves dismissed list empty.
+- Deploy: curl 127.0.0.1:8787 serves bundle index-DY2h7TBX.js containing "v1.7.0 (a0a8833 · 2026-08-10)"; penny.service active; new routes respond 401 unauthenticated (session-gated, registered). Authenticated-UI screenshot probe DEFERRED-VERIFY — PIN is Nick's; follow-up: Nick's next sign-in to v1.7.0 (this task's report).
+- ISC-146: bun test — routes-categories "adopted with a start date AFTER old transactions stays off the unmapped list" (2024 tx + adopt from FIRST → not listed).
+- ISC-147: bun test — routes-categories firstSeenDate test (2025-01-05 earliest returned).
+- ISC-148: Read — AdoptCategoryModal.tsx warning block gated on firstSeenDate < effectiveFrom.
+- ISC-149/150: bun test — routes-categories re-show test: dismiss → suppressed; TOMORROW-dated tx → re-shown, Not synced empty; re-dismiss → suppressed again.
+- ISC-151: bun test — routes-categories "edit carrying ONLY an end date": changed 1, this month 50000, next month 0.
+- ISC-152: bun test — routes-categories income end-date test: next month income budget 0.
+- ISC-153: Grep — AddBudgetModal.tsx both payloads use ...(effectiveFrom ? { effectiveFrom } : {}).
+- v1.8.0 deploy: 397/397 tests green, typecheck + lint clean; bundle index-Czv3dmpr.js serves "v1.8.0 (6a5e6d9 · 2026-08-10)"; dismissed_categories.last_seen_date column present after migration; 21 legacy rows on the dismissed-day fallback.
+- ISC-154..163: bun test — test/budget-window-integrity.test.ts (9 tests: 409 + conflicts payload + atomic refusal; supersede flag; same-date future conflict; invariant sweep via findOverlaps after edit/schedule/supersede/end sequences; override-mask clear; move cap; past-month recompute; garbage-date 400s) + EditBudgetPage.test.tsx conflict-retry test + rewritten coexist tests asserting truncation. 407/407 suite green, typecheck + lint clean.
+- ISC-164/165: live migration 2026-08-12 — journal shows "[migrate] purging 1433975 out-of-era allocation rows"; DB 474MB → 28MB after VACUUM; conservation probe pre-backup vs post: kept-era allocations 4,428 rows / 93,145,680 cents EXACT both sides; 0 out-of-era remaining; budget_history 4 human rows preserved; 42 template lines untouched. Backup retained at ~/.penny/penny.pre-v1.9.0.db(+wal) pending Nick's confirm.
+- v1.9.0 deploy: bundle index-BhdDRSEd.js serves "v1.9.0 (79a4b11 · 2026-08-12)"; penny.service active.
+- ISC-166..175: bun test — test/routes-budget-asof.test.ts (6 scenario tests incl. both owner spec sentences verbatim, middle-month bounding, override targeting, income asOf, zero-base month) + EditBudgetPage.test.tsx as-of suite (default today, September banner + payload, cleared fallback, month-uniform note, income asOf). 413/413 green, typecheck + lint clean.
+- v1.10.0 deploy: bundle serves "v1.10.0 (48f0568 · 2026-08-12)"; penny.service active. Wizard note: mid-month proration scheduling now lives ONLY in the per-envelope modal (wizard is month-uniform by design — Decisions).
+- ISC-176..181: bun test — routes-version-edit.test.ts (6 tests incl. the owner's move-start-earlier prompt scenario, optional-gap decline, self-cap, D4 past recompute, income in-place edit); detail-page timeline via Read (EnvelopeDetailPage "Budget history" card, VersionChronology editable).
+- ISC-182..186: bun test — income-expected-day.test.ts (6 tests: before/after due day, missing-income deficit, clear restores day-1, future month never due, expense never gated); reconcile compensation via Read (awaitingIncomeCents in delta + widget line).
+- ISC-187..190: bun test — pulse.test.ts refixtured to engine figures; parent seeding + wizard totals + chart rate + cadence honesty via Grep/Read. Suite 425/425 green, typecheck + lint clean.
+- v1.11.0 deploy: bundle serves "v1.11.0 (932855c · 2026-08-12)"; penny.service active; income_envelopes.expected_day column migrated; POST /api/envelopes/versions/edit registered (401 unauthenticated).
+- ISC-191..194: bun test — AddBudgetModal.seed.test.tsx (3 tests: real-window seeding + info line, legacy blank-From + hint, create default first-of-month); guard verified by the 4 page-suite tests that mock the versions call. 428/428 green; v1.11.1 deployed (bundle "v1.11.1 (302fdb6 · 2026-08-12)").
+- ISC-195..197: bun test — AddBudgetModal.seed.test.tsx (4 tests: real-window seed, legacy prefilled-1st + note + amount prefill, add-version defaults + title/CTA, create default); detail-page button via Read. 429/429 green; v1.11.2 deployed (bundle "v1.11.2").
+- ISC-198..200: bun test — legacy-start-backfill.test.ts (expense min-month + income anchor + idempotence; create-into-materialised-month regression) + updated move test that had PINNED the $0 quirk as "existing engine semantics". Prod verified: 0 lines at 1970 (42 -> 2023-07-01 earliest-real-month, incomes -> 2026-06-01 anchors, Apple TV -> 2026-08-10 creation); 697 pre-history artifact rows purged; Apple TV August allocation repaired at 1135c (day-prorated from the 10th). 431/431 green; v1.11.3 deployed.
+- ISC-201/202: bun test — AddBudgetModal.seed.test.tsx fresh-object rerender regression (field keeps 2026-06-01); lint rules-of-hooks clean; 432/432 green; v1.11.4 deployed.
+- ISC-203..205: bun test — EditBudgetPage.test.tsx free-typing test ("2" stays 2; 2604 -> 260400 in the payload), income period-selector presence + weekly->monthly maths, income payload carries period; engine relabel skip-fix in editIncomeBudget. 434/434 green; v1.12.0 deployed (bundle "v1.12.0").
+- ISC-206: bun test — reconcile-balances.test.ts summation-rule test (top-level −7,710.87 vs leaves-only −2,036.77 on the synthetic parent-own shape); live diagnosis reproduced Nick's exact figures (page −6,706.37 = top-level rolled; old widget −1,103.29 = leaves-only; gap = Groceries own +71.02 + Recreation own −5,674.10). 435/435 green; v1.12.1 deployed.
+- ISC-207: bun test — routes-budget-versions history-start test (anchor says 2026-06-01, mapped inflow 2023-07-14 → synthetic row AND bootstrapped baseline start 2023-07-01). Prod holds NO income template lines (the 2026-06-01 Nick saw was the synthetic display row), so the engine rule change needs no migration. 436/436 green; v1.12.2 deployed.
+- ISC-208..210: bun test — budget-history-eras.test.ts (series→era: fortnightly one-era + rate-change split; monthly collapse; merge clip/extend/drop) + prod verification (salary/rental chronologies queried post-apply); backup at ~/.penny/penny.pre-history-backfill.db. Relocation "different numbers" diagnosed as period-lens (identical rows server-side; category page defaults to this-FY). 441/441 green; v1.13.0 deployed.
+- ISC-211 (regression + repair, 2026-08-12): the backfill's no-existing-line path left incomes with ONLY closed history — the stored-budget fallback is bypassed once any line exists, zeroing current income budgets ("my active income budgets aren't there"). Repaired live (Salary collapsed into ONE continuous budget open from 2025-01-01 at 7454.60/mo — the owner's exact description; Rental open from 2025-07-01 at 1170/mo; verified via engine grid: August budgets restored) and the script now reopens the final era on same-amount adjacency or appends the stored-budget takeover line.
+- ISC-212: bun test — budget-window-integrity derived-active test (covered/ended/scheduled across two months). Note: envelopes with NO budget lines (e.g. Credit Card Holding) now read inactive — informative "no budget in force", totals unaffected. 442/442 green; v1.13.1 deployed.
+- ISC-213..220 (v1.14.0 batch, 2026-08-12): (213) Add budget and Edit budget are SEPARATE surfaces — the grid pencil is gated on an active budget (`onEdit && row.active` in BudgetSection); inactive envelopes edit via the category page where every version (current/historical/future) has an edit button. (214) Category page top button is "Edit category" (new EditCategoryModal: name, type+parent, rollover start via /api/envelopes/rollover, expectedDay for income); the budget widget can no longer set identity fields (create-only in AddBudgetModal, edit payload is budget-only). (215) Cadence (weekly/fortnightly/monthly/annual) selectable on EVERY budget entry surface: new budgets, income (with monthly-equivalents grid), the per-version editor (EditVersionRequest.period end-to-end), and the wizard rows. (216) Wizard "Add category" button mounts the create-mode AddBudgetModal. (217) Wizard defaults to TREE sort (server pre-order; depth-indented "↳ " children); verified by the two refixtured EditBudgetPage parent tests. (218) Detected PocketSmith categories can map to an EXISTING envelope or income (AdoptCategoryRequest.existingEnvelopeId → mapping-only write, no new envelope; adopt modal "Budget category" select with "Map to category" CTA) — verified by 2 new routes-categories tests (spend resolves into the existing envelope; unknown id 4xx with the category still listed). (219) Full gate green: 444 tests / 80 files, 3 tsconfigs, eslint. (220) v1.14.0 deployed — bundle index-SUsnLFlV.js serves "1.14.0", "Map to category" string present, penny.service active, /api/health ok.
+- KNOWN LIMIT (diagnosed 2026-08-12, Rental Bond case): expense/saving carryover baselines are STATIC — `buildGrid` starts the fold at `range.from` whenever any stored baseline exists ("the baseline already encapsulates prior history"), so activity between the baseline anchor (`rollover_start`) and the viewed month never draws the carry down. Income baselines DO roll forward (`foldIncomeCarry` applies received − budget per intervening month). Concrete repro: env-rental-bond baseline $1,170 anchored 2025-02-01, posted −$1,080 charge 2026-07-15 correctly mapped, August single-month view still shows carryover $1,170 (expected $90). Fix direction when approved: fold expense/saving baselines forward from rollover_start symmetric with the income path (allocation + activity per intervening month). Workaround: view a range starting at/before the charge month (Left is then correct) or manually adjust the carryover.
+- ISC-221..224 (v1.15.0, 2026-08-12): (221) A budget version can be DELETED outright ("delete a budget if I get it wrong"): `deleteVersion` in BudgetService hard-deletes the template line via the new `deleteTemplateLine` store method (port + sqlite + postgres + memory), audits (budget_history + version.delete event), and rederives materialised months (D4) with the D1 overlap sweep guarding the result. (222) `extendPrevious: true` reopens the predecessor the deleted version truncated (end == day-before-deleted-start) over the vacated window, inheriting the deleted line's end (open-ended stays open); without it the window is uncovered and resolves to 0. (223) UI: VersionChronology's editor gains a "Delete…" affordance with a confirm step and the extend-previous checkbox (default on); POST /api/envelopes/versions/delete (schema-validated, 404 on unknown version, 401 unauthenticated). (224) Gate: 448 tests / 81 files (4 new in routes-version-delete.test.ts incl. income-version delete restoring the predecessor figure), typecheck x3, lint clean; v1.15.0 deployed (bundle index-CAqMlakY.js serves "1.15.0", "Delete version" present, route 401 unauthenticated).
+- ISC-225..232 (v1.16.0 engine batch, owner directives 2026-08-12): (225) Move money is a BUCKET-TO-BUCKET transfer: `moveMoneyInTx` writes ONLY a movement row — no allocation writes, no template writes, no budget-history rows (pinned by rewritten budget-move + store-transactions suites). (226) Movements are line items in BOTH envelopes: GET /api/transactions synthesises `:out`/`:in` rows ("Moved to X"/"Moved from Y", isMovement flag), runningBalances steps them, TransactionsPage excludes them from money-in/out totals; MoveMoneyModal lost its scope selector. (227) Moved money counts in Spent and Left: movements fold into grid activity, so spent (total − left) includes them (pinned: A→B 3000 → A.left 7000/spent +3000, B.left 13000, allocations untouched). (228) Left ROLLS FORWARD: expense/saving baselines are the OPENING carryover of their capture month (`carryover_anchor`, new column) and buildGrid pre-folds (allocation + activity + movements) per intervening month under the rollover rule to the viewed month. Pinned by test/rolled-balance.test.ts incl. the literal Rental Bond case (1170 baseline, −1080 next month, view month shows 90). (229) carryover_anchor backfill derives capture from the DB itself: last carryover.reset event per envelope, else the earliest event (initial import). Live: 73 envelopes @ 2026-06-26 import, resets @ 06-29/07-16/08-12; engine probe on the migrated DB shows Rental Bond Aug carry = 9000 EXACT. Resets are month-opening values so no double-count. (230) setEnvelopeCarryover now writes carryover_anchor (capture) and leaves rollover_start alone; new `setEnvelopeRolloverStart` (port + 3 stores) carries the Edit-category rollover endpoint — the two anchors are no longer conflated. runningBalances schedule anchor falls back rolloverStart → carryoverAnchor. (231) Income is NEVER prorated: resolveIncomeBudgetForMonth returns the FULL amount of the version in force on the month's expected receipt day (expectedDay, default 1, clamped to month length); mid-month changes flip whole months by whether the expected day falls before/after (pinned incl. expectedDay=20 case). (232) Gate 454 tests / 82 files + typecheck x3 + lint; v1.16.0 deployed, migration logged "anchoring carryover baselines on 76 envelopes", bundle serves 1.16.0. DB backup: ~/.penny/penny.pre-v1.16.0.db(+wal). Postgres note: anchor backfill SQL is sqlite-dialect, run by the sqlite adapter only (fresh cloud installs anchor via the setter). Known limit: trend/daily chart series remain bank-activity-only (movements appear in the tx list and all balances, not the per-day spend chart); net-position totalLeft is now the rolled figure, so the headline delta shifts.
+- ISC-233 (v1.16.1, 2026-08-12): stale-client (version-skew) detection. Symptom triage: "closing a select closes the modal (on several modals)" + "saving a budget opens a new tab" could not be reproduced at code level (no window.open/target=_blank/forms; single deduped @radix-ui/react-dismissable-layer; happy-dom probe confirms select-Escape leaves the dialog open and onOpenChange(false) never fires). Interceptor live repro unavailable (Mac extension would not connect after 5 attempts — daemon up, "no extensions connected"). Diagnosis: long-lived tab/PWA window running pre-v1.16.0 JS across the day's four deploys (mixed chunks break Radix portal layering; failed dynamic imports fall back to native navigation, which an installed PWA opens as a browser tab). Mitigation shipped: /api/health now reports the server build version; new VersionSkewBanner polls it (load + focus + 5-min interval) and shows a fixed reload banner when it differs from __APP_VERSION__. Gate 454/454 + typecheck x3 + lint; v1.16.1 deployed (health returns {"version":"1.16.1"}, banner string in bundle). DEFERRED-VERIFY: the two reported symptoms on a HARD-REFRESHED client — owner retest is the probe (this report).
+- ISC-234 (v1.16.2, 2026-08-12): cadence conversion on the main-page modal. Root cause of "$22 weekly saved as $22 monthly": AddBudgetModal's expense payloads (edit AND create) sent the raw typed cadence amount as budgetedCents, but the engine stores MONTHLY-EQUIVALENT cents with period as a label (the category-page VersionEditor and the wizard already converted — hence "only from the main budget page"). AdoptCategoryModal had the same bug. Fixed: all three payloads now post monthlyEquivalentCents(priceCents, period); the edit modal additionally re-seeds cadence + amount from the ACTIVE VERSION once the chronology loads (the row's allocation is prorated/range-summed and disagrees with the plan rate outside this-month views). Pinned by seed-test: weekly target seeds 22.00 and posts budgetedCents 9533 / period weekly. Data repair: env-gym's corrupted 2200-weekly line (the bug artefact) repaired via editVersion to 9533-weekly; engine probe shows Gym Aug alloc 9533/weekly. Gate 455/455 + typecheck x3 + lint. Process note: 1.16.2 was restarted before the typecheck result was read (errors were test-file-only; app bundle unaffected) — the fix + re-gate ran before this entry, and the bundle serves 1.16.2 with the conversion in place. Suspect data flagged to owner: "Agent Feeds" and "Apartment Maintenance" both hold 5000-weekly lines from 2026-08-01 — ambiguous ($50/wk raw-bug entry would need 21667; $11.54/wk intent would be correct as-is); awaiting owner confirmation before repair. inc-rental 325000-weekly, Rent 121333-weekly, Landlord Insurance 38476-annual all verified as correctly converted entries.
+- ISC-235 (audit, 2026-08-12): full chronology audit vs PocketSmith (1,695 events, 45 mapped categories): 19 match, 26 diverge. Report at docs/BUDGET_HISTORY_AUDIT_2026-08-12.md. Patterns: (1) 18 categories with FLATTENED history — the legacy-start backfill stretched current amounts back to 2023-07, erasing PS rate changes (the owner's Gym example: PS shows 216.67/238.33/307.67/719.33/433.33, BB one flat 433.33) — auto-repair proposed, BB-authored versions preserved; (2) Aug-26 divergences are deliberate BB edits (system of record), no action; (3) annual-cadence "PS none" gaps are PS repeat artefacts, no action; (4) income matches once expected-day-resolved (audit script used the expense resolver — corrected by hand), EXCEPT Rental: window gap 1..11 Aug resolves August income to $0, and the 12-Aug line is 3250/mo-equiv ($750/wk) — flagged; (5) Savings (no BB lines; PS duplicate $1500 series) and Gas (concurrent 60+65) need owner judgement. v1.16.3 also shipped: skew banner compared display-prefixed "v1.16.2" against bare "1.16.2" and false-positived on current clients ("running vv1.16.2") — versions normalised both in comparison and display.
+- ISC-236 (chronology repair APPLIED, 2026-08-12, owner-approved): scripts/repair-budget-history.ts (dry-run default) executed --apply over 29 envelopes: legacy flat lines (< takeover 2026-06-01) deleted and replaced with PocketSmith eras (gaps BRIDGED — a PS repeat gap is an artefact, the earlier era extends to the day before the next), clipped so every BudgetBuddy-authored version is preserved (Groceries 600, Gym 95.33, Recreation 742.56, Shopping 300, Car Rego 37.81 all kept); no-era envelopes start-trimmed to first transaction month (Card Chasing → 2026-03-01). Verified: Gym now carries its six real versions (216.67/238.33/307.67/719.33/433.33 + authored Aug); Mortgage Fee starts 2024-12-01 (the only remaining 2023-07-01 row is its inert tombstone); D1 overlap sweep CLEAN across all 50 envelopes; current-month allocations preserved (Phone 160, Water 75, authored figures intact). D4 rederive ran per envelope. Backup: ~/.penny/penny.pre-history-repair.db(+wal). Excluded pending owner decisions: Rental ($750/wk line), Public Transport ($173.33 vs $20), Savings & Gas (concurrent PS series).
+- ISC-237 (v1.17.0, 2026-08-12): cascade carryover clear. A parent's displayed carryover is the ROLLED sum, so clearing its own value alone left the children's sum showing (owner's Recreation case). resetCarryover gained includeDescendants: the same value applies to the target and every descendant (grandchildren included), each with its own audited carryover.reset event so per-envelope undo keeps working; SetCarryoverRequest/Response extended (includeDescendants / descendantsReset), schema-validated; CarryoverPopover shows an "Also set every sub-category to this value" checkbox only when the row has children (BudgetSection passes hasChildren). Pinned by 2 engine tests (3-level cascade resets parent+child+grandchild and leaves non-descendants untouched, 3 audit events; no-flag preserves old behaviour). Gate 457/457 + typecheck x3 + lint; v1.17.0 deployed (health 1.17.0, checkbox copy in bundle).
+- ISC-238 (v1.17.1, 2026-08-12): carryover popover base now the FOLDED opening. Diagnosis of "balanced budget suddenly off by ~82": NOT the carryover session — the chronology repair extended Dog Food ($50) and Mortgage Fee ($32.92) through 2026-08-31 per PocketSmith eras, adding $82.92 of August allocations to a zero-base balanced without them (their pre-repair lines ended 2026-07-31). Owner's Shopping report confirmed the second defect: the popover seeded ownCarryoverCents = raw stored baseline ($1,580.91 anchored June) while the table showed the rolled-forward figure (−$2,417.46) — post-v1.16.0 divergence; Add/Subtract computed from the stale base. Fixed: buildGrid ownCarryover now carries each envelope's folded opening at range.from (ownOpening map); probe shows Shopping table == popover base == −2,417.46. Also quantified: the owner's 11:58 cascade clear discarded the children's accumulated June-anchored balances (net −$837.43: social −550, takeaway-lunches −377, dinners −317, unbudgeted −247, coffee −127, … and Recreation's own +1,195 fold) — the intended effect of "clear", noted because it moved the net-position headline. Known limit: popover UNDO restores the logged beforeCents re-anchored at today, so restoring a value captured under an old anchor yields that value as THIS month's opening (not the old folded result). Gate 457/457 + typecheck x3 + lint; v1.17.1 deployed.
+- KNOWN LIMITS (disclosed 2026-08-12 review): wizard end-date applies to CHANGED lines only (end an unchanged line item via the detail-page version editor or the per-envelope modal); grid rollover stays calendar-month per owner answer 6 (cadence in charts only; expense-fold anchor asymmetry documented, untouched); income due-gating is whole-month granular and evaluates against real today (multiple/partial receipts not modelled); detail-page income edit cannot CLEAR the expected day (opener lacks the current value — clear it from the budget page); income in-range pending-inclusion vs posted-only history fold asymmetry pre-exists, documented.
+
+### v1.18.x dropdown UX overhaul (2026-08-13, headless-Chrome harness on isolated dev instance)
+
+- ISC-213: touch probe (pre-fix build) — tap #2 on open Select trigger: `dialog: false` (whole modal unmounted); mouse gesture did NOT reproduce
+- ISC-214: touch probe (post-fix) — `touchSecondTap: {dialog: true, listbox: false}` on both Period and Parent dropdowns
+- ISC-215: Grep — onInteractOutside/selectLayerOwnsCurrentGesture only in ui/dialog.tsx + ui/select.tsx; zero per-modal handlers
+- ISC-216: probes — `A_overlayOnly.dialogClosed: true`, `B_overlayAfterDropdownCycle.dialogClosed: true`, touch overlay tap closes dialog
+- ISC-217: probe — Escape 1: `{dialog: true, listbox: false}`; Escape 2: `{dialog: false}`
+- ISC-218: bisect probe — guard is conditional (overlay close works when no select gesture); localStorage-toggle bisect confirmed guard scope
+- ISC-219: Read — DialogContent has `max-h-[calc(100vh-2rem)]` + `supports-[height:100dvh]` dvh override + `overflow-y-auto`
+- ISC-220: probe 375×667 — dialog bounded 16..651 in 667px viewport, `scrollable: true`, `overflowY: auto` (pre-fix: -291..958, no scroll)
+- ISC-221: inspection — Radix modal RemoveScroll untouched; overlay + body pointer-events state verified present during probes
+- ISC-222 (amended): probe — Move-money modal at 1280×900: `scrollable: false` (448px). The add-budget modal scrolls on desktop too — it exceeds the viewport and was CLIPPED pre-fix, so internal scroll is the fix, not a regression. Amendment logged in Decisions.
+- ISC-223: Grep — no per-modal max-h overrides; all five modals use shared DialogContent
+- ISC-224/247: Grep + probe — SearchableSelectContent in ui/select.tsx, input with aria-label "Search options"
+- ISC-225: probe — query narrows 16→7→3 options case-insensitively ("g"→"gr"→"gro")
+- ISC-226/227: probe — order: ["Top level (no parent)" (pinned), "alpha utilities", "Beach Gear", "Car", "Curl Check", "Groceries", "Holidays", "Mortgage", "Zebra Fund"] — locale sort, case-insensitive, sentinel first
+- ISC-228: probe — input keeps focus through all keystrokes (`INPUT(value=gro)`), no typeahead jump
+- ISC-229/242: probes — desktop `inputFocused: true` after open; touch `inputFocused: false`
+- ISC-230: probe — ArrowDown×3 from input focuses options; Enter selects the FOCUSED option ("alpha utilities"), not first match
+- ISC-231: probe — no-match query: `text: "No matches" true`, selected option remains (exempt), no crash
+- ISC-232: probe — reopen after close: `inputValue: ""`, full list, sentinel first
+- ISC-233: Grep — 9 SearchableSelectContent usages: AddBudgetModal, EditCategoryModal, AdoptCategoryModal×2, MoveMoneyModal×2, TransactionsPage×2, EditBudgetPage
+- ISC-234: Grep — BUDGET_PERIODS.map callsites (4 files) untouched, plain SelectContent; PeriodSelector untouched
+- ISC-235: Read — MoveMoney options carry `render: name (formatCents(left))`; AdoptCategory incomes carry `(income)` suffix via render; grouped blocks sort within group
+- ISC-236: Read — same value strings posted (envelope ids, "__top__", "__new__", ANY, UNCATEGORISED, category names)
+- ISC-237/238/239: Bash — typecheck clean (3 tsconfigs), 457 tests 0 fail, eslint clean
+- ISC-240: curl — live 127.0.0.1:8787 serves the new bundle; version string probe returned "v1.18.0 (aed0030 · 2026-08-12)" post-deploy (re-probed at v1.18.1)
+- ISC-241: Bash — harness ran on PENNY_SQLITE_PATH under the job dir with its own HOME/secret vault; live ~/.penny/penny.db only touched by the live instance's own sync
+- ISC-243: Grep — search input `text-base sm:text-sm` (16px on phones)
+- ISC-244: Grep — content max-h uses `--radix-select-content-available-height` (both content variants)
+- ISC-245: probe — with query "gro", Enter from the input commits "Groceries" and closes the dropdown, dialog intact
+- ISC-246: Read — "No matches" is a plain div, not a SelectItem
+
+Advisor (Rule 2) findings hardened same-day: click-swallow now disarms on next pointerdown (iOS skipped-click safety); vh fallback before dvh; keyboard arrow+Enter and focus-restore-to-trigger probes added and green. Real-device (iOS/Android) verification deferred to Nick's first live use — headless CDP touch emulation cannot fully reproduce iOS click synthesis; rollback is `git revert` + `vite build`.
+
+### v1.19.x stale-pending prune (2026-08-13)
+
+- ISC-248/252/253: sync unit tests — stale pending deleted, live pending kept, posted-same-id flipped by drain; live run pruned 26 (15 NAB matching the drift investigation's ghost list, 6 ANZ Buffer, 5 ANZ Emergency Fund incl −$14,542.14 of stale holds)
+- ISC-249: unit test asserts window start 2026-06-28 / end 2026-08-19 for pendings 2026-07-12..2026-08-12 (oldest−14d, newest+7d)
+- ISC-250/251/257: cross-engine store suite — posted id offered for deletion ignored, tenant B untouched, empty list no-op; sqlite + postgres + memory implementations
+- ISC-254: fake-client call count — zero pendings → zero window fetches
+- ISC-255: unit test — 500 on the window fetch rejects the run, zero deletes, bookmark not advanced
+- ISC-256: live event payload {"prunedPending":26}; v1.19.1 adds capped prunedRows identifying fields (unit-tested)
+- ISC-258: typecheck clean, eslint clean, 466 tests 0 fail
+- ISC-259: live post-prune — card 7280 local pending set = PocketSmith live set (10/10, id-matched); second sync run pruned 0 (idempotent)
+- ISC-260/261: live — posted 7280 unchanged (645 rows / −378,905c) before and after both prune runs
+- Corroboration beyond the tripwire card: the 21 pendings the prune KEPT (CommBank Oct-2024, ANZ Nov-2025 authorisations) are all still listed as pending by PocketSmith itself (6/6 and 15/15 id-matched in their date windows) — PocketSmith-side hygiene, correctly retained locally
+
+### Decisions (2026-08-13, prune task)
+
+- Advisor (Rule 2) triage: adopted (a) zero-transaction-window safety valve — a degraded-but-200 PocketSmith response can no longer mass-delete; (b) pruned-row identifying fields in the audit event. REFUTED with evidence (Rule 3): the claim this work was filed against the investigation ISA — the fix lives here (project ISA) as ISC-248..261; the drift task ISA closed changes-free and accurate, and Nick's "Let's fixing those stale pending transactions" is the explicit deploy authorisation. Pagination-exhaustion test not duplicated: the window fetch reuses paginate()/listAllTransactions whose Link-header drain is already covered by ingest tests. No FK children of transactions exist; cascade concerns n/a.
+- Prune scope is deliberately ALL accounts (not just the NAB card): the same ghost mechanism affected three accounts; per-account scoping would have hidden the ANZ Emergency Fund's −$14,542 of stale holds.
+- 2026-08-13 evening: on Nick's explicit instruction, the 21 PocketSmith-side stale pendings (CommBank Oct-2024 ×6, ANZ Nov-2025 ×15) were deleted via the PocketSmith API (each id re-verified pending before deletion; full row details preserved in the sync audit event). The next sync pruned all 21 local mirrors (event prunedRows), leaving pendings only where PocketSmith has them (NAB card). Idempotency and posted-history invariance re-verified.
+- 2026-08-13 evening: Nick reported "$452.29 of money that has no envelope" after a reconciled morning. Verified: the figure is the net-position reconciledDelta EXACTLY (cash 56,560.94 − card owed 4,393.05 − (total left 61,678.60 − awaiting salary 9,963.00)). Proven NOT caused by the prune or the PocketSmith deletions: pending rows never feed the widget (posted-only activity, live PS balances), and since the morning baseline the server-side inputs moved only −$58.57 (cash −1.00, card owed +57.57 from three new NAB pendings, zero budget edits in the event log). Composition: structural gap +1,051.84 currently masked by −599.55 of live card-pending skew — the displayed figure will RISE toward ~$1,050 as those pendings post. Zero-base unallocated is separately $211.03 (zeroBasedAlert true). Gap-origin audit offered as a follow-up task.

@@ -1,0 +1,151 @@
+/**
+ * Incremental sync (ISC-5, ISC-7, ISC-8, ISC-12, ISC-17).
+ *
+ * Daily pull-only refresh. Asks PocketSmith only for transactions changed since
+ * the last successful run (updated_since = last sync timestamp, ISC-5), pages to
+ * completion, and upserts base fields through the Store. The verbatim source
+ * JSON is retained on every row (ISC-12).
+ *
+ * Non-destructive (ISC-17): like backfill, this refreshes base fields via the
+ * Store's ON CONFLICT DO UPDATE and never touches transaction_overrides, so a
+ * re-sync never destroys a user's overlay. It only ever refreshes base facts.
+ *
+ * Failure alerting (ISC-8): syncWithFailureTracking wraps runSync, counting
+ * consecutive failures across runs and raising a Pulse/Telegram alert once two
+ * in a row occur. A success resets the count.
+ *
+ * Pull-only (ISC-9): the only PocketSmith traffic is GET pagination. No webhook,
+ * listener, or push path exists.
+ */
+
+import type { Store } from "../platform/store.ts";
+import type { UserId } from "../platform/auth.ts";
+import { PocketSmithClient, type TransactionQuery } from "./client.ts";
+import { toStoreTxs } from "./map.ts";
+import {
+  ALERT_AFTER_CONSECUTIVE_FAILURES,
+  type Alerter,
+  type FailureTracker,
+} from "./alert.ts";
+
+export interface SyncOptions {
+  readonly store: Store;
+  readonly client: PocketSmithClient;
+  /** Penny tenant id (the authenticated user_id every store call is scoped by). */
+  readonly userId: UserId;
+  /** PocketSmith user id. Resolved via GET /me when omitted. */
+  readonly pocketsmithUserId?: number;
+  /** Clock injection for deterministic tests; defaults to now. */
+  readonly now?: () => Date;
+}
+
+export interface SyncResult {
+  readonly pages: number;
+  readonly transactions: number;
+  /** The updated_since the run sent, or null on a first run with no bookmark. */
+  readonly updatedSince: string | null;
+  readonly completedAt: string;
+}
+
+/**
+ * Run one incremental sync. ISC-5: updated_since equals the last successful sync
+ * timestamp. On the very first run (no bookmark yet) it pulls everything, which
+ * is the correct behaviour if a backfill has not seeded the bookmark.
+ */
+export async function runSync(opts: SyncOptions): Promise<SyncResult> {
+  const now = opts.now ?? (() => new Date());
+  const correlationId = crypto.randomUUID();
+
+  // ISC-5: the bookmark is the last successful run's timestamp.
+  const updatedSince = await opts.store.getLastSyncAt(opts.userId);
+
+  const pocketsmithUserId =
+    opts.pocketsmithUserId ?? (await resolvePocketSmithUserId(opts.client));
+
+  const query: TransactionQuery =
+    updatedSince !== null ? { updatedSince } : {};
+
+  let pages = 0;
+  let transactions = 0;
+
+  // ISC-4: drain to completion.
+  for await (const page of opts.client.paginate(pocketsmithUserId, query)) {
+    pages += 1;
+    const txs = toStoreTxs(page);
+    if (txs.length > 0) {
+      // ISC-17: base-field refresh only; overlay untouched.
+      await opts.store.upsertTransactions(opts.userId, txs);
+      transactions += txs.length;
+    }
+  }
+
+  const completedAt = now().toISOString();
+
+  // ISC-15: append a sync event.
+  await opts.store.appendEvent(opts.userId, {
+    id: crypto.randomUUID(),
+    ts: Date.parse(completedAt),
+    actor: "sync",
+    correlationId,
+    kind: "ingest.sync.completed",
+    payloadJson: JSON.stringify({ updatedSince, pages, transactions }),
+  });
+
+  // Advance the bookmark only after a fully successful drain (ISC-5).
+  await opts.store.setLastSyncAt(opts.userId, completedAt);
+
+  return { pages, transactions, updatedSince, completedAt };
+}
+
+export interface TrackedSyncDeps {
+  readonly failures: FailureTracker;
+  readonly alerter: Alerter;
+}
+
+export interface TrackedSyncOutcome {
+  readonly ok: boolean;
+  readonly result?: SyncResult;
+  readonly error?: unknown;
+  /** Consecutive failures after this run (0 on success). */
+  readonly consecutiveFailures: number;
+  /** Whether an alert was raised on this run. */
+  readonly alerted: boolean;
+}
+
+/**
+ * Run a sync with consecutive-failure tracking and alerting (ISC-8). A success
+ * resets the counter; two consecutive failures raise a Pulse/Telegram alert.
+ * Never throws — the cron entry inspects the outcome and sets its exit code.
+ */
+export async function syncWithFailureTracking(
+  opts: SyncOptions,
+  deps: TrackedSyncDeps,
+): Promise<TrackedSyncOutcome> {
+  try {
+    const result = await runSync(opts);
+    await deps.failures.recordSuccess();
+    return { ok: true, result, consecutiveFailures: 0, alerted: false };
+  } catch (error) {
+    const consecutiveFailures = await deps.failures.recordFailure();
+    let alerted = false;
+    if (consecutiveFailures >= ALERT_AFTER_CONSECUTIVE_FAILURES) {
+      await deps.alerter.alert(
+        `PocketSmith sync failed ${consecutiveFailures} times in a row for user ${opts.userId}. Last error: ${describeError(error)}`,
+      );
+      alerted = true;
+    }
+    return { ok: false, error, consecutiveFailures, alerted };
+  }
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function resolvePocketSmithUserId(client: PocketSmithClient): Promise<number> {
+  const me = await client.getAuthenticatedUser();
+  if (me.id === undefined || me.id === null) {
+    throw new Error("PocketSmith /me returned no user id");
+  }
+  return me.id;
+}

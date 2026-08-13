@@ -1,0 +1,207 @@
+import * as React from "react";
+import { ArrowRight, CheckCircle2, AlertTriangle } from "lucide-react";
+import type { EnvelopeRow } from "@contract";
+import type { ChangeScope } from "@domain";
+import { call, isApiError } from "@/lib/api";
+import { useInvalidateBudget } from "@/lib/queries";
+import { formatCents, cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+
+interface Props {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  rows: readonly EnvelopeRow[];
+  /** Optionally preselect the destination (e.g. opened from an envelope row). */
+  defaultToId?: string;
+}
+
+/**
+ * Move-money (reallocation) modal. Names an explicit source (From) and
+ * destination (To); the amount leaving the source equals the amount entering
+ * the destination (ISC-66). Scope is this-month-only or every-month (ongoing,
+ * which edits the recurring template — ISC-67). A live indicator shows whether
+ * the plan stays balanced (ISC-69): a same-envelope reallocation always
+ * balances; moving from an envelope into deficit is allowed but flagged.
+ */
+export function MoveMoneyModal({ open, onOpenChange, rows, defaultToId }: Props) {
+  const invalidateBudget = useInvalidateBudget();
+  // Free rebalancing: any envelope can be a source or destination (ISC-89).
+  const spendable = rows;
+  const [toId, setToId] = React.useState(defaultToId ?? spendable[0]?.id ?? "");
+  const [fromId, setFromId] = React.useState(spendable[1]?.id ?? spendable[0]?.id ?? "");
+  const [amount, setAmount] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [result, setResult] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (open && defaultToId) setToId(defaultToId);
+  }, [open, defaultToId]);
+
+  // Seed/repair both selections when the rows arrive while the modal is open.
+  // The detail page fetches the grid only once the modal opens, so the useState
+  // initialisers above ran with rows=[] and never re-run; without this the From
+  // select opened empty. A selection that still exists in rows is kept.
+  React.useEffect(() => {
+    if (!open || spendable.length === 0) return;
+    const has = (id: string) => spendable.some((r) => r.id === id);
+    setToId((prev) =>
+      prev !== "" && has(prev) ? prev : defaultToId && has(defaultToId) ? defaultToId : spendable[0]?.id ?? ""
+    );
+    setFromId((prev) => {
+      if (prev !== "" && has(prev)) return prev;
+      // Default the source to the first envelope that is not the preselected
+      // destination, mirroring the rows[1] ?? rows[0] initialiser intent.
+      return (spendable.find((r) => r.id !== defaultToId) ?? spendable[0])?.id ?? "";
+    });
+  }, [open, spendable, defaultToId]);
+
+  const amountCents = Math.round((parseFloat(amount) || 0) * 100);
+  const from = rows.find((r) => r.id === fromId);
+  const sourceLeft = from?.leftCents ?? 0;
+  // The plan stays balanced when the source can fund the move without going
+  // negative. Conservation always holds (out === in); "balanced" here means the
+  // source does not fall into deficit.
+  const staysBalanced = amountCents > 0 && amountCents <= sourceLeft && fromId !== toId;
+  const sameEnvelope = fromId === toId;
+
+  const onSubmit = async () => {
+    if (amountCents <= 0 || sameEnvelope) return;
+    setBusy(true);
+    setResult(null);
+    try {
+      // Post to the free-reallocation endpoint; the move is recorded as a
+      // traceable movement (ISC-90) the History view then surfaces.
+      const res = await call("POST /api/move", {
+        fromEnvelopeId: fromId,
+        toEnvelopeId: toId,
+        amountCents,
+        scope: "this_month",
+      });
+      if (isApiError(res)) {
+        setResult(res.error);
+        return;
+      }
+      setAmount("");
+      // Invalidate the shared budget queries so the grid and net-position banner
+      // refresh atomically (the same money move touches both).
+      invalidateBudget();
+      onOpenChange(false);
+    } catch (e) {
+      setResult(e instanceof Error ? e.message : "Could not move money.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Move money</DialogTitle>
+          <DialogDescription>Reallocate between envelopes. Every dollar is conserved.</DialogDescription>
+        </DialogHeader>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
+          <div className="space-y-2">
+            <Label>From (source)</Label>
+            <Select value={fromId} onValueChange={setFromId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Source envelope" />
+              </SelectTrigger>
+              <SelectContent>
+                {spendable.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.name} ({formatCents(r.leftCents)})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="hidden pb-2 sm:block">
+            <ArrowRight className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <div className="space-y-2">
+            <Label>To</Label>
+            <Select value={toId} onValueChange={setToId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Destination envelope" />
+              </SelectTrigger>
+              <SelectContent>
+                {spendable.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.name} ({formatCents(r.leftCents)})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="amount">Amount (AUD)</Label>
+          <Input
+            id="amount"
+            type="number"
+            min="0"
+            step="0.01"
+            inputMode="decimal"
+            placeholder="0.00"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Moves money between the two envelopes and shows as a line item in both. Budgets are not
+            changed.
+          </p>
+        </div>
+
+        {/* Budget-stays-balanced indicator */}
+        <div
+          className={cn(
+            "flex items-center gap-2 rounded-md px-3 py-2 text-sm",
+            sameEnvelope
+              ? "bg-muted text-muted-foreground"
+              : staysBalanced
+                ? "bg-success/15 text-success"
+                : "bg-warning/15 text-warning"
+          )}
+        >
+          {sameEnvelope ? (
+            <>Pick a different source and destination.</>
+          ) : staysBalanced ? (
+            <>
+              <CheckCircle2 className="h-4 w-4" /> Budget stays balanced — {from?.name} keeps{" "}
+              {formatCents(sourceLeft - amountCents)}.
+            </>
+          ) : (
+            <>
+              <AlertTriangle className="h-4 w-4" /> This move puts {from?.name} into deficit. Allowed, but the
+              zero-based alert will fire.
+            </>
+          )}
+        </div>
+        {result && <p className="text-sm text-destructive">{result}</p>}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={onSubmit} disabled={busy || amountCents <= 0 || sameEnvelope}>
+            {busy ? "Moving…" : "Move money"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

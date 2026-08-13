@@ -1,0 +1,390 @@
+/**
+ * In-memory BudgetStore for engine unit tests. Implements the full persistence
+ * surface the envelope and budget engines depend on (the platform Store plus
+ * the two extras ports) without bun:sqlite. Mirrors the SqliteStore snapshot
+ * semantics so engine tests exercise the same balance maths.
+ *
+ * Every method is tenant-scoped by userId, matching the production contract.
+ */
+
+import type { UserId } from "../src/platform/auth.ts";
+import type { Envelope as StoreEnvelope, LedgerEvent, Tx } from "../src/platform/store.ts";
+import type {
+  BudgetChange,
+  BudgetTemplate,
+  CategoryMapping,
+  IncomeEnvelope,
+  MoneyMovement,
+} from "../src/domain/types.ts";
+import type {
+  Allocation,
+  Category,
+  EnvelopeCarryover,
+  EnvelopeStore,
+  IncomeCarryover,
+  SnapshotPoint,
+} from "../src/envelope/ports.ts";
+import type { BudgetStore, ReconciliationRecord } from "../src/budget/ports.ts";
+
+interface Snapshot {
+  envelopeId: string;
+  date: string;
+  balanceCents: number;
+}
+
+interface Tenant {
+  txs: Map<string, Tx>;
+  envelopes: Map<string, StoreEnvelope>;
+  events: LedgerEvent[];
+  snapshots: Map<string, Snapshot>;
+  mappings: Map<string, CategoryMapping>;
+  categories: Map<string, Category>;
+  allocations: Map<string, Allocation>;
+  incomes: Map<string, IncomeEnvelope>;
+  template: Map<string, BudgetTemplate>;
+  history: BudgetChange[];
+  movements: MoneyMovement[];
+  envelopeCarryover: Map<string, EnvelopeCarryover>;
+  incomeCarryover: Map<string, IncomeCarryover>;
+  reconciliations: ReconciliationRecord[];
+  dismissedCategories: Map<string, { dismissedAt: number; lastSeenDate: string }>;
+  lastSyncAt: string | null;
+}
+
+export class MemoryStore implements BudgetStore, EnvelopeStore {
+  private readonly tenants = new Map<string, Tenant>();
+  /** True while a withTransaction is open, so nested calls join it. */
+  private inTransaction = false;
+
+  /**
+   * All-or-nothing transaction with real rollback semantics (mirrors the
+   * adapters, so engine tests can assert crash-consistency): the tenant state
+   * is snapshotted at entry and restored if `fn` throws. Nested calls join the
+   * outer transaction — the OUTER commit/rollback decides. Tests run
+   * sequentially on one store, so a flag (not AsyncLocalStorage) suffices here.
+   */
+  async withTransaction<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.inTransaction) return fn(); // nested: join the outer transaction
+    const snapshot = this.snapshotTenants();
+    this.inTransaction = true;
+    try {
+      return await fn();
+    } catch (err) {
+      this.restoreTenants(snapshot);
+      throw err;
+    } finally {
+      this.inTransaction = false;
+    }
+  }
+
+  /** Structural copy of every tenant's containers (values are treated as immutable). */
+  private snapshotTenants(): Map<string, Tenant> {
+    const copy = new Map<string, Tenant>();
+    for (const [userId, t] of this.tenants) {
+      copy.set(userId, {
+        txs: new Map(t.txs),
+        envelopes: new Map(t.envelopes),
+        events: [...t.events],
+        snapshots: new Map(t.snapshots),
+        mappings: new Map(t.mappings),
+        categories: new Map(t.categories),
+        allocations: new Map(t.allocations),
+        incomes: new Map(t.incomes),
+        template: new Map(t.template),
+        history: [...t.history],
+        movements: [...t.movements],
+        envelopeCarryover: new Map(t.envelopeCarryover),
+        incomeCarryover: new Map(t.incomeCarryover),
+        reconciliations: [...t.reconciliations],
+        dismissedCategories: new Map(t.dismissedCategories),
+        lastSyncAt: t.lastSyncAt,
+      });
+    }
+    return copy;
+  }
+
+  private restoreTenants(snapshot: Map<string, Tenant>): void {
+    this.tenants.clear();
+    for (const [userId, t] of snapshot) this.tenants.set(userId, t);
+  }
+
+  private t(userId: UserId): Tenant {
+    let t = this.tenants.get(userId);
+    if (t === undefined) {
+      t = {
+        txs: new Map(),
+        envelopes: new Map(),
+        events: [],
+        snapshots: new Map(),
+        mappings: new Map(),
+        categories: new Map(),
+        allocations: new Map(),
+        incomes: new Map(),
+        template: new Map(),
+        history: [],
+        movements: [],
+        envelopeCarryover: new Map(),
+        incomeCarryover: new Map(),
+        reconciliations: [],
+        dismissedCategories: new Map(),
+        lastSyncAt: null,
+      };
+      this.tenants.set(userId, t);
+    }
+    return t;
+  }
+
+  async migrate(): Promise<void> {}
+
+  async upsertTransactions(userId: UserId, txs: readonly Tx[]): Promise<void> {
+    const t = this.t(userId);
+    for (const tx of txs) t.txs.set(tx.id, tx);
+  }
+
+  async listTransactions(
+    userId: UserId,
+    opts?: {
+      envelopeId?: string;
+      accountId?: string;
+      since?: string;
+      from?: string;
+      to?: string;
+      newestFirst?: boolean;
+    },
+  ): Promise<Tx[]> {
+    let rows = [...this.t(userId).txs.values()];
+    if (opts?.envelopeId !== undefined) rows = rows.filter((r) => r.envelopeId === opts.envelopeId);
+    if (opts?.accountId !== undefined) rows = rows.filter((r) => r.accountId === opts.accountId);
+    const lower = opts?.from ?? opts?.since;
+    if (lower !== undefined) rows = rows.filter((r) => r.date >= lower);
+    if (opts?.to !== undefined) rows = rows.filter((r) => r.date <= opts.to!);
+    rows.sort((a, b) => (a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date)));
+    if (opts?.newestFirst) rows.reverse();
+    return rows;
+  }
+
+  async upsertEnvelope(userId: UserId, e: StoreEnvelope): Promise<void> {
+    this.t(userId).envelopes.set(e.id, e);
+  }
+
+  async listEnvelopes(userId: UserId): Promise<StoreEnvelope[]> {
+    return [...this.t(userId).envelopes.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async appendEvent(userId: UserId, e: LedgerEvent): Promise<void> {
+    this.t(userId).events.push(e);
+  }
+
+  /** Newest first (ts desc, id desc tie-break), mirroring the adapters' SQL order. */
+  async listEventsByKind(userId: UserId, kind: string): Promise<LedgerEvent[]> {
+    return this.t(userId)
+      .events.filter((e) => e.kind === kind)
+      .sort((a, b) => b.ts - a.ts || b.id.localeCompare(a.id));
+  }
+
+  async writeDailySnapshot(userId: UserId, date: string): Promise<void> {
+    const t = this.t(userId);
+    for (const env of t.envelopes.values()) {
+      let bal = 0;
+      for (const tx of t.txs.values()) {
+        if (tx.envelopeId === env.id && tx.date <= date && !tx.isPending && !tx.isTransfer) {
+          bal += tx.amountCents;
+        }
+      }
+      t.snapshots.set(`${env.id}:${date}`, { envelopeId: env.id, date, balanceCents: bal });
+    }
+  }
+
+  async getLastSyncAt(userId: UserId): Promise<string | null> {
+    return this.t(userId).lastSyncAt;
+  }
+
+  async setLastSyncAt(userId: UserId, iso: string): Promise<void> {
+    this.t(userId).lastSyncAt = iso;
+  }
+
+  async close(): Promise<void> {}
+
+  // ── envelope extras ────────────────────────────────────────────────────────
+
+  async listMappings(userId: UserId): Promise<CategoryMapping[]> {
+    return [...this.t(userId).mappings.values()];
+  }
+
+  async upsertMapping(userId: UserId, m: CategoryMapping): Promise<void> {
+    this.t(userId).mappings.set(m.id, m);
+  }
+
+  async listCategories(userId: UserId): Promise<Category[]> {
+    return [...this.t(userId).categories.values()];
+  }
+
+  async upsertCategory(userId: UserId, c: Category): Promise<void> {
+    this.t(userId).categories.set(c.id, c);
+  }
+
+  async listDismissedCategoryMarks(userId: UserId): Promise<{ categoryId: string; dismissedAt: number; lastSeenDate: string }[]> {
+    return [...this.t(userId).dismissedCategories].map(([categoryId, m]) => ({ categoryId, ...m }));
+  }
+
+  async setCategoryDismissed(userId: UserId, categoryId: string, dismissed: boolean, lastSeenDate = ""): Promise<void> {
+    if (dismissed) this.t(userId).dismissedCategories.set(categoryId, { dismissedAt: Date.now(), lastSeenDate });
+    else this.t(userId).dismissedCategories.delete(categoryId);
+  }
+
+  async listAllocations(userId: UserId, period: string): Promise<Allocation[]> {
+    return [...this.t(userId).allocations.values()].filter((a) => a.period === period);
+  }
+
+  /**
+   * Upsert keyed by (envelopeId, period), mirroring the adapters' UNIQUE index:
+   * REPLACE semantics (amount/scope overwritten, never summed) and the
+   * surviving row keeps its original id.
+   */
+  async putAllocation(userId: UserId, a: Allocation): Promise<void> {
+    const key = `${a.envelopeId}|${a.period}`;
+    const prior = this.t(userId).allocations.get(key);
+    this.t(userId).allocations.set(key, prior === undefined ? a : { ...a, id: prior.id });
+  }
+
+  async listAllocationPeriods(userId: UserId): Promise<string[]> {
+    return [...new Set([...this.t(userId).allocations.values()].map((a) => a.period))].sort();
+  }
+
+  async listIncomeEnvelopes(userId: UserId): Promise<IncomeEnvelope[]> {
+    return [...this.t(userId).incomes.values()];
+  }
+
+  async upsertIncomeEnvelope(userId: UserId, e: IncomeEnvelope): Promise<void> {
+    this.t(userId).incomes.set(e.id, e);
+  }
+
+  async setEnvelopeRolloverStart(userId: UserId, envelopeId: string, rolloverStart: string): Promise<void> {
+    const prev = this.t(userId).envelopeCarryover.get(envelopeId);
+    this.t(userId).envelopeCarryover.set(envelopeId, {
+      envelopeId,
+      carryoverCents: prev?.carryoverCents ?? 0,
+      rolloverStart,
+      carryoverAnchor: prev?.carryoverAnchor ?? null,
+    });
+  }
+
+  async setEnvelopeCarryover(
+    userId: UserId,
+    envelopeId: string,
+    carryoverCents: number,
+    rolloverStart: string | null,
+  ): Promise<void> {
+    // The date param is the baseline's CAPTURE anchor (mirrors the SQL stores,
+    // which write carryover_anchor and leave rollover_start untouched).
+    const prev = this.t(userId).envelopeCarryover.get(envelopeId);
+    this.t(userId).envelopeCarryover.set(envelopeId, {
+      envelopeId,
+      carryoverCents,
+      rolloverStart: prev?.rolloverStart ?? null,
+      carryoverAnchor: rolloverStart,
+    });
+  }
+
+  async listEnvelopeCarryover(userId: UserId): Promise<EnvelopeCarryover[]> {
+    return [...this.t(userId).envelopeCarryover.values()];
+  }
+
+  async setEnvelopeArchived(userId: UserId, envelopeId: string, archived: boolean): Promise<void> {
+    const e = this.t(userId).envelopes.get(envelopeId);
+    if (e !== undefined) this.t(userId).envelopes.set(envelopeId, { ...e, archived });
+  }
+
+  async setIncomeCarryover(
+    userId: UserId,
+    incomeEnvelopeId: string,
+    carryoverCents: number,
+    rolloverStart: string | null,
+  ): Promise<void> {
+    this.t(userId).incomeCarryover.set(incomeEnvelopeId, {
+      incomeEnvelopeId,
+      carryoverCents,
+      rolloverStart,
+    });
+  }
+
+  async listIncomeCarryover(userId: UserId): Promise<IncomeCarryover[]> {
+    return [...this.t(userId).incomeCarryover.values()];
+  }
+
+  async listSnapshots(
+    userId: UserId,
+    envelopeId: string,
+    from: string,
+    to: string,
+  ): Promise<SnapshotPoint[]> {
+    return [...this.t(userId).snapshots.values()]
+      .filter((s) => s.envelopeId === envelopeId && s.date >= from && s.date <= to)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((s) => ({ date: s.date, balanceCents: s.balanceCents }));
+  }
+
+  // ── budget extras ──────────────────────────────────────────────────────────
+
+  async listTemplate(userId: UserId): Promise<BudgetTemplate[]> {
+    return [...this.t(userId).template.values()];
+  }
+
+  /**
+   * Upsert keyed by line id, mirroring the adapters: versioned (effective-dated)
+   * lines under DIFFERENT ids for the same envelope coexist (append-only), and
+   * the effective dates default exactly as the SQL columns do ('1970-01-01' /
+   * NULL open-ended) so back-compat resolution matches the real stores.
+   */
+  async putTemplateLine(userId: UserId, line: BudgetTemplate): Promise<void> {
+    this.t(userId).template.set(line.id, {
+      ...line,
+      effectiveFrom: line.effectiveFrom ?? "1970-01-01",
+      effectiveTo: line.effectiveTo ?? null,
+    });
+  }
+
+  async deleteTemplateLine(userId: UserId, lineId: string): Promise<void> {
+    this.t(userId).template.delete(lineId);
+  }
+
+  async listBudgetHistory(userId: UserId): Promise<BudgetChange[]> {
+    return [...this.t(userId).history];
+  }
+
+  async appendBudgetHistory(userId: UserId, change: BudgetChange): Promise<void> {
+    this.t(userId).history.push(change);
+  }
+
+  async appendMovement(userId: UserId, movement: MoneyMovement): Promise<void> {
+    this.t(userId).movements.push(movement);
+  }
+
+  async listMovements(userId: UserId): Promise<MoneyMovement[]> {
+    return [...this.t(userId).movements].sort((a, b) => b.ts - a.ts);
+  }
+
+  async appendReconciliation(userId: UserId, rec: ReconciliationRecord): Promise<void> {
+    this.t(userId).reconciliations.push(rec);
+  }
+
+  async getLatestReconciliation(userId: UserId): Promise<ReconciliationRecord | null> {
+    const recs = this.t(userId).reconciliations;
+    if (recs.length === 0) return null;
+    return [...recs].sort((a, b) => b.ts - a.ts || b.id.localeCompare(a.id))[0]!;
+  }
+
+  // ── test introspection helpers ───────────────────────────────────────────────
+
+  events(userId: UserId): LedgerEvent[] {
+    return [...this.t(userId).events];
+  }
+
+  snapshots(userId: UserId): Snapshot[] {
+    return [...this.t(userId).snapshots.values()];
+  }
+
+  addCategory(userId: UserId, c: Category): void {
+    this.t(userId).categories.set(c.id, c);
+  }
+}
