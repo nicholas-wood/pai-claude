@@ -1,0 +1,173 @@
+import * as React from "react";
+import { Scale, CheckCircle2, AlertTriangle } from "lucide-react";
+import { useNetPosition } from "@/lib/queries";
+import { cn, formatCents } from "@/lib/utils";
+
+/**
+ * Net-position widget (the master reconciliation), pinned to the top of the budget
+ * page. It states the user's real liquid position — cash on hand minus what is
+ * owed on credit cards — alongside the budget's total "left" across the sections,
+ * and grades whether the two reconcile. Within a dollar is green (the envelopes
+ * account for every real dollar); a larger gap is amber, with a plain note that the
+ * two should match. Account balances come live from PocketSmith, so the widget
+ * degrades to a quiet "could not reach PocketSmith" line on failure rather than
+ * inventing figures (ISC-83).
+ *
+ * Layout: two stacked, colour-coded groups — "What I actually have" (cash, card
+ * owed, net liquid) and "What the budget says is left" (the per-section balances,
+ * including Working) — then the reconciled/unreconciled banner. Vertical and
+ * scannable so it reads cleanly on mobile.
+ */
+
+/** A within-a-dollar delta is treated as reconciled (rounding/timing noise). */
+const RECONCILE_TOLERANCE_CENTS = 100;
+
+/** Sign-aware tone for a money figure: green positive, red negative, muted zero. */
+function signTone(cents: number): string {
+  if (cents > 0) return "text-success";
+  if (cents < 0) return "text-destructive";
+  return "text-muted-foreground";
+}
+
+/** One label/value line in a group. `tone` overrides the sign colour when given. */
+function Line({
+  label,
+  valueCents,
+  tone,
+  strong,
+}: {
+  label: string;
+  valueCents: number;
+  tone?: string;
+  strong?: boolean;
+}) {
+  return (
+    <div className={cn("flex items-center justify-between gap-3 py-1", strong && "font-semibold")}>
+      <span className={cn("text-sm", strong ? "text-foreground" : "text-muted-foreground")}>{label}</span>
+      <span className={cn("text-sm tabular-nums tracking-tight", tone ?? signTone(valueCents))}>
+        {formatCents(valueCents)}
+      </span>
+    </div>
+  );
+}
+
+function GroupHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{children}</p>
+  );
+}
+
+/**
+ * The banner subscribes to the shared ['net-position'] query. Any mutation that
+ * moves money invalidates that key (see useInvalidateBudget), so the banner
+ * re-reads and never shows a stale net position — the Phase 1 refreshKey shim is
+ * gone. On a fetch error the query has no data and the widget degrades to the
+ * quiet honest fallback below rather than inventing figures (ISC-83).
+ */
+export function NetPositionWidget() {
+  const { data, isLoading } = useNetPosition();
+
+  if (isLoading) {
+    return <div className="h-[7.5rem] animate-pulse rounded-lg border bg-card" aria-hidden />;
+  }
+
+  // PocketSmith unreachable, or the request failed: a quiet, honest fallback.
+  if (!data || !data.ok) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-dashed bg-card px-4 py-3 text-sm text-muted-foreground">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+        <span>{data?.message ?? "Could not load your net position right now."}</span>
+      </div>
+    );
+  }
+
+  const netLiquidCents = data.cashOnHandCents - data.cardOwedCents;
+  // The banner grades on the UNEXPLAINED delta (owner principle 2026-08-14):
+  // uncategorised activity is known-but-unfiled, shown as its own line below —
+  // "off" means the numbers fail to match even after accounting for it.
+  const gradedDeltaCents = data.unexplainedDeltaCents ?? data.reconciledDeltaCents;
+  const uncategorisedCents = data.uncategorisedActivityCents ?? 0;
+  const reconciled = Math.abs(gradedDeltaCents) <= RECONCILE_TOLERANCE_CENTS;
+  // A positive delta means more real money than the budget accounts for (dollars
+  // without a job); negative means the budget claims more than is actually liquid.
+  const deltaPhrase = reconciled
+    ? "Your envelopes account for every real dollar."
+    : gradedDeltaCents > 0
+      ? `${formatCents(Math.abs(gradedDeltaCents))} of real money has no envelope yet.`
+      : `Your envelopes hold ${formatCents(Math.abs(gradedDeltaCents))} more than you actually have.`;
+
+  return (
+    <section className="rounded-lg border bg-card p-4 md:p-5" aria-label="Net position reconciliation">
+      <header className="mb-3">
+        <h2 className="text-sm font-semibold tracking-tight">Net position</h2>
+        <p className="text-xs text-muted-foreground">
+          Cash on hand minus card debt should match what is left across your envelopes.
+        </p>
+      </header>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {/* Group 1: the real liquid position. */}
+        <div className="rounded-md border bg-muted/30 px-3 py-2.5">
+          <GroupHeading>What I actually have</GroupHeading>
+          <div className="divide-y divide-border/40">
+            <Line label="Cash on hand" valueCents={data.cashOnHandCents} tone="text-success" />
+            <Line label="Owed on card" valueCents={-data.cardOwedCents} tone="text-destructive" />
+            {(data.cardPendingCents ?? 0) > 0 && (
+              <div className="flex items-center justify-between gap-3 py-1">
+                <span className="pl-3 text-xs text-muted-foreground">…of which pending</span>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {formatCents(data.cardPendingCents!)}
+                </span>
+              </div>
+            )}
+            {(data.awaitingIncomeCents ?? 0) > 0 && (
+              <Line label="Awaiting expected income" valueCents={data.awaitingIncomeCents!} tone="text-muted-foreground" />
+            )}
+            <Line label="Net liquid" valueCents={netLiquidCents} strong />
+          </div>
+        </div>
+
+        {/* Group 2: the budget's "left" by section (includes Working). */}
+        <div className="rounded-md border bg-muted/30 px-3 py-2.5">
+          <GroupHeading>What the budget says is left</GroupHeading>
+          <div className="divide-y divide-border/40">
+            <Line label="Income" valueCents={data.sectionLeftCents.income} />
+            <Line label="Savings" valueCents={data.sectionLeftCents.saving} />
+            <Line label="Expenses" valueCents={data.sectionLeftCents.expense} />
+            <Line label="Envelopes" valueCents={data.sectionLeftCents.envelope} />
+            <Line label="Working" valueCents={data.sectionLeftCents.working} />
+            {uncategorisedCents !== 0 && (
+              <Line label="Yet to be categorised" valueCents={uncategorisedCents} tone="text-muted-foreground" />
+            )}
+            <Line label="Total left" valueCents={data.totalLeftCents} strong />
+          </div>
+        </div>
+      </div>
+
+      <div
+        className={cn(
+          "mt-3 flex items-center gap-2.5 rounded-md border px-3 py-2.5 text-sm",
+          reconciled
+            ? "border-success/30 bg-success/10 text-success"
+            : "border-warning/40 bg-warning/10 text-warning",
+        )}
+      >
+        {reconciled ? <CheckCircle2 className="h-5 w-5 shrink-0" /> : <Scale className="h-5 w-5 shrink-0" />}
+        <span className="flex-1">
+          <span className="font-medium">{reconciled ? "Reconciled" : "Unreconciled"}</span>
+          {" — "}
+          {deltaPhrase}
+          {!reconciled && (
+            <span className="ml-1 tabular-nums">(off by {formatCents(Math.abs(gradedDeltaCents))})</span>
+          )}
+          {uncategorisedCents !== 0 && (
+            <span className="ml-1 text-xs opacity-80">
+              ({formatCents(Math.abs(uncategorisedCents))} awaiting categorisation, not counted as off)
+            </span>
+          )}
+        </span>
+      </div>
+
+    </section>
+  );
+}
