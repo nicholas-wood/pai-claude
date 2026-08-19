@@ -95,9 +95,8 @@ enabled = true
 [[job]]
 name = "memory-consolidation"
 schedule = "0 3 * * *"
-type = "claude"
-prompt = "Run learning consolidation: execute `bun run ~/.claude/PAI/TOOLS/SessionHarvester.ts --recent 20` then `bun run ~/.claude/PAI/TOOLS/LearningPatternSynthesis.ts --week`. Summarize what was learned and any patterns found."
-model = "sonnet"
+type = "script"
+command = "bun run ~/.claude/PAI/TOOLS/SessionHarvester.ts --recent 20 && bun run ~/.claude/PAI/TOOLS/LearningPatternSynthesis.ts --week"
 output = "log"
 enabled = true
 

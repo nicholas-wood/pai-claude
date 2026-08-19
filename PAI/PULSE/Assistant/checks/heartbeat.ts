@@ -26,7 +26,7 @@
  */
 
 import { join } from "path"
-import { existsSync, readFileSync } from "fs"
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs"
 
 const HOME = process.env.HOME ?? ""
 const PAI_DIR = join(HOME, ".claude", "PAI")
@@ -37,6 +37,8 @@ const DA_DIR = join(PAI_DIR, "USER", "DA")
 const DA_IDENTITY_FLAT = join(PAI_DIR, "USER", "DA_IDENTITY.md")
 const REGISTRY_PATH = join(DA_DIR, "_registry.yaml")
 const TASKS_PATH = join(PULSE_DIR, "state", "da", "scheduled-tasks.jsonl")
+const DEDUP_PATH = join(PULSE_DIR, "state", "da", "heartbeat-alerts.json")
+const DEDUP_TTL_MS = 24 * 60 * 60 * 1000 // announce a persistent failure once per day, not every 30 min
 
 // ── Helpers ──
 
@@ -178,14 +180,33 @@ async function main() {
     ? recent.reduce((s, r) => s + r.rating, 0) / recent.length
     : null
 
-  if (alerts.length === 0) {
+  // Dedup: persistent failure alerts repeat every heartbeat run until fixed —
+  // announce each distinct one at most once per TTL window. Reminders always pass.
+  let announced: Record<string, number> = {}
+  if (existsSync(DEDUP_PATH)) {
+    try { announced = JSON.parse(readFileSync(DEDUP_PATH, "utf-8")) } catch { announced = {} }
+  }
+  const nowMs = Date.now()
+  const isDedupable = (a: string) => a.startsWith("Job ")
+  const fresh = alerts.filter(a => !isDedupable(a) || nowMs - (announced[a] ?? 0) >= DEDUP_TTL_MS)
+
+  if (fresh.length === 0) {
     console.log("NO_ACTION")
     return
   }
 
+  for (const a of fresh.filter(isDedupable)) announced[a] = nowMs
+  for (const [k, ts] of Object.entries(announced)) {
+    if (nowMs - ts >= DEDUP_TTL_MS) delete announced[k]
+  }
+  try {
+    mkdirSync(join(PULSE_DIR, "state", "da"), { recursive: true })
+    writeFileSync(DEDUP_PATH, JSON.stringify(announced, null, 2))
+  } catch { /* non-critical */ }
+
   // Format as a concise voice notification
   const intro = `${daName} heartbeat:`
-  const body = alerts.join(" Also: ")
+  const body = fresh.join(" Also: ")
   console.log(`${intro} ${body}`)
 }
 

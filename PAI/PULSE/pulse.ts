@@ -190,6 +190,7 @@ async function loadPulseConfig(): Promise<PulseConfig> {
 const STATE_PATH = join(PULSE_DIR, "state", "state.json")
 const PID_PATH = join(PULSE_DIR, "state", "pulse.pid")
 const MAX_FAILURES = 3
+const LATCH_RETRY_MS = 24 * 60 * 60 * 1000 // after MAX_FAILURES, allow one retry per cooldown instead of skipping forever
 const MAX_SLEEP_MS = 60_000
 const MIN_SLEEP_MS = 1_000
 
@@ -476,11 +477,18 @@ async function main() {
 
       if (!isDue(job.schedule, now, jobState?.lastRun)) continue
 
-      if ((jobState?.consecutiveFailures ?? 0) >= MAX_FAILURES) {
-        log("warn", `Skipping ${job.name}: ${jobState!.consecutiveFailures} consecutive failures`, {
+      const latched = (jobState?.consecutiveFailures ?? 0) >= MAX_FAILURES
+      if (latched && now.getTime() - (jobState?.lastRun ?? 0) < LATCH_RETRY_MS) {
+        log("warn", `Skipping ${job.name}: ${jobState!.consecutiveFailures} consecutive failures (retry after cooldown)`, {
           lastResult: jobState!.lastResult,
         })
         continue
+      }
+      if (latched) {
+        log("info", `Retrying ${job.name} after latch cooldown`, {
+          failures: jobState!.consecutiveFailures,
+          subsystem: "cron",
+        })
       }
 
       log("info", `Running: ${job.name}`, { type: job.type, subsystem: "cron" })

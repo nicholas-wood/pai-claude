@@ -84,6 +84,8 @@ const FALLBACK_VOICE_SETTINGS: ElevenLabsVoiceSettings = {
 }
 
 const FALLBACK_VOLUME = 1.0
+// Premade ElevenLabs voice (Adam) — usable on the free plan, unlike library voices which 402
+const PREMADE_FALLBACK_VOICE_ID = "pNInz6obpgDQGcFmaJgB"
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "http://localhost",
@@ -338,6 +340,12 @@ async function generateSpeech(
 
   if (!response.ok) {
     const errorText = await response.text()
+    // 402 = current plan cannot use this voice (library voices need a paid plan).
+    // Retry once with a premade voice so the notification still speaks.
+    if (response.status === 402 && voiceId !== PREMADE_FALLBACK_VOICE_ID) {
+      log("warn", `Voice: ${voiceId} rejected by plan (402) — falling back to premade voice ${PREMADE_FALLBACK_VOICE_ID}`)
+      return generateSpeech(text, PREMADE_FALLBACK_VOICE_ID, voiceSettings)
+    }
     throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`)
   }
 
