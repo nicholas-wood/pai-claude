@@ -1,33 +1,35 @@
 {
   "proto": 1,
-  "supervisorPid": 153777,
-  "updatedAt": 1787137430253,
+  "supervisorPid": 1673213,
+  "updatedAt": 1787481117374,
   "workers": {
-    "59e73a46": {
-      "pid": 149115,
-      "procStart": "19953141",
-      "sessionId": "59e73a46-fd2f-44e7-8edc-f3f51e19b37b",
-      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/59e73a46.sock",
-      "ptySock": "/tmp/cc-daemon-1000/14adf565/pty/59e73a46.sock",
-      "cliVersion": "2.1.229",
-      "startedAt": 1787108509513,
-      "attempt": 1,
+    "423f247a": {
+      "pid": 3952844,
+      "procStart": "56685732",
+      "sessionId": "423f247a-627d-4dce-a25e-c2ee59439098",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/423f247a.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/a183e63c.pty.sock",
+      "cliVersion": "2.1.241",
+      "startedAt": 1787466460588,
+      "attempt": 2,
       "cwd": "/home/nicholas-wood/.claude",
       "dispatch": {
         "proto": 1,
-        "short": "59e73a46",
-        "nonce": "7f79e870",
-        "sessionId": "59e73a46-fd2f-44e7-8edc-f3f51e19b37b",
-        "createdAt": 1787108508978,
-        "source": "spare",
+        "short": "423f247a",
+        "nonce": "1e11674d",
+        "sessionId": "423f247a-627d-4dce-a25e-c2ee59439098",
+        "createdAt": 1787466460586,
+        "source": "fleet",
         "cwd": "/home/nicholas-wood/.claude",
         "launch": {
           "mode": "prompt",
           "args": [
             "--session-id",
-            "59e73a46-fd2f-44e7-8edc-f3f51e19b37b",
+            "423f247a-627d-4dce-a25e-c2ee59439098",
             "--agent",
-            "claude"
+            "claude",
+            "--",
+            "Please check my home assistant. it is saying it can't connet to onedrive"
           ],
           "restoresTranscript": false
         },
@@ -39,7 +41,7 @@
         ],
         "agent": "claude",
         "seed": {
-          "intent": ""
+          "intent": "Please check my home assistant. it is saying it can't connet to onedrive"
         },
         "cols": 214,
         "rows": 50
@@ -53,8 +55,155 @@
         1004,
         2031
       ],
-      "rvAuth": "be231bd00d347372952d4b6e6d3edc8e",
-      "ptyAuth": "5c0a796fdd4ce5b103a921adaf63dcc9"
+      "firedInteractiveMarks": [
+        {
+          "kind": "content_paint",
+          "msgsLoaded": 160,
+          "msgsInJsonl": 160,
+          "msgsRenderedAtFirstPaint": 165
+        },
+        {
+          "kind": "prompt_idle"
+        }
+      ],
+      "rvAuth": "28e7fdd5a46a994c2449444b35e15006",
+      "ptyAuth": "4ce3eb9c3b2c45f014b6fc2b9d4cb230"
+    },
+    "54d1767b": {
+      "pid": 1217633,
+      "procStart": "57213740",
+      "sessionId": "54d1767b-536a-4069-b177-d5187127d494",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/54d1767b.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/e6ca006a.pty.sock",
+      "cliVersion": "2.1.241",
+      "startedAt": 1787466441776,
+      "attempt": 2,
+      "cwd": "/home/nicholas-wood/.claude",
+      "dispatch": {
+        "proto": 1,
+        "short": "54d1767b",
+        "nonce": "d0e501b1",
+        "sessionId": "54d1767b-536a-4069-b177-d5187127d494",
+        "createdAt": 1787466441773,
+        "source": "fleet",
+        "cwd": "/home/nicholas-wood/.claude",
+        "launch": {
+          "mode": "resume",
+          "sessionId": "54d1767b-536a-4069-b177-d5187127d494",
+          "transcriptPath": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/54d1767b-536a-4069-b177-d5187127d494.jsonl",
+          "fork": false,
+          "flagArgs": [
+            "--agent",
+            "claude"
+          ],
+          "restoresTranscript": true
+        },
+        "env": {},
+        "isolation": "none",
+        "respawnFlags": [
+          "--agent",
+          "claude"
+        ],
+        "agent": "claude",
+        "seed": {
+          "intent": "",
+          "name": "jarvis heartbeat investigation"
+        },
+        "cols": 214,
+        "rows": 50
+      },
+      "decModes": [
+        1000,
+        1002,
+        1003,
+        1006,
+        2004,
+        1004,
+        2031
+      ],
+      "firedInteractiveMarks": [
+        {
+          "kind": "content_paint",
+          "msgsLoaded": 411,
+          "msgsInJsonl": 411,
+          "msgsRenderedAtFirstPaint": 416
+        },
+        {
+          "kind": "prompt_idle"
+        }
+      ],
+      "rvAuth": "72c31bf3b573414886450fb0eb9eaba3",
+      "ptyAuth": "2bd432a76606dd5ae04ed470c6739357"
+    },
+    "379c203c": {
+      "pid": 1673511,
+      "procStart": "55755714",
+      "sessionId": "379c203c-5071-4a12-956b-fe7864d0221f",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/379c203c.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/d078f751.pty.sock",
+      "cliVersion": "2.1.241",
+      "startedAt": 1787472279106,
+      "attempt": 1,
+      "cwd": "/home/nicholas-wood/.claude",
+      "dispatch": {
+        "proto": 1,
+        "short": "379c203c",
+        "nonce": "fad55c07",
+        "sessionId": "379c203c-5071-4a12-956b-fe7864d0221f",
+        "createdAt": 1787472279102,
+        "source": "fleet",
+        "cwd": "/home/nicholas-wood/.claude",
+        "launch": {
+          "mode": "resume",
+          "sessionId": "379c203c-5071-4a12-956b-fe7864d0221f",
+          "transcriptPath": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/379c203c-5071-4a12-956b-fe7864d0221f.jsonl",
+          "fork": false,
+          "flagArgs": [
+            "--agent",
+            "claude",
+            "--model",
+            "claude-fable-5[1m]"
+          ],
+          "restoresTranscript": true
+        },
+        "env": {},
+        "isolation": "none",
+        "respawnFlags": [
+          "--agent",
+          "claude",
+          "--model",
+          "claude-fable-5[1m]"
+        ],
+        "agent": "claude",
+        "seed": {
+          "intent": "",
+          "name": "first aid form data analysis"
+        },
+        "cols": 212,
+        "rows": 50
+      },
+      "decModes": [
+        1000,
+        1002,
+        1003,
+        1006,
+        2004,
+        1004,
+        2031
+      ],
+      "firedInteractiveMarks": [
+        {
+          "kind": "content_paint",
+          "msgsLoaded": 198,
+          "msgsInJsonl": 198,
+          "msgsRenderedAtFirstPaint": 202
+        },
+        {
+          "kind": "prompt_idle"
+        }
+      ],
+      "rvAuth": "8f75a473dbcb98e6e4672406cf90eb8d",
+      "ptyAuth": "c4b6b6635171c493ca5beea74b4bf001"
     }
   }
 }

@@ -557,7 +557,7 @@ export function startVoice(config: VoiceConfig): void {
   voiceConfig = loadVoiceConfigFromSettings()
 
   // Resolve default voice ID: config override → settings.json → hardcoded fallback
-  defaultVoiceId = config.default_voice_id || voiceConfig.defaultVoiceId || "s3TPKV1kjDlVtZbl4Ksh"
+  defaultVoiceId = config.default_voice_id || voiceConfig.defaultVoiceId || PREMADE_FALLBACK_VOICE_ID
 
   initialized = true
   log("info", "Voice module: initialized", {

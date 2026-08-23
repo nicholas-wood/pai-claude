@@ -37,7 +37,7 @@ const PAI_DIR = process.env.PAI_DIR || join(HOME, ".claude", "PAI");
 const STATE_FILE = join(PAI_DIR, "PULSE", "state", "notification-governor.json");
 const LOG_FILE = join(PAI_DIR, "MEMORY", "OBSERVABILITY", "notification-governor.jsonl");
 const NOTIFY_URL = "http://localhost:31337/notify";
-const VOICE_ID = "fTtv3eikoepIosk8dTZ5";
+const VOICE_ID = "pNInz6obpgDQGcFmaJgB"; // Adam — premade, free-plan safe (library voices 402)
 
 type Priority = "critical" | "event" | "light";
 type Channel = "voice" | "telegram" | "ntfy" | "email";

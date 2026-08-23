@@ -119,3 +119,14 @@ Deliver a re-derived, statistically thorough analysis of all seven raw season sh
 - ISC-32: Bash — 8 analysis scripts copied to analysis/
 - ISC-33: Bash — rg PII sweep returned no matches (exit 1)
 - ISC-35: Bash — sha256 identical for OneDrive source and working copy (99ca023c…)
+
+## Iteration 2 (2026-08-23) — feedback round
+
+- [x] ISC-37: Section titles in artifact rewritten to documentary register (no "ten numbers that carry the story" style)
+- [x] ISC-38: Background section explains the form to a reader with no prior knowledge (what it is, who completes it, old vs new, which question sets branch on what)
+- [x] ISC-39: New-form activity deep dive: natures with specific problems, body locations, age bands and severity by age, cohorts, gender, treating skills, unit types, month/hour timing, treatments, discharge, ambulance attendance, resuscitation detail
+- [x] ISC-40: Every quoted exception explained from structured fields (envenomation 7, injury 7, drowning minor, MH minor, resus 5 vs 7, major envenomations, 41 late, 3 negative, 24 nature-blank, 249 vs 253, methoxyflurane 6 unscored)
+- [x] ISC-41: Legacy activity/experience/contributing-factor questions confirmed absent from new form (0/1,494 vs 1,688/1,688) and reported honestly
+- [x] ISC-42: Where-to-next section with One action form and Incident categorisation sub-sections in Nick's framing, formal register
+- [x] ISC-43: Anti: no narrative text reproduced; PII sweep clean on both deliverables
+- ISC-37..43 verification: Bash rg sweep exit 1 (clean); analyze5.ts copied to analysis/; artifact republished at same URL (label deep-dive-and-roadmap); report rewritten with sections 1, 4, 7, 10 added.

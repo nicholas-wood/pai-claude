@@ -1,0 +1,574 @@
+<title>First Aid Form Upgrade: 2025/26 Analysis</title>
+<style>
+  :root {
+    --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --baseline: #c3c2b7; --border: rgba(11,11,11,0.10);
+    --accent: #2a78d6; --series-old: #eb6834;
+    --seq-250: #86b6ef; --seq-350: #5598e7; --seq-450: #2a78d6; --seq-550: #1c5cab; --seq-650: #104281;
+    --good-text: #006300;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+      --grid: #2c2c2a; --baseline: #383835; --border: rgba(255,255,255,0.10);
+      --accent: #3987e5; --series-old: #d95926;
+      --seq-250: #184f95; --seq-350: #1c5cab; --seq-450: #256abf; --seq-550: #3987e5; --seq-650: #6da7ec;
+      --good-text: #0ca30c;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --baseline: #383835; --border: rgba(255,255,255,0.10);
+    --accent: #3987e5; --series-old: #d95926;
+    --seq-250: #184f95; --seq-350: #1c5cab; --seq-450: #256abf; --seq-550: #3987e5; --seq-650: #6da7ec;
+    --good-text: #0ca30c;
+  }
+  body { background: var(--page); color: var(--ink); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.55; margin: 0; padding: 0 20px 72px; }
+  .wrap { max-width: 1060px; margin: 0 auto; }
+  header.hero { padding: 56px 0 8px; }
+  .eyebrow { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; }
+  h1 { font-size: clamp(28px, 4.2vw, 40px); line-height: 1.14; margin: 10px 0 14px; letter-spacing: -0.02em; text-wrap: balance; font-weight: 720; }
+  .lede { max-width: 64ch; color: var(--ink-2); font-size: 17px; margin: 0 0 8px; }
+  h2 { font-size: 21px; letter-spacing: -0.01em; margin: 0 0 4px; text-wrap: balance; }
+  h3 { font-size: 16px; }
+  .sec { margin-top: 56px; }
+  .sec > .kicker { font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); font-weight: 700; margin-bottom: 6px; }
+  .sec > p.note, .card > p.note { color: var(--ink-2); max-width: 70ch; margin: 6px 0 20px; }
+  .prose { max-width: 70ch; }
+  .prose p { margin: 0 0 12px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-top: 28px; }
+  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 18px 14px; }
+  .tile .v { font-size: 32px; font-weight: 750; letter-spacing: -0.02em; line-height: 1.05; }
+  .tile .l { font-size: 13.5px; color: var(--ink-2); margin-top: 6px; }
+  .tile .d { font-size: 12.5px; color: var(--good-text); margin-top: 4px; font-weight: 600; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 22px 22px 18px; margin-top: 16px; }
+  .card h3 { margin: 0 0 2px; }
+  .card .sub { font-size: 13px; color: var(--muted); margin: 0 0 16px; }
+  .card .sub.after { margin: 12px 0 0; }
+  .row { display: grid; grid-template-columns: 190px 1fr 92px; gap: 10px; align-items: center; margin: 7px 0; }
+  .row .name { font-size: 13.5px; color: var(--ink-2); text-align: right; }
+  .row .val { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; }
+  .row .n { color: var(--muted); font-weight: 400; }
+  .track { border-radius: 4px; height: 18px; position: relative; }
+  .track::before { content: ""; position: absolute; inset: 0; border-radius: 4px; background: var(--grid); opacity: 0.45; }
+  .bar { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 4px; background: var(--accent); min-width: 3px; }
+  .cols { display: flex; align-items: flex-end; gap: 8px; height: 200px; padding-top: 8px; }
+  .col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; height: 100%; }
+  .col .stick { width: 100%; max-width: 72px; background: var(--accent); border-radius: 4px 4px 0 0; }
+  .col .cv { font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .col .cl { font-size: 11.5px; color: var(--muted); }
+  .axisline { border-top: 1.5px solid var(--baseline); }
+  .stack { display: flex; height: 30px; border-radius: 5px; overflow: hidden; gap: 2px; margin: 14px 0 10px; }
+  .stack .seg { height: 100%; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--ink-2); margin-top: 8px; }
+  .legend .key { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+  .chartwrap, .tablewrap { overflow-x: auto; }
+  svg text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  ol.list, ul.list { max-width: 72ch; padding-left: 22px; margin: 14px 0 0; }
+  ol.list li, ul.list li { margin: 9px 0; }
+  ul.limits { max-width: 70ch; color: var(--ink-2); padding-left: 20px; }
+  ul.limits li { margin: 7px 0; }
+  table.mini { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  table.mini th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 650; padding: 6px 10px; border-bottom: 1px solid var(--grid); }
+  table.mini td { padding: 7px 10px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; vertical-align: top; }
+  table.mini td:first-child { color: var(--ink-2); }
+  .outlier { border-left: 3px solid var(--accent); padding: 2px 0 2px 14px; margin: 14px 0; max-width: 72ch; }
+  .outlier .q { font-weight: 650; margin-bottom: 3px; }
+  .outlier .a { color: var(--ink-2); }
+  footer { margin-top: 64px; font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--grid); padding-top: 16px; max-width: 72ch; }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="eyebrow">Life Saving Victoria · First Aid Reporting · 2025/26 Season</div>
+    <h1>First aid form upgrade: 2025/26 season analysis</h1>
+    <p class="lede">What the new first aid form recorded in its first season, what it made measurable for the first time, where it needs work, and what comes next. All figures are re-derived from the raw case records for six seasons (7,406 cases).</p>
+  </header>
+
+  <section class="sec">
+    <div class="kicker">Background</div>
+    <h2>About the first aid form</h2>
+    <div class="prose">
+      <p>Whenever a lifesaver, lifeguard or event first aider treats a person, a first aid form is completed in LSV's incident management system. The record captures who was treated, what they presented with, what was done, and how the patient left care. Cases a crew classifies as major can be linked to an LSV Communications incident number so the first aid record and the operational incident sit together.</p>
+      <p>Until November 2025 every case saw the same flat form: a fixed set of fields (injury type, initial treatment, body location, activity at the time, who the patient was released to) plus one free-text notes box where all other clinical detail had to be written. Data that did not fit the fixed fields existed only as prose.</p>
+      <p>The new form presents question sets based on the case. The nature of the presentation (injury, medical, envenomation, environmental, mental health, suspected drowning, resuscitation, drug or alcohol) opens a specific-problem question set for that nature. Treatments given open their own sets: administering oxygen asks for method, time applied and duration; administering methoxyflurane asks for vial number, dose times, contraindications, adverse effects and pain ratings before, at two minutes and at four minutes; performing resuscitation asks for equipment, airway assessment, method, time of first compression, defibrillation time, CPR cycles, first AED rhythm, shock count and the patient's state at handover. The discharge set records the pathway, ambulance handover and the patient's condition, and a closing set asks whether the responder needs peer support or experienced occupational violence. A member sees only the questions that apply to the case in front of them.</p>
+      <p>The old form was retired on 9 November 2025 and the new form went live on 12 November 2025. This analysis compares the 1,494 new-form cases against the five prior seasons and examines what the new data shows.</p>
+    </div>
+    <div class="tiles">
+      <div class="tile"><div class="v">87.1%</div><div class="l">of cases documented within one hour of treatment</div><div class="d">Not measurable under the old form</div></div>
+      <div class="tile"><div class="v">~4 min</div><div class="l">median time from opening a form to its final edit</div><div class="d">95.0% of forms reach completed status</div></div>
+      <div class="tile"><div class="v">96.6&ndash;100%</div><div class="l">answer rate on conditional question sets when presented</div><div class="d">Across all six clinical branches; gaps explained below</div></div>
+      <div class="tile"><div class="v">14.0%</div><div class="l">of patients unidentified, down from 27.9% last season</div><div class="d">Unidentified patients halved</div></div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="kicker">Adoption and volume</div>
+    <h2>Season volume and the cutover</h2>
+    <p class="note">Presentations handled have grown 126 per cent across six seasons. The 2024/25 export includes cases in every calendar month; on the matched November-to-June window the 2025/26 season is 3.6 per cent above 2024/25 (1,518 against 1,465). Cutover took three days with no parallel running.</p>
+    <div class="card">
+      <h3>First aid cases per season</h3>
+      <p class="sub">2025/26 = 1,494 new form + 24 old form lodged before cutover</p>
+      <div class="cols">
+        <div class="col" title="2020/21: 673 cases"><div class="cv">673</div><div class="stick" style="height:39.9%"></div><div class="cl">20/21</div></div>
+        <div class="col" title="2021/22: 920 cases"><div class="cv">920</div><div class="stick" style="height:54.5%"></div><div class="cl">21/22</div></div>
+        <div class="col" title="2022/23: 1,097 cases"><div class="cv">1,097</div><div class="stick" style="height:65%"></div><div class="cl">22/23</div></div>
+        <div class="col" title="2023/24: 1,510 cases"><div class="cv">1,510</div><div class="stick" style="height:89.5%"></div><div class="cl">23/24</div></div>
+        <div class="col" title="2024/25: 1,688 cases"><div class="cv">1,688</div><div class="stick" style="height:100%"></div><div class="cl">24/25</div></div>
+        <div class="col" title="2025/26: 1,518 cases, new form from 12 Nov 2025"><div class="cv">1,518</div><div class="stick" style="height:89.9%"></div><div class="cl">25/26</div></div>
+      </div>
+      <div class="axisline"></div>
+    </div>
+    <div class="card">
+      <h3>2025/26 season shape, new-form cases by month</h3>
+      <p class="sub">January carries 43.6% of the season; weekends carry 51.7%; 15:00 is the peak hour</p>
+      <div class="chartwrap">
+      <svg viewBox="0 0 640 224" width="100%" style="max-width:660px" role="img" aria-label="Line chart of monthly new-form case counts, November 52 to January peak 651, tapering to 33 by June">
+        <g stroke="var(--grid)" stroke-width="1">
+          <line x1="40" y1="190" x2="620" y2="190"/><line x1="40" y1="144.3" x2="620" y2="144.3"/><line x1="40" y1="98.6" x2="620" y2="98.6"/><line x1="40" y1="52.9" x2="620" y2="52.9"/>
+        </g>
+        <g fill="var(--muted)" font-size="11" text-anchor="end">
+          <text x="34" y="194">0</text><text x="34" y="148.3">200</text><text x="34" y="102.6">400</text><text x="34" y="56.9">600</text>
+        </g>
+        <polyline fill="none" stroke="var(--accent)" stroke-width="2" points="50,178.1 130,103.6 210,41.2 290,151.1 370,158.2 450,181.1 530,182.7 610,182.5"/>
+        <g fill="var(--accent)">
+          <circle cx="50" cy="178.1" r="3.5"><title>Nov: 52</title></circle>
+          <circle cx="130" cy="103.6" r="3.5"><title>Dec: 378</title></circle>
+          <circle cx="210" cy="41.2" r="4.5"><title>Jan: 651</title></circle>
+          <circle cx="290" cy="151.1" r="3.5"><title>Feb: 170</title></circle>
+          <circle cx="370" cy="158.2" r="3.5"><title>Mar: 139</title></circle>
+          <circle cx="450" cy="181.1" r="3.5"><title>Apr: 39</title></circle>
+          <circle cx="530" cy="182.7" r="3.5"><title>May: 32</title></circle>
+          <circle cx="610" cy="182.5" r="3.5"><title>Jun: 33</title></circle>
+        </g>
+        <text x="210" y="28" fill="var(--ink)" font-size="12.5" font-weight="650" text-anchor="middle">651</text>
+        <g fill="var(--muted)" font-size="11.5" text-anchor="middle">
+          <text x="50" y="210">Nov</text><text x="130" y="210">Dec</text><text x="210" y="210">Jan</text><text x="290" y="210">Feb</text><text x="370" y="210">Mar</text><text x="450" y="210">Apr</text><text x="530" y="210">May</text><text x="610" y="210">Jun</text>
+        </g>
+      </svg>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="kicker">First aid activity in 2025/26</div>
+    <h2>What the new form recorded: presentations, patients, responders and timing</h2>
+    <p class="note">This section uses the new form's structured fields. Under the old form most of this could only be estimated from free text; here it is counted directly from 1,494 cases.</p>
+
+    <div class="card">
+      <h3>Nature of presentation</h3>
+      <p class="sub">Cases can carry more than one nature (31 cases do); 51 cases have no nature recorded, 27 of them forms still open</p>
+      <div class="row"><div class="name">Injury</div><div class="track"><div class="bar" style="width:100%" title="1,018 cases, 68.1%"></div></div><div class="val">1,018 <span class="n">68.1%</span></div></div>
+      <div class="row"><div class="name">Envenomation</div><div class="track"><div class="bar" style="width:20%" title="204 cases, 13.7%"></div></div><div class="val">204 <span class="n">13.7%</span></div></div>
+      <div class="row"><div class="name">Medical</div><div class="track"><div class="bar" style="width:13.6%" title="138 cases, 9.2%"></div></div><div class="val">138 <span class="n">9.2%</span></div></div>
+      <div class="row"><div class="name">Environmental</div><div class="track"><div class="bar" style="width:5.9%" title="60 cases, 4.0%"></div></div><div class="val">60 <span class="n">4.0%</span></div></div>
+      <div class="row"><div class="name">Other</div><div class="track"><div class="bar" style="width:2.6%" title="26 cases"></div></div><div class="val">26 <span class="n">1.7%</span></div></div>
+      <div class="row"><div class="name">Suspected drowning</div><div class="track"><div class="bar" style="width:1.2%" title="12 cases: 11 non-fatal, 1 fatal"></div></div><div class="val">12 <span class="n">0.8%</span></div></div>
+      <div class="row"><div class="name">Drug and/or alcohol</div><div class="track"><div class="bar" style="width:0.7%" title="7 cases"></div></div><div class="val">7 <span class="n">0.5%</span></div></div>
+      <div class="row"><div class="name">Resuscitation</div><div class="track"><div class="bar" style="width:0.7%" title="7 resuscitations performed: 5 recorded under the resuscitation nature and 2 under medical (cardiac arrest)"></div></div><div class="val">7 <span class="n">0.5%</span></div></div>
+      <div class="row"><div class="name">Mental health</div><div class="track"><div class="bar" style="width:0.5%" title="5 cases"></div></div><div class="val">5 <span class="n">0.3%</span></div></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>Specific problems within each nature</h3>
+        <p class="sub">Top entries from the specific-problem question sets</p>
+        <div class="tablewrap">
+        <table class="mini">
+          <tr><th>Nature</th><th>Leading specific problems (cases)</th></tr>
+          <tr><td>Injury (1,018)</td><td>Laceration 381 · Soft tissue injury 205 · Abrasion 93 · Animal bite 67 · Head injury 60 · Bruise 51 · Bleeding 50 · Swelling 44 · Fracture 41 · Dislocation 36 · Penetrating injury 32 · Foreign body 30</td></tr>
+          <tr><td>Envenomation (204)</td><td>Jellyfish 151 · Other 26 · Bee sting 14 · Ant 4 · Stingray 4 · Spider 1</td></tr>
+          <tr><td>Medical (138)</td><td>Dizziness 36 · Asthma 31 · Nausea or vomiting 20 · Loss of consciousness 18 · Seizure 11 · Allergic reaction 11 · Chest pain 9 · Headache 7 · Cardiac arrest 4</td></tr>
+          <tr><td>Environmental (60)</td><td>Hypothermia 25 · Other 19 · Heat stress 12 · Heat stroke 5 · Dehydration 2 · Chemical exposure 1</td></tr>
+          <tr><td>Suspected drowning (12)</td><td>Non-fatal 11 · Fatal 1</td></tr>
+          <tr><td>Mental health (5)</td><td>Panic attack 4 · Behavioural disturbance 1</td></tr>
+        </table>
+        </div>
+        <p class="sub after">Cold exposure outnumbers heat: 25 hypothermia cases against 17 heat stress or heat stroke cases.</p>
+      </div>
+      <div class="card">
+        <h3>Injury body location</h3>
+        <p class="sub">Recorded on 989 of 1,018 injury cases (97.2%); a case can list more than one site</p>
+        <div class="row"><div class="name">Foot</div><div class="track"><div class="bar" style="width:100%" title="356"></div></div><div class="val">356</div></div>
+        <div class="row"><div class="name">Hand</div><div class="track"><div class="bar" style="width:43.8%" title="156"></div></div><div class="val">156</div></div>
+        <div class="row"><div class="name">Head</div><div class="track"><div class="bar" style="width:31.5%" title="112"></div></div><div class="val">112</div></div>
+        <div class="row"><div class="name">Face</div><div class="track"><div class="bar" style="width:29.2%" title="104"></div></div><div class="val">104</div></div>
+        <div class="row"><div class="name">Knee</div><div class="track"><div class="bar" style="width:28.1%" title="100"></div></div><div class="val">100</div></div>
+        <div class="row"><div class="name">Lower leg</div><div class="track"><div class="bar" style="width:26.4%" title="94"></div></div><div class="val">94</div></div>
+        <div class="row"><div class="name">Ankle</div><div class="track"><div class="bar" style="width:19.9%" title="71"></div></div><div class="val">71</div></div>
+        <div class="row"><div class="name">Arm</div><div class="track"><div class="bar" style="width:17.1%" title="61"></div></div><div class="val">61</div></div>
+        <p class="sub after">Feet account for more injuries than the next two sites combined, consistent with the laceration and abrasion profile.</p>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>Patient age</h3>
+        <p class="sub">Age recorded on 1,472 cases (98.6%); median 16; 53.9% under 18</p>
+        <div class="cols" style="height:170px">
+          <div class="col" title="0 to 4: 56"><div class="cv">56</div><div class="stick" style="height:17%"></div><div class="cl">0-4</div></div>
+          <div class="col" title="5 to 9: 242"><div class="cv">242</div><div class="stick" style="height:73.3%"></div><div class="cl">5-9</div></div>
+          <div class="col" title="10 to 14: 330"><div class="cv">330</div><div class="stick" style="height:100%"></div><div class="cl">10-14</div></div>
+          <div class="col" title="15 to 19: 260"><div class="cv">260</div><div class="stick" style="height:78.8%"></div><div class="cl">15-19</div></div>
+          <div class="col" title="20 to 29: 233"><div class="cv">233</div><div class="stick" style="height:70.6%"></div><div class="cl">20-29</div></div>
+          <div class="col" title="30 to 39: 96"><div class="cv">96</div><div class="stick" style="height:29.1%"></div><div class="cl">30-39</div></div>
+          <div class="col" title="40 to 49: 87"><div class="cv">87</div><div class="stick" style="height:26.4%"></div><div class="cl">40-49</div></div>
+          <div class="col" title="50 to 59: 82"><div class="cv">82</div><div class="stick" style="height:24.8%"></div><div class="cl">50-59</div></div>
+          <div class="col" title="60 to 69: 42"><div class="cv">42</div><div class="stick" style="height:12.7%"></div><div class="cl">60-69</div></div>
+          <div class="col" title="70 and over: 44"><div class="cv">44</div><div class="stick" style="height:13.3%"></div><div class="cl">70+</div></div>
+        </div>
+        <div class="axisline"></div>
+        <div class="tablewrap" style="margin-top:14px">
+        <table class="mini">
+          <tr><th>Age band</th><th>Under 15</th><th>15 to 29</th><th>30 to 49</th><th>50 and over</th></tr>
+          <tr><td>Share classified major</td><td>5.4%</td><td>25.4%</td><td>15.3%</td><td>34.5%</td></tr>
+        </table>
+        </div>
+        <p class="sub after">Severity rises with age: 4 to 7 per cent of under-15 cases are major, rising to 33 to 39 per cent for patients 50 and over. Envenomation patients are youngest (median 12, 75% under 18); medical patients are older (median 23, 14% aged 60 or more).</p>
+      </div>
+      <div class="card">
+        <h3>Who is treated</h3>
+        <p class="sub">Cohort recorded on 1,457 cases</p>
+        <div class="row"><div class="name">Public</div><div class="track"><div class="bar" style="width:100%" title="962 cases, median age 17"></div></div><div class="val">962 <span class="n">64.4%</span></div></div>
+        <div class="row"><div class="name">Members</div><div class="track"><div class="bar" style="width:32.1%" title="309 cases: club event 106, LSV event 87, on duty 66, off duty 50"></div></div><div class="val">309 <span class="n">20.7%</span></div></div>
+        <div class="row"><div class="name">Event participants</div><div class="track"><div class="bar" style="width:17.9%" title="172 cases: LSV event 88, club event 84; median age 11 at club events"></div></div><div class="val">172 <span class="n">11.5%</span></div></div>
+        <div class="row"><div class="name">LSV staff and support</div><div class="track"><div class="bar" style="width:1.5%" title="14 cases"></div></div><div class="val">14 <span class="n">0.9%</span></div></div>
+        <p class="sub after">Member cases are 18.1% major against 17.2% for the public. Gender is balanced overall (767 male, 720 female, 5 non-binary, 2 other); environmental cases skew female (43 of 59) and injuries skew male (550 of 1,016).</p>
+        <h3 style="margin-top:18px">Who treats</h3>
+        <p class="sub">Treating skills recorded on 1,434 cases; a case can list several</p>
+        <div class="row"><div class="name">Lifesaver</div><div class="track"><div class="bar" style="width:100%" title="811 mentions"></div></div><div class="val">811</div></div>
+        <div class="row"><div class="name">Lifeguard</div><div class="track"><div class="bar" style="width:61.8%" title="501 mentions"></div></div><div class="val">501</div></div>
+        <div class="row"><div class="name">First aider</div><div class="track"><div class="bar" style="width:59.8%" title="485 mentions"></div></div><div class="val">485</div></div>
+        <div class="row"><div class="name">Health professional</div><div class="track"><div class="bar" style="width:22.1%" title="179 mentions: nurse 49, medical practitioner 37, volunteer paramedic 31, ambulance 30, physiotherapist 19, other 13"></div></div><div class="val">179</div></div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>Where cases are logged</h3>
+        <p class="sub">Unit type derived from the logging unit's name; 126 units logged at least one case</p>
+        <div class="row"><div class="name">Volunteer clubs</div><div class="track"><div class="bar" style="width:100%" title="877 cases"></div></div><div class="val">877 <span class="n">58.7%</span></div></div>
+        <div class="row"><div class="name">Lifeguard services</div><div class="track"><div class="bar" style="width:46.8%" title="410 cases"></div></div><div class="val">410 <span class="n">27.4%</span></div></div>
+        <div class="row"><div class="name">Aquatic sports events</div><div class="track"><div class="bar" style="width:19.2%" title="168 cases, the single largest logging unit"></div></div><div class="val">168 <span class="n">11.2%</span></div></div>
+        <div class="row"><div class="name">Support and other</div><div class="track"><div class="bar" style="width:4.4%" title="39 cases: RWC and support operations 18, education units and area response officers 21"></div></div><div class="val">39 <span class="n">2.6%</span></div></div>
+        <p class="sub after">The top ten units carry a third of all cases, led by Aquatic Sports (168), Torquay Lifeguards (59) and Lorne Volunteers (45).</p>
+      </div>
+      <div class="card">
+        <h3>When cases occur</h3>
+        <p class="sub">Treatment time as recorded on the form</p>
+        <div class="tablewrap">
+        <table class="mini">
+          <tr><th>Nature</th><th>Nov</th><th>Dec</th><th>Jan</th><th>Feb</th><th>Mar</th><th>Apr-Jun</th></tr>
+          <tr><td>Injury</td><td>38</td><td>242</td><td>409</td><td>133</td><td>105</td><td>91</td></tr>
+          <tr><td>Envenomation</td><td>5</td><td>58</td><td>115</td><td>14</td><td>12</td><td>0</td></tr>
+          <tr><td>Medical</td><td>6</td><td>45</td><td>64</td><td>9</td><td>11</td><td>3</td></tr>
+          <tr><td>Environmental</td><td>1</td><td>16</td><td>29</td><td>8</td><td>5</td><td>1</td></tr>
+        </table>
+        </div>
+        <p class="sub after">January carries 43.6% of the season. Envenomation is sharply seasonal: 85% of cases fall in December and January and none after March. By time of day, 15:00 to 18:00 is the busiest band (535 cases), then 12:00 to 15:00 (508) and 09:00 to 12:00 (312). Weekends carry 51.7% of cases.</p>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>Treatments given</h3>
+        <p class="sub">Treatment recorded on 1,432 cases; a case can list several</p>
+        <div class="row"><div class="name">Ice</div><div class="track"><div class="bar" style="width:100%" title="372"></div></div><div class="val">372</div></div>
+        <div class="row"><div class="name">Cleaned / irrigation</div><div class="track"><div class="bar" style="width:91.9%" title="342"></div></div><div class="val">342</div></div>
+        <div class="row"><div class="name">Bandaid</div><div class="track"><div class="bar" style="width:75.8%" title="282"></div></div><div class="val">282</div></div>
+        <div class="row"><div class="name">Wound management</div><div class="track"><div class="bar" style="width:55.1%" title="205"></div></div><div class="val">205</div></div>
+        <div class="row"><div class="name">Bandage</div><div class="track"><div class="bar" style="width:52.4%" title="195"></div></div><div class="val">195</div></div>
+        <div class="row"><div class="name">Hot water</div><div class="track"><div class="bar" style="width:42.7%" title="159, the sting protocol"></div></div><div class="val">159</div></div>
+        <div class="row"><div class="name">Cold water</div><div class="track"><div class="bar" style="width:33.3%" title="124"></div></div><div class="val">124</div></div>
+        <div class="row"><div class="name">Oxygen</div><div class="track"><div class="bar" style="width:11%" title="41 treatment tags; 47 oxygen administration records"></div></div><div class="val">41</div></div>
+        <div class="row"><div class="name">Salbutamol</div><div class="track"><div class="bar" style="width:4.6%" title="17"></div></div><div class="val">17</div></div>
+        <div class="row"><div class="name">Methoxyflurane</div><div class="track"><div class="bar" style="width:3.8%" title="14"></div></div><div class="val">14</div></div>
+      </div>
+      <div class="card">
+        <h3>How patients left care</h3>
+        <p class="sub">Discharge pathway recorded on 1,431 cases</p>
+        <div class="row"><div class="name">No referral</div><div class="track"><div class="bar" style="width:100%" title="657"></div></div><div class="val">657 <span class="n">44.0%</span></div></div>
+        <div class="row"><div class="name">Care of competent adult</div><div class="track"><div class="bar" style="width:51.9%" title="341"></div></div><div class="val">341 <span class="n">22.8%</span></div></div>
+        <div class="row"><div class="name">GP or other doctor</div><div class="track"><div class="bar" style="width:23.9%" title="157"></div></div><div class="val">157 <span class="n">10.5%</span></div></div>
+        <div class="row"><div class="name">Ambulance, transported</div><div class="track"><div class="bar" style="width:14.6%" title="96"></div></div><div class="val">96 <span class="n">6.4%</span></div></div>
+        <div class="row"><div class="name">Hospital, self transport</div><div class="track"><div class="bar" style="width:9.9%" title="65"></div></div><div class="val">65 <span class="n">4.4%</span></div></div>
+        <div class="row"><div class="name">Hospital, with adult</div><div class="track"><div class="bar" style="width:9%" title="59"></div></div><div class="val">59 <span class="n">3.9%</span></div></div>
+        <div class="row"><div class="name">Ambulance, not transported</div><div class="track"><div class="bar" style="width:4.4%" title="29"></div></div><div class="val">29 <span class="n">1.9%</span></div></div>
+        <div class="row"><div class="name">Physio / club clinician / refused</div><div class="track"><div class="bar" style="width:4.1%" title="physiotherapist 12, healthcare professional at the club 7, refused care 8"></div></div><div class="val">27 <span class="n">1.8%</span></div></div>
+        <p class="sub after">An ambulance was called on 145 cases (9.7%), consistent with prior seasons, and attended on 123; on 20 cases the ambulance was called but did not attend or was stood down.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Resuscitations in detail</h3>
+      <p class="sub">Seven resuscitations were performed: five recorded under the resuscitation nature and two under medical (cardiac arrest) with the resuscitation question set completed</p>
+      <div class="tablewrap">
+      <table class="mini">
+        <tr><th>Measure</th><th>Recorded values across the seven cases</th></tr>
+        <tr><td>Ventilation method</td><td>Bag valve mask 5 · Mouth to mouth 1 · Other 1</td></tr>
+        <tr><td>First AED rhythm</td><td>Shockable 2 · Not shockable 4 · Unknown 1</td></tr>
+        <tr><td>Shocks delivered</td><td>Three cases received shocks (2, 3 and 1)</td></tr>
+        <tr><td>CPR cycles recorded</td><td>3, 6, 15, 21, 30, 75 and 100</td></tr>
+        <tr><td>Equipment</td><td>AED on all 7; oropharyngeal airway and oxygen on 4; bag valve mask on 5</td></tr>
+        <tr><td>Patient state at handover</td><td>Breathing for themselves 2 · Conscious 1 · Deceased, confirmed by ambulance 4</td></tr>
+      </table>
+      </div>
+      <p class="sub after">Under the old form, only 14 of 28 comparable 2024/25 cases carried any resuscitation detail at all.</p>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>Share of cases classified major, by nature</h3>
+        <p class="sub">The evidence base for matching skills to presentation types; exceptions explained in the outliers section</p>
+        <div class="row"><div class="name">Resuscitation</div><div class="track"><div class="bar" style="width:100%" title="5 of 5 major (nature-level count)"></div></div><div class="val">100% <span class="n">n=5</span></div></div>
+        <div class="row"><div class="name">Suspected drowning</div><div class="track"><div class="bar" style="width:91.7%" title="11 of 12 major"></div></div><div class="val">91.7% <span class="n">n=12</span></div></div>
+        <div class="row"><div class="name">Mental health</div><div class="track"><div class="bar" style="width:80%" title="4 of 5 major"></div></div><div class="val">80% <span class="n">n=5</span></div></div>
+        <div class="row"><div class="name">Drug and/or alcohol</div><div class="track"><div class="bar" style="width:71.4%" title="5 of 7 major"></div></div><div class="val">71.4% <span class="n">n=7</span></div></div>
+        <div class="row"><div class="name">Medical</div><div class="track"><div class="bar" style="width:46.4%" title="64 of 138 major"></div></div><div class="val">46.4% <span class="n">n=138</span></div></div>
+        <div class="row"><div class="name">Environmental</div><div class="track"><div class="bar" style="width:25%" title="15 of 60 major"></div></div><div class="val">25.0% <span class="n">n=60</span></div></div>
+        <div class="row"><div class="name">Injury</div><div class="track"><div class="bar" style="width:14.6%" title="149 of 1,018 major"></div></div><div class="val">14.6% <span class="n">n=1,018</span></div></div>
+        <div class="row"><div class="name">Envenomation</div><div class="track"><div class="bar" style="width:3.4%" title="7 of 204 major"></div></div><div class="val">3.4% <span class="n">n=204</span></div></div>
+      </div>
+      <div class="card">
+        <h3>Six-season trends from the shared taxonomy</h3>
+        <p class="sub">Old-form categories, share of season cases (2020/21 to 2024/25)</p>
+        <div class="tablewrap">
+        <table class="mini">
+          <tr><th>Category</th><th>20/21</th><th>21/22</th><th>22/23</th><th>23/24</th><th>24/25</th><th>Reading</th></tr>
+          <tr><td>Abrasion / graze</td><td>17.4%</td><td>27.6%</td><td>27.3%</td><td>29.5%</td><td>31.8%</td><td>Steady climb every season</td></tr>
+          <tr><td>Laceration / cut</td><td>25.4%</td><td>21.6%</td><td>20.3%</td><td>20.9%</td><td>21.5%</td><td>Stable near a fifth of cases</td></tr>
+          <tr><td>Heat stroke / exhaustion</td><td>0.7%</td><td>2.5%</td><td>3.7%</td><td>2.9%</td><td>4.1%</td><td>Rising across the period</td></tr>
+          <tr><td>Marine sting</td><td>7.9%</td><td>15.5%</td><td>7.9%</td><td>6.8%</td><td>8.8%</td><td>Episodic, not trending</td></tr>
+          <tr><td>Cardiac problem</td><td>1.5%</td><td>2.1%</td><td>1.8%</td><td>1.4%</td><td>1.0%</td><td>Stable, low volume</td></tr>
+        </table>
+        </div>
+        <p class="sub after">In 2025/26 the new taxonomy records envenomation as 13.7% of cases (204), attributed at species level. Ambulance involvement (9.7%) is consistent with prior seasons (7.8 to 14.3 per cent released to ambulance).</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="kicker">Clarity gained</div>
+    <h2>Things that are measurable for the first time</h2>
+    <p class="note">The old form's date field mirrored the record's creation time, so the gap between treating a patient and documenting the case was structurally invisible. The new form records treatment time independently, exposes workflow state, and replaces a free-text catch-all (narrative present on 96.4 per cent of 2024/25 cases) with structured fields (narrative needed on 15.6 per cent).</p>
+
+    <div class="card">
+      <h3>Time from treatment to documentation, 2025/26</h3>
+      <p class="sub">n = 1,494; three cases with a treatment time later than the form's creation are excluded from the segments (see outliers)</p>
+      <div class="stack">
+        <div class="seg" style="width:87.3%; background: var(--seq-250)" title="Under 1 hour: 1,301 cases (87.1% of all cases)"></div>
+        <div class="seg" style="width:6.4%; background: var(--seq-350)" title="1 to 3 hours: 95 cases"></div>
+        <div class="seg" style="width:2.7%; background: var(--seq-450)" title="3 to 8 hours: 40 cases"></div>
+        <div class="seg" style="width:0.9%; background: var(--seq-550)" title="8 to 24 hours: 13 cases"></div>
+        <div class="seg" style="width:2.7%; background: var(--seq-650)" title="24 hours or more: 41 cases"></div>
+      </div>
+      <div class="legend">
+        <span class="key"><span class="swatch" style="background:var(--seq-250)"></span>Under 1 h · 1,301 (87.1%)</span>
+        <span class="key"><span class="swatch" style="background:var(--seq-350)"></span>1&ndash;3 h · 95</span>
+        <span class="key"><span class="swatch" style="background:var(--seq-450)"></span>3&ndash;8 h · 40</span>
+        <span class="key"><span class="swatch" style="background:var(--seq-550)"></span>8&ndash;24 h · 13</span>
+        <span class="key"><span class="swatch" style="background:var(--seq-650)"></span>24 h or more · 41</span>
+      </div>
+      <p class="sub after">Major incidents: 77.1% documented within the hour (crews treat first). Minor incidents: 89.1%. Median time from opening a form to its final edit is about 4 minutes; 85.4% of forms are finalised within an hour of being opened.</p>
+    </div>
+
+    <div class="card">
+      <h3>Resuscitation records, old form against new form</h3>
+      <p class="sub">Detail recorded per resuscitation case</p>
+      <div class="row"><div class="name">2024/25 old form</div><div class="track"><div class="bar" style="width:50%; background: var(--series-old)" title="14 of 28 comparable cases carried any resuscitation detail"></div></div><div class="val">14/28 <span class="n">any detail</span></div></div>
+      <div class="row"><div class="name">2025/26 new form</div><div class="track"><div class="bar" style="width:100%" title="7 of 7 cases carry 11 of 12 detail fields"></div></div><div class="val">7/7 <span class="n">11 of 12 fields</span></div></div>
+      <p class="sub after">Every 2025/26 resuscitation records equipment, airway assessment, method, time of first compression, defibrillation time, CPR cycles, first AED rhythm, shock count, return of breathing and pulse. The only unfilled field is barriers, which the change register plans to make optional.</p>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>Medication and oxygen audit trails</h3>
+        <p class="sub">Structured records that had no home in the old form</p>
+        <div class="row"><div class="name">Oxygen administrations</div><div class="track"><div class="bar" style="width:78%" title="47 oxygen records: therapy mask 37, bag valve mask 5, oxygen tubing 3"></div></div><div class="val">47</div></div>
+        <div class="row"><div class="name">Methoxyflurane records</div><div class="track"><div class="bar" style="width:23%" title="14 records with vial numbers, dose times, contraindications, adverse effects and pain scores"></div></div><div class="val">14</div></div>
+        <div class="row"><div class="name">Peer-support requests</div><div class="track"><div class="bar" style="width:12%" title="7 responder peer-support requests"></div></div><div class="val">7</div></div>
+        <p class="sub after">Of the 14 methoxyflurane records, 8 carry a starting pain score (mean 7.1 of 10, falling 2.6 points by four minutes across the 7 with a four-minute score); 6 have no pain score entered. The old form recorded roughly 20 Penthrane administrations in 2024/25 as a bare treatment tag.</p>
+      </div>
+      <div class="card">
+        <h3>Outcome and welfare fields</h3>
+        <p class="sub">New questions asked in 2025/26</p>
+        <div class="tablewrap">
+        <table class="mini">
+          <tr><th>Field</th><th>Result</th></tr>
+          <tr><td>Condition at discharge</td><td>Answered on 98% of completed forms: 1,417 conscious, 4 deceased, 2 unconscious</td></tr>
+          <tr><td>Condition after treatment</td><td>263 answered: improved 161, same 99, deteriorated 3 (mechanism recorded on all 3)</td></tr>
+          <tr><td>Ambulance handover</td><td>Documented on 119 of 220 hospital-pathway cases; hospital named on 66; ambulance case number on 18</td></tr>
+          <tr><td>Responder welfare</td><td>Asked for the first time: 7 peer-support requests; 1 occupational-violence report</td></tr>
+        </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Identity and demographic capture, old form (2024/25) against new form (2025/26)</h3>
+      <p class="sub">The design trades optional demographic fields for near-complete clinical completeness; the identity field that matters operationally improved</p>
+      <div class="chartwrap">
+      <svg viewBox="0 0 660 240" width="100%" style="max-width:680px" role="img" aria-label="Dumbbell chart comparing capture rates: any name 72.1 to 86.0 per cent, age steady near 99, postcode 94.9 to 81.3, date of birth 34.0 to 11.2, nationality 34.9 to 6.5, address 18.1 to 6.6">
+        <g stroke="var(--grid)" stroke-width="1">
+          <line x1="150" y1="16" x2="150" y2="204"/><line x1="270" y1="16" x2="270" y2="204"/><line x1="390" y1="16" x2="390" y2="204"/><line x1="510" y1="16" x2="510" y2="204"/><line x1="630" y1="16" x2="630" y2="204"/>
+        </g>
+        <g fill="var(--muted)" font-size="11" text-anchor="middle">
+          <text x="150" y="222">0%</text><text x="270" y="222">25%</text><text x="390" y="222">50%</text><text x="510" y="222">75%</text><text x="630" y="222">100%</text>
+        </g>
+        <g fill="var(--ink-2)" font-size="13" text-anchor="end">
+          <text x="138" y="36">Any name</text><text x="138" y="68">Age</text><text x="138" y="100">Postcode</text><text x="138" y="132">Date of birth</text><text x="138" y="164">Nationality</text><text x="138" y="196">Address</text>
+        </g>
+        <g stroke="var(--baseline)" stroke-width="1.5">
+          <line x1="496.1" y1="32" x2="562.8" y2="32"/><line x1="623.3" y1="64" x2="629.5" y2="64"/><line x1="540.2" y1="96" x2="605.5" y2="96"/><line x1="203.8" y1="128" x2="313.2" y2="128"/><line x1="181.2" y1="160" x2="317.5" y2="160"/><line x1="181.7" y1="192" x2="236.9" y2="192"/>
+        </g>
+        <g fill="var(--series-old)">
+          <circle cx="496.1" cy="32" r="5"><title>2024/25 old form: any name 72.1%</title></circle>
+          <circle cx="629.5" cy="64" r="5"><title>2024/25 old form: age 99.9%</title></circle>
+          <circle cx="605.5" cy="96" r="5"><title>2024/25 old form: postcode 94.9%</title></circle>
+          <circle cx="313.2" cy="128" r="5"><title>2024/25 old form: DOB 34.0%</title></circle>
+          <circle cx="317.5" cy="160" r="5"><title>2024/25 old form: nationality 34.9%</title></circle>
+          <circle cx="236.9" cy="192" r="5"><title>2024/25 old form: address 18.1%</title></circle>
+        </g>
+        <g fill="var(--accent)">
+          <circle cx="562.8" cy="32" r="5"><title>2025/26 new form: any name 86.0%</title></circle>
+          <circle cx="623.3" cy="64" r="5"><title>2025/26 new form: age 98.6%</title></circle>
+          <circle cx="540.2" cy="96" r="5"><title>2025/26 new form: postcode 81.3%</title></circle>
+          <circle cx="203.8" cy="128" r="5"><title>2025/26 new form: DOB 11.2%</title></circle>
+          <circle cx="181.2" cy="160" r="5"><title>2025/26 new form: nationality 6.5%</title></circle>
+          <circle cx="181.7" cy="192" r="5"><title>2025/26 new form: address 6.6%</title></circle>
+        </g>
+        <g font-size="11.5" fill="var(--ink)" font-weight="600">
+          <text x="572" y="36">86.0%</text>
+          <text x="484.1" y="36" text-anchor="end" fill="var(--ink-2)" font-weight="400">72.1%</text>
+          <text x="325.2" y="132" fill="var(--ink-2)" font-weight="400">34.0%</text>
+          <text x="191.8" y="132" text-anchor="end">11.2%</text>
+        </g>
+      </svg>
+      </div>
+      <div class="legend">
+        <span class="key"><span class="swatch" style="background:var(--series-old)"></span>2024/25 old form</span>
+        <span class="key"><span class="swatch" style="background:var(--accent)"></span>2025/26 new form</span>
+      </div>
+      <p class="sub after">One set of questions was not carried into the new form: activity at the time (walking or playing near water, swimming, competing, training), experience level and contributing factors. These were answered on every 2024/25 case and on none in 2025/26. Whether they return belongs to the action-form design in the final section.</p>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="kicker">Form performance</div>
+    <h2>Answer rates on conditional questions</h2>
+    <p class="note">When a conditional question set is presented it is answered in almost every case. Residual blanks concentrate in the 74 forms still open in the workflow; on completed forms, core categorical blanks run at 1.7 to 2.1 per cent. The remaining gaps are small and each one is accounted for in the outliers section below.</p>
+    <div class="grid2">
+      <div class="card">
+        <h3>Specific-problem question answered, by nature branch</h3>
+        <p class="sub">Cases carrying the nature, and the share with the specific problem recorded</p>
+        <div class="row"><div class="name">Medical</div><div class="track"><div class="bar" style="width:100%" title="138 of 138"></div></div><div class="val">100% <span class="n">138/138</span></div></div>
+        <div class="row"><div class="name">Suspected drowning</div><div class="track"><div class="bar" style="width:100%" title="12 of 12"></div></div><div class="val">100% <span class="n">12/12</span></div></div>
+        <div class="row"><div class="name">Mental health</div><div class="track"><div class="bar" style="width:100%" title="5 of 5"></div></div><div class="val">100% <span class="n">5/5</span></div></div>
+        <div class="row"><div class="name">Injury</div><div class="track"><div class="bar" style="width:99.3%" title="1,011 of 1,018"></div></div><div class="val">99.3% <span class="n">1,011/1,018</span></div></div>
+        <div class="row"><div class="name">Environmental</div><div class="track"><div class="bar" style="width:98.3%" title="59 of 60"></div></div><div class="val">98.3% <span class="n">59/60</span></div></div>
+        <div class="row"><div class="name">Envenomation</div><div class="track"><div class="bar" style="width:96.6%" title="197 of 204"></div></div><div class="val">96.6% <span class="n">197/204</span></div></div>
+        <p class="sub after">Injury body location is present on 97.2% of injury cases. On completed forms, blanks in nature, treatment and discharge run at 1.7 to 2.1 per cent.</p>
+      </div>
+      <div class="card">
+        <h3>Free-text overflow by option list</h3>
+        <p class="sub">Share of branch answers that fell to "Other" free text</p>
+        <div class="row"><div class="name">Environmental</div><div class="track"><div class="bar" style="width:30.5%" title="18 of 59"></div></div><div class="val">30.5%</div></div>
+        <div class="row"><div class="name">Envenomation</div><div class="track"><div class="bar" style="width:13.6%" title="27 of 198"></div></div><div class="val">13.6%</div></div>
+        <div class="row"><div class="name">Medical</div><div class="track"><div class="bar" style="width:10.1%" title="14 of 138"></div></div><div class="val">10.1%</div></div>
+        <div class="row"><div class="name">Nature (top level)</div><div class="track"><div class="bar" style="width:1.7%" title="24 of 1,443"></div></div><div class="val">1.7%</div></div>
+        <div class="row"><div class="name">Injury</div><div class="track"><div class="bar" style="width:1.1%" title="11 of 1,011"></div></div><div class="val">1.1%</div></div>
+        <p class="sub after">The injury and nature lists fit practice closely. The environmental list is missing common options (the free text is dominated by cold and heat exposure variants and dizziness), and the envenomation free text is mostly unidentified stings and insect stings. The change register already includes option-list and field changes.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="kicker">Outliers explained</div>
+    <h2>What sits behind each exception</h2>
+    <p class="note">Every figure above that is not 100 per cent, or that differs from what the headline suggests, is accounted for here from the structured fields of the records concerned. No narrative text is reproduced.</p>
+
+    <div class="outlier"><div class="q">Envenomation specific problem recorded on 96.6%: what are the other 3.4%?</div><div class="a">Seven cases. Two are forms still open in the workflow (the specific-problem step has not been reached). Five are completed forms where the member reached and passed the step without selecting a specific problem; all five received sting-typical treatment (ice or hot water), and two of the five are classified major with no referral and no ambulance. The workflow allows the specific-problem question to be skipped on completion; making it mandatory would close the gap.</div></div>
+    <div class="outlier"><div class="q">Injury specific problem on 99.3%: the other 0.7%?</div><div class="a">Seven cases: four open forms (one with no treatment recorded at all) and three completed forms that skipped the step. One of the open forms is classified major. Environmental has one completed form that skipped the step (treatment recorded as "Other").</div></div>
+    <div class="outlier"><div class="q">Eleven of twelve suspected drownings are major. The twelfth?</div><div class="a">A member of the public aged 12, recorded as a non-fatal suspected drowning, conscious at discharge, treatment recorded as "Other", no referral, no ambulance called, no incident number and no narrative. The structured record describes a low-acuity episode that the crew did not escalate, which is why it was not classified major; the absence of any narrative or incident link for a suspected drowning is itself a consistency point for the action-form work.</div></div>
+    <div class="outlier"><div class="q">Four of five mental health cases are major. The fifth?</div><div class="a">A panic attack in a 27-year-old, no treatment required, no referral. Classified minor consistently with those fields.</div></div>
+    <div class="outlier"><div class="q">Five resuscitation-nature cases but seven resuscitation records?</div><div class="a">Two cardiac arrests were recorded under the medical nature, and the members completed the resuscitation question set for them. Counting by the question set, seven resuscitations were performed; counting by nature, five. The nature-level count undercounts and the question-set count is the reliable one.</div></div>
+    <div class="outlier"><div class="q">Envenomation is 3.4% major. Which seven cases?</div><div class="a">Three stingray injuries (two to hospital with an adult, one by ambulance), one combined medical and envenomation case transported by ambulance, one jellyfish sting with no referral, and the two majors with no specific problem and no referral described above. The stingray cases drive the severity; the last three are classification inconsistencies rather than clinical escalations.</div></div>
+    <div class="outlier"><div class="q">Forty-one cases documented a day or more after treatment. Who are they?</div><div class="a">Thirty-four are injuries and eleven are major. Nineteen come from club-event cohorts, and two volunteer clubs account for sixteen of the forty-one. Thirty-six of the forty-one were subsequently completed. The pattern is retrospective entry after club events at a small number of units, not a system-wide lag.</div></div>
+    <div class="outlier"><div class="q">Three cases show treatment after the form was created.</div><div class="a">The recorded treatment time is 44 minutes, 10 hours and 9 days later than the form's creation. These are treatment-time entry errors (the time was entered in the future relative to when the form was opened) and were excluded from the timeliness segments.</div></div>
+    <div class="outlier"><div class="q">Twenty-four completed forms have no nature recorded.</div><div class="a">All twenty-four have a free-text reason for presentation and a treatment, and the workflow marks all steps complete. The nature question can be passed without an answer; it should be mandatory, because every downstream question set keys off it.</div></div>
+    <div class="outlier"><div class="q">249 cases classified major but 253 linked to an incident number.</div><div class="a">The two flags are set independently: 22 major cases have no incident number and 26 incident-linked cases are not classified major, 48 records (3.2%) where the classification and the link disagree. This is the consistency problem the action form is designed to remove.</div></div>
+    <div class="outlier"><div class="q">Fourteen methoxyflurane records but eight pain trajectories.</div><div class="a">Six of the fourteen have no starting pain score entered. Two of the eight scored cases start at 1 of 10; the remaining six start at 8 to 10 and fall by 0 to 6 points within four minutes.</div></div>
+  </section>
+
+  <section class="sec">
+    <div class="kicker">Training targets</div>
+    <h2>Questions that are presented but not answered well</h2>
+    <p class="note">Capture-rate gaps on questions that matter clinically. They corroborate the training flags already raised internally (full name and SAMPLE history) and add two more.</p>
+    <div class="card">
+      <div class="row"><div class="name">SAMPLE: medications</div><div class="track"><div class="bar" style="width:6%" title="6.0% of all cases; 8.8% of majors"></div></div><div class="val">6.0%</div></div>
+      <div class="row"><div class="name">SAMPLE: medical history</div><div class="track"><div class="bar" style="width:7%" title="7.0% of all cases; 12.9% of majors"></div></div><div class="val">7.0%</div></div>
+      <div class="row"><div class="name">SAMPLE: allergies</div><div class="track"><div class="bar" style="width:7.2%" title="7.2% of all cases; 9.6% of majors"></div></div><div class="val">7.2%</div></div>
+      <div class="row"><div class="name">Ambulance case number</div><div class="track"><div class="bar" style="width:8.2%" title="18 of 220 hospital-pathway cases"></div></div><div class="val">8.2%</div></div>
+      <div class="row"><div class="name">Outcome question, majors</div><div class="track"><div class="bar" style="width:28.9%" title="72 of 249 major cases"></div></div><div class="val">28.9%</div></div>
+      <div class="row"><div class="name">Full name (not first only)</div><div class="track"><div class="bar" style="width:57.8%" title="FullName on 57.8% of cases; a further 28.2% first name only"></div></div><div class="val">57.8%</div></div>
+      <p class="sub after">SAMPLE capture roughly doubles on major incidents (12.9 / 9.6 / 8.8 per cent) but remains low where it matters most. Date of birth, address and nationality declined when they became optional; whether to require them is a form-design decision rather than a member-performance issue.</p>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="kicker">Summary</div>
+    <h2>Statistics for presentation</h2>
+    <ol class="list">
+      <li>Cutover in three days: last old form 9 November, first new form 12 November; 1,494 new-form cases in season one with no parallel running.</li>
+      <li>Median 4 minutes from opening a form to its final edit; 95.0 per cent completion.</li>
+      <li>87.1 per cent of cases documented within one hour of treatment, measurable for the first time this season.</li>
+      <li>Conditional question sets answered 96.6 to 100 per cent of the time they are presented, with every gap accounted for.</li>
+      <li>Unidentified patients halved, from 27.9 to 14.0 per cent.</li>
+      <li>Seven resuscitations with method, rhythm, shocks, cycles and handover state recorded on every one; the old form carried any detail on half of comparable cases.</li>
+      <li>Oxygen (47) and methoxyflurane (14) administrations with structured audit records; recorded pain falling from a mean of 7.1 by 2.6 points within four minutes.</li>
+      <li>1,018 injuries, 204 envenomations, 138 medical and 60 environmental presentations, each with specific problems, body locations, treatments and discharge pathways counted directly.</li>
+      <li>Seven peer-support requests surfaced through a question that previously did not exist.</li>
+      <li>Form improvement is now empirical: free-text overflow rates identify the exact option lists to fix.</li>
+      <li>126 per cent six-season growth in presentations; January carries 43.6 per cent of the season and weekends 51.7 per cent.</li>
+    </ol>
+  </section>
+
+  <section class="sec">
+    <div class="kicker">Where to next</div>
+    <h2>Two programs that build on this work</h2>
+    <div class="card">
+      <h3>One action form</h3>
+      <div class="prose" style="margin-top:8px">
+        <p>The first aid form and the rescue form will be combined into a single action form with one clear definition for members: one form for one person assisted. This removes the need for a member to remember to complete one or both forms, to decide which form applies, or to enter the same personal details twice. It will be one form, with questions presented dynamically for the rescue, for the first aid, or for both.</p>
+        <p>The result is a record that is accurately captured, reported cohesively, and linked to incidents consistently. The 48 records in this season's data where the major classification and the incident link disagree, and the suspected drowning with no incident number, are the kind of inconsistency the single form is designed to remove at source. Above all, the organisation gains consistency and completeness of data that allow it to be more informed than at any previous point.</p>
+        <p>The first aid form project has been a key signifier of what is possible when the system meets the need, and of the benefits of accurate, complete and consistent data.</p>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Incident categorisation</h3>
+      <div class="prose" style="margin-top:8px">
+        <p>Following this work, a similar program will be applied to the incident categorisation approach. It will simplify categorisation for members, capture more accurately what is being done on the beach, and make the system easier to use and understand, with clear standards on how information is captured.</p>
+        <p>Stronger data quality and consistency will in turn support operational decisions, reporting, funding submissions and everything else that good data enables.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="kicker">Limitations</div>
+    <h2>What this data cannot support</h2>
+    <ul class="limits">
+      <li>The workbook contains no user-satisfaction survey; satisfaction evidence is behavioural (completion rate, speed, adoption, branch answer rates).</li>
+      <li>Resuscitation (7) and methoxyflurane (14) counts are small and are reported as counts, not precise rates.</li>
+      <li>Old and new taxonomies differ; cross-form trend comparisons use shared categories only.</li>
+      <li>Timestamps measure documentation behaviour, not care delivery; the completion long tail includes administrative reopens (incident linking, reclassification).</li>
+      <li>Season-on-season volume comparisons use a matched November-to-June window because the 2024/25 export spans all months.</li>
+      <li>Unit type is derived from unit names in the data (volunteers, lifeguards, aquatic sports, support), not from a separate classification.</li>
+    </ul>
+  </section>
+
+  <footer>
+    Source: First Aid Form Data.xlsx, raw season sheets 2020/21 to 2025/26 (7,406 cases). All figures re-derived from raw rows; the workbook's crunched 2025/26 summaries reconciled exactly against this re-derivation. Prior-season formulas in the workbook's year-to-year sheet are broken and were corrected here. Aggregate data only; no patient-identifying information appears in this analysis.
+  </footer>
+</div>

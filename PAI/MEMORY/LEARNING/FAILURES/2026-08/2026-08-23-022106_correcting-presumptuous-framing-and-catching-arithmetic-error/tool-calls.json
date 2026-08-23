@@ -1,0 +1,716 @@
+[
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/ALGORITHM/LATEST"
+    },
+    "timestamp": "2026-08-19T03:02:55.719Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls ~/Documents/workspace/projects/envelope-os/",
+      "description": "List BudgetBuddy project directory"
+    },
+    "timestamp": "2026-08-19T03:02:57.309Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/ALGORITHM/v6.3.0.md"
+    },
+    "timestamp": "2026-08-19T03:03:00.288Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Algorithm\", \"voice_id\": \"fTtv3eikoepIosk8dTZ5\", \"voice_enabled\": true}' --max-time 5",
+      "description": "Voice announce Algorithm entry"
+    },
+    "timestamp": "2026-08-19T03:03:16.320Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && ls src scripts docs && head -50 README.md",
+      "description": "Survey BudgetBuddy structure and README"
+    },
+    "timestamp": "2026-08-19T03:03:17.067Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -il \"discrepanc|mismatch|delta\" src web/src --type ts 2>/dev/null | head -20; echo \"---DB---\"; fd -e sqlite -e db -e sqlite3 . --max-depth 3 2>/dev/null; ls data 2>/dev/null",
+      "description": "Find discrepancy-related code and the SQLite DB"
+    },
+    "timestamp": "2026-08-19T03:03:28.580Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && ls src/reconcile src/envelope src/budget 2>/dev/null; echo \"---\"; curl -sk --max-time 4 http://localhost:3000/health 2>/dev/null; curl -sk --max-time 4 http://127.0.0.1:8787/health 2>/dev/null",
+      "description": "List reconcile/envelope modules, probe local server"
+    },
+    "timestamp": "2026-08-19T03:03:29.987Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && cat src/server/handlers/reconcile.ts | head -80; echo \"=== routes ===\"; rg -n \"app\\.(get|post|route)\" src/server --type ts | head -30",
+      "description": "Read reconcile handler and API route map"
+    },
+    "timestamp": "2026-08-19T03:03:36.478Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -n \"\\.sqlite|\\.db\\b|dbPath|DB_PATH\" src/platform src/store scripts/migrate.ts 2>/dev/null | head -10; fd . ~/.local/share -d 3 2>/dev/null | rg -i \"penny|budget|envelope\" | head",
+      "description": "Locate the SQLite database file path"
+    },
+    "timestamp": "2026-08-19T03:03:38.688Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sqlite3 ~/.penny/penny.db \".tables\" 2>/dev/null || bun -e 'const {Database}=require(\"bun:sqlite\");const db=new Database(process.env.HOME+\"/.penny/penny.db\",{readonly:true});console.log(db.query(\"SELECT name FROM sqlite_master WHERE type=\\\"table\\\"\").all().map(r=>r.name).join(\"\\n\"))'",
+      "description": "List tables in BudgetBuddy SQLite DB"
+    },
+    "timestamp": "2026-08-19T03:03:46.180Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "bun -e '\nconst {Database}=require(\"bun:sqlite\");\nconst db=new Database(process.env.HOME+\"/.penny/penny.db\",{readonly:true});\nconsole.log(\"=== recent reconciliations ===\");\nconsole.log(JSON.stringify(db.query(\"SELECT * FROM reconciliations ORDER BY ts DESC LIMIT 5\").all(),null,1));\n' 2>&1 | head -60",
+      "description": "Check recent reconciliation records for the drift"
+    },
+    "timestamp": "2026-08-19T03:03:49.788Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && sed -n '80,200p' src/server/handlers/reconcile.ts",
+      "description": "Read rest of reconcile handler (net position, balances)"
+    },
+    "timestamp": "2026-08-19T03:03:57.318Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && head -80 src/reconcile/balances.ts && echo \"=== widget ===\" && head -60 web/src/components/budget/NetPositionWidget.tsx",
+      "description": "Read balance-lines builder and net position widget"
+    },
+    "timestamp": "2026-08-19T03:03:57.828Z"
+  },
+  {
+    "name": "ToolSearch",
+    "input": {
+      "query": "select:mcp__pocketsmith__list_transaction_accounts,mcp__pocketsmith__list_transactions,mcp__pocketsmith__get_current_user",
+      "max_results": 3
+    },
+    "timestamp": "2026-08-19T03:04:10.581Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "bun -e '\nconst {Database}=require(\"bun:sqlite\");\nconst db=new Database(process.env.HOME+\"/.penny/penny.db\",{readonly:true});\nconst rows=db.query(`SELECT account_id, COUNT(*) n, SUM(CASE WHEN is_pending=0 THEN amount_cents ELSE 0 END) posted_net, SUM(CASE WHEN is_pending=1 THEN amount_cents ELSE 0 END) pending_net FROM transactions GROUP BY account_id`).all();\nconsole.log(JSON.stringify(rows,null,1));\nconsole.log(\"=== sync state ===\");\nconsole.log(JSON.stringify(db.query(\"SELECT * FROM sync_state\").all(),null,1));\n' 2>&1",
+      "description": "Compute Penny per-account transaction nets from SQLite"
+    },
+    "timestamp": "2026-08-19T03:04:13.048Z"
+  },
+  {
+    "name": "mcp__pocketsmith__get_current_user",
+    "input": {},
+    "timestamp": "2026-08-19T03:04:16.738Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transaction_accounts",
+    "input": {
+      "user_id": 418333
+    },
+    "timestamp": "2026-08-19T03:04:19.498Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && sed -n '80,140p' src/reconcile/balances.ts; echo \"=== net-position rest ===\"; sed -n '200,280p' src/server/handlers/reconcile.ts",
+      "description": "Read drift math: pending handling in balances and net-position"
+    },
+    "timestamp": "2026-08-19T03:04:44.730Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -n \"isPending|pending\" src/envelope/spend.ts src/envelope/balance.ts | head -20",
+      "description": "Check pending handling in envelope spend engine"
+    },
+    "timestamp": "2026-08-19T03:05:00.869Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transactions",
+    "input": {
+      "transaction_account_id": 4771153,
+      "start_date": "2026-08-14",
+      "per_page": 100
+    },
+    "timestamp": "2026-08-19T03:05:01.157Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transactions",
+    "input": {
+      "transaction_account_id": 4771153,
+      "start_date": "2026-08-12",
+      "end_date": "2026-08-19",
+      "per_page": 100
+    },
+    "timestamp": "2026-08-19T03:05:07.858Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "f=/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787108709497.txt\ngrep -nE '\"(id|date|payee|amount|needs_review|status)\"' \"$f\" | grep -vE '\"(category|account|institution|user|scenario)' | head -100",
+      "description": "Extract id/date/payee/amount lines from PocketSmith card transactions"
+    },
+    "timestamp": "2026-08-19T03:05:14.248Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "f=/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787108709497.txt\ngrep -n '\"amount\"' \"$f\" | awk -F: '{print $3}' | tr -d ' ,' | sort | uniq -c | sort -rn | head; echo \"=== any 6.5 ===\"; grep -n '6\\.5' \"$f\" | head",
+      "description": "Scan window for $6.50 amounts"
+    },
+    "timestamp": "2026-08-19T03:05:39.098Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "bun -e '\nconst {Database}=require(\"bun:sqlite\");\nconst db=new Database(process.env.HOME+\"/.penny/penny.db\",{readonly:true});\nconsole.log(\"=== Penny card txns >= 2026-08-12 ===\");\nconst rows=db.query(`SELECT date, payee, amount_cents, is_pending, is_transfer FROM transactions WHERE account_id=\\\"4771153\\\" AND date>=\\\"2026-08-12\\\" ORDER BY date DESC`).all();\nfor(const r of rows) console.log(`${r.date} ${String(r.amount_cents).padStart(8)} pend=${r.is_pending} tr=${r.is_transfer} ${r.payee}`);\nconsole.log(\"=== any 650-cent rows ever ===\");\nconsole.log(JSON.stringify(db.query(`SELECT date,payee,amount_cents,account_id FROM transactions WHERE ABS(amount_cents)=650 ORDER BY date DESC LIMIT 10`).all(),null,1));\n'",
+      "description": "Compare Penny card rows and search 650-cent transactions"
+    },
+    "timestamp": "2026-08-19T03:05:42.928Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "bun -e '\nconst {Database}=require(\"bun:sqlite\");\nconst db=new Database(process.env.HOME+\"/.penny/penny.db\",{readonly:true});\nconsole.log(db.query(\"PRAGMA table_info(transactions)\").all().map(c=>c.name).join(\", \"));\nconst rows=db.query(`SELECT * FROM transactions WHERE account_id=\\\"4771153\\\" ORDER BY rowid DESC LIMIT 8`).all();\nconsole.log(JSON.stringify(rows.slice(0,3),null,1));\n'",
+      "description": "Inspect transactions schema and latest card rows"
+    },
+    "timestamp": "2026-08-19T03:05:50.238Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && head -60 scripts/pulse.ts; rg -n \"resolveSession\" src/server/http.ts | head -3; sed -n \"$(rg -n 'resolveSession' src/server/http.ts | head -1 | cut -d: -f1),+25p\" src/server/http.ts",
+      "description": "Check pulse script and session resolution for API access"
+    },
+    "timestamp": "2026-08-19T03:06:30.748Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && cat > /home/nicholas-wood/.claude/jobs/59e73a46/tmp/netpos.ts <<'EOF'\nimport { buildContainer } from \"./src/composition.ts\";\nimport { buildServices } from \"./src/server/services.ts\";\n\nconst container = await buildContainer();\nconst services = buildServices(container);\nconst userId = \"local\";\n// Live PocketSmith balances pulled 2026-08-19 (cents)\nconst cashOnHandCents = 26232 + 23872 + 10 + 6206080; // MAC Casual, MAC Buffer, ANZ Expenses, ANZ Emergency\nconst cardOwedCents = 448112; // NAB card #7280\n\nconst now = new Date();\nconst period = new Intl.DateTimeFormat(\"en-CA\", { timeZone: container.config.timezone, year: \"numeric\", month: \"2-digit\" }).format(now).slice(0, 7);\nconst grid = await services.envelopes.getGrid(userId, period);\nconst topLevel = grid.rows.filter((r: any) => r.parentId === null);\nconst leafLeftCents = topLevel.reduce((s: number, r: any) => s + r.leftCents, 0);\nconst incomeLeftCents = grid.income.reduce((s: number, i: any) => s + i.carryoverCents + i.varianceCents, 0);\nconst totalLeftCents = leafLeftCents + incomeLeftCents;\nconst awaitingIncomeCents = grid.income.reduce((s: number, i: any) => s + (i.awaitingCents ?? 0), 0);\nconst reconciledDeltaCents = cashOnHandCents - cardOwedCents - (totalLeftCents - awaitingIncomeCents);\nconst uncat = grid.unresolvedActivityCents ?? 0;\nconsole.log(JSON.stringify({\n  period, cashOnHandCents, cardOwedCents, leafLeftCents, incomeLeftCents, totalLeftCents,\n  awaitingIncomeCents, reconciledDeltaCents, uncategorisedActivityCents: uncat,\n  unexplainedDeltaCents: reconciledDeltaCents - uncat,\n}, null, 1));\nawait container.store.close();\nEOF\nbun /home/nicholas-wood/.claude/jobs/59e73a46/tmp/netpos.ts 2>&1 | tail -20",
+      "description": "Reproduce net-position widget delta offline from live data"
+    },
+    "timestamp": "2026-08-19T03:06:45.079Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && sed -i 's#\"\\./src/#\"/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/#' /home/nicholas-wood/.claude/jobs/59e73a46/tmp/netpos.ts && bun /home/nicholas-wood/.claude/jobs/59e73a46/tmp/netpos.ts 2>&1 | tail -20",
+      "description": "Rerun net-position reproduction with absolute imports"
+    },
+    "timestamp": "2026-08-19T03:06:49.170Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && head -80 src/platform/auth/local.ts",
+      "description": "Read local auth session resolution"
+    },
+    "timestamp": "2026-08-19T03:06:57.587Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "bun -e '\nconst {Database}=require(\"bun:sqlite\");\nconst db=new Database(process.env.HOME+\"/.penny/penny.db\",{readonly:true});\nconsole.log(\"envelopes:\",db.query(\"SELECT COUNT(*) n FROM envelopes\").get());\nconsole.log(\"sample:\",JSON.stringify(db.query(\"SELECT * FROM envelopes LIMIT 3\").all(),null,1).slice(0,600));\nconsole.log(\"income:\",db.query(\"SELECT COUNT(*) n FROM income_envelopes\").get());\nconsole.log(\"budget_template:\",db.query(\"SELECT COUNT(*) n FROM budget_template\").get());\n'",
+      "description": "Inspect envelopes and template tables"
+    },
+    "timestamp": "2026-08-19T03:07:06.189Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -n \"getGrid\" src/envelope/service.ts | head -5; rg -n \"async getGrid\" -A 15 src/envelope/service.ts | head -30",
+      "description": "Check getGrid signature"
+    },
+    "timestamp": "2026-08-19T03:07:12.049Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && cat > /home/nicholas-wood/.claude/jobs/59e73a46/tmp/gridshape.ts <<'EOF'\nimport { buildContainer } from \"/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/composition.ts\";\nimport { buildServices } from \"/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/services.ts\";\nconst container = await buildContainer();\nconst services = buildServices(container);\nconst grid: any = await services.envelopes.getGrid(\"local\", \"2026-08\");\nconsole.log(\"keys:\", Object.keys(grid));\nconsole.log(\"rows:\", Array.isArray(grid.rows) ? grid.rows.length : typeof grid.rows);\nif (grid.rows?.length) console.log(\"row0 keys:\", Object.keys(grid.rows[0]), JSON.stringify(grid.rows[0]).slice(0,300));\nconsole.log(\"income:\", JSON.stringify(grid.income)?.slice(0,500));\nawait container.store.close();\nEOF\nbun /home/nicholas-wood/.claude/jobs/59e73a46/tmp/gridshape.ts 2>&1 | tail -12",
+      "description": "Dump grid response shape"
+    },
+    "timestamp": "2026-08-19T03:07:19.740Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cat > /home/nicholas-wood/.claude/jobs/59e73a46/tmp/netpos2.ts <<'EOF'\nimport { buildContainer } from \"/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/composition.ts\";\nimport { buildServices } from \"/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/services.ts\";\nconst container = await buildContainer();\nconst services = buildServices(container);\nconst grid: any = await services.envelopes.getGrid(\"local\", \"2026-08\");\nconst top = grid.rows.filter((r: any) => r.parentId === null);\nconsole.log(\"timezone:\", container.config.timezone, \"isSetUp:\", grid.isSetUp, \"asOf:\", grid.asOf);\nfor (const r of top) {\n  if (r.leftCents !== 0 || r.allocationCents !== 0) console.log(`${r.name.padEnd(22)} type=${r.type.padEnd(9)} left=${(r.leftCents/100).toFixed(2).padStart(11)} alloc=${(r.allocationCents/100).toFixed(2).padStart(11)}`);\n}\nconst leafLeft = top.reduce((s: number, r: any) => s + r.leftCents, 0);\nconst incomeLeft = grid.income.reduce((s: number, i: any) => s + i.carryoverCents + i.varianceCents, 0);\nconst awaiting = grid.income.reduce((s: number, i: any) => s + (i.awaitingCents ?? 0), 0);\nconsole.log(\"income detail:\", JSON.stringify(grid.income.map((i:any)=>({name:i.name,carry:i.carryoverCents,var:i.varianceCents,awaiting:i.awaitingCents}))));\nconst cash = 6256194, cardOwed = 448112;\nconst totalLeft = leafLeft + incomeLeft;\nconst delta = cash - cardOwed - (totalLeft - awaiting);\nconsole.log({leafLeft, incomeLeft, totalLeft, awaiting, uncat: grid.unresolvedActivityCents, reconciledDeltaCents: delta, unexplained: delta - (grid.unresolvedActivityCents ?? 0)});\nawait container.store.close();\nEOF\nbun /home/nicholas-wood/.claude/jobs/59e73a46/tmp/netpos2.ts 2>&1 | tail -40",
+      "description": "Full net-position reproduction with per-row detail"
+    },
+    "timestamp": "2026-08-19T03:07:46.507Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "bun -e '\nconst {Database}=require(\"bun:sqlite\");\nconst db=new Database(process.env.HOME+\"/.penny/penny.db\",{readonly:true});\nconsole.log(\"allocations by period:\",JSON.stringify(db.query(\"SELECT period, COUNT(*) n, SUM(amount_cents) total FROM allocations GROUP BY period ORDER BY period DESC LIMIT 4\").all()));\nconsole.log(\"budget_history sample:\",JSON.stringify(db.query(\"SELECT * FROM budget_history ORDER BY rowid DESC LIMIT 3\").all()).slice(0,600));\nconsole.log(\"budget_template sample:\",JSON.stringify(db.query(\"SELECT * FROM budget_template LIMIT 3\").all()).slice(0,600));\nconsole.log(\"money_movements recent:\",JSON.stringify(db.query(\"SELECT * FROM money_movements ORDER BY rowid DESC LIMIT 3\").all()).slice(0,600));\n'",
+      "description": "Inspect allocations and budget tables"
+    },
+    "timestamp": "2026-08-19T03:08:01.817Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && sed -n '534,640p' src/envelope/service.ts",
+      "description": "Read buildGrid allocation resolution"
+    },
+    "timestamp": "2026-08-19T03:08:24.809Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -n \"export (type|interface) Period|periodKey|periodOfDate\" src/envelope/period.ts | head; rg -n \"currentPeriod\" src/server/http.ts | head -3; sed -n \"$(rg -n 'export function currentPeriod' src/server/http.ts | cut -d: -f1),+8p\" src/server/http.ts",
+      "description": "Check Period type and currentPeriod helper"
+    },
+    "timestamp": "2026-08-19T03:08:32.307Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && sed -n '1,30p' src/envelope/period.ts",
+      "description": "Read Period type definition"
+    },
+    "timestamp": "2026-08-19T03:08:35.468Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cat > /home/nicholas-wood/.claude/jobs/59e73a46/tmp/netpos3.ts <<'EOF'\nimport { buildContainer } from \"/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/composition.ts\";\nimport { buildServices } from \"/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/services.ts\";\nconst container = await buildContainer();\nconst services = buildServices(container);\nconst grid: any = await services.envelopes.getGrid(\"local\", { year: 2026, month: 8 });\nconst top = grid.rows.filter((r: any) => r.parentId === null);\nconst leafLeft = top.reduce((s: number, r: any) => s + r.leftCents, 0);\nconst incomeLeft = grid.income.reduce((s: number, i: any) => s + i.carryoverCents + i.varianceCents, 0);\nconst awaiting = grid.income.reduce((s: number, i: any) => s + (i.awaitingCents ?? 0), 0);\nconst cash = 6256194, cardOwed = 448112;\nconst totalLeft = leafLeft + incomeLeft;\nconst delta = cash - cardOwed - (totalLeft - awaiting);\nconst uncat = grid.unresolvedActivityCents ?? 0;\nconsole.log({leafLeft, incomeLeft, totalLeft, awaiting, uncat, reconciledDeltaCents: delta, unexplainedDeltaCents: delta - uncat});\nawait container.store.close();\nEOF\nbun /home/nicholas-wood/.claude/jobs/59e73a46/tmp/netpos3.ts 2>&1 | tail -10",
+      "description": "Rerun net-position with correct Period object"
+    },
+    "timestamp": "2026-08-19T03:08:44.058Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "bun -e '\nconst {Database}=require(\"bun:sqlite\");\nconst db=new Database(process.env.HOME+\"/.penny/penny.db\",{readonly:true});\nconst rows=db.query(`SELECT id, txn_date, payee, amount_cents, is_pending, raw_json FROM transactions WHERE account_id=\\\"4771153\\\" ORDER BY txn_date ASC, CAST(id AS INTEGER) ASC`).all();\nlet prev=null;\nconst toC=(x)=>Math.round(x*100);\nfor(const r of rows){\n  const j=JSON.parse(r.raw_json);\n  const cb=j.closing_balance;\n  if(cb===null||cb===undefined){console.log(`${r.txn_date} ${r.payee.slice(0,30)} NO closing_balance`);continue;}\n  if(prev!==null){\n    const implied=toC(cb)-toC(prev.cb);\n    if(implied!==r.amount_cents){\n      console.log(`BREAK at ${r.txn_date} ${r.payee.slice(0,40)}: closing ${prev.cb} -> ${cb}, implied move ${implied}c but txn amount ${r.amount_cents}c (gap ${implied-r.amount_cents}c) [after ${prev.date} ${prev.payee.slice(0,30)}]`);\n    }\n  }\n  prev={cb, date:r.txn_date, payee:r.payee};\n}\nconsole.log(\"first txn:\", rows[0].txn_date, rows[0].payee, rows[0].amount_cents, \"closing:\", JSON.parse(rows[0].raw_json).closing_balance);\nconsole.log(\"last txn:\", rows[rows.length-1].txn_date, rows[rows.length-1].payee, rows[rows.length-1].amount_cents, \"closing:\", JSON.parse(rows[rows.length-1].raw_json).closing_balance);\nconsole.log(\"count:\", rows.length);\n'",
+      "description": "Walk closing-balance chain to locate the $6.50 break"
+    },
+    "timestamp": "2026-08-19T03:09:26.448Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -n \"delete|remove|prune|vanish|stale\" scripts/sync.ts src/ingest/*.ts | grep -iv \"//\" | head -20; echo \"=== sync flow ===\"; rg -n \"upsert|putTransaction|saveTransaction\" scripts/sync.ts src/ingest/*.ts | head -10",
+      "description": "Check whether sync deletes transactions removed upstream"
+    },
+    "timestamp": "2026-08-19T03:09:56.177Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "bun -e '\nconst {Database}=require(\"bun:sqlite\");\nconst db=new Database(process.env.HOME+\"/.penny/penny.db\",{readonly:true});\nconst rows=db.query(`SELECT id, txn_date, payee, amount_cents, is_pending FROM transactions WHERE account_id=\\\"4771153\\\"`).all();\nconst out=rows.map(r=>`${r.id}|${r.txn_date}|${r.amount_cents}|${r.is_pending}|${r.payee}`).join(\"\\n\");\nrequire(\"fs\").writeFileSync(\"/home/nicholas-wood/.claude/jobs/59e73a46/tmp/penny-card.txt\",out);\nconsole.log(\"wrote\",rows.length,\"rows\");\n'",
+      "description": "Export Penny card rows for diffing"
+    },
+    "timestamp": "2026-08-19T03:10:07.887Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transactions",
+    "input": {
+      "transaction_account_id": 4771153,
+      "start_date": "2026-03-01",
+      "end_date": "2026-05-31",
+      "per_page": 100,
+      "page": 1
+    },
+    "timestamp": "2026-08-19T03:10:11.521Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/jobs/59e73a46/tmp && f=/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787109013769.txt\npython3 - \"$f\" <<'EOF' || bun -e '\nconst fs=require(\"fs\");const txt=fs.readFileSync(process.argv[1],\"utf8\");\nconst data=JSON.parse(txt);\nconsole.log(\"count\",data.length);\n' \"$f\"\nimport json,sys\nd=json.load(open(sys.argv[1]))\nprint(\"count\",len(d))\nwith open(\"ps-card.txt\",\"a\") as o:\n    for t in d:\n        o.write(f\"{t['id']}|{t['date']}|{round(t['amount']*100)}|{t['status']}|{t['payee']}\\n\")\nEOF\nwc -l ps-card.txt",
+      "description": "Extract PS page 1 to id|date|amount lines"
+    },
+    "timestamp": "2026-08-19T03:10:21.968Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "f=/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787109013769.txt\nhead -8 \"$f\"; echo ...; grep -c '\"id\":' \"$f\"",
+      "description": "Inspect PS result file structure"
+    },
+    "timestamp": "2026-08-19T03:10:26.577Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cat > /home/nicholas-wood/.claude/jobs/59e73a46/tmp/extract.py <<'EOF'\nimport json,sys\nf=sys.argv[1]\ntxt=open(f).read()\nstart=txt.index('[')\nd=json.loads(txt[start:])\nwith open(\"/home/nicholas-wood/.claude/jobs/59e73a46/tmp/ps-card.txt\",\"a\") as o:\n    for t in d:\n        o.write(f\"{t['id']}|{t['date']}|{round(t['amount']*100)}|{t['status']}|{t['payee']}\\n\")\nprint(\"extracted\",len(d))\nEOF\npython3 /home/nicholas-wood/.claude/jobs/59e73a46/tmp/extract.py /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787109013769.txt",
+      "description": "Create extractor and process page 1"
+    },
+    "timestamp": "2026-08-19T03:10:35.419Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transactions",
+    "input": {
+      "transaction_account_id": 4771153,
+      "start_date": "2026-03-01",
+      "end_date": "2026-05-31",
+      "per_page": 100,
+      "page": 2
+    },
+    "timestamp": "2026-08-19T03:10:39.697Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "python3 /home/nicholas-wood/.claude/jobs/59e73a46/tmp/extract.py /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787109041857.txt",
+      "description": "Extract page 2"
+    },
+    "timestamp": "2026-08-19T03:10:46.065Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transactions",
+    "input": {
+      "transaction_account_id": 4771153,
+      "start_date": "2026-03-01",
+      "end_date": "2026-05-31",
+      "per_page": 100,
+      "page": 3
+    },
+    "timestamp": "2026-08-19T03:10:49.297Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "python3 /home/nicholas-wood/.claude/jobs/59e73a46/tmp/extract.py /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787109051327.txt",
+      "description": "Extract page 3"
+    },
+    "timestamp": "2026-08-19T03:10:54.949Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transactions",
+    "input": {
+      "transaction_account_id": 4771153,
+      "start_date": "2026-03-01",
+      "end_date": "2026-05-31",
+      "per_page": 100,
+      "page": 4
+    },
+    "timestamp": "2026-08-19T03:10:58.119Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "python3 /home/nicholas-wood/.claude/jobs/59e73a46/tmp/extract.py /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787109059497.txt",
+      "description": "Extract page 4"
+    },
+    "timestamp": "2026-08-19T03:11:02.917Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transactions",
+    "input": {
+      "transaction_account_id": 4771153,
+      "start_date": "2026-06-01",
+      "end_date": "2026-08-19",
+      "per_page": 100,
+      "page": 1
+    },
+    "timestamp": "2026-08-19T03:11:06.878Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "python3 /home/nicholas-wood/.claude/jobs/59e73a46/tmp/extract.py /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787109068847.txt; head -1 /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787109068847.txt",
+      "description": "Extract Jun-Aug page 1 and read page count"
+    },
+    "timestamp": "2026-08-19T03:11:13.579Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transactions",
+    "input": {
+      "transaction_account_id": 4771153,
+      "start_date": "2026-06-01",
+      "end_date": "2026-08-19",
+      "per_page": 100,
+      "page": 2
+    },
+    "timestamp": "2026-08-19T03:11:19.138Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "python3 /home/nicholas-wood/.claude/jobs/59e73a46/tmp/extract.py /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787109081319.txt",
+      "description": "Extract Jun-Aug page 2"
+    },
+    "timestamp": "2026-08-19T03:11:24.609Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transactions",
+    "input": {
+      "transaction_account_id": 4771153,
+      "start_date": "2026-06-01",
+      "end_date": "2026-08-19",
+      "per_page": 100,
+      "page": 3
+    },
+    "timestamp": "2026-08-19T03:11:27.937Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "python3 /home/nicholas-wood/.claude/jobs/59e73a46/tmp/extract.py /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787109089927.txt",
+      "description": "Extract Jun-Aug page 3"
+    },
+    "timestamp": "2026-08-19T03:11:33.657Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transactions",
+    "input": {
+      "transaction_account_id": 4771153,
+      "start_date": "2026-06-01",
+      "end_date": "2026-08-19",
+      "per_page": 100,
+      "page": 4
+    },
+    "timestamp": "2026-08-19T03:11:37.787Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "python3 /home/nicholas-wood/.claude/jobs/59e73a46/tmp/extract.py /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787109099687.txt\ncd /home/nicholas-wood/.claude/jobs/59e73a46/tmp && python3 - <<'EOF'\ndef load(path):\n    d={}\n    for line in open(path):\n        parts=line.rstrip(\"\\n\").split(\"|\")\n        d[parts[0]]=(parts[1],int(parts[2]),parts[3],parts[4])\n    return d\npenny=load(\"penny-card.txt\")   # id|date|cents|is_pending(0/1)|payee\nps=load(\"ps-card.txt\")         # id|date|cents|status|payee\nprint(\"penny\",len(penny),\"ps\",len(ps))\nonly_penny=set(penny)-set(ps)\nonly_ps=set(ps)-set(penny)\nfor i in sorted(only_penny): print(\"ONLY PENNY:\",i,penny[i])\nfor i in sorted(only_ps): print(\"ONLY PS:  \",i,ps[i])\ndiff=0\nfor i in set(penny)&set(ps):\n    if penny[i][1]!=ps[i][1]:\n        print(\"AMOUNT DIFF:\",i,\"penny\",penny[i],\"ps\",ps[i])\n        diff+=penny[i][1]-ps[i][1]\n    pstat = 1 if ps[i][2]==\"pending\" else 0\n    if int(penny[i][2])!=pstat:\n        print(\"STATUS DIFF:\",i,\"penny pend=\",penny[i][2],\"ps\",ps[i][2],penny[i])\nprint(\"net amount diff (penny-ps):\",diff)\nprint(\"sum penny:\",sum(v[1] for v in penny.values()),\"sum ps:\",sum(v[1] for v in ps.values()))\nEOF",
+      "description": "Extract final page and diff Penny vs PocketSmith sets"
+    },
+    "timestamp": "2026-08-19T03:11:49.138Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -in \"6\\.50|650|drift|delta\" docs/BudgetAudit-2026-08-14.md | head -10",
+      "description": "Check 14 Aug audit for prior mention of the delta"
+    },
+    "timestamp": "2026-08-19T03:12:15.357Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "bun -e '\nconst {Database}=require(\"bun:sqlite\");\nconst db=new Database(process.env.HOME+\"/.penny/penny.db\",{readonly:true});\nconsole.log(\"sync_state:\",JSON.stringify(db.query(\"SELECT * FROM sync_state\").all()));\nconsole.log(\"max txn date:\",JSON.stringify(db.query(\"SELECT MAX(txn_date) d, COUNT(*) n FROM transactions\").get()));\nconsole.log(\"card rows:\",JSON.stringify(db.query(`SELECT COUNT(*) n, SUM(CASE WHEN is_pending=0 THEN amount_cents ELSE 0 END) posted, SUM(CASE WHEN is_pending=1 THEN amount_cents ELSE 0 END) pending FROM transactions WHERE account_id=\\\"4771153\\\"`).get()));\nconsole.log(\"recent events:\",JSON.stringify(db.query(\"SELECT * FROM events ORDER BY rowid DESC LIMIT 5\").all()).slice(0,800));\n'",
+      "description": "Check Penny sync freshness and card totals"
+    },
+    "timestamp": "2026-08-23T08:03:13.151Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transaction_accounts",
+    "input": {
+      "user_id": 418333
+    },
+    "timestamp": "2026-08-23T08:03:19.691Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sed -i 's/const cash = 6256194, cardOwed = 448112;/const cash = 6256194, cardOwed = 498935;/' /home/nicholas-wood/.claude/jobs/59e73a46/tmp/netpos3.ts && bun /home/nicholas-wood/.claude/jobs/59e73a46/tmp/netpos3.ts 2>&1 | tail -10",
+      "description": "Reproduce widget delta with fresh balances"
+    },
+    "timestamp": "2026-08-23T08:03:43.949Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/envelope-os && rg -n \"unexplainedDeltaCents|reconciledDeltaCents|uncategorised\" web/src/components/budget/NetPositionWidget.tsx | head -20",
+      "description": "Check which delta the widget displays"
+    },
+    "timestamp": "2026-08-23T08:03:58.034Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transactions",
+    "input": {
+      "transaction_account_id": 4771153,
+      "start_date": "2026-03-01",
+      "end_date": "2026-05-31",
+      "per_page": 10,
+      "page": 1
+    },
+    "timestamp": "2026-08-23T08:04:11.914Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transactions",
+    "input": {
+      "transaction_account_id": 4771153,
+      "start_date": "2026-06-01",
+      "end_date": "2026-08-23",
+      "per_page": 10,
+      "page": 1
+    },
+    "timestamp": "2026-08-23T08:04:18.287Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls -la /home/nicholas-wood/.claude/jobs/59e73a46/tmp/ && wc -l /home/nicholas-wood/.claude/jobs/59e73a46/tmp/ps-card.txt /home/nicholas-wood/.claude/jobs/59e73a46/tmp/penny-card.txt && cp /home/nicholas-wood/.claude/jobs/59e73a46/tmp/ps-card.txt /home/nicholas-wood/.claude/jobs/59e73a46/tmp/ps-card-aug19.txt && sed -i 's/ps-card.txt/ps-card-today.txt/' /home/nicholas-wood/.claude/jobs/59e73a46/tmp/extract.py && rm -f /home/nicholas-wood/.claude/jobs/59e73a46/tmp/ps-card-today.txt && echo ready",
+      "description": "Preserve 19 Aug snapshot, point extractor at today file"
+    },
+    "timestamp": "2026-08-23T08:47:47.925Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transactions",
+    "input": {
+      "transaction_account_id": 4771153,
+      "start_date": "2026-03-01",
+      "end_date": "2026-05-31",
+      "per_page": 100,
+      "page": 1
+    },
+    "timestamp": "2026-08-23T08:47:52.714Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "python3 /home/nicholas-wood/.claude/jobs/59e73a46/tmp/extract.py /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787474874774.txt",
+      "description": "Extract Mar-May page 1 (today)"
+    },
+    "timestamp": "2026-08-23T08:47:58.884Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transactions",
+    "input": {
+      "transaction_account_id": 4771153,
+      "start_date": "2026-03-01",
+      "end_date": "2026-05-31",
+      "per_page": 100,
+      "page": 2
+    },
+    "timestamp": "2026-08-23T08:48:02.187Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "python3 /home/nicholas-wood/.claude/jobs/59e73a46/tmp/extract.py /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787474883865.txt",
+      "description": "Extract Mar-May page 2 (today)"
+    },
+    "timestamp": "2026-08-23T08:48:07.396Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transactions",
+    "input": {
+      "transaction_account_id": 4771153,
+      "start_date": "2026-03-01",
+      "end_date": "2026-05-31",
+      "per_page": 100,
+      "page": 3
+    },
+    "timestamp": "2026-08-23T08:48:10.813Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "python3 /home/nicholas-wood/.claude/jobs/59e73a46/tmp/extract.py /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787474892634.txt",
+      "description": "Extract Mar-May page 3 (today)"
+    },
+    "timestamp": "2026-08-23T08:48:16.435Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transactions",
+    "input": {
+      "transaction_account_id": 4771153,
+      "start_date": "2026-03-01",
+      "end_date": "2026-05-31",
+      "per_page": 100,
+      "page": 4
+    },
+    "timestamp": "2026-08-23T08:48:19.644Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "python3 /home/nicholas-wood/.claude/jobs/59e73a46/tmp/extract.py /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787474900983.txt",
+      "description": "Extract Mar-May page 4 (today)"
+    },
+    "timestamp": "2026-08-23T08:48:25.287Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transactions",
+    "input": {
+      "transaction_account_id": 4771153,
+      "start_date": "2026-06-01",
+      "end_date": "2026-08-23",
+      "per_page": 100,
+      "page": 1
+    },
+    "timestamp": "2026-08-23T08:48:28.524Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "python3 /home/nicholas-wood/.claude/jobs/59e73a46/tmp/extract.py /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787474909774.txt",
+      "description": "Extract Jun-Aug page 1 (today)"
+    },
+    "timestamp": "2026-08-23T08:48:34.234Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transactions",
+    "input": {
+      "transaction_account_id": 4771153,
+      "start_date": "2026-06-01",
+      "end_date": "2026-08-23",
+      "per_page": 100,
+      "page": 2
+    },
+    "timestamp": "2026-08-23T08:48:37.524Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "python3 /home/nicholas-wood/.claude/jobs/59e73a46/tmp/extract.py /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787474919004.txt",
+      "description": "Extract Jun-Aug page 2 (today)"
+    },
+    "timestamp": "2026-08-23T08:48:42.355Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transactions",
+    "input": {
+      "transaction_account_id": 4771153,
+      "start_date": "2026-06-01",
+      "end_date": "2026-08-23",
+      "per_page": 100,
+      "page": 3
+    },
+    "timestamp": "2026-08-23T08:48:45.684Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "python3 /home/nicholas-wood/.claude/jobs/59e73a46/tmp/extract.py /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787474928383.txt",
+      "description": "Extract Jun-Aug page 3 (today)"
+    },
+    "timestamp": "2026-08-23T08:48:51.924Z"
+  },
+  {
+    "name": "mcp__pocketsmith__list_transactions",
+    "input": {
+      "transaction_account_id": 4771153,
+      "start_date": "2026-06-01",
+      "end_date": "2026-08-23",
+      "per_page": 100,
+      "page": 4
+    },
+    "timestamp": "2026-08-23T08:48:55.654Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "python3 /home/nicholas-wood/.claude/jobs/59e73a46/tmp/extract.py /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/59e73a46-fd2f-44e7-8edc-f3f51e19b37b/tool-results/mcp-pocketsmith-list_transactions-1787474936647.txt\ncd /home/nicholas-wood/.claude/jobs/59e73a46/tmp && python3 - <<'EOF'\ndef load(path):\n    d={}\n    for line in open(path):\n        p=line.rstrip(\"\\n\").split(\"|\")\n        d[p[0]]=(p[1],int(p[2]),p[3],p[4])   # id -> (date, cents, status, payee)\n    return d\nold=load(\"ps-card-aug19.txt\")   # PocketSmith feed as of 19 Aug\nnew=load(\"ps-card-today.txt\")   # PocketSmith feed today (23 Aug)\nprint(\"old\",len(old),\"new\",len(new))\ngone=set(old)-set(new)\nadded=set(new)-set(old)\nprint(\"=== VANISHED since 19 Aug (in feed then, gone now) ===\")\ntot=0\nfor i in sorted(gone):\n    print(f\"  id={i} {old[i][0]} {old[i][1]/100:>9.2f} {old[i][2]:>8} {old[i][3]}\")\n    tot+=old[i][1]\nprint(f\"  vanished net: {tot/100:.2f}\")\nprint(\"=== AMOUNT CHANGED ===\")\ndtot=0\nfor i in set(old)&set(new):\n    if old[i][1]!=new[i][1]:\n        print(f\"  id={i} {old[i][3][:40]}: {old[i][1]/100:.2f} ({old[i][2]}) -> {new[i][1]/100:.2f} ({new[i][2]})\")\n        dtot+=new[i][1]-old[i][1]\nprint(f\"  amount-change net: {dtot/100:.2f}\")\nprint(\"=== ADDED since 19 Aug ===\")\natot=0\nfor i in sorted(added, key=lambda x: new[x][0]):\n    print(f\"  id={i} {new[i][0]} {new[i][1]/100:>9.2f} {new[i][2]:>8} {new[i][3][:45]}\")\n    atot+=new[i][1]\nprint(f\"  added net: {atot/100:.2f}\")\nprint(\"=== STATUS FLIPS (pending->posted) with date shifts ===\")\nfor i in set(old)&set(new):\n    if old[i][2]!=new[i][2] or old[i][0]!=new[i][0]:\n        print(f\"  id={i} {old[i][3][:35]}: {old[i][0]} {old[i][2]} -> {new[i][0]} {new[i][2]} amt {new[i][1]/100:.2f}\")\nEOF",
+      "description": "Diff PocketSmith feed 19 Aug vs 23 Aug to find vanished/changed transactions"
+    },
+    "timestamp": "2026-08-23T08:49:08.565Z"
+  }
+]
