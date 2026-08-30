@@ -1,0 +1,42 @@
+// Minimal docx -> text: paragraphs per line, table cells joined with " | "
+import { $ } from "bun";
+
+const [input, output] = Bun.argv.slice(2);
+const xml = await $`unzip -p ${input} word/document.xml`.text();
+
+const decode = (s: string) =>
+  s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+
+const lines: string[] = [];
+// Split on paragraph boundaries; handle table rows by grouping cells
+const rowRe = /<w:tr[ >][\s\S]*?<\/w:tr>/g;
+const paraRe = /<w:p[ >][\s\S]*?<\/w:p>/g;
+const textOf = (frag: string) =>
+  decode((frag.match(/<w:t(?: [^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\/>|<w:br\/>/g) ?? [])
+    .map((m) => (m === "<w:tab/>" ? "\t" : m === "<w:br/>" ? "\n" : m.replace(/<[^>]+>/g, "")))
+    .join(""));
+
+// Walk body sequentially: rows and non-table paragraphs
+const body = xml.slice(xml.indexOf("<w:body>"));
+let i = 0;
+const tokenRe = /<w:tr[ >][\s\S]*?<\/w:tr>|<w:p[ >][\s\S]*?<\/w:p>/g;
+let m: RegExpExecArray | null;
+let lastEnd = 0;
+while ((m = tokenRe.exec(body))) {
+  const frag = m[0];
+  if (frag.startsWith("<w:tr")) {
+    const cells = (frag.match(/<w:tc[ >][\s\S]*?<\/w:tc>/g) ?? []).map((c) =>
+      (c.match(paraRe) ?? []).map(textOf).join(" ").trim()
+    );
+    lines.push("| " + cells.join(" | ") + " |");
+  } else {
+    const style = frag.match(/<w:pStyle w:val="([^"]+)"/)?.[1] ?? "";
+    const t = textOf(frag).trim();
+    if (!t) { lines.push(""); continue; }
+    const h = /^Heading(\d)$/.exec(style);
+    const numbered = /<w:numPr>/.test(frag);
+    lines.push(h ? "#".repeat(+h[1]) + " " + t : numbered ? "- " + t : t);
+  }
+}
+await Bun.write(output, lines.join("\n").replace(/\n{3,}/g, "\n\n"));
+console.log(`${lines.length} lines -> ${output}`);

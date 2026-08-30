@@ -1,17 +1,17 @@
 {
   "proto": 1,
-  "supervisorPid": 671479,
-  "updatedAt": 1787616117675,
+  "supervisorPid": 2617362,
+  "updatedAt": 1788088804286,
   "workers": {
     "379c203c": {
-      "pid": 1673511,
-      "procStart": "55755714",
+      "pid": 2620952,
+      "procStart": "117534149",
       "sessionId": "379c203c-5071-4a12-956b-fe7864d0221f",
       "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/379c203c.sock",
       "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/d078f751.pty.sock",
-      "cliVersion": "2.1.241",
+      "cliVersion": "2.1.251",
       "startedAt": 1787472279106,
-      "attempt": 1,
+      "attempt": 2,
       "cwd": "/home/nicholas-wood/.claude",
       "dispatch": {
         "proto": 1,
@@ -62,16 +62,130 @@
       "firedInteractiveMarks": [
         {
           "kind": "content_paint",
-          "msgsLoaded": 198,
-          "msgsInJsonl": 198,
-          "msgsRenderedAtFirstPaint": 202
+          "msgsLoaded": 407,
+          "msgsInJsonl": 407,
+          "msgsRenderedAtFirstPaint": 411
         },
         {
           "kind": "prompt_idle"
         }
       ],
       "rvAuth": "8f75a473dbcb98e6e4672406cf90eb8d",
-      "ptyAuth": "c4b6b6635171c493ca5beea74b4bf001"
+      "ptyAuth": "c4b6b6635171c493ca5beea74b4bf001",
+      "replPid": 2620965,
+      "replProcStart": "117534165"
+    },
+    "1277ffe3": {
+      "pid": 2613379,
+      "procStart": "117531233",
+      "sessionId": "1277ffe3-c398-482d-a577-9c78f5db0215",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/1277ffe3.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/c92e1632.pty.sock",
+      "cliVersion": "2.1.243",
+      "startedAt": 1788084290453,
+      "attempt": 1,
+      "cwd": "/home/nicholas-wood/.claude",
+      "dispatch": {
+        "proto": 1,
+        "short": "1277ffe3",
+        "nonce": "9235818f",
+        "sessionId": "1277ffe3-c398-482d-a577-9c78f5db0215",
+        "createdAt": 1788084290445,
+        "source": "spare",
+        "cwd": "/home/nicholas-wood/.claude",
+        "launch": {
+          "mode": "prompt",
+          "args": [
+            "--session-id",
+            "1277ffe3-c398-482d-a577-9c78f5db0215",
+            "--agent",
+            "claude"
+          ],
+          "restoresTranscript": false
+        },
+        "env": {},
+        "isolation": "none",
+        "respawnFlags": [
+          "--agent",
+          "claude"
+        ],
+        "agent": "claude",
+        "seed": {
+          "intent": ""
+        },
+        "cols": 212,
+        "rows": 50
+      },
+      "decModes": [
+        1000,
+        1002,
+        1003,
+        1006,
+        2004,
+        1004,
+        2031
+      ],
+      "rvAuth": "56f50a5a343a918b3f1059b3137d10ff",
+      "ptyAuth": "cbe73b6ffb4a561c930d466fb70633f9",
+      "replPid": 2613415,
+      "replProcStart": "117531259"
+    },
+    "2869fbd7": {
+      "pid": 671560,
+      "procStart": "70713958",
+      "sessionId": "2869fbd7-6479-4f92-96a2-e0791fc3286f",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/2869fbd7.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/e755ebe9.pty.sock",
+      "cliVersion": "2.1.243",
+      "startedAt": 1788084290438,
+      "attempt": 1,
+      "cwd": "/home/nicholas-wood/.claude",
+      "dispatch": {
+        "proto": 1,
+        "short": "2869fbd7",
+        "nonce": "2d2dfbc1",
+        "sessionId": "2869fbd7-6479-4f92-96a2-e0791fc3286f",
+        "createdAt": 1788084290434,
+        "source": "fleet",
+        "cwd": "/home/nicholas-wood/.claude",
+        "launch": {
+          "mode": "prompt",
+          "args": [
+            "--session-id",
+            "2869fbd7-6479-4f92-96a2-e0791fc3286f",
+            "--agent",
+            "claude",
+            "--",
+            "I need to do some work for state comms role on the incident categorisation project. Please summarise to me what your understanding of that is"
+          ],
+          "restoresTranscript": false
+        },
+        "env": {},
+        "isolation": "none",
+        "respawnFlags": [
+          "--agent",
+          "claude"
+        ],
+        "agent": "claude",
+        "seed": {
+          "intent": "I need to do some work for state comms role on the incident categorisation project. Please summarise to me what your understanding of that is"
+        },
+        "cols": 212,
+        "rows": 50
+      },
+      "decModes": [
+        1000,
+        1002,
+        1003,
+        1006,
+        2004,
+        1004,
+        2031
+      ],
+      "rvAuth": "75b1fc03a9114a88562c950814f28c92",
+      "ptyAuth": "5dee83021c0afbdd45482bcb2f3343f5",
+      "replPid": 671660,
+      "replProcStart": "70713978"
     }
   }
 }

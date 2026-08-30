@@ -1,0 +1,255 @@
+# First Aid Form Upgrade: 2025/26 Season Analysis
+
+**Source:** First Aid Form Data.xlsx (OneDrive inbox, as at 9 August 2026)
+**Method:** All figures re-derived from the raw season sheets (20-21 through 25-26_NEW) using the scripts in `analysis/`. The colleague-crunched sheets (Year 2 Year, Stats (25-26), By Unit, Resus) were treated as claims to reconcile, not as sources. Every 2025/26 figure in those sheets that was tested reconciled exactly on the all-lodged basis; the prior-season formulas in Year 2 Year are broken and corrected figures appear below.
+**Analysis base:** The 2025/26 analysis uses the 1,420 completed new-form cases. The 74 forms still open at export are excluded from every figure and described in section 8. Season totals (section 3) count every lodged case.
+**Scope discipline:** Nothing in this document relies on information outside the workbook. Limitations are stated at the end. No narrative text from any record is reproduced.
+
+---
+
+## 1. About the first aid form
+
+Whenever a lifesaver, lifeguard or event first aider treats a person, a first aid form is completed in LSV's incident management system. The record captures who was treated, what they presented with, what was done, and how the patient left care. Cases a crew classifies as major can be linked to an LSV Communications incident number so the first aid record and the operational incident sit together.
+
+Until November 2025 every case saw the same flat form: a fixed set of fields (injury type, initial treatment, body location, activity at the time, who the patient was released to) plus one free-text notes box where all other clinical detail had to be written. Data that did not fit the fixed fields existed only as prose.
+
+The new form presents question sets based on the case. The nature of the presentation (injury, medical, envenomation, environmental, mental health, suspected drowning, resuscitation, drug or alcohol) opens a specific-problem question set for that nature. Treatments given open their own sets: administering oxygen asks for method, time applied and duration; administering methoxyflurane asks for vial number, dose times, contraindications, adverse effects and pain ratings before, at two minutes and at four minutes; performing resuscitation asks for equipment, airway assessment, method, time of first compression, defibrillation time, CPR cycles, first AED rhythm, shock count and the patient's state at handover. The discharge set records the pathway, ambulance handover and the patient's condition, and a closing set asks whether the responder needs peer support or experienced occupational violence. A member sees only the questions that apply to the case in front of them.
+
+The old form was retired on 9 November 2025 and the new form went live on 12 November 2025. Of the 1,494 new-form cases lodged by the export date, 1,420 had been completed and 74 remained open in the workflow.
+
+## 2. Executive summary
+
+Six seasons of raw data (7,406 cases) support four conclusions.
+
+1. **The new form measures things the old form structurally could not.** Documentation delay, completion state, clinical timelines for resuscitation, analgesia audit trails, patient outcomes and responder welfare are all visible for the first time.
+2. **The branching design works.** On completed forms, at most 2.6 per cent of cases in any clinical branch did not record the specific problem, and every gap is accounted for (section 7).
+3. **Documentation is fast and timely.** Median time from opening a form to its final edit is 4 minutes; 87.0 per cent of completed cases are documented within one hour of treatment; 95.0 per cent of lodged forms reached completed status.
+4. **The data now describes the work directly.** Presentations, patients, responders, timing, treatments and outcomes are counted from structured fields (section 4), and the same data identifies its own improvement and training targets (sections 6 and 9).
+
+## 3. Data and reconciliation
+
+| Season | Cases lodged (re-derived) | Form |
+|---|---|---|
+| 2020/21 | 673 | Old |
+| 2021/22 | 920 | Old |
+| 2022/23 | 1,097 | Old |
+| 2023/24 | 1,510 | Old |
+| 2024/25 | 1,688 | Old |
+| 2025/26 | 1,518 (1,494 new: 1,420 completed, 74 open; plus 24 old) | New from 12 Nov 2025 |
+
+Presentations handled have grown 126 per cent across the six seasons. The 2024/25 export includes cases in every calendar month; restricting both seasons to the November-to-June window gives 1,465 (2024/25) against 1,518 (2025/26), a like-for-like increase of 3.6 per cent.
+
+Reconciliation: all tested 2025/26 figures in the colleague sheets match the raw data exactly on the all-lodged basis (name capture 863/422/209, DOB not captured 1,308, major 249 / minor 1,245, gender 767 M / 720 F / 5 non-binary / 2 other, peer support 7, occupational violence 1, incident-linked 253). Two corrections: the Year 2 Year sheet's prior-season totals display 1 for every season before 2025/26 (broken formula; correct values above), and its Age and Postcode "Captured" rows compute negative values for prior seasons.
+
+## 4. First aid activity in 2025/26 (completed new-form cases, n=1,420)
+
+### 4.1 What members respond to
+
+| Nature | Cases | Share | Leading specific problems |
+|---|---|---|---|
+| Injury | 984 | 69.3% | Laceration 369, soft tissue injury 196, abrasion 92, animal bite 66, head injury 57, bruise 49, bleeding 49, swelling 43, fracture 38, dislocation 36, foreign body 30, penetrating injury 30 |
+| Envenomation | 195 | 13.7% | Jellyfish 145, other 25, bee sting 14, ant 4, stingray 4, spider 1 |
+| Medical | 137 | 9.6% | Dizziness 35, asthma 31, nausea or vomiting 20, loss of consciousness 18, seizure 11, allergic reaction 11, chest pain 9, headache 7, cardiac arrest 4 |
+| Environmental | 57 | 4.0% | Hypothermia 25, other 17, heat stress 11, heat stroke 5, dehydration 2, chemical exposure 1 |
+| Other | 24 | 1.7% | |
+| Suspected drowning | 12 | 0.8% | Non-fatal 11, fatal 1 |
+| Drug and/or alcohol | 7 | 0.5% | |
+| Resuscitation | 7 | 0.5% | 5 under the resuscitation nature, 2 under medical (cardiac arrest) with the resuscitation set completed |
+| Mental health | 4 | 0.3% | Panic attack 4 |
+
+Twenty-eight cases carry more than one nature. Twenty-four completed cases (1.7 per cent) have no nature recorded (section 7). Cold exposure outnumbers heat: 25 hypothermia cases against 16 heat stress or heat stroke.
+
+Injury body location is recorded on 960 of 984 injury cases (2.4 per cent did not record one): foot 348, hand 154, head 108, face 101, knee 99, lower leg 88, ankle 70, arm 59. Feet account for more injuries than the next two sites combined.
+
+### 4.2 Who is treated
+
+- Cohort (recorded on 1,405 cases): public 935 (65.8 per cent), members 292 (20.6 per cent: club event 98, LSV event 86, on duty 60, off duty 48), event participants 166 (11.7 per cent), LSV staff and support 12.
+- Age (recorded on 1,401 cases): median 16, 54.5 per cent under 18. Bands: 0 to 4: 54; 5 to 9: 234; 10 to 14: 316; 15 to 19: 249; 20 to 29: 221; 30 to 39: 84; 40 to 49: 81; 50 to 59: 78; 60 to 69: 40; 70 and over: 44.
+- Severity rises with age: under 15, 5.0 per cent major; 15 to 29, 24.9 per cent; 30 to 49, 15.2 per cent; 50 and over, 34.6 per cent.
+- Age by nature: envenomation patients are youngest (median 12, 75 per cent under 18); medical patients are older (median 23, 14 per cent aged 60 or more); environmental median 25.
+- Gender: 724 male, 690 female, 5 non-binary, 1 other. Injuries skew male (528 of 982); environmental cases skew female (41 of 56).
+- Member cases are 18.2 per cent major against 16.9 per cent for the public. Median age is 16 for the public and 10 for club-event participants.
+
+### 4.3 Who treats and where
+
+- Treating skills (recorded on 1,396 cases, multi-select): lifesaver 786, lifeguard 496, first aider 473, health professionals 174 (nurse 48, medical practitioner 35, volunteer paramedic 31, ambulance 29, physiotherapist 18, other 13).
+- Logging unit type (derived from unit names; 123 units logged completed cases): volunteer clubs 826 (58.2 per cent), lifeguard services 394 (27.7 per cent), aquatic sports events 164 (11.5 per cent), support operations and other 36. The top ten units carry 33.6 per cent of cases, led by Aquatic Sports (164), Torquay Lifeguards (58) and Lorne Volunteers (45).
+
+### 4.4 When
+
+- Month (treatment time): November 52, December 381, January 615, February 150, March 126, April 35, May 31, June 30. January carries 43.3 per cent of the season.
+- Envenomation is sharply seasonal: December 58 and January 107 (85 per cent of the year), none after March.
+- Time of day: 15:00 to 18:00 is the busiest band (510), then 12:00 to 15:00 (480) and 09:00 to 12:00 (300). Weekends carry 51.3 per cent of cases.
+
+### 4.5 Treatments and discharge
+
+- Treatments (recorded on 1,389 cases, multi-select): ice 355, cleaned or irrigated 338, bandaid 278, wound management 200, bandage 186, hot water 156, cold water 121, dressed 106, RICER 79, oxygen 41, methoxyflurane 14.
+- Discharge (recorded on 1,390 cases): no referral 639 (45.0 per cent), into care of a competent adult 333 (23.5 per cent), GP or other doctor 152 (10.7 per cent), ambulance transported 93, hospital self-transport 65, hospital with adult 53, ambulance not transported 28, physiotherapist 12, refused care 8, clinician at the club 7.
+- Ambulance called on 138 cases (9.7 per cent, consistent with prior seasons); attended on 120; on 17 the ambulance was called but did not attend or was stood down.
+
+### 4.6 Resuscitations in detail
+
+Seven resuscitations were performed. Ventilation method: bag valve mask 5, mouth to mouth 1, other 1. First AED rhythm: shockable 2, not shockable 4, unknown 1. Shocks were delivered in three cases (2, 3 and 1). CPR cycles recorded: 3, 6, 15, 21, 30, 75 and 100. An AED was applied in all seven; an oropharyngeal airway and oxygen in four. Patient state at handover: breathing for themselves 2, conscious 1, deceased and confirmed by ambulance 4. Under the old form only 14 of 28 comparable 2024/25 cases carried any resuscitation detail.
+
+### 4.7 Severity by nature
+
+Share of cases classified major: resuscitation 5 of 5 (nature-level count), suspected drowning 11 of 12 (91.7 per cent), mental health 3 of 4, drug and/or alcohol 5 of 7 (71.4 per cent), medical 64 of 137 (46.7 per cent), environmental 15 of 57 (26.3 per cent), injury 137 of 984 (13.9 per cent), envenomation 7 of 195 (3.6 per cent). Exceptions are explained in section 7.
+
+### 4.8 Six-season trends from the shared taxonomy
+
+| Category (old-form injury_nature, share of season cases) | 20/21 | 21/22 | 22/23 | 23/24 | 24/25 | Reading |
+|---|---|---|---|---|---|---|
+| Abrasion / graze | 17.4% | 27.6% | 27.3% | 29.5% | 31.8% | Steady climb every season |
+| Laceration / cut | 25.4% | 21.6% | 20.3% | 20.9% | 21.5% | Stable near a fifth of cases |
+| Heat stroke / exhaustion | 0.7% | 2.5% | 3.7% | 2.9% | 4.1% | Rising across the period |
+| Marine sting | 7.9% | 15.5% | 7.9% | 6.8% | 8.8% | Episodic, not trending |
+| Cardiac problem | 1.5% | 2.1% | 1.8% | 1.4% | 1.0% | Stable, low volume |
+| Deceased | 3 | 1 | 3 | 7 | 1 | Counts per season |
+
+In 2025/26 the new taxonomy records envenomation as 13.7 per cent of completed cases (195), attributed at species level. Ambulance involvement (9.7 per cent called) is consistent with prior seasons (7.8 to 14.3 per cent released to ambulance).
+
+## 5. Clarity the new form created
+
+### 5.1 Documentation timeliness is measurable for the first time
+
+The old form's date field mirrors record creation time (in 2024/25 every computable treatment-to-creation delta is approximately zero, and only 460 of 1,688 rows carry the field). The new form records treatment time independently.
+
+| Measure (completed cases, n=1,420) | Result |
+|---|---|
+| Documented within 1 hour of treatment | 1,235 (87.0%) |
+| 1 to 3 hours | 93 |
+| 3 to 8 hours | 38 |
+| 8 to 24 hours | 13 |
+| 24 hours or more | 38 (section 7) |
+| Treatment time later than form creation (entry errors, excluded) | 3 |
+| Major incidents within 1 hour | 76.7% |
+| Minor incidents within 1 hour | 89.0% |
+
+### 5.2 Completion state is visible
+
+Old-form exports show every record as completed because the old workflow had no visible open state. The new workflow exposes it: 1,420 of 1,494 lodged forms (95.0 per cent) completed and 74 open (section 8). Median time from creation to last edit is 4 minutes (quartiles 3 and 12 minutes); 85.2 per cent of completed forms were finalised within an hour of being opened.
+
+### 5.3 Structured data replaced a free-text catch-all
+
+96.4 per cent of 2024/25 cases carried a free-text narrative. Under the new form only 15.8 per cent of completed cases need one; the same information lands in queryable fields, which is what makes section 4 possible.
+
+### 5.4 Medication, oxygen, outcomes and welfare
+
+- Methoxyflurane: 14 records with vial numbers, dose times, administering member, contraindications and adverse effects. Eight carry a starting pain score (mean 7.1 of 10, falling 2.6 points by four minutes across the seven with a four-minute score); six have no score entered. The old form recorded roughly 20 Penthrane administrations in 2024/25 as a bare treatment tag.
+- Oxygen: 47 administration records (therapy mask 37, bag valve mask 5, oxygen tubing 3).
+- Condition at discharge answered on 98.0 per cent of completed cases (1,379 conscious, 4 deceased, 2 unconscious, 7 other). Condition after treatment recorded on 253 cases; both deteriorations include the mechanism.
+- Hospital pathway (211 cases): ambulance handover documented on 117, destination hospital on 65, ambulance case number on 18.
+- Responder welfare, asked for the first time: 7 peer-support requests and 1 occupational-violence report.
+
+### 5.5 Capture rates, old form against new form
+
+| Field | 2024/25 (old, all cases) | 2025/26 (new, completed) | Direction |
+|---|---|---|---|
+| Any patient name | 72.1% | 87.5% | Up; not-captured fell from 27.9% to 12.5% |
+| Age | 99.9% | 98.7% | Held |
+| Gender | 100% | 100% | Held |
+| Phone | not available | 10.1% | New capability |
+| Date of birth | 34.0% | 11.4% | Down (age captured instead) |
+| Postcode | 94.9% | 82.5% | Down |
+| Address | 18.1% | 6.5% | Down |
+| Nationality | 34.9% | 6.3% | Down |
+| Activity at the time, experience, contributing factors | 100% | 0% | Not carried into the new form |
+
+The demographic declines are concentrated in fields the new design treats as optional; if DOB, address or nationality are organisationally required, that is a form-design decision rather than a member-performance problem. The activity, experience and contributing-factor questions were answered on every 2024/25 case (walking or playing near water 517, swimming or wading 401, competing in a carnival 151, training 114) and on none in 2025/26; whether they return belongs to the action-form design (section 11).
+
+## 6. Form performance
+
+### 6.1 Questions not answered on completed forms
+
+Share of completed cases carrying each nature where the specific-problem question is blank: envenomation 2.6 per cent (5 of 195), environmental 1.8 per cent (1 of 57), injury 0.3 per cent (3 of 984), medical 0 per cent (0 of 137), suspected drowning 0 per cent (0 of 12), mental health 0 per cent (0 of 4). 2.4 per cent of injury cases did not record a body location; 1.7 per cent of completed cases did not record a nature, 2.2 per cent no treatment, 2.1 per cent no discharge pathway. No malformed duplicate multiselect values exist in the core fields of the current export.
+
+### 6.2 Option lists that need work
+
+Free-text "Other" overflow by branch: environmental 30.4 per cent (17 of 56), envenomation 13.6 per cent (26 of 191), medical 10.2 per cent (14 of 137), nature 1.6 per cent, injury 1.1 per cent. The environmental free text is dominated by cold and heat exposure variants and dizziness; the envenomation free text is mostly unidentified stings and insect stings. The change register already includes option-list and field changes (SpO2 field, barriers optional, renames).
+
+## 7. Outliers explained
+
+Every exception quoted above is accounted for here from the structured fields of the completed records concerned.
+
+- **2.6 per cent of envenomation cases did not record the specific problem.** Five completed forms where the member passed the step without selecting an option; all five received sting-typical treatment (ice or hot water), and two of the five are classified major with no referral and no ambulance. The workflow allows the question to be skipped on completion; making it mandatory would close the gap.
+- **0.3 per cent of injury cases and 1.8 per cent of environmental cases did not record the specific problem.** Three completed injury forms and one completed environmental form (treatment "Other") skipped the step; none is classified major.
+- **Eleven of twelve suspected drownings are major.** The twelfth is a member of the public aged 12, recorded as a non-fatal suspected drowning, conscious at discharge, treatment "Other", no referral, no ambulance, no incident number and no narrative. The structured record describes a low-acuity episode the crew did not escalate; the absence of any narrative or incident link for a suspected drowning is itself a consistency point for the action-form work.
+- **Three of four mental health cases are major.** The fourth is a panic attack in a 27-year-old, no treatment required, no referral; classified minor consistently with those fields.
+- **Five resuscitation-nature cases, seven resuscitation records.** Two cardiac arrests were recorded under the medical nature with the resuscitation set completed. The question-set count (seven) is the reliable one.
+- **Envenomation 3.6 per cent major (seven cases).** Three stingray injuries (two to hospital with an adult, one by ambulance), one combined medical and envenomation case transported by ambulance, one jellyfish sting with no referral, and the two majors with no specific problem and no referral above. Stingray injuries drive the severity; the last three are classification inconsistencies rather than clinical escalations.
+- **Thirty-eight completed cases documented a day or more after treatment.** Thirty-one injuries; ten major; eighteen from club-event cohorts; two volunteer clubs account for sixteen of the thirty-eight. The pattern is retrospective entry after club events at a small number of units, not a system-wide lag.
+- **Three cases record treatment after the form was created** (44 minutes, 10 hours and 9 days later). Treatment-time entry errors; excluded from timeliness figures.
+- **Twenty-four completed forms (1.7 per cent) have no nature.** All have a free-text reason and a treatment, and all workflow steps are marked complete. The nature question can be passed without an answer; it should be mandatory because every downstream question set keys off it.
+- **232 completed cases classified major, 253 incident-linked.** The flags are set independently: 5 majors have no incident number and 26 incident-linked cases are not major, 31 completed records (2.2 per cent) where classification and link disagree. A further 17 open forms are flagged major with no link (section 8).
+- **Fourteen methoxyflurane records, eight pain trajectories.** Six have no starting score. Two of the eight start at 1 of 10; the remaining six start at 8 to 10 and fall 0 to 6 points by four minutes.
+
+## 8. Open forms (n=74)
+
+Forms created but not submitted as complete when the data was exported on 9 August 2026. Excluded from every figure above.
+
+| Measure | Open forms |
+|---|---|
+| Share of all new-form cases lodged | 5.0% (74 of 1,494) |
+| Created | January 33, February 22, March 11, April 4, May 2, June 2; none from November or December |
+| Age at export | 43 to 216 days open; median 184 days |
+| Workflow progress | 24 with no step recorded at all; 10 reached the third step; 8 have every step marked but were never submitted |
+| Nature recorded | 47 of 74 (injury 31, envenomation 8, environmental 2, medical 1, combined 3, blank 27) |
+| Other fields present | Age 71, name 43, treatment 43, discharge 41, specific problem 41 |
+| Classified major | 17, none linked to an incident number |
+| Unit type | Volunteer clubs 51, lifeguard services 16, aquatic sports 4, support and other 3 |
+| Most common units | Brighton Volunteers 6, Sandringham Volunteers 5, Aquatic Sports 4, Mentone Volunteers 4, Geelong Waterfront Lifeguards 4 |
+| Cohort | Public 27, blank 22, member at club event 8, member on duty 6 |
+
+Two observations follow. The 17 open forms flagged major with no incident link are where most of the season's unlinked major cases sit, and the 24 forms with no step recorded at all are forms that were opened and abandoned. An open-form review at season close, or an automatic prompt after a set number of days, would bring both groups to resolution.
+
+## 9. Training targets
+
+| Question set | Capture (completed cases) | Note |
+|---|---|---|
+| SAMPLE history (past medical history / allergies / medications) | 7.3% / 7.5% / 6.2% overall; 13.8% / 10.3% / 9.5% on majors | Matches the internal training flag; low even where it matters most |
+| Full name | FullName 58.3%, first name only 29.2% | Not-captured more than halved against the old form; first-name-only grew |
+| Ambulance case number | 18 of 211 hospital-pathway cases (8.5%) | Small effort, high value for continuity of care |
+| Outcome question on majors | 67 of 232 (28.9%) | Worth reinforcing for major incidents |
+| Care participants | 39 of 1,420 (2.7%) | Rarely used |
+
+## 10. Statistics for presentation
+
+1. Cutover in three days: last old form 9 November, first new form 12 November; 1,494 new-form cases lodged in season one with no parallel running, 1,420 of them completed.
+2. Median 4 minutes from opening a form to its final edit; 95.0 per cent of lodged forms completed.
+3. 87.0 per cent of completed cases documented within one hour of treatment, measurable for the first time this season.
+4. On completed forms, at most 2.6 per cent of cases in any clinical branch did not record the specific problem, with every gap accounted for.
+5. Unidentified patients more than halved, from 27.9 to 12.5 per cent.
+6. Seven resuscitations with method, rhythm, shocks, cycles and handover state recorded on every one; the old form carried any detail on half of comparable cases.
+7. Oxygen (47) and methoxyflurane (14) administrations with structured audit records; recorded pain falling from a mean of 7.1 by 2.6 points within four minutes.
+8. 984 injuries, 195 envenomations, 137 medical and 57 environmental presentations, each with specific problems, body locations, treatments and discharge pathways counted directly.
+9. Seven peer-support requests surfaced through a question that previously did not exist.
+10. Form improvement is now empirical: free-text overflow rates identify the exact option lists to fix.
+11. 126 per cent six-season growth in presentations; January carries 43.3 per cent of the season and weekends 51.3 per cent.
+
+## 11. Where to next
+
+### 11.1 One action form
+
+The first aid form and the rescue form will be combined into a single action form with one clear definition for members: one form for one person assisted. This removes the need for a member to remember to complete one or both forms, to decide which form applies, or to enter the same personal details twice. It will be one form, with questions presented dynamically for the rescue, for the first aid, or for both.
+
+The result is a record that is accurately captured, reported cohesively, and linked to incidents consistently. The 31 completed records in this season's data where the major classification and the incident link disagree, the 17 open forms flagged major with no link, and the suspected drowning with no incident number, are the kind of inconsistency the single form is designed to remove at source. Above all, the organisation gains consistency and completeness of data that allow it to be more informed than at any previous point.
+
+The first aid form project has been a key signifier of what is possible when the system meets the need, and of the benefits of accurate, complete and consistent data.
+
+### 11.2 Incident categorisation
+
+Following this work, a similar program will be applied to the incident categorisation approach. It will simplify categorisation for members, capture more accurately what is being done on the beach, and make the system easier to use and understand, with clear standards on how information is captured. Stronger data quality and consistency will in turn support operational decisions, reporting, funding submissions and everything else that good data enables.
+
+## 12. Limitations
+
+- The workbook contains no user-satisfaction survey; satisfaction claims rest on behavioural evidence (completion rate, speed, adoption, answer rates).
+- Resuscitation (7) and methoxyflurane (14) counts are small; report them as counts.
+- Old and new taxonomies differ; cross-form trend comparisons use shared categories only.
+- Timestamps measure documentation behaviour, not care delivery.
+- Season-on-season volume comparisons use the matched November-to-June window, and season totals include open forms.
+- Unit type is derived from unit names in the data, not from a separate classification.
+- The old-form comparison figures (2024/25) include every lodged case because the old export has no open state; the 2025/26 figures use completed cases only.
+
+---
+
+*Prepared from First Aid Form Data.xlsx only. Analysis scripts in `analysis/` reproduce every figure from the raw sheets (`analyze6.ts` for the completed-forms base and the open-forms profile). Visual version: https://claude.ai/code/artifact/2ccce9a8-6a50-4edf-8e32-91c045e7765b*
