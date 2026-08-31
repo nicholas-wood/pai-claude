@@ -2,11 +2,11 @@
 task: Rewrite SOP 4.3 Incident Notifications against the LIMSOC Incident Categorisation v0.9 model with a per-incident subscription list
 slug: sop-4-3-notifications-v0-9
 effort: E3
-phase: verify
-progress: 43/44
+phase: complete
+progress: 44/44
 mode: standard
 started: 2026-08-30T20:20:00+10:00
-updated: 2026-08-30T21:30:00+10:00
+updated: 2026-08-30T22:20:00+10:00
 ---
 
 # ISA — SOP 4.3 Incident Notifications v2.0 (v0.9 model)
@@ -102,7 +102,7 @@ Produce SOP 4.3 v2.0 whose Procedure defines the per-incident subscription list 
 - [x] ISC-39: Related Information cross-references correct (SOP 1.2, 1.3, 4.4, v0.9 pack) (verify: list)
 - [x] ISC-40: Revision table adds v2.0 with author and reason (verify: row present)
 - [x] ISC-41: Platform requirements annex lists rule engine needs (inherited Type rules, Tag rules, Outcome rules, condition timers, subscription persistence, Supervisor removal, audit of notifications in chronology) (verify: ≥7 items)
-- [DEFERRED-VERIFY] ISC-42: (follow-up: obtain LSV SOP .docx template; v1.1 arrived as PDF only) Docx rendered programmatically and pushed to OneDrive with rclone copy, verified with rclone lsl (verify: listing)
+- [x] ISC-42: Docx rendered programmatically and pushed to OneDrive with rclone copy, verified with rclone lsl (verify: listing)
 
 ### Cross-checks
 - [x] ISC-43: Every Type, Tag, Status and Outcome name in the SOP matches v0.9 spelling (verify: rg each against v0.9 mirror)
@@ -171,3 +171,14 @@ Produce SOP 4.3 v2.0 whose Procedure defines the per-incident subscription list 
 - ISC-43: 22 Type, Status and Outcome names checked by rg -F against the v0.9 mirror, all found
 - ISC-44: rg ' you ' = 0, em dash = 0, 'separately|separate list' = 0 in SOP-4.3-v2.0.md
 - 2026-08-30 (Nick): Outcome can be set before closure. Item 11 (Should-attend timing) dissolved; Outcome Fatality carries both the escalation and the ARO Should attend. Remaining 11 items adopted as defaults and carried into the SOP as Annex C. Pack feedback for Phase 6: Outcome wording "set when known, required at closure".
+- ISC-42: docx rendered by template surgery on SOP 4.3 v1.3.docx (tools/render-sop.ts): body replaced, sectPr/headers/footers/styles/numbering kept, comment parts stripped, footer effective-date line replaced. unzip -t clean; round-trip extraction 4222 words vs 4238 source; 50 migration rows; document.xml 950/950 <w:p>, 14/14 <w:tbl>. Pushed to onedrive:06_Lifesaving/LSV/2026/LIMSOC/SOP 4.3 Incident Notifications/ and listed with rclone lsl. Visual check in Word not possible on this box (no LibreOffice); Nick to open.
+- 2026-08-30 (Nick, evening, four messages): v1.3 docx was in the inbox (landed 20:38, after my scans; I failed to rescan before declaring the template missing). Broadcast generalised to LSV Comms; subscribers added by LSV Comms attaching an officer unit; Protracted note that SUP, ARO, SDO are already subscribed at open; False Alarm has no trigger; Off-duty response Tag removed; state resource, multiple services and manual rows removed. Applied to SOP and design doc, zero misses.
+- 2026-08-30: refined: baseline is SOP 4.3 v1.3 (D. Potter draft, revision row 1.2): Welfare Duty Officer column with values on D01, D05, D08, D09, E02, E03, E12, DZZ conditional; role renamed Lifesaving Operations Lead (Ops Lead). WDO rules derived from v1.3 rather than my recommendation: Type Cardiac Arrest, Type Overdose, Type Penetrating Trauma, Tag Major First Aid, Outcome Fatality, Tag Rescue Completed scoped to SAR > Rescue > Person > Water, Tag Member Injury unconditional. Annex C now 13 items. ISC-29 satisfied by v1.3-derived rules; ISC-25 columns now nine in v1.3 order.
+- 2026-08-30: Lesson for LEARN: when Nick says a file is in the inbox, rescan the inbox immediately rather than trusting an earlier listing; the OneDrive sync lag and my scan timing produced a false "missing template" blocker.
+
+## Changelog
+
+- conjectured: SOP 4.3 v1.1 (PDF) was the latest version and the docx template was unavailable, so docx export had to be deferred.
+- refuted_by: Nick's "I gave you v1.3 as a doc"; rclone lsl of the inbox showed v1.3.docx at 20:38, after my two scans.
+- learned: inbox state changes during a session; every claim that a file is missing must be preceded by a fresh listing at that moment.
+- criterion_now: ISC-42 passed by template surgery on v1.3; future SOP tasks start with a fresh inbox listing before any "missing" claim.

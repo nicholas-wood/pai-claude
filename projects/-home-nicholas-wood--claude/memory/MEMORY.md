@@ -29,3 +29,4 @@
 - [Radix Select/Dialog touch gotchas](gotcha-radix-select-dialog-touch.md) — touch-only dismissal bugs, closed-content renders, isolated BudgetBuddy harness pattern
 - [BudgetBuddy v1.20.0 state](project-budgetbuddy-v1200-state.md) — shipped 13 Aug; roll_carry everywhere, grid counts pending, widget contains zero-base; verify before asserting
 - [Pulse latch + voice quota](gotcha-pulse-latch-voice-quota.md) — stop daemon before editing state.json; free ElevenLabs = Adam only, alert spam burns TTS quota; no claude-type jobs needing tools
+- [Inbox rescan before missing claim](gotcha-inbox-rescan-before-missing-claim.md) — 00_Inbox changes mid-session; fresh rclone lsl before saying a file Nick dropped is missing
