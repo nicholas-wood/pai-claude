@@ -1,0 +1,264 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { useParams } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+
+type CredentialInfo = {
+  id: string;
+  serialNumber: string | null;
+  credentialTypeName: string | null;
+  accessLevelName: string | null;
+  issuedAt: string | null;
+  expiresAt: string | null;
+};
+
+type AttestationData = {
+  attestation: { id: string; season: string; status: string };
+  member: { firstName: string; lastName: string };
+  tenant: { name: string; slug: string };
+  credentials: CredentialInfo[];
+};
+
+type CredentialResponse = {
+  credentialId: string;
+  confirmed: boolean;
+  note: string;
+  showNote: boolean;
+};
+
+export default function AttestationPage() {
+  const params = useParams<{ slug: string; token: string }>();
+  const slug = params.slug;
+  const token = params.token;
+
+  const [data, setData] = useState<AttestationData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [responses, setResponses] = useState<CredentialResponse[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/v1/t/${slug}/attestations/${token}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to load this page");
+      }
+      const result: AttestationData = await res.json();
+      setData(result);
+      setResponses(
+        result.credentials.map((c) => ({
+          credentialId: c.id,
+          confirmed: true,
+          note: "",
+          showNote: false,
+        }))
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  }, [slug, token]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  function toggleConfirmed(index: number) {
+    setResponses((prev) =>
+      prev.map((r, i) =>
+        i === index
+          ? { ...r, confirmed: !r.confirmed, showNote: !r.confirmed ? false : true }
+          : r
+      )
+    );
+  }
+
+  function toggleNote(index: number) {
+    setResponses((prev) =>
+      prev.map((r, i) => (i === index ? { ...r, showNote: !r.showNote } : r))
+    );
+  }
+
+  function updateNote(index: number, note: string) {
+    setResponses((prev) =>
+      prev.map((r, i) => (i === index ? { ...r, note } : r))
+    );
+  }
+
+  async function handleSubmit() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/t/${slug}/attestations/${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          responses: responses.map((r) => ({
+            credentialId: r.credentialId,
+            confirmed: r.confirmed,
+            ...(r.note ? { note: r.note } : {}),
+          })),
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to submit your confirmation");
+      }
+      setSubmitted(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  if (error && !data) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6 text-center">
+            <p className="text-destructive">{error}</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (submitted) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6 text-center space-y-2">
+            <h2 className="text-lg font-semibold">Thank you!</h2>
+            <p className="text-muted-foreground">
+              Your confirmation has been submitted successfully.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const formatDate = (iso: string | null) => {
+    if (!iso) return "-";
+    return new Date(iso).toLocaleDateString("en-AU", {
+      timeZone: "Australia/Melbourne",
+    });
+  };
+
+  return (
+    <div className="mx-auto max-w-lg space-y-6 p-4 py-8">
+      <div className="text-center space-y-1">
+        <h1 className="text-2xl font-bold">{data.tenant.name}</h1>
+        <p className="text-muted-foreground">Season {data.attestation.season}</p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            Hi {data.member.firstName}, please confirm you still have the
+            following fobs and keys:
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {data.credentials.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No active fobs or keys found.
+            </p>
+          ) : (
+            data.credentials.map((cred, index) => (
+              <div
+                key={cred.id}
+                className="rounded border p-3 space-y-2"
+              >
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={responses[index]?.confirmed ?? true}
+                    onChange={() => toggleConfirmed(index)}
+                    className="mt-1 h-4 w-4 rounded border-gray-300"
+                  />
+                  <div className="flex-1">
+                    <p className="font-medium text-sm">
+                      {cred.credentialTypeName ?? "Fob or key"}
+                      {cred.serialNumber && (
+                        <span className="ml-1 text-muted-foreground">
+                          #{cred.serialNumber}
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {cred.accessLevelName ?? "No access level"}
+                      {" \u00B7 "}
+                      Issued {formatDate(cred.issuedAt)}
+                      {cred.expiresAt && ` \u00B7 Expires ${formatDate(cred.expiresAt)}`}
+                    </p>
+                  </div>
+                </label>
+
+                {!responses[index]?.confirmed && (
+                  <p className="text-xs text-amber-600 ml-7">
+                    This fob or key will be reported as lost and a replacement
+                    will be requested.
+                  </p>
+                )}
+
+                {responses[index]?.confirmed && !responses[index]?.showNote && (
+                  <button
+                    type="button"
+                    onClick={() => toggleNote(index)}
+                    className="ml-7 text-xs text-blue-600 hover:underline"
+                  >
+                    Add note
+                  </button>
+                )}
+
+                {(responses[index]?.showNote || !responses[index]?.confirmed) && (
+                  <textarea
+                    value={responses[index]?.note ?? ""}
+                    onChange={(e) => updateNote(index, e.target.value)}
+                    placeholder={
+                      responses[index]?.confirmed
+                        ? "Optional note..."
+                        : "Any details about the lost fob or key..."
+                    }
+                    maxLength={500}
+                    className="ml-7 w-[calc(100%-1.75rem)] rounded border p-2 text-xs resize-none"
+                    rows={2}
+                  />
+                )}
+              </div>
+            ))
+          )}
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          {data.credentials.length > 0 && (
+            <Button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="w-full"
+            >
+              {submitting ? "Submitting..." : "Confirm"}
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
