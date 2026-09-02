@@ -1,0 +1,40 @@
+import { Database } from "bun:sqlite";
+const db = new Database(`${process.env.HOME}/.penny/penny.db`, { readonly: true });
+const q = (sql: string, ...p: unknown[]) => db.query(sql).all(...(p as never[]));
+const out: string[] = [];
+const log = (t: string, v: unknown) => out.push(`== ${t} ==\n${JSON.stringify(v, null, 1)}`);
+
+log("MYSTERY ENVELOPE 51a901bc", q(`SELECT id, name, type, rollover_rule, carryover_cents, rollover_start, carryover_anchor, active, archived FROM envelopes WHERE id = '51a901bc-5ad1-45d9-82b8-6de2e7d81a0b'`));
+
+log("TEMPLATE LINES Compliance + Leasing Fees + any ending Aug or starting Sep", q(`SELECT bt.envelope_id, COALESCE(e.name, ie.name, bt.envelope_id) name, bt.amount_cents, bt.period, bt.effective_from, bt.effective_to
+  FROM budget_template bt
+  LEFT JOIN envelopes e ON e.id = bt.envelope_id AND e.user_id = bt.user_id
+  LEFT JOIN income_envelopes ie ON ie.id = bt.envelope_id AND ie.user_id = bt.user_id
+  WHERE bt.envelope_id IN ('419a2c55-495f-457d-aefe-41aa1f191e70','d1fe1684-d183-4c0b-a06e-4aca0ef61490')
+     OR bt.effective_to BETWEEN '2026-08-01' AND '2026-09-30'
+     OR bt.effective_from BETWEEN '2026-09-01' AND '2026-09-30'
+  ORDER BY name, bt.effective_from`));
+
+log("MAPPINGS TO INCOME ENVELOPES", q(`SELECT m.category_id, c.name cat, m.envelope_id, m.effective_from, m.effective_to
+  FROM mappings m LEFT JOIN categories c ON c.id = m.category_id AND c.user_id = m.user_id
+  WHERE m.envelope_id LIKE 'inc-%' ORDER BY m.envelope_id, m.effective_from`));
+
+// Monthly posted, non-transfer income to inc-rental / inc-salary via current mappings
+log("MONTHLY INCOME RECEIVED Jun-Sep (posted, non-transfer, via mappings)", q(`
+  SELECT substr(t.txn_date,1,7) month, m.envelope_id, SUM(t.amount_cents) cents, COUNT(*) n
+  FROM transactions t
+  JOIN mappings m ON m.category_id = t.category_id AND m.user_id = t.user_id
+    AND m.effective_from <= t.txn_date AND (m.effective_to IS NULL OR m.effective_to >= t.txn_date)
+  WHERE m.envelope_id LIKE 'inc-%' AND t.txn_date >= '2026-06-01' AND t.is_transfer = 0 AND t.is_pending = 0
+  GROUP BY month, m.envelope_id ORDER BY month`));
+
+log("RENTAL TXNS Aug-Sep detail", q(`
+  SELECT t.txn_date, t.amount_cents, t.payee, t.is_pending
+  FROM transactions t
+  JOIN mappings m ON m.category_id = t.category_id AND m.user_id = t.user_id
+    AND m.effective_from <= t.txn_date AND (m.effective_to IS NULL OR m.effective_to >= t.txn_date)
+  WHERE m.envelope_id = 'inc-rental' AND t.txn_date >= '2026-08-01' AND t.is_transfer = 0
+  ORDER BY t.txn_date`));
+
+await Bun.write(`${process.env.HOME}/.claude/jobs/b65b1bed/tmp/out3.txt`, out.join("\n\n"));
+process.exit(0);

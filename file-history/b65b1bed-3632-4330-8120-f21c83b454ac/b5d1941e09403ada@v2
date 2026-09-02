@@ -1,0 +1,30 @@
+/** Per-month unresolved (uncategorised) activity + wide-range widget check. */
+import { Database } from "bun:sqlite";
+import { SqliteStore } from "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/sqlite.ts";
+import { EnvelopeService } from "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts";
+
+const SNAP = "/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/netpos.db"; // reuse migrated snapshot
+const store = new SqliteStore(SNAP);
+const svc = new EnvelopeService(store, { holdingEnvelopeId: null, nabCardAccountIds: ["acc-nab"] }, { timezone: "Australia/Melbourne" });
+
+for (const m of [6, 7, 8, 9]) {
+  const g = await svc.getGridRange("local", { from: { year: 2026, month: m }, to: { year: 2026, month: m } });
+  console.log(`2026-0${m} unresolvedActivityCents:`, (g as { unresolvedActivityCents?: number }).unresolvedActivityCents);
+}
+// Wide view Jun..Sep — does the unexplained residue collapse into the uncat line?
+const wide = await svc.getGridRange("local", { from: { year: 2026, month: 6 }, to: { year: 2026, month: 9 } });
+const top = (wide.rows as { parentId: string | null; leftCents: number }[]).filter((r) => r.parentId === null);
+const leafLeft = top.reduce((s, r) => s + r.leftCents, 0);
+const incLeft = (wide.income as { carryoverCents: number; varianceCents: number }[]).reduce((s, i) => s + i.carryoverCents + i.varianceCents, 0);
+const awaiting = (wide.income as { awaitingCents?: number }[]).reduce((s, i) => s + (i.awaitingCents ?? 0), 0);
+console.log("WIDE Jun-Sep:", JSON.stringify({ leafLeft, incLeft, totalLeft: leafLeft + incLeft, awaiting, unresolved: (wide as { unresolvedActivityCents?: number }).unresolvedActivityCents }));
+
+// Uncategorised transactions since 1 Aug, posted+pending, with dates
+const db = new Database(SNAP, { readonly: true });
+console.log("UNCAT TXNS Aug+:", JSON.stringify(db.query(`
+  SELECT t.txn_date, t.amount_cents, t.payee, t.is_pending FROM transactions t
+  LEFT JOIN mappings m ON m.category_id = t.category_id AND m.user_id = t.user_id
+    AND m.effective_from <= t.txn_date AND (m.effective_to IS NULL OR m.effective_to >= t.txn_date)
+  WHERE t.user_id='local' AND t.txn_date >= '2026-08-01' AND t.is_transfer = 0 AND m.id IS NULL
+  ORDER BY t.txn_date`).all(), null, 1));
+process.exit(0);

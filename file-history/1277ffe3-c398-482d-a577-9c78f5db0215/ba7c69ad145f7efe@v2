@@ -1,0 +1,75 @@
+// Minimal docx → markdown-ish text extractor (headings, lists, tables, paragraphs).
+// Usage: bun docx2md.ts <file.docx> > out.md
+import { $ } from "bun";
+
+const file = Bun.argv[2];
+if (!file) { console.error("usage: bun docx2md.ts <file.docx>"); process.exit(1); }
+
+const xml = await $`unzip -p ${file} word/document.xml`.text();
+
+const decode = (s: string) =>
+  s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+
+function runsText(p: string): string {
+  // Concatenate w:t, w:tab, w:br inside a paragraph (excluding nested paragraphs which won't occur here)
+  let out = "";
+  const re = /<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>|<w:tab\/>|<w:br\/>|<w:t(?:\s[^>]*)?\/>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(p))) {
+    if (m[0].startsWith("<w:tab")) out += "\t";
+    else if (m[0].startsWith("<w:br")) out += "\n";
+    else if (m[1] !== undefined) out += decode(m[1]);
+  }
+  return out;
+}
+
+function paraToMd(p: string): string {
+  const text = runsText(p).trim();
+  const style = /<w:pStyle w:val="([^"]+)"/.exec(p)?.[1] ?? "";
+  const isList = /<w:numPr>/.test(p);
+  const ilvl = Number(/<w:ilvl w:val="(\d+)"/.exec(p)?.[1] ?? "0");
+  if (!text) return "";
+  const h = /^Heading(\d)$/i.exec(style) ?? /^Title$/i.test(style) ? ["", "0"] : null;
+  if (/^Title$/i.test(style)) return `# ${text}`;
+  const hm = /^Heading(\d)$/i.exec(style);
+  if (hm) return `${"#".repeat(Math.min(6, Number(hm[1]) + 1))} ${text}`;
+  if (isList || /^List/i.test(style)) return `${"  ".repeat(ilvl)}- ${text}`;
+  return text;
+}
+
+// Walk body: tables and top-level paragraphs in document order.
+const body = /<w:body>([\s\S]*)<\/w:body>/.exec(xml)?.[1] ?? xml;
+const lines: string[] = [];
+const tokenRe = /<w:tbl>[\s\S]*?<\/w:tbl>|<w:p[\s>][\s\S]*?<\/w:p>|<w:p\/>/g;
+let m: RegExpExecArray | null;
+let lastIndex = 0;
+while ((m = tokenRe.exec(body))) {
+  const tok = m[0];
+  if (tok.startsWith("<w:tbl>")) {
+    const rows = tok.match(/<w:tr[\s>][\s\S]*?<\/w:tr>/g) ?? [];
+    const tableRows: string[][] = [];
+    for (const r of rows) {
+      const cells = r.match(/<w:tc>[\s\S]*?<\/w:tc>/g) ?? [];
+      tableRows.push(
+        cells.map((c) => {
+          const ps = c.match(/<w:p[\s>][\s\S]*?<\/w:p>/g) ?? [];
+          return ps.map((p) => paraToMd(p).replace(/^#+\s*/, "")).filter(Boolean).join("<br>").replace(/\|/g, "\\|");
+        })
+      );
+    }
+    if (tableRows.length) {
+      const width = Math.max(...tableRows.map((r) => r.length));
+      lines.push("");
+      tableRows.forEach((r, i) => {
+        const cells = [...r, ...Array(width - r.length).fill("")];
+        lines.push(`| ${cells.join(" | ")} |`);
+        if (i === 0) lines.push(`| ${cells.map(() => "---").join(" | ")} |`);
+      });
+      lines.push("");
+    }
+  } else {
+    const md = paraToMd(tok);
+    if (md) lines.push(md);
+  }
+}
+console.log(lines.join("\n"));

@@ -1,0 +1,40 @@
+/** v1.23.0 pre-deploy verification against a consistent snapshot of the live ledger. */
+import { Database } from "bun:sqlite";
+import { SqliteStore } from "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/sqlite.ts";
+import { EnvelopeService } from "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts";
+import { BudgetService } from "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts";
+
+const SNAP = "/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/verify.db";
+// Consistent snapshot from a readonly connection (safe against the live WAL).
+await Bun.$`rm -f ${SNAP}`.quiet();
+const src = new Database(`${process.env.HOME}/.penny/penny.db`, { readonly: true });
+src.run(`VACUUM INTO '${SNAP}'`);
+src.close();
+
+const store = new SqliteStore(SNAP);
+await store.migrate(); // applies the new format-aware garbage purge
+
+const db = new Database(SNAP, { readonly: true });
+const badRows = db.query(`SELECT COUNT(*) n FROM allocations WHERE length(period) <> 7 OR substr(period,5,1) <> '-'`).get() as { n: number };
+console.log("PROBE-1 malformed-period rows after migrate:", badRows.n, badRows.n === 0 ? "PASS" : "FAIL");
+db.close();
+
+const envSvc = new EnvelopeService(store, { holdingEnvelopeId: null, nabCardAccountIds: ["acc-nab"] }, { timezone: "Australia/Melbourne" });
+const budget = new BudgetService(store, envSvc, "Australia/Melbourne");
+
+const SEP = { year: 2026, month: 9 };
+const res = await budget.ensureMonth("local", SEP);
+console.log("PROBE-2 ensureMonth(2026-09) reconciled rows:", res.rolled, res.rolled === 2 ? "PASS (Compliance + Leasing Fees)" : "CHECK");
+
+const db2 = new Database(SNAP, { readonly: true });
+const added = db2.query(`SELECT envelope_id, amount_cents FROM allocations WHERE period='2026-09' AND envelope_id IN ('419a2c55-495f-457d-aefe-41aa1f191e70','d1fe1684-d183-4c0b-a06e-4aca0ef61490')`).all();
+console.log("PROBE-3 September rows:", JSON.stringify(added));
+db2.close();
+
+const grid = await envSvc.getGridRange("local", { from: SEP, to: SEP });
+const rental = grid.income.find((i: { id: string }) => i.id === "inc-rental")!;
+const adhoc = grid.income.find((i: { id: string }) => i.id === "inc-adhoc-income")!;
+console.log("PROBE-4 Rental Sept carryoverCents:", rental.carryoverCents, rental.carryoverCents === 0 ? "PASS (was -294800)" : "CHECK");
+console.log("PROBE-5 Adhoc Sept carryoverCents:", adhoc.carryoverCents);
+console.log("PROBE-6 Sept unallocatedCents:", grid.unallocatedCents, "zeroBasedAlert:", grid.zeroBasedAlert, grid.unallocatedCents === 0 ? "PASS (was 14167)" : "CHECK");
+process.exit(0);

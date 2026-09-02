@@ -1,0 +1,37 @@
+import { Database } from "bun:sqlite";
+const db = new Database(`${process.env.HOME}/.penny/penny.db`, { readonly: true });
+const q = (sql: string, ...p: unknown[]) => db.query(sql).all(...(p as never[]));
+const out: string[] = [];
+const log = (t: string, v: unknown) => out.push(`== ${t} ==\n${JSON.stringify(v, null, 1)}`);
+
+log("USER SCOPES", q(`SELECT user_id, COUNT(*) n FROM income_envelopes GROUP BY user_id`));
+
+log("BUDGET_HISTORY since 1 Jul", q(`SELECT datetime(bh.ts/1000,'unixepoch','+10 hours') t,
+   COALESCE(ie.name, e.name, bh.envelope_id) name, bh.before_cents b, bh.after_cents a, bh.scope, bh.actor, bh.user_id
+  FROM budget_history bh
+  LEFT JOIN income_envelopes ie ON ie.id = bh.envelope_id AND ie.user_id = bh.user_id
+  LEFT JOIN envelopes e ON e.id = bh.envelope_id AND e.user_id = bh.user_id
+  WHERE bh.ts >= 1751292000000 ORDER BY bh.ts`));
+
+log("CARRYOVER EVENTS since 1 Jul", q(`SELECT datetime(ts/1000,'unixepoch','+10 hours') t, kind, payload_json, user_id
+  FROM events WHERE ts >= 1751292000000 AND (kind LIKE '%carryover%' OR kind LIKE '%rollover%') ORDER BY ts`));
+
+log("VERSION EVENTS Aug+", q(`SELECT datetime(ts/1000,'unixepoch','+10 hours') t, kind, payload_json, user_id
+  FROM events WHERE ts >= 1753970400000 AND kind LIKE 'version.%' ORDER BY ts`));
+
+for (const period of ["2026-08", "2026-09"]) {
+  log(`ALLOCATIONS ${period} (sum by envelope)`, q(`SELECT a.user_id, a.envelope_id,
+     COALESCE(e.name, a.envelope_id) name, e.type, SUM(a.amount_cents) cents, GROUP_CONCAT(a.scope) scopes
+    FROM allocations a LEFT JOIN envelopes e ON e.id = a.envelope_id AND e.user_id = a.user_id
+    WHERE a.period = ? GROUP BY a.user_id, a.envelope_id ORDER BY e.name`, period));
+  log(`ALLOC TOTAL ${period} (excl working)`, q(`SELECT a.user_id, SUM(a.amount_cents) cents, COUNT(DISTINCT a.envelope_id) envs
+    FROM allocations a LEFT JOIN envelopes e ON e.id = a.envelope_id AND e.user_id = a.user_id
+    WHERE a.period = ? AND COALESCE(e.type,'expense') != 'working' GROUP BY a.user_id`, period));
+}
+
+log("ALL INCOME TEMPLATE LINES", q(`SELECT bt.user_id, ie.name, bt.amount_cents, bt.period, bt.effective_from, bt.effective_to
+  FROM budget_template bt JOIN income_envelopes ie ON ie.id = bt.envelope_id AND ie.user_id = bt.user_id
+  ORDER BY ie.name, bt.effective_from`));
+
+await Bun.write(`${process.env.HOME}/.claude/jobs/b65b1bed/tmp/out2.txt`, out.join("\n\n"));
+process.exit(0);

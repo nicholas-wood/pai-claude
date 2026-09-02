@@ -1,0 +1,43 @@
+/** Hunt for $214.94 (21494c) across the live ledger + full Sept/Aug grid output. */
+import { Database } from "bun:sqlite";
+import { SqliteStore } from "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/sqlite.ts";
+import { EnvelopeService } from "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts";
+
+const SNAP = "/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/hunt.db";
+await Bun.$`rm -f ${SNAP}`.quiet();
+const src = new Database(`${process.env.HOME}/.penny/penny.db`, { readonly: true });
+src.run(`VACUUM INTO '${SNAP}'`);
+src.close();
+
+const out: string[] = [];
+const db = new Database(SNAP, { readonly: true });
+for (const table of ["allocations", "transactions", "money_movements", "budget_template", "budget_history", "envelopes", "income_envelopes"]) {
+  const cols = (db.query(`PRAGMA table_info(${table})`).all() as { name: string; type: string }[])
+    .filter((c) => /INT|BIG/i.test(c.type) && /cents/.test(c.name)).map((c) => c.name);
+  for (const col of cols) {
+    const hits = db.query(`SELECT COUNT(*) n FROM ${table} WHERE ABS(${col}) = 21494`).get() as { n: number };
+    if (hits.n > 0) out.push(`DB HIT: ${table}.${col} x${hits.n}`);
+  }
+}
+db.close();
+
+const store = new SqliteStore(SNAP);
+await store.migrate();
+const svc = new EnvelopeService(store, { holdingEnvelopeId: null, nabCardAccountIds: ["acc-nab"] }, { timezone: "Australia/Melbourne" });
+
+for (const month of [{ year: 2026, month: 8 }, { year: 2026, month: 9 }]) {
+  const g = await svc.getGridRange("local", { from: month, to: month });
+  const label = `${month.year}-${String(month.month).padStart(2, "0")}`;
+  // scan every numeric leaf in the grid response for ±21494
+  const walk = (v: unknown, path: string) => {
+    if (typeof v === "number" && Math.abs(v) === 21494) out.push(`GRID ${label} HIT: ${path} = ${v}`);
+    else if (Array.isArray(v)) v.forEach((x, i) => walk(x, `${path}[${(x as { name?: string; id?: string })?.name ?? (x as { id?: string })?.id ?? i}]`));
+    else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) walk(x, `${path}.${k}`);
+  };
+  walk(g, "grid");
+  const top = { unallocatedCents: (g as { unallocatedCents?: number }).unallocatedCents, zeroBasedAlert: (g as { zeroBasedAlert?: boolean }).zeroBasedAlert };
+  out.push(`${label} zero-base: ${JSON.stringify(top)}`);
+}
+
+await Bun.write("/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/hunt.txt", out.join("\n") || "no hits");
+process.exit(0);

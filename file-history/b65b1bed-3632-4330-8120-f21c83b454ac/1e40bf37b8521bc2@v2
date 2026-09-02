@@ -1,0 +1,177 @@
+/**
+ * v1.23.0 fixes (ISC-242..245): materialised months reconcile later-created
+ * budget lines, creation reaches pre-materialised future months, the era guard
+ * rejects malformed period keys, and the income carry fold counts money
+ * movements (the 2026-09 regression set: Compliance/Leasing missing from
+ * September's plan; a $2,948 Adhoc→Rental move vanishing from the rollover).
+ */
+
+import { describe, test, expect } from "bun:test";
+import { MemoryStore } from "./penny-memory-store.ts";
+import { EnvelopeService } from "../src/envelope/service.ts";
+import { BudgetService, isValidEraKey } from "../src/budget/service.ts";
+import { env, USER, CONFIG } from "./penny-fixtures.ts";
+
+const AUG = { year: 2026, month: 8 };
+const SEP = { year: 2026, month: 9 };
+
+function services() {
+  const store = new MemoryStore();
+  const envSvc = new EnvelopeService(store, CONFIG);
+  const budget = new BudgetService(store, envSvc);
+  return { store, envSvc, budget };
+}
+
+describe("ensureMonth reconciles materialised months (ISC-243)", () => {
+  test("a line created after the month materialised is added on the next ensureMonth", async () => {
+    const { store, budget } = await services();
+    await store.upsertEnvelope(USER, env("groceries", { name: "Groceries" }));
+    await store.putTemplateLine(USER, { id: "t1", userId: USER, envelopeId: "groceries", amountCents: 50000 });
+    expect((await budget.ensureMonth(USER, SEP)).rolled).toBe(1);
+
+    // The month now pre-dates the Rent line — the 2026-09 shape.
+    await store.upsertEnvelope(USER, env("rent", { name: "Rent" }));
+    await store.putTemplateLine(USER, { id: "t2", userId: USER, envelopeId: "rent", amountCents: 200000 });
+
+    expect((await budget.ensureMonth(USER, SEP)).rolled).toBe(1);
+    const byEnv = new Map((await store.listAllocations(USER, "2026-09")).map((a) => [a.envelopeId, a]));
+    expect(byEnv.get("rent")?.amountCents).toBe(200000);
+    expect(byEnv.get("groceries")?.amountCents).toBe(50000);
+  });
+
+  test("reconcile never touches existing rows: this-month overrides and edits survive", async () => {
+    const { store, budget } = await services();
+    await store.upsertEnvelope(USER, env("groceries", { name: "Groceries" }));
+    await store.putTemplateLine(USER, { id: "t1", userId: USER, envelopeId: "groceries", amountCents: 50000 });
+    await budget.ensureMonth(USER, SEP);
+
+    // A this-month override on the materialised row.
+    const row = (await store.listAllocations(USER, "2026-09")).find((a) => a.envelopeId === "groceries")!;
+    await store.putAllocation(USER, { ...row, amountCents: 99999, scope: "this_month" });
+
+    await store.upsertEnvelope(USER, env("rent", { name: "Rent" }));
+    await store.putTemplateLine(USER, { id: "t2", userId: USER, envelopeId: "rent", amountCents: 200000 });
+    await budget.ensureMonth(USER, SEP);
+
+    const groceries = (await store.listAllocations(USER, "2026-09")).find((a) => a.envelopeId === "groceries")!;
+    expect(groceries.amountCents).toBe(99999);
+    expect(groceries.scope).toBe("this_month");
+  });
+
+  test("an ENDED line never resurrects: reconcile reads template effective dating, not prior-month presence", async () => {
+    const { store, budget } = await services();
+    await store.upsertEnvelope(USER, env("groceries", { name: "Groceries" }));
+    await store.putTemplateLine(USER, { id: "t1", userId: USER, envelopeId: "groceries", amountCents: 50000 });
+    await store.upsertEnvelope(USER, env("carloan", { name: "Car Loan" }));
+    await store.putTemplateLine(USER, {
+      id: "t2", userId: USER, envelopeId: "carloan", amountCents: 90000,
+      effectiveFrom: "2026-01-01", effectiveTo: "2026-08-31",
+    });
+    expect((await budget.ensureMonth(USER, AUG)).rolled).toBe(2); // both active in August
+
+    // September: the ended line must not materialise — and a second reconcile
+    // pass must not bring it back either.
+    expect((await budget.ensureMonth(USER, SEP)).rolled).toBe(1);
+    expect((await budget.ensureMonth(USER, SEP)).rolled).toBe(0);
+    expect((await store.listAllocations(USER, "2026-09")).some((a) => a.envelopeId === "carloan")).toBe(false);
+  });
+
+  test("reconcile skips zero-resolving lines (no pointless zero rows appear)", async () => {
+    const { store, budget } = await services();
+    await store.upsertEnvelope(USER, env("groceries", { name: "Groceries" }));
+    await store.putTemplateLine(USER, { id: "t1", userId: USER, envelopeId: "groceries", amountCents: 50000 });
+    await budget.ensureMonth(USER, SEP);
+
+    await store.upsertEnvelope(USER, env("zero", { name: "Zero" }));
+    await store.putTemplateLine(USER, { id: "t2", userId: USER, envelopeId: "zero", amountCents: 0 });
+    expect((await budget.ensureMonth(USER, SEP)).rolled).toBe(0);
+    expect((await store.listAllocations(USER, "2026-09")).some((a) => a.envelopeId === "zero")).toBe(false);
+  });
+});
+
+describe("createEnvelope reaches pre-materialised months (ISC-242)", () => {
+  test("a new envelope's budget lands in already-materialised future months", async () => {
+    const { store, budget } = await services();
+    await store.upsertEnvelope(USER, env("groceries", { name: "Groceries" }));
+    await store.putTemplateLine(USER, { id: "t1", userId: USER, envelopeId: "groceries", amountCents: 50000 });
+    await budget.ensureMonth(USER, AUG);
+    await budget.ensureMonth(USER, SEP); // September materialised BEFORE the new envelope exists
+
+    const id = await budget.createEnvelope(USER, AUG, {
+      name: "Compliance",
+      type: "expense",
+      rolloverStart: "2026-08-01",
+      budgetedCents: 3750,
+      effectiveFrom: "2026-08-01",
+    });
+
+    const aug = (await store.listAllocations(USER, "2026-08")).find((a) => a.envelopeId === id);
+    const sep = (await store.listAllocations(USER, "2026-09")).find((a) => a.envelopeId === id);
+    expect(aug?.amountCents).toBe(3750);
+    expect(sep?.amountCents).toBe(3750);
+  });
+
+  test("the effective window is respected: months before effectiveFrom stay untouched", async () => {
+    const { store, budget } = await services();
+    await store.upsertEnvelope(USER, env("groceries", { name: "Groceries" }));
+    await store.putTemplateLine(USER, { id: "t1", userId: USER, envelopeId: "groceries", amountCents: 50000 });
+    await budget.ensureMonth(USER, { year: 2026, month: 7 });
+    await budget.ensureMonth(USER, AUG);
+
+    const id = await budget.createEnvelope(USER, AUG, {
+      name: "Compliance",
+      type: "expense",
+      rolloverStart: "2026-08-01",
+      budgetedCents: 3750,
+      effectiveFrom: "2026-08-01",
+    });
+    expect((await store.listAllocations(USER, "2026-07")).some((a) => a.envelopeId === id)).toBe(false);
+  });
+});
+
+describe("era guard rejects malformed period keys (ISC-245)", () => {
+  test("isValidEraKey: format AND range", () => {
+    expect(isValidEraKey("2026-09")).toBe(true);
+    expect(isValidEraKey("203-01")).toBe(false); // mid-typing "2030" — passes lexical bounds
+    expect(isValidEraKey("1989-12")).toBe(false);
+    expect(isValidEraKey("2101-01")).toBe(false);
+    expect(isValidEraKey("2026-9")).toBe(false);
+  });
+
+  test("ensureMonth refuses a three-digit year outright", async () => {
+    const { store, budget } = await services();
+    await store.upsertEnvelope(USER, env("groceries", { name: "Groceries" }));
+    await store.putTemplateLine(USER, { id: "t1", userId: USER, envelopeId: "groceries", amountCents: 50000 });
+    expect((await budget.ensureMonth(USER, { year: 203, month: 1 })).rolled).toBe(0);
+    expect((await store.listAllocations(USER, "203-01")).length).toBe(0);
+  });
+});
+
+describe("income carry fold counts money movements (ISC-244)", () => {
+  test("a prior-month move into an income envelope survives into the next month's carryover", async () => {
+    const { store, envSvc } = await services();
+    await store.upsertEnvelope(USER, env("groceries", { name: "Groceries" }));
+    await store.upsertIncomeEnvelope(USER, {
+      id: "inc-r", userId: USER, name: "Rental", source: "Rental", budgetedCents: 0, actualCents: 0,
+    });
+    await store.upsertIncomeEnvelope(USER, {
+      id: "inc-a", userId: USER, name: "Adhoc", source: "Adhoc", budgetedCents: 0, actualCents: 0,
+    });
+    await store.setIncomeCarryover(USER, "inc-r", 0, "2026-08-01");
+    await store.setIncomeCarryover(USER, "inc-a", 0, "2026-08-01");
+    // Mid-August in any plausible budget timezone.
+    await store.appendMovement(USER, {
+      id: "mv1", userId: USER, ts: Date.UTC(2026, 7, 14, 2), fromEnvelopeId: "inc-a", toEnvelopeId: "inc-r",
+      amountCents: 294800, scope: "ongoing", actor: "ui", correlationId: "c1",
+    });
+
+    const grid = await envSvc.getGridRange(USER, { from: SEP, to: SEP });
+    const rental = grid.income.find((i) => i.id === "inc-r")!;
+    const adhoc = grid.income.find((i) => i.id === "inc-a")!;
+    // Before the fix the August move vanished from the fold: rental read 0
+    // (and the live ledger read −$2,948 against its budget), adhoc read 0
+    // instead of the −294800 it had sent away. Conservation holds again:
+    expect(rental.carryoverCents).toBe(294800);
+    expect(adhoc.carryoverCents).toBe(-294800);
+  });
+});

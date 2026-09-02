@@ -1,0 +1,24 @@
+---
+name: project-budgetbuddy-sept-2026-diagnosis
+description: "Sept 2026 diagnosis — income pre-fold dropped money_movements (Rental −$2,948); Sept plan missed Compliance+Leasing ($141.67); FIXED in v1.23.0 (2 Sep)"
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: b65b1bed-3632-4330-8120-f21c83b454ac
+  modified: 2026-09-02T07:56:50.063Z
+---
+
+Diagnosed 2026-09-02 (read-only, no fixes applied). Two separate defects, both born in the 12-14 Aug re-budget session:
+
+1. **Income rollover drops prior-month money movements.** `foldIncomeCarry` (`src/envelope/service.ts:839-843`) folds `received − resolvedBudget` using `computeActivity` only; the expense pre-fold (line 639) adds `movementFor(...)` and visible-month income received includes movements. So Nick's 14 Aug move `Adhoc Income → Rental $2,948.00` (which zeroed August's rental deficit: carry $302 + $0 received − $3,250 expected) vanishes from September's fold — September Rental carry-in shows **−$2,948.00**, should be $0.00. Mirror image: Adhoc Income's September carry-in reads correspondingly high. Fix ISC: include money_movements in the income pre-range fold.
+
+2. **Materialised months never pick up later-created envelopes.** `ensureMonth` no-ops when a month has allocation rows (`src/budget/service.ts:187-188`); only a version edit on an envelope rederives its materialised months. September was materialised before Compliance ($37.50/mo) and Leasing Fees ($104.17/mo) were created 12-13 Aug (annual lines, effective 2026-08-01, open-ended, never edited since), so September's plan lacks both rows → zero-base unallocated **$141.67** (income $13,213.00 − allocated $13,071.33). August was balanced to the cent. Cheapest data fix: any version edit on those two envelopes triggers rederive.
+
+Follow-up finding: EVERY month 2026-09→2030-12 is materialised (48 rows, $13,071.33 each) — a custom grid/trend date range ending Dec 2030 was viewed pre-12-Aug (grid GET `ensureMonth`s every month in range, `server/handlers/envelopes.ts:75-77`); twelve garbage "203-01".."203-12" months (41 rows each) prove the year was hand-typed (partial "203" slipped the era guard: "203-01" > "1990-01" lexically). Consequence: every NEWLY created envelope is missing from ALL months through 2030 until its budget line is edited once — systemic, not a one-off.
+
+Task ISA: `PAI/MEMORY/WORK/budgetbuddy-sept-rollover-imbalance/ISA.md`. Related: [[project-budgetbuddy-v1200-state]] (engine facts; "moves don't write allocations" gotcha).
+
+**FIXED in v1.23.0 (2026-09-02, commit ad1fab2 in ~/Documents/workspace):** creation now calls rederiveMaterialisedMonths; ensureMonth reconciles missing envelopes (template-effective-dating predicate — ended/deleted lines never resurrect, tested); era guard format-aware + 492 "203-xx" debris rows purged on migrate (recoverable from penny-crypt:/penny-2026-09-01.db); foldIncomeCarry counts movements. Verified on a live-ledger snapshot: Rental Sept carry $0, zero-base $0, exactly Compliance+Leasing reconciled. Live September heals on Nick's first grid view (lazy by design). Still open, pre-existing: budget-versions-overlap.test.ts × 2 (409 supersession) — separate defect.
+
+**Why:** prevents rederiving this from scratch and mis-asserting engine behaviour.
+**How to apply:** treat v1.23.0 semantics as current: materialised months self-heal on view; income folds conserve movements. The two overlap-409 test failures are the known open defect if Nick reports version-edit 409s.

@@ -1,0 +1,1394 @@
+[
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/ALGORITHM/LATEST"
+    },
+    "timestamp": "2026-09-02T06:51:24.362Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/ALGORITHM/v6.3.0.md"
+    },
+    "timestamp": "2026-09-02T06:51:26.813Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Algorithm\", \"voice_id\": \"pNInz6obpgDQGcFmaJgB\", \"voice_enabled\": true}' --max-time 5",
+      "description": "Voice announcement: entering the Algorithm"
+    },
+    "timestamp": "2026-09-02T06:51:52.074Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls /home/nicholas-wood/Documents/workspace/projects/envelope-os/ && echo \"---\" && ls /home/nicholas-wood/Documents/workspace/projects/envelope-os/src 2>/dev/null | head -40",
+      "description": "List BudgetBuddy project structure"
+    },
+    "timestamp": "2026-09-02T06:51:53.062Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget /home/nicholas-wood/Documents/workspace/projects/envelope-os/scripts 2>/dev/null",
+      "description": "List store, budget, scripts directories"
+    },
+    "timestamp": "2026-09-02T06:52:03.632Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls /home/nicholas-wood/Documents/workspace/projects/envelope-os/docs && rg -l -i \"rollover|roll_carry\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/docs /home/nicholas-wood/Documents/workspace/projects/envelope-os/src --max-count 1 | head -20",
+      "description": "Find rollover-related docs and source files"
+    },
+    "timestamp": "2026-09-02T06:52:05.002Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -i \"adjustment\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src --files-with-matches | head; echo ---; rg -n \"CREATE TABLE\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/schema.ts | head -30; echo ---; rg -rn \"\\.db|sqlite|DATABASE_URL|dbPath\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/platform/*.ts | rg -i \"path|url|file\" | head",
+      "description": "Find adjustment concept, schema tables, and DB location"
+    },
+    "timestamp": "2026-09-02T06:52:19.711Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -i \"budgetbuddy|envelope\" /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/*.md -l; echo ---; cat /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/project-budgetbuddy-v1200-state.md 2>/dev/null",
+      "description": "FeedbackMemoryConsult: read BudgetBuddy memory files"
+    },
+    "timestamp": "2026-09-02T06:52:21.501Z"
+  },
+  {
+    "name": "Skill",
+    "input": {
+      "skill": "ISA",
+      "args": "scaffold from prompt: \"Diagnose why BudgetBuddy August adjustments (rental income) aren't reflected in September rollover, and why September budget is unbalanced when August was balanced — explanation only, no fixes\" at tier E3, task ISA (ad-hoc investigation)"
+    },
+    "timestamp": "2026-09-02T06:52:31.073Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Running the Scaffold workflow in the ISA skill\"}' > /dev/null 2>&1 &",
+      "description": "Voice notification for ISA Scaffold workflow"
+    },
+    "timestamp": "2026-09-02T06:52:40.572Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-sept-rollover-imbalance/ISA.md",
+      "content": "---\ntask: Diagnose BudgetBuddy September rollover missing August adjustments + unbalanced budget\nslug: budgetbuddy-sept-rollover-imbalance\neffort: E3\nphase: observe\nprogress: 0/16\nmode: standard\nstarted: 2026-09-02T00:00:00+10:00\nupdated: 2026-09-02T00:00:00+10:00\n---\n\n## Problem\n\nNick applied budget adjustments in August (e.g. to the rental income category) inside BudgetBuddy. September's rollover figures do not reflect those adjustments. Additionally, September's budget shows as unbalanced (zero-base non-zero) while August closed balanced. He wants to know why — what mechanism dropped the adjustments, and what changed or ended between the months.\n\n## Vision\n\nNick reads a short explanation naming the exact mechanism (with the actual dollar figures from his ledger) for both symptoms, and instantly recognises it as true — including which specific budget lines changed or ended between August and September.\n\n## Out of Scope\n\nNo code fixes, no data mutations, no re-reconciliation runs that write to the DB, no redesign proposals beyond naming the mechanism. This is diagnosis only (advice-not-action rule).\n\n## Constraints\n\n- Read-only against the live SQLite store at `~/.penny/pennyn` (or configured PENNY_SQLITE_PATH).\n- Balance queries must include `money_movements` (moves don't write allocations).\n- Verify engine facts in code/data before asserting (prior corrections on this project).\n\n## Goal\n\nBoth symptoms are explained by a named mechanism in code/data, each supported by at least one quoted query result or code reference, and the month-over-month delta lines (changed/ended) are enumerated with figures.\n\n## Criteria\n\n- [ ] ISC-1: The rollover computation code path is identified (file:line) and its input source named\n- [ ] ISC-2: The \"adjustment\" concept's storage representation is identified (table/column, file:line)\n- [ ] ISC-3: August rental income adjustment rows are located in the DB with figures quoted\n- [ ] ISC-4: September's rollover figure for the affected category is queried and quoted\n- [ ] ISC-5: The mechanism by which adjustments are included/excluded from rollover is stated from code\n- [ ] ISC-6: A causal chain (RootCauseAnalysis) links the August adjustment to the September rollover miss\n- [ ] ISC-7: August's budget balance (zero-base) figure is queried/derived and quoted\n- [ ] ISC-8: September's budget imbalance amount is queried/derived and quoted\n- [ ] ISC-9: Line-level diff of budgeted amounts August vs September is produced\n- [ ] ISC-10: Each changed/ended line contributing to the imbalance is named with its dollar delta\n- [ ] ISC-11: The sum of named deltas reconciles to the September imbalance amount (±$0.01)\n- [ ] ISC-12: Whether the two symptoms share one root cause is explicitly answered\n- [ ] ISC-13: Final answer states what Nick can do about each (options, not applied fixes)\n- [ ] ISC-14: Anti: no INSERT/UPDATE/DELETE issued against the live store\n- [ ] ISC-15: Anti: no assertion about engine behaviour made without a code or data citation\n- [ ] ISC-16: Anti: the reply does not apply or commit any fix\n\n## Test Strategy\n\n| isc | type | check | threshold | tool |\n|-----|------|-------|-----------|------|\n| ISC-1,2,5 | code | file:line cited | exact | Read/Grep |\n| ISC-3,4,7,8,9 | data | query output quoted | exact rows | Bash sqlite3 |\n| ISC-6,12 | reasoning | causal chain written | complete chain | RootCauseAnalysis |\n| ISC-10,11 | data | deltas sum to imbalance | ±$0.01 | Bash sqlite3 + arithmetic |\n| ISC-13 | prose | options listed | ≥1 per symptom | final message |\n| ISC-14,15,16 | anti | command history read-only | zero writes | session audit |\n\n## Features\n\n| name | description | satisfies | depends_on | parallelizable |\n|------|-------------|-----------|------------|----------------|\n| locate-store | Find live DB and confirm month tables | ISC-3,4,7,8 | — | true |\n| rollover-code-trace | Trace rollover + adjustment code paths | ISC-1,2,5 | — | true |\n| ledger-queries | Query Aug/Sep figures and diffs | ISC-3,4,7,8,9,10,11 | locate-store | false |\n| synthesis | Causal chain + final explanation | ISC-6,12,13 | all | false |\n\n## Decisions\n\n- 2026-09-02: Delegation floor (E3 ≥2) relaxed, show-my-math: both features are directed lookups against a known local repo and a single SQLite file; an Explore agent would re-discover paths already known from memory (`project-budgetbuddy-v1200-state`), and finance-accountant targets the deprecated PocketSmith MCP surface. Investigation is sequential on the data.\n- 2026-09-02: ISC floor (E3 ≥32 soft) relaxed to 16: a two-question diagnostic has a natural probe count; padding criteria would be ceremony over work.\n"
+    },
+    "timestamp": "2026-09-02T06:53:05.263Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Think phase.\", \"voice_id\": \"pNInz6obpgDQGcFmaJgB\", \"voice_enabled\": true}' > /dev/null 2>&1; ls -la ~/.penny/ 2>/dev/null; echo ---; sqlite3 ~/.penny/pennyn \".tables\" 2>/dev/null || echo \"sqlite3 open failed\"",
+      "description": "Voice curl; check live DB exists and list tables"
+    },
+    "timestamp": "2026-09-02T06:54:38.522Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Plan phase.\", \"voice_id\": \"pNInz6obpgDQGcFmaJgB\", \"voice_enabled\": true}' > /dev/null 2>&1; which sqlite3; bun --version",
+      "description": "Voice curl; check sqlite3 and bun availability"
+    },
+    "timestamp": "2026-09-02T06:54:49.073Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-sept-rollover-imbalance/ISA.md",
+      "old_string": "phase: observe",
+      "new_string": "phase: plan"
+    },
+    "timestamp": "2026-09-02T06:54:49.782Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Build phase.\", \"voice_id\": \"pNInz6obpgDQGcFmaJgB\", \"voice_enabled\": true}' > /dev/null 2>&1",
+      "description": "Voice curl for Build phase"
+    },
+    "timestamp": "2026-09-02T06:54:59.391Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sed -n '150,200p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/schema.ts",
+      "description": "Read budget_history and money_movements schema"
+    },
+    "timestamp": "2026-09-02T06:55:00.092Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"adjust\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/*.ts /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/schema.ts | head -30",
+      "description": "Find adjustment concept in budget module and schema"
+    },
+    "timestamp": "2026-09-02T06:55:01.242Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/versions.ts"
+    },
+    "timestamp": "2026-09-02T06:55:08.593Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/zerobased.ts"
+    },
+    "timestamp": "2026-09-02T06:55:13.822Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"rollover|carryover|carry\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/balance.ts /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/rollup.ts | head -40; echo ===; wc -l /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/balance.ts /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/rollup.ts",
+      "description": "Locate rollover/carry computation in envelope module"
+    },
+    "timestamp": "2026-09-02T06:55:15.632Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"foldCarryover|resolveTemplateForMonth|resolveIncomeBudgetForMonth|openingCarryover\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src --type ts | rg -v \"rollup.ts|versions.ts\" | head -20",
+      "description": "Find callers of fold and template resolution"
+    },
+    "timestamp": "2026-09-02T06:55:27.212Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts",
+      "offset": 560,
+      "limit": 200
+    },
+    "timestamp": "2026-09-02T06:55:30.051Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "offset": 490,
+      "limit": 150
+    },
+    "timestamp": "2026-09-02T06:55:46.872Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n -i \"income\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts | head -40",
+      "description": "Find income handling in envelope grid service"
+    },
+    "timestamp": "2026-09-02T06:55:54.532Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts",
+      "offset": 766,
+      "limit": 110
+    },
+    "timestamp": "2026-09-02T06:55:57.402Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"income_carryover|carryover|effective_from|effective_to|expected_day|ALTER TABLE\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/schema.ts | head -30; echo ===; sed -n '142,152p;61,104p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/schema.ts",
+      "description": "Check carryover and version columns in schema"
+    },
+    "timestamp": "2026-09-02T06:56:20.033Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-sept-rollover-imbalance/ISA.md",
+      "old_string": "phase: plan",
+      "new_string": "phase: execute"
+    },
+    "timestamp": "2026-09-02T06:56:31.314Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/query1.ts",
+      "content": "import { Database } from \"bun:sqlite\";\nconst db = new Database(`${process.env.HOME}/.penny/penny.db`, { readonly: true });\nconst q = (sql: string, ...p: unknown[]) => db.query(sql).all(...(p as never[]));\n\nconsole.log(\"== USERS ==\");\nconsole.log(q(\"SELECT id FROM users\"));\n\nconsole.log(\"\\n== INCOME ENVELOPES ==\");\nconsole.log(q(`SELECT id, name, budgeted_cents, actual_cents, carryover_cents, rollover_start, expected_day, target_cents FROM income_envelopes`));\n\nconsole.log(\"\\n== TEMPLATE LINES FOR INCOME ENVELOPES ==\");\nconsole.log(q(`SELECT bt.envelope_id, ie.name, bt.id AS line_id, bt.amount_cents, bt.period, bt.effective_from, bt.effective_to\n  FROM budget_template bt JOIN income_envelopes ie ON ie.id = bt.envelope_id AND ie.user_id = bt.user_id\n  ORDER BY ie.name, bt.effective_from`));\n\nconsole.log(\"\\n== BUDGET HISTORY AUG 2026 ==\");\nconsole.log(q(`SELECT bh.ts, datetime(bh.ts/1000,'unixepoch','+10 hours') AS t, bh.envelope_id,\n    COALESCE(ie.name, e.name, bh.envelope_id) AS name, bh.before_cents, bh.after_cents, bh.scope, bh.actor\n  FROM budget_history bh\n  LEFT JOIN income_envelopes ie ON ie.id = bh.envelope_id AND ie.user_id = bh.user_id\n  LEFT JOIN envelopes e ON e.id = bh.envelope_id AND e.user_id = bh.user_id\n  WHERE bh.ts >= 1753970400000 -- 2026-08-01T00:00+10\n  ORDER BY bh.ts`));\n"
+    },
+    "timestamp": "2026-09-02T06:56:37.972Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/jobs/b65b1bed/tmp && bun query1.ts 2>&1 | head -120",
+      "description": "Query income envelopes, versions, August budget history"
+    },
+    "timestamp": "2026-09-02T06:56:40.772Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/tmp/claude-1000/-home-nicholas-wood--claude/b65b1bed-3632-4330-8120-f21c83b454ac/tasks/b4wyrcm2w.output"
+    },
+    "timestamp": "2026-09-02T07:06:47.253Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/tmp/claude-1000/-home-nicholas-wood--claude/b65b1bed-3632-4330-8120-f21c83b454ac/tasks/b4wyrcm2w.output",
+      "offset": 121
+    },
+    "timestamp": "2026-09-02T07:07:21.333Z"
+  },
+  {
+    "name": "ToolSearch",
+    "input": {
+      "query": "select:TaskStop,TaskList",
+      "max_results": 2
+    },
+    "timestamp": "2026-09-02T07:07:34.593Z"
+  },
+  {
+    "name": "TaskStop",
+    "input": {
+      "task_id": "b4wyrcm2w"
+    },
+    "timestamp": "2026-09-02T07:07:36.673Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/query2.ts",
+      "content": "import { Database } from \"bun:sqlite\";\nconst db = new Database(`${process.env.HOME}/.penny/penny.db`, { readonly: true });\nconst q = (sql: string, ...p: unknown[]) => db.query(sql).all(...(p as never[]));\nconst out: string[] = [];\nconst log = (t: string, v: unknown) => out.push(`== ${t} ==\\n${JSON.stringify(v, null, 1)}`);\n\nlog(\"USER SCOPES\", q(`SELECT user_id, COUNT(*) n FROM income_envelopes GROUP BY user_id`));\n\nlog(\"BUDGET_HISTORY since 1 Jul\", q(`SELECT datetime(bh.ts/1000,'unixepoch','+10 hours') t,\n   COALESCE(ie.name, e.name, bh.envelope_id) name, bh.before_cents b, bh.after_cents a, bh.scope, bh.actor, bh.user_id\n  FROM budget_history bh\n  LEFT JOIN income_envelopes ie ON ie.id = bh.envelope_id AND ie.user_id = bh.user_id\n  LEFT JOIN envelopes e ON e.id = bh.envelope_id AND e.user_id = bh.user_id\n  WHERE bh.ts >= 1751292000000 ORDER BY bh.ts`));\n\nlog(\"CARRYOVER EVENTS since 1 Jul\", q(`SELECT datetime(ts/1000,'unixepoch','+10 hours') t, kind, payload_json, user_id\n  FROM events WHERE ts >= 1751292000000 AND (kind LIKE '%carryover%' OR kind LIKE '%rollover%') ORDER BY ts`));\n\nlog(\"VERSION EVENTS Aug+\", q(`SELECT datetime(ts/1000,'unixepoch','+10 hours') t, kind, payload_json, user_id\n  FROM events WHERE ts >= 1753970400000 AND kind LIKE 'version.%' ORDER BY ts`));\n\nfor (const period of [\"2026-08\", \"2026-09\"]) {\n  log(`ALLOCATIONS ${period} (sum by envelope)`, q(`SELECT a.user_id, a.envelope_id,\n     COALESCE(e.name, a.envelope_id) name, e.type, SUM(a.amount_cents) cents, GROUP_CONCAT(a.scope) scopes\n    FROM allocations a LEFT JOIN envelopes e ON e.id = a.envelope_id AND e.user_id = a.user_id\n    WHERE a.period = ? GROUP BY a.user_id, a.envelope_id ORDER BY e.name`, period));\n  log(`ALLOC TOTAL ${period} (excl working)`, q(`SELECT a.user_id, SUM(a.amount_cents) cents, COUNT(DISTINCT a.envelope_id) envs\n    FROM allocations a LEFT JOIN envelopes e ON e.id = a.envelope_id AND e.user_id = a.user_id\n    WHERE a.period = ? AND COALESCE(e.type,'expense') != 'working' GROUP BY a.user_id`, period));\n}\n\nlog(\"ALL INCOME TEMPLATE LINES\", q(`SELECT bt.user_id, ie.name, bt.amount_cents, bt.period, bt.effective_from, bt.effective_to\n  FROM budget_template bt JOIN income_envelopes ie ON ie.id = bt.envelope_id AND ie.user_id = bt.user_id\n  ORDER BY ie.name, bt.effective_from`));\n\nawait Bun.write(`${process.env.HOME}/.claude/jobs/b65b1bed/tmp/out2.txt`, out.join(\"\\n\\n\"));\nprocess.exit(0);\n"
+    },
+    "timestamp": "2026-09-02T07:07:57.263Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/jobs/b65b1bed/tmp && timeout 60 bun query2.ts; echo \"exit=$?\"; wc -c out2.txt",
+      "description": "Run ledger queries writing to out2.txt"
+    },
+    "timestamp": "2026-09-02T07:08:00.554Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/out2.txt"
+    },
+    "timestamp": "2026-09-02T07:08:03.683Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"CREATE TABLE IF NOT EXISTS (transactions|mappings)\" -A 16 /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/schema.ts",
+      "description": "Read transactions and mappings schema"
+    },
+    "timestamp": "2026-09-02T07:09:03.535Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/query3.ts",
+      "content": "import { Database } from \"bun:sqlite\";\nconst db = new Database(`${process.env.HOME}/.penny/penny.db`, { readonly: true });\nconst q = (sql: string, ...p: unknown[]) => db.query(sql).all(...(p as never[]));\nconst out: string[] = [];\nconst log = (t: string, v: unknown) => out.push(`== ${t} ==\\n${JSON.stringify(v, null, 1)}`);\n\nlog(\"MYSTERY ENVELOPE 51a901bc\", q(`SELECT id, name, type, rollover_rule, carryover_cents, rollover_start, carryover_anchor, active, archived FROM envelopes WHERE id = '51a901bc-5ad1-45d9-82b8-6de2e7d81a0b'`));\n\nlog(\"TEMPLATE LINES Compliance + Leasing Fees + any ending Aug or starting Sep\", q(`SELECT bt.envelope_id, COALESCE(e.name, ie.name, bt.envelope_id) name, bt.amount_cents, bt.period, bt.effective_from, bt.effective_to\n  FROM budget_template bt\n  LEFT JOIN envelopes e ON e.id = bt.envelope_id AND e.user_id = bt.user_id\n  LEFT JOIN income_envelopes ie ON ie.id = bt.envelope_id AND ie.user_id = bt.user_id\n  WHERE bt.envelope_id IN ('419a2c55-495f-457d-aefe-41aa1f191e70','d1fe1684-d183-4c0b-a06e-4aca0ef61490')\n     OR bt.effective_to BETWEEN '2026-08-01' AND '2026-09-30'\n     OR bt.effective_from BETWEEN '2026-09-01' AND '2026-09-30'\n  ORDER BY name, bt.effective_from`));\n\nlog(\"MAPPINGS TO INCOME ENVELOPES\", q(`SELECT m.category_id, c.name cat, m.envelope_id, m.effective_from, m.effective_to\n  FROM mappings m LEFT JOIN categories c ON c.id = m.category_id AND c.user_id = m.user_id\n  WHERE m.envelope_id LIKE 'inc-%' ORDER BY m.envelope_id, m.effective_from`));\n\n// Monthly posted, non-transfer income to inc-rental / inc-salary via current mappings\nlog(\"MONTHLY INCOME RECEIVED Jun-Sep (posted, non-transfer, via mappings)\", q(`\n  SELECT substr(t.txn_date,1,7) month, m.envelope_id, SUM(t.amount_cents) cents, COUNT(*) n\n  FROM transactions t\n  JOIN mappings m ON m.category_id = t.category_id AND m.user_id = t.user_id\n    AND m.effective_from <= t.txn_date AND (m.effective_to IS NULL OR m.effective_to >= t.txn_date)\n  WHERE m.envelope_id LIKE 'inc-%' AND t.txn_date >= '2026-06-01' AND t.is_transfer = 0 AND t.is_pending = 0\n  GROUP BY month, m.envelope_id ORDER BY month`));\n\nlog(\"RENTAL TXNS Aug-Sep detail\", q(`\n  SELECT t.txn_date, t.amount_cents, t.payee, t.is_pending\n  FROM transactions t\n  JOIN mappings m ON m.category_id = t.category_id AND m.user_id = t.user_id\n    AND m.effective_from <= t.txn_date AND (m.effective_to IS NULL OR m.effective_to >= t.txn_date)\n  WHERE m.envelope_id = 'inc-rental' AND t.txn_date >= '2026-08-01' AND t.is_transfer = 0\n  ORDER BY t.txn_date`));\n\nawait Bun.write(`${process.env.HOME}/.claude/jobs/b65b1bed/tmp/out3.txt`, out.join(\"\\n\\n\"));\nprocess.exit(0);\n"
+    },
+    "timestamp": "2026-09-02T07:09:19.294Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 60 bun query3.ts && cat out3.txt",
+      "description": "Run follow-up ledger queries and show results"
+    },
+    "timestamp": "2026-09-02T07:09:22.364Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/query4.ts",
+      "content": "import { Database } from \"bun:sqlite\";\nconst db = new Database(`${process.env.HOME}/.penny/penny.db`, { readonly: true });\nconst q = (sql: string, ...p: unknown[]) => db.query(sql).all(...(p as never[]));\nconst out: string[] = [];\nconst log = (t: string, v: unknown) => out.push(`== ${t} ==\\n${JSON.stringify(v, null, 1)}`);\n\nlog(\"POSITIVE INFLOWS >= $200 Aug-Sep (posted+pending, non-transfer)\", q(`\n  SELECT t.txn_date, t.amount_cents, t.payee, COALESCE(c.name,'(uncategorised)') cat, t.is_pending\n  FROM transactions t LEFT JOIN categories c ON c.id = t.category_id AND c.user_id = t.user_id\n  WHERE t.txn_date >= '2026-08-01' AND t.is_transfer = 0 AND t.amount_cents >= 20000\n  ORDER BY t.txn_date`));\n\nlog(\"SEPT ALLOCATION ROW IDS for the 4 missing (any period)\", q(`\n  SELECT envelope_id, period, amount_cents FROM allocations\n  WHERE envelope_id IN ('419a2c55-495f-457d-aefe-41aa1f191e70','d1fe1684-d183-4c0b-a06e-4aca0ef61490','cd2e2e51-7ca9-40cc-ab4a-fa3f9ba18bfa','da98c2f1-249a-446d-ac2e-e18e2c88303a')\n  ORDER BY envelope_id, period`));\n\nawait Bun.write(`${process.env.HOME}/.claude/jobs/b65b1bed/tmp/out4.txt`, out.join(\"\\n\\n\"));\nprocess.exit(0);\n"
+    },
+    "timestamp": "2026-09-02T07:10:59.073Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 60 bun query4.ts && cat out4.txt",
+      "description": "Check for unmapped rent inflows and missing allocation rows"
+    },
+    "timestamp": "2026-09-02T07:11:01.936Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"ensureMonth\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src --type ts | head; echo ===; rg -n \"async ensureMonth\" -A 40 /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts | head -60",
+      "description": "Read ensureMonth materialisation logic"
+    },
+    "timestamp": "2026-09-02T07:11:17.736Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Verify phase.\", \"voice_id\": \"pNInz6obpgDQGcFmaJgB\", \"voice_enabled\": true}' > /dev/null 2>&1; timeout 120 bun ~/.claude/PAI/TOOLS/Inference.ts --mode advisor --auto-state \"TASK: Diagnose two BudgetBuddy symptoms: August adjustments not in September rollover; September zero-base unbalanced\" \"QUESTION: Diagnosis reached: (1) Rental income budget re-versioned 12 Aug to 325000c/mo-equiv effective 2026-08-12; income resolves by version in force on expected day (13th) with no proration, so August expected the full 3250 while zero rental income arrived Aug/Sep; September carry-in folds to 30200 + 0 + 0 + (0-325000) = -294800c. Adjustment IS applied; missing actual income drives the figure. (2) September was materialised before envelopes Compliance (3750c) and Leasing Fees (10417c) were created on 12-13 Aug; ensureMonth no-ops on materialised months and only version-edits rederive, so September lacks their rows: income 1321300c - alloc 1307133c = 141670c... correction 13213.00-13071.33=141.67 = exactly 3750+10417 cents. Any gaps before declaring the diagnosis done?\"",
+      "description": "Advisor second-opinion on diagnosis (Rule 2)"
+    },
+    "timestamp": "2026-09-02T07:12:27.186Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/query5.ts",
+      "content": "import { Database } from \"bun:sqlite\";\nconst db = new Database(`${process.env.HOME}/.penny/penny.db`, { readonly: true });\nconst q = (sql: string, ...p: unknown[]) => db.query(sql).all(...(p as never[]));\nconst out: string[] = [];\nconst log = (t: string, v: unknown) => out.push(`== ${t} ==\\n${JSON.stringify(v, null, 1)}`);\n\nlog(\"MONEY MOVEMENTS Aug-Sep\", q(`SELECT datetime(ts/1000,'unixepoch','+10 hours') t, from_envelope_id, to_envelope_id, amount_cents\n  FROM money_movements WHERE ts >= 1754316000000 ORDER BY ts`));\n\n// Programmatic Aug vs Sep allocation diff\nconst rows = q(`SELECT period, envelope_id, SUM(amount_cents) c FROM allocations\n  WHERE period IN ('2026-08','2026-09') GROUP BY period, envelope_id`) as { period: string; envelope_id: string; c: number }[];\nconst aug = new Map(rows.filter(r => r.period === \"2026-08\").map(r => [r.envelope_id, r.c]));\nconst sep = new Map(rows.filter(r => r.period === \"2026-09\").map(r => [r.envelope_id, r.c]));\nconst diffs: Record<string, { aug: number | null; sep: number | null }> = {};\nfor (const [id, c] of aug) if (sep.get(id) !== c) diffs[id] = { aug: c, sep: sep.get(id) ?? null };\nfor (const [id, c] of sep) if (!aug.has(id)) diffs[id] = { aug: null, sep: c };\nlog(\"ALLOCATION DIFF Aug vs Sep (only changed rows)\", diffs);\n\nlog(\"EVENT KINDS ALL TIME\", q(`SELECT kind, COUNT(*) n, datetime(MIN(ts)/1000,'unixepoch','+10 hours') first, datetime(MAX(ts)/1000,'unixepoch','+10 hours') last FROM events GROUP BY kind`));\n\nlog(\"EVENTS MENTIONING 2026-09\", q(`SELECT datetime(ts/1000,'unixepoch','+10 hours') t, kind, substr(payload_json,1,160) p\n  FROM events WHERE payload_json LIKE '%2026-09%' ORDER BY ts LIMIT 20`));\n\nlog(\"BUDGET_HISTORY actor=sync any\", q(`SELECT COUNT(*) n FROM budget_history WHERE actor = 'sync'`));\n\nawait Bun.write(`${process.env.HOME}/.claude/jobs/b65b1bed/tmp/out5.txt`, out.join(\"\\n\\n\"));\nprocess.exit(0);\n"
+    },
+    "timestamp": "2026-09-02T07:14:11.225Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 60 bun query5.ts && cat out5.txt",
+      "description": "Run verification queries: movements, diff, event dating"
+    },
+    "timestamp": "2026-09-02T07:14:14.107Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "python3 - <<'EOF'\n# arithmetic cross-checks\nprint(\"rental fold:\", 30200 + (117000-117000) + (117000-117000) + (0-325000))  # expect -294800\nprint(\"with movement:\", 30200 + (0 + 294800 - 325000))                          # expect 0\nprint(\"imbalance:\", 1321300 - 1307133, \"= compliance+leasing:\", 3750 + 10417)\nprint(\"aug zerobase:\", (996300+325000) - 1321300)\nprint(\"sep zerobase:\", (996300+325000) - 1307133)\nEOF",
+      "description": "Cross-check all reconciliation arithmetic"
+    },
+    "timestamp": "2026-09-02T07:15:19.424Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-sept-rollover-imbalance/ISA.md",
+      "old_string": "phase: execute\nprogress: 0/16",
+      "new_string": "phase: complete\nprogress: 16/16"
+    },
+    "timestamp": "2026-09-02T07:15:25.995Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-sept-rollover-imbalance/ISA.md",
+      "old_string": "- [ ] ISC-1: The rollover computation code path is identified (file:line) and its input source named\n- [ ] ISC-2: The \"adjustment\" concept's storage representation is identified (table/column, file:line)\n- [ ] ISC-3: August rental income adjustment rows are located in the DB with figures quoted\n- [ ] ISC-4: September's rollover figure for the affected category is queried and quoted\n- [ ] ISC-5: The mechanism by which adjustments are included/excluded from rollover is stated from code\n- [ ] ISC-6: A causal chain (RootCauseAnalysis) links the August adjustment to the September rollover miss\n- [ ] ISC-7: August's budget balance (zero-base) figure is queried/derived and quoted\n- [ ] ISC-8: September's budget imbalance amount is queried/derived and quoted\n- [ ] ISC-9: Line-level diff of budgeted amounts August vs September is produced\n- [ ] ISC-10: Each changed/ended line contributing to the imbalance is named with its dollar delta\n- [ ] ISC-11: The sum of named deltas reconciles to the September imbalance amount (±$0.01)\n- [ ] ISC-12: Whether the two symptoms share one root cause is explicitly answered\n- [ ] ISC-13: Final answer states what Nick can do about each (options, not applied fixes)\n- [ ] ISC-14: Anti: no INSERT/UPDATE/DELETE issued against the live store\n- [ ] ISC-15: Anti: no assertion about engine behaviour made without a code or data citation\n- [ ] ISC-16: Anti: the reply does not apply or commit any fix",
+      "new_string": "- [x] ISC-1: The rollover computation code path is identified (file:line) and its input source named\n- [x] ISC-2: The \"adjustment\" concept's storage representation is identified (table/column, file:line)\n- [x] ISC-3: August rental income adjustment rows are located in the DB with figures quoted\n- [x] ISC-4: September's rollover figure for the affected category is queried and quoted\n- [x] ISC-5: The mechanism by which adjustments are included/excluded from rollover is stated from code\n- [x] ISC-6: A causal chain (RootCauseAnalysis) links the August adjustment to the September rollover miss\n- [x] ISC-7: August's budget balance (zero-base) figure is queried/derived and quoted\n- [x] ISC-8: September's budget imbalance amount is queried/derived and quoted\n- [x] ISC-9: Line-level diff of budgeted amounts August vs September is produced\n- [x] ISC-10: Each changed/ended line contributing to the imbalance is named with its dollar delta\n- [x] ISC-11: The sum of named deltas reconciles to the September imbalance amount (±$0.01)\n- [x] ISC-12: Whether the two symptoms share one root cause is explicitly answered\n- [x] ISC-13: Final answer states what Nick can do about each (options, not applied fixes)\n- [x] ISC-14: Anti: no INSERT/UPDATE/DELETE issued against the live store\n- [x] ISC-15: Anti: no assertion about engine behaviour made without a code or data citation\n- [x] ISC-16: Anti: the reply does not apply or commit any fix"
+    },
+    "timestamp": "2026-09-02T07:15:35.815Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/PAI/MEMORY/WORK/budgetbuddy-sept-rollover-imbalance/ISA.md",
+      "old_string": "- 2026-09-02: ISC floor (E3 ≥32 soft) relaxed to 16: a two-question diagnostic has a natural probe count; padding criteria would be ceremony over work.",
+      "new_string": "- 2026-09-02: ISC floor (E3 ≥32 soft) relaxed to 16: a two-question diagnostic has a natural probe count; padding criteria would be ceremony over work.\n- 2026-09-02: Advisor (Rule 2) challenged the \"zero rental income\" negative claim and the materialisation dating; both closed with further probes (movements query found the $2,948 move; sync-actor budget_history rows pruned by migration so dating is structural, not timestamped).\n\n## Changelog\n\n- conjectured: adjustments live in a month-scoped table the rollover chain never reads forward (THINK prediction).\n  refuted by: money_movements row 2026-08-14 13:15 `inc-adhoc-income → inc-rental` $2,948.00 plus code trace — the adjustment IS stored globally; only the income pre-range fold drops it.\n  learned: `foldIncomeCarry` (envelope/service.ts:839-843) sums `received - incomeMonthly` from `computeActivity` only; the expense pre-fold (line 639) adds `movementFor(...)` and the visible-month income path folds movements via `activityByEnv` (lines 696-702, 811-815) — income-envelope movements vanish from any PRIOR month's fold.\n  criterion now: ISC-5/ISC-6 verified against this asymmetry; a future fix task's ISC is \"income pre-range fold includes money_movements, September Rental carry-in reads $0.00\".\n\n## Verification\n\n- ISC-1: Read — foldIncomeCarry envelope/service.ts:835-845 (income), expense fold :627-645; inputs from computeActivity + listAllocations.\n- ISC-2: Read — budget_template effective-dated lines (store/schema.ts:153-161, cols 428-429); money_movements (schema.ts:178-190); carryover resets in events.\n- ISC-3: SELECT — budget_history 12 Aug Rental 117000→325000 chain; template line 325000c weekly-display effective 2026-08-12 open; movement 294800c adhoc→rental 14 Aug.\n- ISC-4: replicated fold — 30200 + (0−325000) = −294800c (−$2,948.00); arithmetic cross-checked via python.\n- ISC-5: Read — versions.ts:175-193 expected-day income resolution (no proration, owner directive 2026-08-12); service.ts:839-843 movement omission.\n- ISC-6: chain in final answer (version edit → full-month $3,250 expectation → $0 received → $2,948 deficit → manual move zeroed August → fold drops movement → September −$2,948).\n- ISC-7: SELECT + arithmetic — Aug: (996300+325000) − 1321300 = 0c.\n- ISC-8: SELECT + arithmetic — Sep: (996300+325000) − 1307133 = 14167c ($141.67 unallocated).\n- ISC-9: programmatic diff (query5) — exactly 4 rows differ, all Aug-only: Compliance 3750, Leasing Fees 10417, Car Loan 0, Apple TV(old) 0.\n- ISC-10/11: 3750 + 10417 = 14167c = imbalance, exact.\n- ISC-12: answered — distinct mechanisms, common origin (12-14 Aug re-budget session); zero-base has no carry term (zerobased.ts:29-43, envelope/service.ts:788-800).\n- ISC-13: options listed in final answer, none applied.\n- ISC-14: all DB access via bun:sqlite `{ readonly: true }` (SQLITE_OPEN_READONLY) in query1-5.ts; sqlite3 CLI absent so never opened read-write.\n- ISC-15: every engine claim carries file:line or query output above.\n- ISC-16: no Edit/Write to envelope-os, no DML, no deploy."
+    },
+    "timestamp": "2026-09-02T07:15:57.326Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/project-budgetbuddy-sept-2026-diagnosis.md",
+      "content": "---\nname: project-budgetbuddy-sept-2026-diagnosis\ndescription: Sept 2026 diagnosis — income pre-fold drops money_movements (Rental −$2,948); Sept plan missing Compliance+Leasing ($141.67); fixes not yet applied\nmetadata:\n  type: project\n---\n\nDiagnosed 2026-09-02 (read-only, no fixes applied). Two separate defects, both born in the 12-14 Aug re-budget session:\n\n1. **Income rollover drops prior-month money movements.** `foldIncomeCarry` (`src/envelope/service.ts:839-843`) folds `received − resolvedBudget` using `computeActivity` only; the expense pre-fold (line 639) adds `movementFor(...)` and visible-month income received includes movements. So Nick's 14 Aug move `Adhoc Income → Rental $2,948.00` (which zeroed August's rental deficit: carry $302 + $0 received − $3,250 expected) vanishes from September's fold — September Rental carry-in shows **−$2,948.00**, should be $0.00. Mirror image: Adhoc Income's September carry-in reads correspondingly high. Fix ISC: include money_movements in the income pre-range fold.\n\n2. **Materialised months never pick up later-created envelopes.** `ensureMonth` no-ops when a month has allocation rows (`src/budget/service.ts:187-188`); only a version edit on an envelope rederives its materialised months. September was materialised before Compliance ($37.50/mo) and Leasing Fees ($104.17/mo) were created 12-13 Aug (annual lines, effective 2026-08-01, open-ended, never edited since), so September's plan lacks both rows → zero-base unallocated **$141.67** (income $13,213.00 − allocated $13,071.33). August was balanced to the cent. Cheapest data fix: any version edit on those two envelopes triggers rederive.\n\nTask ISA: `PAI/MEMORY/WORK/budgetbuddy-sept-rollover-imbalance/ISA.md`. Related: [[project-budgetbuddy-v1200-state]] (engine facts; \"moves don't write allocations\" gotcha).\n\n**Why:** prevents rederiving this from scratch and mis-asserting engine behaviour when Nick asks to fix either defect.\n**How to apply:** if asked to fix, verify these file:line references still hold (v1.22.2 at diagnosis time), then target the two named mechanisms directly.\n"
+    },
+    "timestamp": "2026-09-02T07:16:08.424Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/MEMORY.md",
+      "old_string": "- [Inbox rescan before missing claim](gotcha-inbox-rescan-before-missing-claim.md) — 00_Inbox changes mid-session; fresh rclone lsl before saying a file Nick dropped is missing",
+      "new_string": "- [Inbox rescan before missing claim](gotcha-inbox-rescan-before-missing-claim.md) — 00_Inbox changes mid-session; fresh rclone lsl before saying a file Nick dropped is missing\n- [BudgetBuddy Sept 2026 diagnosis](project-budgetbuddy-sept-2026-diagnosis.md) — income pre-fold drops money_movements (Rental −$2,948); Sept missing Compliance+Leasing ($141.67); unfixed"
+    },
+    "timestamp": "2026-09-02T07:16:14.276Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Learn phase.\", \"voice_id\": \"pNInz6obpgDQGcFmaJgB\", \"voice_enabled\": true}' > /dev/null 2>&1; echo '{\"timestamp\":\"2026-09-02T17:10:00+10:00\",\"effort_level\":\"E3\",\"effort_source\":\"classifier\",\"task_description\":\"Diagnose BudgetBuddy Sept rollover missing Aug adjustments + unbalanced budget\",\"criteria_count\":16,\"criteria_passed\":16,\"criteria_failed\":0,\"prd_id\":\"budgetbuddy-sept-rollover-imbalance\",\"implied_sentiment\":7,\"satisfaction_prediction\":8,\"reflection_q1\":\"Reproduce-first via read-only DB replication worked; advisor caught the movements gap\",\"reflection_q2\":\"Query movements alongside transactions from the first ledger pass\",\"reflection_q3\":\"Preflight A/D fired usefully; verification doctrine advisor call materially improved the answer\",\"knowledge_flags\":1,\"within_budget\":true,\"living_doc_refinements\":2,\"doctrine_fired\":{\"live_probe\":true,\"advisor\":true,\"cato\":false,\"conflict\":false,\"thinking_floor_met\":true,\"completeness_gate_met\":true}}' >> ~/.claude/PAI/MEMORY/LEARNING/REFLECTIONS/algorithm-reflections.jsonl",
+      "description": "Learn phase voice curl and reflection JSONL"
+    },
+    "timestamp": "2026-09-02T07:16:20.606Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"ensureMonth\\(\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src --type ts; echo ===; rg -n \"ensureMonth\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server -B2 -A6",
+      "description": "Find all callers of ensureMonth"
+    },
+    "timestamp": "2026-09-02T07:33:52.915Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sed -n '55,80p;130,155p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/handlers/envelopes.ts; echo ===; sed -n '935,975p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "description": "Read month-range computation at each ensureMonth call site"
+    },
+    "timestamp": "2026-09-02T07:34:04.034Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cat > query6.ts <<'EOF'\nimport { Database } from \"bun:sqlite\";\nconst db = new Database(`${process.env.HOME}/.penny/penny.db`, { readonly: true });\nconst q = (sql: string) => db.query(sql).all();\nconst out: string[] = [];\nout.push(\"== MATERIALISED PERIODS (rows per month) ==\\n\" + JSON.stringify(q(`SELECT period, COUNT(*) n, SUM(amount_cents) total FROM allocations GROUP BY period ORDER BY period`)));\nout.push(\"== COMPLIANCE/LEASING ROWS ANYWHERE ==\\n\" + JSON.stringify(q(`SELECT period, envelope_id, amount_cents FROM allocations WHERE envelope_id IN ('419a2c55-495f-457d-aefe-41aa1f191e70','d1fe1684-d183-4c0b-a06e-4aca0ef61490') ORDER BY period`)));\nawait Bun.write(\"out6.txt\", out.join(\"\\n\\n\"));\nprocess.exit(0);\nEOF\ntimeout 60 bun query6.ts && cat out6.txt",
+      "description": "List all materialised months and Compliance/Leasing rows"
+    },
+    "timestamp": "2026-09-02T07:34:23.165Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/project-budgetbuddy-sept-2026-diagnosis.md",
+      "old_string": "Task ISA: `PAI/MEMORY/WORK/budgetbuddy-sept-rollover-imbalance/ISA.md`.",
+      "new_string": "Follow-up finding: EVERY month 2026-09→2030-12 is materialised (48 rows, $13,071.33 each) — a custom grid/trend date range ending Dec 2030 was viewed pre-12-Aug (grid GET `ensureMonth`s every month in range, `server/handlers/envelopes.ts:75-77`); twelve garbage \"203-01\"..\"203-12\" months (41 rows each) prove the year was hand-typed (partial \"203\" slipped the era guard: \"203-01\" > \"1990-01\" lexically). Consequence: every NEWLY created envelope is missing from ALL months through 2030 until its budget line is edited once — systemic, not a one-off.\n\nTask ISA: `PAI/MEMORY/WORK/budgetbuddy-sept-rollover-imbalance/ISA.md`."
+    },
+    "timestamp": "2026-09-02T07:35:17.365Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"rederiveMaterialisedMonths\" -A 30 /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts | head -45",
+      "description": "Read rederiveMaterialisedMonths implementation"
+    },
+    "timestamp": "2026-09-02T07:37:49.766Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"private async rederiveMaterialisedMonths\" -A 35 /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "description": "Read the rederive method body itself"
+    },
+    "timestamp": "2026-09-02T07:37:55.014Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Algorithm\", \"voice_id\": \"pNInz6obpgDQGcFmaJgB\", \"voice_enabled\": true}' > /dev/null 2>&1; which codex; rg -n '\"version\"' /home/nicholas-wood/Documents/workspace/projects/envelope-os/package.json; ls /home/nicholas-wood/Documents/workspace/projects/envelope-os/test",
+      "description": "Voice curl; check codex CLI, version location, test layout"
+    },
+    "timestamp": "2026-09-02T07:41:48.427Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -l -i \"budgetbuddy|penny\" /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/ | head; rg -n \"restart|deploy\" /home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/project-budgetbuddy-v1200-state.md | head -5",
+      "description": "FeedbackMemoryConsult: deploy gotchas for this project"
+    },
+    "timestamp": "2026-09-02T07:41:50.397Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "offset": 160,
+      "limit": 60
+    },
+    "timestamp": "2026-09-02T07:42:03.407Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "offset": 900,
+      "limit": 100
+    },
+    "timestamp": "2026-09-02T07:42:03.765Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sed -n '320,400p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/schema.ts",
+      "description": "Read migration statement structure and era cleanup region"
+    },
+    "timestamp": "2026-09-02T07:42:39.936Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"1990-01\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src --type ts; rg -n \"const movements|listMovements|listMoneyMovements\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts | head; rg -rn \"1\\.22\\.2\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src /home/nicholas-wood/Documents/workspace/projects/envelope-os/web 2>/dev/null | head -5",
+      "description": "Find all era-guard sites, movements fetch, version references"
+    },
+    "timestamp": "2026-09-02T07:42:41.645Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Build phase.\", \"voice_id\": \"pNInz6obpgDQGcFmaJgB\", \"voice_enabled\": true}' > /dev/null 2>&1; sed -n '400,430p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/schema.ts; echo ===; rg -n \"GARBAGE_PURGE_SQL\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src --type ts; echo ===; rg -n \"^- \\[.\\] ISC-\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md | tail -3",
+      "description": "Purge array tail, its executor, last project ISC number"
+    },
+    "timestamp": "2026-09-02T07:43:04.730Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sed -n '1,60p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/test/budget-history-eras.test.ts",
+      "description": "Read era test file for idiom"
+    },
+    "timestamp": "2026-09-02T07:43:05.194Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sed -n '1,70p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/test/budget-template.test.ts",
+      "description": "Read budget-template test fixture idiom"
+    },
+    "timestamp": "2026-09-02T07:43:16.295Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "offset": 82,
+      "limit": 14
+    },
+    "timestamp": "2026-09-02T07:43:53.636Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "old_string": "export const ERA_MIN = \"1990-01-01\";\nexport const ERA_MAX = \"2100-12-31\";",
+      "new_string": "export const ERA_MIN = \"1990-01-01\";\nexport const ERA_MAX = \"2100-12-31\";\n\n/**\n * A real YYYY-MM period key inside the supported era. The lexical bounds alone\n * pass three-digit years (\"203-01\" sorts between \"1990-01\" and \"2100-12\" — and\n * inside the purge's 2023..2030 keep-window), which is how mid-typing debris\n * survived the year-10..1015 cleanup.\n */\nexport function isValidEraKey(key: string): boolean {\n  return /^\\d{4}-\\d{2}$/.test(key) && key >= \"1990-01\" && key <= \"2100-12\";\n}"
+    },
+    "timestamp": "2026-09-02T07:43:59.689Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "old_string": "  /**\n   * Ensure the period has its budget without any manual step. If the period has\n   * no allocations yet, materialise the recurring template into it and record\n   * each rolled line in the budget history (ISC-29, ISC-76, ISC-77). Idempotent:\n   * an already-populated month is left untouched so edits are never clobbered.\n   * The whole roll is one transaction (all lines land or none do), and even a\n   * raced double-roll cannot double the month: allocations upsert keyed on\n   * (user_id, envelope_id, period), so the second roll re-sets the same rows.\n   */\n  async ensureMonth(userId: UserId, period: Period): Promise<{ rolled: number }> {\n    // Era guard: partial years typed into date inputs once reached here as\n    // requests for year 10, 100, 1000 — materialising 1.4M garbage allocation\n    // rows. Handlers now validate, and this is the engine-level backstop.\n    const key = periodKey(period);\n    if (key < \"1990-01\" || key > \"2100-12\") return { rolled: 0 };\n    return this.store.withTransaction(async () => {\n      const existing = await this.allocMap(userId, period);\n      if (existing.size > 0) return { rolled: 0 };\n\n      const template = await this.store.listTemplate(userId);\n      // Day-weighted resolution over the effective-dated versions: a scheduled\n      // version contributes nothing until its month arrives, a completed one\n      // stops, a mid-month window is prorated by its active days, and\n      // overlapping versions SUM. Income envelope versions live in the same\n      // table but never materialise allocations (income budgets are resolved\n      // live from the lines), so they are excluded here.\n      const incomes = await this.store.listIncomeEnvelopes(userId);\n      const incomeIds = new Set(incomes.map((i) => i.id));\n      const wanted = resolveTemplateForMonth(\n        template.filter((t) => !incomeIds.has(t.envelopeId)),\n        period,\n      );\n      let rolled = 0;\n      for (const [envelopeId, amountCents] of wanted) {\n        await this.setAllocation(userId, period, envelopeId, amountCents, \"ongoing\", existing);\n        await this.store.appendBudgetHistory(\n          userId,\n          makeChange({ userId, envelopeId, beforeCents: 0, afterCents: amountCents, scope: \"ongoing\", actor: \"sync\" }),\n        );\n        rolled++;\n      }\n      return { rolled };\n    });\n  }",
+      "new_string": "  /**\n   * Ensure the period has its budget without any manual step. If the period has\n   * no allocations yet, materialise the recurring template into it and record\n   * each rolled line in the budget history (ISC-29, ISC-76, ISC-77). An\n   * already-populated month is RECONCILED, not skipped: envelopes whose active\n   * template line resolves non-zero but that have no allocation row at all are\n   * added (a month materialised before a line existed never sees it otherwise —\n   * the 2026-09 gap, ISC-243). Existing rows are never touched, so edits,\n   * this-month overrides, and explicit zeros are never clobbered (a deliberate\n   * zero is a ROW with amount 0; absence can only mean \"materialised before\n   * this line existed\"). The whole roll is one transaction, and even a raced\n   * double-roll cannot double the month: allocations upsert keyed on\n   * (user_id, envelope_id, period), so the second roll re-sets the same rows.\n   */\n  async ensureMonth(userId: UserId, period: Period): Promise<{ rolled: number }> {\n    // Era guard: partial years typed into date inputs once reached here as\n    // requests for year 10, 100, 1000 — materialising 1.4M garbage allocation\n    // rows. Handlers now validate, and this is the engine-level backstop.\n    if (!isValidEraKey(periodKey(period))) return { rolled: 0 };\n    return this.store.withTransaction(async () => {\n      const existing = await this.allocMap(userId, period);\n      const fresh = existing.size === 0;\n\n      const template = await this.store.listTemplate(userId);\n      // Day-weighted resolution over the effective-dated versions: a scheduled\n      // version contributes nothing until its month arrives, a completed one\n      // stops, a mid-month window is prorated by its active days, and\n      // overlapping versions SUM. Income envelope versions live in the same\n      // table but never materialise allocations (income budgets are resolved\n      // live from the lines), so they are excluded here.\n      const incomes = await this.store.listIncomeEnvelopes(userId);\n      const incomeIds = new Set(incomes.map((i) => i.id));\n      const wanted = resolveTemplateForMonth(\n        template.filter((t) => !incomeIds.has(t.envelopeId)),\n        period,\n      );\n      let rolled = 0;\n      for (const [envelopeId, amountCents] of wanted) {\n        // Reconcile mode: only missing envelopes, and skip zero-resolving lines\n        // (mirrors rederiveMaterialisedMonths — no pointless zero rows).\n        if (!fresh && (existing.has(envelopeId) || amountCents === 0)) continue;\n        await this.setAllocation(userId, period, envelopeId, amountCents, \"ongoing\", existing);\n        await this.store.appendBudgetHistory(\n          userId,\n          makeChange({ userId, envelopeId, beforeCents: 0, afterCents: amountCents, scope: \"ongoing\", actor: \"sync\" }),\n        );\n        rolled++;\n      }\n      return { rolled };\n    });\n  }"
+    },
+    "timestamp": "2026-09-02T07:44:21.107Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "old_string": "      if (key < \"1990-01\" || key > \"2100-12\") continue; // era guard",
+      "new_string": "      if (!isValidEraKey(key)) continue; // era guard (format + range; \"203-01\" passes lexical bounds)"
+    },
+    "timestamp": "2026-09-02T07:44:26.979Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "old_string": "        await this.store.putTemplateLine(userId, line);\n        await this.ensureMonth(userId, period); // nested: joins this transaction\n        // ensureMonth no-ops on an already-materialised month, which used to\n        // leave a new envelope with NO allocation row at all (it showed $0 on\n        // the grid until its next edit). Materialise its own line explicitly.\n        const allocs = await this.allocMap(userId, period);\n        if (!allocs.has(id)) {\n          const resolved = resolveAmountForMonth([line], id, period);\n          if (resolved !== 0) await this.setAllocation(userId, period, id, resolved, \"ongoing\", allocs);\n        }",
+      "new_string": "        await this.store.putTemplateLine(userId, line);\n        await this.ensureMonth(userId, period); // nested: joins this transaction\n        // Push the new line into EVERY materialised month its effective window\n        // covers, exactly as a version edit would (ISC-242). Long-range views\n        // materialise years ahead; before this, a month rolled before the\n        // envelope existed never saw it until its budget was edited once (the\n        // 2026-09 Compliance/Leasing gap). This replaces the old current-month-\n        // only backfill — rederive covers the current month too.\n        await this.rederiveMaterialisedMonths(userId, id, [line]);"
+    },
+    "timestamp": "2026-09-02T07:44:31.695Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts",
+      "old_string": "      for (let m = periodOfDate(rs); comparePeriods(m, range.from) < 0; m = nextPeriod(m)) {\n        const received = incomeReceivedByMonth.get(periodKey(m))?.get(i.id) ?? 0;\n        // Each intervening month draws down by that month's RESOLVED budget.\n        carry += received - incomeMonthly(i, m);\n      }",
+      "new_string": "      for (let m = periodOfDate(rs); comparePeriods(m, range.from) < 0; m = nextPeriod(m)) {\n        const received = incomeReceivedByMonth.get(periodKey(m))?.get(i.id) ?? 0;\n        // Each intervening month draws down by that month's RESOLVED budget.\n        // Money movements count as received here exactly as they do in the\n        // visible months (activityByEnv folds monthMoves in) and in the expense\n        // pre-fold (movementFor at the opening-carryover fold above): without\n        // this term, a prior-month move into an income envelope vanished from\n        // the carry the moment the month scrolled out of view (ISC-244 — the\n        // 2026-08 $2,948 Adhoc→Rental move read as −$2,948 in September).\n        carry += received + movementFor(m, i.id) - incomeMonthly(i, m);\n      }"
+    },
+    "timestamp": "2026-09-02T07:44:42.867Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/schema.ts",
+      "old_string": "  `DELETE FROM allocations WHERE period < '2023-01' OR period > '2030-12'`,",
+      "new_string": "  `DELETE FROM allocations WHERE period < '2023-01' OR period > '2030-12'`,\n  // Malformed period keys: three-digit years (\"203-01\", typed on the way to\n  // \"2030\") sort INSIDE the 2023..2030 keep-window lexically, so the range\n  // delete above never caught them. A format check is the only reliable net;\n  // length()/substr() are portable across SQLite and Postgres.\n  `DELETE FROM allocations WHERE length(period) <> 7 OR substr(period, 5, 1) <> '-'`,"
+    },
+    "timestamp": "2026-09-02T07:44:45.535Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sed -n '1,30p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/package.json",
+      "description": "Read package.json version and scripts"
+    },
+    "timestamp": "2026-09-02T07:44:59.336Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/package.json",
+      "old_string": "  \"version\": \"1.22.2\",",
+      "new_string": "  \"version\": \"1.23.0\","
+    },
+    "timestamp": "2026-09-02T07:45:04.867Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"Movement|IncomeCarryover|putTransaction|upsertMapping|upsertCategory\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/test/penny-memory-store.ts | head -12; echo ===; rg -n \"getGridRange\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts | head -3; echo ===; rg -n \"movement|income\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/test/routes-move-edit-movements.test.ts | head -20; echo ===; rg -n \"export function env|export const USER|export const CONFIG|incomeEnv\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/test/penny-fixtures.ts",
+      "description": "Find store/fixture APIs for the new tests"
+    },
+    "timestamp": "2026-09-02T07:45:15.309Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"interface MoneyMovement|interface IncomeEnvelope|interface IncomeCarryover|interface CreateEnvelopeInput\" -A 16 /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/domain/types.ts /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/platform/store.ts /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts 2>/dev/null | head -80; echo ===; sed -n '312,330p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/test/penny-memory-store.ts; echo ===; sed -n '9,40p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/test/penny-fixtures.ts",
+      "description": "Read type shapes needed for tests"
+    },
+    "timestamp": "2026-09-02T07:45:32.717Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sed -n '876,905p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts; echo ===; rg -n \"export function periodKey|export interface MonthRange\" -A 4 /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/period.ts /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/domain/types.ts /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts 2>/dev/null | head -14",
+      "description": "Income view fields, periodKey, MonthRange shapes"
+    },
+    "timestamp": "2026-09-02T07:45:59.109Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/test/materialised-month-reconcile.test.ts",
+      "content": "/**\n * v1.23.0 fixes (ISC-242..245): materialised months reconcile later-created\n * budget lines, creation reaches pre-materialised future months, the era guard\n * rejects malformed period keys, and the income carry fold counts money\n * movements (the 2026-09 regression set: Compliance/Leasing missing from\n * September's plan; a $2,948 Adhoc→Rental move vanishing from the rollover).\n */\n\nimport { describe, test, expect } from \"bun:test\";\nimport { MemoryStore } from \"./penny-memory-store.ts\";\nimport { EnvelopeService } from \"../src/envelope/service.ts\";\nimport { BudgetService, isValidEraKey } from \"../src/budget/service.ts\";\nimport { env, USER, CONFIG } from \"./penny-fixtures.ts\";\n\nconst AUG = { year: 2026, month: 8 };\nconst SEP = { year: 2026, month: 9 };\n\nfunction services() {\n  const store = new MemoryStore();\n  const envSvc = new EnvelopeService(store, CONFIG);\n  const budget = new BudgetService(store, envSvc);\n  return { store, envSvc, budget };\n}\n\ndescribe(\"ensureMonth reconciles materialised months (ISC-243)\", () => {\n  test(\"a line created after the month materialised is added on the next ensureMonth\", async () => {\n    const { store, budget } = await services();\n    await store.upsertEnvelope(USER, env(\"groceries\", { name: \"Groceries\" }));\n    await store.putTemplateLine(USER, { id: \"t1\", userId: USER, envelopeId: \"groceries\", amountCents: 50000 });\n    expect((await budget.ensureMonth(USER, SEP)).rolled).toBe(1);\n\n    // The month now pre-dates the Rent line — the 2026-09 shape.\n    await store.upsertEnvelope(USER, env(\"rent\", { name: \"Rent\" }));\n    await store.putTemplateLine(USER, { id: \"t2\", userId: USER, envelopeId: \"rent\", amountCents: 200000 });\n\n    expect((await budget.ensureMonth(USER, SEP)).rolled).toBe(1);\n    const byEnv = new Map((await store.listAllocations(USER, \"2026-09\")).map((a) => [a.envelopeId, a]));\n    expect(byEnv.get(\"rent\")?.amountCents).toBe(200000);\n    expect(byEnv.get(\"groceries\")?.amountCents).toBe(50000);\n  });\n\n  test(\"reconcile never touches existing rows: this-month overrides and edits survive\", async () => {\n    const { store, budget } = await services();\n    await store.upsertEnvelope(USER, env(\"groceries\", { name: \"Groceries\" }));\n    await store.putTemplateLine(USER, { id: \"t1\", userId: USER, envelopeId: \"groceries\", amountCents: 50000 });\n    await budget.ensureMonth(USER, SEP);\n\n    // A this-month override on the materialised row.\n    const row = (await store.listAllocations(USER, \"2026-09\")).find((a) => a.envelopeId === \"groceries\")!;\n    await store.putAllocation(USER, { ...row, amountCents: 99999, scope: \"this_month\" });\n\n    await store.upsertEnvelope(USER, env(\"rent\", { name: \"Rent\" }));\n    await store.putTemplateLine(USER, { id: \"t2\", userId: USER, envelopeId: \"rent\", amountCents: 200000 });\n    await budget.ensureMonth(USER, SEP);\n\n    const groceries = (await store.listAllocations(USER, \"2026-09\")).find((a) => a.envelopeId === \"groceries\")!;\n    expect(groceries.amountCents).toBe(99999);\n    expect(groceries.scope).toBe(\"this_month\");\n  });\n\n  test(\"reconcile skips zero-resolving lines (no pointless zero rows appear)\", async () => {\n    const { store, budget } = await services();\n    await store.upsertEnvelope(USER, env(\"groceries\", { name: \"Groceries\" }));\n    await store.putTemplateLine(USER, { id: \"t1\", userId: USER, envelopeId: \"groceries\", amountCents: 50000 });\n    await budget.ensureMonth(USER, SEP);\n\n    await store.upsertEnvelope(USER, env(\"zero\", { name: \"Zero\" }));\n    await store.putTemplateLine(USER, { id: \"t2\", userId: USER, envelopeId: \"zero\", amountCents: 0 });\n    expect((await budget.ensureMonth(USER, SEP)).rolled).toBe(0);\n    expect((await store.listAllocations(USER, \"2026-09\")).some((a) => a.envelopeId === \"zero\")).toBe(false);\n  });\n});\n\ndescribe(\"createEnvelope reaches pre-materialised months (ISC-242)\", () => {\n  test(\"a new envelope's budget lands in already-materialised future months\", async () => {\n    const { store, budget } = await services();\n    await store.upsertEnvelope(USER, env(\"groceries\", { name: \"Groceries\" }));\n    await store.putTemplateLine(USER, { id: \"t1\", userId: USER, envelopeId: \"groceries\", amountCents: 50000 });\n    await budget.ensureMonth(USER, AUG);\n    await budget.ensureMonth(USER, SEP); // September materialised BEFORE the new envelope exists\n\n    const id = await budget.createEnvelope(USER, AUG, {\n      name: \"Compliance\",\n      type: \"expense\",\n      rolloverStart: \"2026-08-01\",\n      budgetedCents: 3750,\n      effectiveFrom: \"2026-08-01\",\n    });\n\n    const aug = (await store.listAllocations(USER, \"2026-08\")).find((a) => a.envelopeId === id);\n    const sep = (await store.listAllocations(USER, \"2026-09\")).find((a) => a.envelopeId === id);\n    expect(aug?.amountCents).toBe(3750);\n    expect(sep?.amountCents).toBe(3750);\n  });\n\n  test(\"the effective window is respected: months before effectiveFrom stay untouched\", async () => {\n    const { store, budget } = await services();\n    await store.upsertEnvelope(USER, env(\"groceries\", { name: \"Groceries\" }));\n    await store.putTemplateLine(USER, { id: \"t1\", userId: USER, envelopeId: \"groceries\", amountCents: 50000 });\n    await budget.ensureMonth(USER, { year: 2026, month: 7 });\n    await budget.ensureMonth(USER, AUG);\n\n    const id = await budget.createEnvelope(USER, AUG, {\n      name: \"Compliance\",\n      type: \"expense\",\n      rolloverStart: \"2026-08-01\",\n      budgetedCents: 3750,\n      effectiveFrom: \"2026-08-01\",\n    });\n    expect((await store.listAllocations(USER, \"2026-07\")).some((a) => a.envelopeId === id)).toBe(false);\n  });\n});\n\ndescribe(\"era guard rejects malformed period keys (ISC-245)\", () => {\n  test(\"isValidEraKey: format AND range\", () => {\n    expect(isValidEraKey(\"2026-09\")).toBe(true);\n    expect(isValidEraKey(\"203-01\")).toBe(false); // mid-typing \"2030\" — passes lexical bounds\n    expect(isValidEraKey(\"1989-12\")).toBe(false);\n    expect(isValidEraKey(\"2101-01\")).toBe(false);\n    expect(isValidEraKey(\"2026-9\")).toBe(false);\n  });\n\n  test(\"ensureMonth refuses a three-digit year outright\", async () => {\n    const { store, budget } = await services();\n    await store.upsertEnvelope(USER, env(\"groceries\", { name: \"Groceries\" }));\n    await store.putTemplateLine(USER, { id: \"t1\", userId: USER, envelopeId: \"groceries\", amountCents: 50000 });\n    expect((await budget.ensureMonth(USER, { year: 203, month: 1 })).rolled).toBe(0);\n    expect((await store.listAllocations(USER, \"203-01\")).length).toBe(0);\n  });\n});\n\ndescribe(\"income carry fold counts money movements (ISC-244)\", () => {\n  test(\"a prior-month move into an income envelope survives into the next month's carryover\", async () => {\n    const { store, envSvc } = await services();\n    await store.upsertEnvelope(USER, env(\"groceries\", { name: \"Groceries\" }));\n    await store.upsertIncomeEnvelope(USER, {\n      id: \"inc-r\", userId: USER, name: \"Rental\", source: \"Rental\", budgetedCents: 0, actualCents: 0,\n    });\n    await store.upsertIncomeEnvelope(USER, {\n      id: \"inc-a\", userId: USER, name: \"Adhoc\", source: \"Adhoc\", budgetedCents: 0, actualCents: 0,\n    });\n    await store.setIncomeCarryover(USER, \"inc-r\", 0, \"2026-08-01\");\n    await store.setIncomeCarryover(USER, \"inc-a\", 0, \"2026-08-01\");\n    // Mid-August in any plausible budget timezone.\n    await store.appendMovement(USER, {\n      id: \"mv1\", userId: USER, ts: Date.UTC(2026, 7, 14, 2), fromEnvelopeId: \"inc-a\", toEnvelopeId: \"inc-r\",\n      amountCents: 294800, scope: \"ongoing\", actor: \"ui\", correlationId: \"c1\",\n    });\n\n    const grid = await envSvc.getGridRange(USER, { from: SEP, to: SEP });\n    const rental = grid.income.find((i) => i.id === \"inc-r\")!;\n    const adhoc = grid.income.find((i) => i.id === \"inc-a\")!;\n    // Before the fix the August move vanished from the fold: rental read 0\n    // (and the live ledger read −$2,948 against its budget), adhoc read 0\n    // instead of the −294800 it had sent away. Conservation holds again:\n    expect(rental.carryoverCents).toBe(294800);\n    expect(adhoc.carryoverCents).toBe(-294800);\n  });\n});\n"
+    },
+    "timestamp": "2026-09-02T07:46:51.926Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && timeout 300 bun test test/materialised-month-reconcile.test.ts 2>&1 | tail -30",
+      "description": "Run the new regression tests"
+    },
+    "timestamp": "2026-09-02T07:46:58.015Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && timeout 600 bun test 2>&1 | tail -15",
+      "description": "Run full test suite"
+    },
+    "timestamp": "2026-09-02T07:47:04.235Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && timeout 600 bun test 2>&1 | rg -B2 -A12 \"\\(fail\\)\" | head -60",
+      "description": "Show the two failing tests"
+    },
+    "timestamp": "2026-09-02T07:47:15.137Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && timeout 600 bun test 2>&1 | rg -i \"fail\" | head -10",
+      "description": "Locate failing test names"
+    },
+    "timestamp": "2026-09-02T07:47:25.705Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && timeout 600 bun test 2>&1 | grep -a -B3 -A15 \"✗\" | head -70",
+      "description": "Show failing test detail via unicode marker"
+    },
+    "timestamp": "2026-09-02T07:47:36.665Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace && git stash push -m \"v1.23.0 wip\" -- projects/envelope-os/src projects/envelope-os/package.json >/dev/null && cd projects/envelope-os && timeout 300 bun test test/budget-versions-overlap.test.ts 2>&1 | tail -4; cd /home/nicholas-wood/Documents/workspace && git stash pop",
+      "description": "Test the failing file against unmodified source"
+    },
+    "timestamp": "2026-09-02T07:47:54.535Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && timeout 300 bun run typecheck 2>&1 | tail -5 && timeout 120 bun run lint 2>&1 | tail -3",
+      "description": "Typecheck all tsconfigs and lint"
+    },
+    "timestamp": "2026-09-02T07:48:19.726Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"class SqliteStore\" -A 8 /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/sqlite.ts | head -12; rg -n \"SqliteStore|new BudgetService|new EnvelopeService\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/composition.ts | head -8",
+      "description": "Store constructor and composition idiom"
+    },
+    "timestamp": "2026-09-02T07:48:21.534Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"migrate\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/composition.ts /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/sqlite.ts | head -8; rg -n \"new EnvelopeService|new BudgetService|EngineConfig|tz\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/composition.ts | head -12",
+      "description": "Find migrate invocation and service composition"
+    },
+    "timestamp": "2026-09-02T07:48:50.095Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sed -n '195,250p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/sqlite.ts; echo ===; sed -n '220,235p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/postgres.ts",
+      "description": "Read migrate gating in both stores"
+    },
+    "timestamp": "2026-09-02T07:48:59.465Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/schema.ts",
+      "old_string": "export const GARBAGE_ALLOCATIONS_COUNT_SQL =\n  `SELECT COUNT(*) AS n FROM allocations WHERE period < '2023-01' OR period > '2030-12'`;",
+      "new_string": "export const GARBAGE_ALLOCATIONS_COUNT_SQL =\n  // The format clauses mirror GARBAGE_PURGE_SQL: three-digit years (\"203-01\")\n  // sort INSIDE the keep-window, so a range-only count gates the purge shut\n  // while malformed keys survive.\n  `SELECT COUNT(*) AS n FROM allocations\n   WHERE period < '2023-01' OR period > '2030-12'\n      OR length(period) <> 7 OR substr(period, 5, 1) <> '-'`;"
+    },
+    "timestamp": "2026-09-02T07:49:12.185Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sed -n '25,60p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/composition.ts",
+      "description": "Read service composition wiring"
+    },
+    "timestamp": "2026-09-02T07:49:24.896Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"new EnvelopeService|new BudgetService\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/*.ts /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/**/*.ts 2>/dev/null | head -5; rg -n \"constructor\" -A 6 /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts | head -10",
+      "description": "Find EnvelopeService construction with timezone"
+    },
+    "timestamp": "2026-09-02T07:49:30.375Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sed -n '25,55p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/services.ts; rg -n \"holdingEnvelopeId|nabCardAccountIds|HOLDING|NAB\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/platform/config.ts | head",
+      "description": "Mirror production EngineConfig values"
+    },
+    "timestamp": "2026-09-02T07:49:37.666Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "systemctl --user cat penny 2>/dev/null | rg -v \"^#\" | head -25",
+      "description": "Read penny service unit env configuration"
+    },
+    "timestamp": "2026-09-02T07:49:43.236Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/verify-release.ts",
+      "content": "/** v1.23.0 pre-deploy verification against a consistent snapshot of the live ledger. */\nimport { Database } from \"bun:sqlite\";\nimport { SqliteStore } from \"/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/sqlite.ts\";\nimport { EnvelopeService } from \"/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts\";\nimport { BudgetService } from \"/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts\";\n\nconst SNAP = \"/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/verify.db\";\n// Consistent snapshot from a readonly connection (safe against the live WAL).\nawait Bun.$`rm -f ${SNAP}`.quiet();\nconst src = new Database(`${process.env.HOME}/.penny/penny.db`, { readonly: true });\nsrc.run(`VACUUM INTO '${SNAP}'`);\nsrc.close();\n\nconst store = new SqliteStore(SNAP);\nawait store.migrate(); // applies the new format-aware garbage purge\n\nconst db = new Database(SNAP, { readonly: true });\nconst badRows = db.query(`SELECT COUNT(*) n FROM allocations WHERE length(period) <> 7 OR substr(period,5,1) <> '-'`).get() as { n: number };\nconsole.log(\"PROBE-1 malformed-period rows after migrate:\", badRows.n, badRows.n === 0 ? \"PASS\" : \"FAIL\");\ndb.close();\n\nconst envSvc = new EnvelopeService(store, { holdingEnvelopeId: null, nabCardAccountIds: [\"acc-nab\"] }, { timezone: \"Australia/Melbourne\" });\nconst budget = new BudgetService(store, envSvc, \"Australia/Melbourne\");\n\nconst SEP = { year: 2026, month: 9 };\nconst res = await budget.ensureMonth(\"local\", SEP);\nconsole.log(\"PROBE-2 ensureMonth(2026-09) reconciled rows:\", res.rolled, res.rolled === 2 ? \"PASS (Compliance + Leasing Fees)\" : \"CHECK\");\n\nconst db2 = new Database(SNAP, { readonly: true });\nconst added = db2.query(`SELECT envelope_id, amount_cents FROM allocations WHERE period='2026-09' AND envelope_id IN ('419a2c55-495f-457d-aefe-41aa1f191e70','d1fe1684-d183-4c0b-a06e-4aca0ef61490')`).all();\nconsole.log(\"PROBE-3 September rows:\", JSON.stringify(added));\ndb2.close();\n\nconst grid = await envSvc.getGridRange(\"local\", { from: SEP, to: SEP });\nconst rental = grid.income.find((i: { id: string }) => i.id === \"inc-rental\")!;\nconst adhoc = grid.income.find((i: { id: string }) => i.id === \"inc-adhoc-income\")!;\nconsole.log(\"PROBE-4 Rental Sept carryoverCents:\", rental.carryoverCents, rental.carryoverCents === 0 ? \"PASS (was -294800)\" : \"CHECK\");\nconsole.log(\"PROBE-5 Adhoc Sept carryoverCents:\", adhoc.carryoverCents);\nconsole.log(\"PROBE-6 Sept unallocatedCents:\", grid.unallocatedCents, \"zeroBasedAlert:\", grid.zeroBasedAlert, grid.unallocatedCents === 0 ? \"PASS (was 14167)\" : \"CHECK\");\nprocess.exit(0);\n"
+    },
+    "timestamp": "2026-09-02T07:50:03.445Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && timeout 120 bun /home/nicholas-wood/.claude/jobs/b65b1bed/tmp/verify-release.ts 2>&1 | tail -15",
+      "description": "Run pre-deploy verification on live-data snapshot"
+    },
+    "timestamp": "2026-09-02T07:50:07.226Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"^## \" /home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md; sed -n '455,470p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md; rg -n \"^### v1\\.\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md | tail -3",
+      "description": "Project ISA structure and criteria tail"
+    },
+    "timestamp": "2026-09-02T07:50:25.865Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -o \"ISC-([0-9]+)\" -r '$1' /home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md | sort -n | tail -1; sed -n '648,660p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "description": "Find max ISC number and Decisions/Changelog boundary"
+    },
+    "timestamp": "2026-09-02T07:50:32.787Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sed -n '718,742p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md; echo ===TAIL; tail -6 /home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "description": "Read Changelog end and file tail"
+    },
+    "timestamp": "2026-09-02T07:50:47.166Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "- [x] ISC-241: Anti: the harness never writes to the live database — it runs against its own PENNY_SQLITE_PATH; ~/.penny/penny.db is untouched by this task's testing\n\n## Test Strategy",
+      "new_string": "- [x] ISC-241: Anti: the harness never writes to the live database — it runs against its own PENNY_SQLITE_PATH; ~/.penny/penny.db is untouched by this task's testing\n\nv1.23.0 materialised-month integrity + income-fold conservation (2026-09-02):\n\n- [x] ISC-291: createEnvelope pushes the new budget line into EVERY already-materialised month its effective window covers (rederiveMaterialisedMonths at creation), not just the current month\n- [x] ISC-292: ensureMonth RECONCILES an already-materialised month — envelopes whose active line resolves non-zero but have no allocation row are added; a fresh month still materialises in full\n- [x] ISC-293: era guard is format-aware (isValidEraKey: ^\\d{4}-\\d{2}$ within 1990-01..2100-12); ensureMonth refuses year-203 periods outright\n- [x] ISC-294: the garbage purge count AND delete catch malformed period keys; the live ledger holds zero rows where length(period) <> 7 after migrate\n- [x] ISC-295: the income carry pre-range fold counts money movements (movementFor term), restoring conservation with the visible-month path and the expense pre-fold\n- [x] ISC-296: Anti: reconcile never touches an existing allocation row — a this_month override and an explicit zero row survive a reconcile pass unchanged\n\n## Test Strategy"
+    },
+    "timestamp": "2026-09-02T07:51:01.497Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": " (6) AdoptCategoryModal:162 concatenates categories + incomes into one flat list — sorting keeps the two blocks separate (sort within group), never interleaved.\n\n## Changelog",
+      "new_string": " (6) AdoptCategoryModal:162 concatenates categories + incomes into one flat list — sorting keeps the two blocks separate (sort within group), never interleaved.\n\n- 2026-09-02: v1.23.0 (bg session, E3, Nick-approved scope). Diagnosis first (read-only, task ISA budgetbuddy-sept-rollover-imbalance): September's zero-base gap ($141.67) was exactly Compliance + Leasing Fees, created 12-13 Aug into a ledger whose months were already materialised through 2030-12 by a pre-12-Aug long-range view (the twelve garbage 203-xx months prove the year was hand-typed; they sort INSIDE both the era guard and the purge keep-window, which is how they survived). Rental's September rollover read −$2,948.00 because foldIncomeCarry omitted money movements for pre-range months while the visible-month path and the expense pre-fold both count them — Nick's 14 Aug Adhoc→Rental $2,948.00 move (which zeroed August) vanished from September. Fix choices: (1) reconcile-per-envelope in ensureMonth over a data patch — absence of a row is a safe \"never materialised\" signal because deliberate zeros are rows; (2) creation now calls the SAME rederive as edits (symmetry restored); (3) purge gate count had to learn the format clauses or the new delete would never run. Pre-existing failures noted, NOT mine (verified via stash): budget-versions-overlap.test.ts × 2 (409 vs 200 supersession regression, pre-dates this work — separate task). Forge/Cato skipped: codex CLI absent on this box (documented gotcha).\n\n## Changelog"
+    },
+    "timestamp": "2026-09-02T07:51:11.706Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "  criterion_now: ISC-137, ISC-138, ISC-139.\n\n## Verification",
+      "new_string": "  criterion_now: ISC-137, ISC-138, ISC-139.\n\n- conjectured: ensureMonth's materialise-if-empty guard (\"an already-populated month is left untouched so edits are never clobbered\") plus rederive-on-edit fully keeps materialised months true to the budget chronology.\n  refuted_by: 2026-09 live ledger — months were materialised through 2030-12 by a long-range view; envelopes created 12-13 Aug (Compliance, Leasing Fees) existed in the chronology but reached only their creation month, leaving every later month's plan short by exactly $141.67 with no surface explaining why. Creation was the one line-writing path with no rederive, and the skip guard blocked the lazy repair too.\n  learned: \"Never clobber\" and \"never skip\" are separable: existing rows are the edits to protect; MISSING rows are always safe to add because a deliberate zero is stored as a row. ensureMonth now reconciles missing envelopes on every call, and creation invokes the same rederive as edits — materialised months converge on the chronology from both directions.\n  criterion_now: ISC-291, ISC-292, ISC-293, ISC-294, ISC-295, ISC-296.\n\n## Verification"
+    },
+    "timestamp": "2026-09-02T07:51:23.359Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && timeout 300 bunx vite build 2>&1 | tail -6",
+      "description": "Build the web bundle"
+    },
+    "timestamp": "2026-09-02T07:51:29.075Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "systemctl --user restart penny && sleep 3 && systemctl --user is-active penny && curl -s http://127.0.0.1:8787/api/health",
+      "description": "Restart penny service and check health/version"
+    },
+    "timestamp": "2026-09-02T07:51:41.965Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "journalctl --user -u penny --since \"2 minutes ago\" 2>/dev/null | rg -i \"migrate|purg|error\" | head -5; cat > /home/nicholas-wood/.claude/jobs/b65b1bed/tmp/postdeploy.ts <<'EOF'\nimport { Database } from \"bun:sqlite\";\nconst db = new Database(`${process.env.HOME}/.penny/penny.db`, { readonly: true });\nconst bad = db.query(`SELECT COUNT(*) n FROM allocations WHERE length(period) <> 7 OR substr(period,5,1) <> '-'`).get();\nconst sep = db.query(`SELECT COUNT(*) n, SUM(amount_cents) c FROM allocations WHERE period='2026-09'`).get();\nconsole.log(\"live malformed rows:\", JSON.stringify(bad), \"| live 2026-09:\", JSON.stringify(sep));\nprocess.exit(0);\nEOF\ntimeout 60 bun /home/nicholas-wood/.claude/jobs/b65b1bed/tmp/postdeploy.ts",
+      "description": "Post-deploy probes: migrate log, live debris count, September state"
+    },
+    "timestamp": "2026-09-02T07:52:07.435Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/postdeploy.ts",
+      "content": "import { Database } from \"bun:sqlite\";\nconst db = new Database(`${process.env.HOME}/.penny/penny.db`, { readonly: true });\nconst bad = db.query(`SELECT COUNT(*) n FROM allocations WHERE length(period) <> 7 OR substr(period,5,1) <> '-'`).get();\nconst sep = db.query(`SELECT COUNT(*) n, SUM(amount_cents) c FROM allocations WHERE period='2026-09'`).get();\nconsole.log(\"live malformed rows:\", JSON.stringify(bad), \"| live 2026-09:\", JSON.stringify(sep));\nprocess.exit(0);\n"
+    },
+    "timestamp": "2026-09-02T07:52:55.176Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 60 bun /home/nicholas-wood/.claude/jobs/b65b1bed/tmp/postdeploy.ts",
+      "description": "Probe live DB: malformed rows and September state"
+    },
+    "timestamp": "2026-09-02T07:52:58.887Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "journalctl --user -u penny --since \"3 minutes ago\" --no-pager 2>/dev/null | rg -i \"migrate|purg|error|listen\" | head -6",
+      "description": "Check penny boot log for migrate purge line"
+    },
+    "timestamp": "2026-09-02T07:52:59.406Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace && git status --short | head -12",
+      "description": "Show working tree before commit"
+    },
+    "timestamp": "2026-09-02T07:53:28.195Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace && git add projects/envelope-os/ISA.md projects/envelope-os/package.json projects/envelope-os/src/budget/service.ts projects/envelope-os/src/envelope/service.ts projects/envelope-os/src/store/schema.ts projects/envelope-os/test/materialised-month-reconcile.test.ts && git commit -m \"envelope-os v1.23.0: materialised-month integrity + income-fold conservation\n\n- createEnvelope rederives every materialised month (new lines reached only\n  their creation month; Sept 2026 was missing Compliance + Leasing = \\$141.67)\n- ensureMonth reconciles missing envelopes instead of no-oping; existing rows\n  (edits, this_month overrides, explicit zeros) are never touched\n- era guard is format-aware (isValidEraKey) and the garbage purge count/delete\n  catch three-digit-year keys; 492 '203-xx' debris rows purged on migrate\n- foldIncomeCarry counts money movements for pre-range months (a \\$2,948\n  Adhoc->Rental move vanished from September's rollover, reading -\\$2,948)\n\nISC-291..296; verified on a live-ledger snapshot: Rental Sept carry 0,\nzero-base 0, reconcile adds exactly the two missing rows. Pre-existing\nbudget-versions-overlap failures (409 supersession) are unrelated and remain.\" | tail -3",
+      "description": "Commit v1.23.0 to workspace repo"
+    },
+    "timestamp": "2026-09-02T07:53:38.857Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "- 2026-08-14: Deploy discipline correction — the VersionSkewBanner compares the client bundle against /api/health, which reports the version loaded at SERVER BOOT. A frontend-only release without a penny restart leaves health reporting the old version and fires the banner in reverse on up-to-date clients (bit Nick on v1.22.2). Rule: every version bump ends with `systemctl --user restart penny`, regardless of what changed.",
+      "new_string": "- 2026-08-14: Deploy discipline correction — the VersionSkewBanner compares the client bundle against /api/health, which reports the version loaded at SERVER BOOT. A frontend-only release without a penny restart leaves health reporting the old version and fires the banner in reverse on up-to-date clients (bit Nick on v1.22.2). Rule: every version bump ends with `systemctl --user restart penny`, regardless of what changed.\n\n- 2026-09-02: v1.23.0 verification. ISC-291/292/296: bun test test/materialised-month-reconcile.test.ts — 8/8 (reconcile adds later lines, preserves this_month override 99999, skips zero lines; createEnvelope lands in pre-materialised Sept, respects effectiveFrom). ISC-293: same file (isValidEraKey matrix + ensureMonth year-203 refusal). ISC-294: live probe post-deploy — boot journal \"[migrate] purging 492 out-of-era allocation rows\"; readonly SELECT on ~/.penny/penny.db: 0 rows with length(period) <> 7. ISC-295: pre-deploy snapshot probe (VACUUM INTO copy, real SqliteStore + services, production config): ensureMonth(2026-09) rolled exactly 2 (Compliance 3750, Leasing Fees 10417); getGridRange Sept: inc-rental carryoverCents 0 (was −294800), inc-adhoc-income 0 (had moved out exactly its accumulated surplus — conservation), unallocatedCents 0 / zeroBasedAlert false (was 14167). Suite: 491 pass / 2 pre-existing fails (budget-versions-overlap 409-supersession, confirmed present on stashed baseline — separate defect, not this release). typecheck (3 tsconfigs) + eslint clean. Deploy: vite build, systemctl --user restart penny, /api/health {\"version\":\"1.23.0\"}. Live 2026-09 heals on Nick's first September view (grid GET → ensureMonth reconcile) — verified end-to-end on the snapshot, by design not front-run on the live ledger."
+    },
+    "timestamp": "2026-09-02T07:53:57.258Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace && git add projects/envelope-os/ISA.md && git commit --amend --no-edit | tail -2",
+      "description": "Amend commit with verification evidence"
+    },
+    "timestamp": "2026-09-02T07:54:02.065Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Verify phase.\", \"voice_id\": \"pNInz6obpgDQGcFmaJgB\", \"voice_enabled\": true}' > /dev/null 2>&1; timeout 120 bun ~/.claude/PAI/TOOLS/Inference.ts --mode advisor --auto-state \"TASK: Shipped envelope-os v1.23.0: creation rederives materialised months, ensureMonth reconciles missing envelopes, format-aware era guard + 492-row debris purge, income pre-fold now counts money movements\" \"QUESTION: Release is deployed (health 1.23.0, migrate purged 492 rows, snapshot probes all pass: reconcile adds exactly Compliance+Leasing, Rental Sept carry 0, zero-base 0; 8 new tests green, suite 491 pass + 2 PRE-EXISTING budget-versions-overlap 409 failures confirmed on stashed baseline; typecheck+lint clean; committed ad1fab2 with ISA ISCs 291-296 + C/R/L). Live Sept reconciles lazily on first grid view by design. Any gaps before declaring done?\"",
+      "description": "Advisor pre-complete gap check (Rule 2)"
+    },
+    "timestamp": "2026-09-02T07:54:12.086Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/test/materialised-month-reconcile.test.ts",
+      "old_string": "  test(\"reconcile skips zero-resolving lines (no pointless zero rows appear)\", async () => {",
+      "new_string": "  test(\"an ENDED line never resurrects: reconcile reads template effective dating, not prior-month presence\", async () => {\n    const { store, budget } = await services();\n    await store.upsertEnvelope(USER, env(\"groceries\", { name: \"Groceries\" }));\n    await store.putTemplateLine(USER, { id: \"t1\", userId: USER, envelopeId: \"groceries\", amountCents: 50000 });\n    await store.upsertEnvelope(USER, env(\"carloan\", { name: \"Car Loan\" }));\n    await store.putTemplateLine(USER, {\n      id: \"t2\", userId: USER, envelopeId: \"carloan\", amountCents: 90000,\n      effectiveFrom: \"2026-01-01\", effectiveTo: \"2026-08-31\",\n    });\n    expect((await budget.ensureMonth(USER, AUG)).rolled).toBe(2); // both active in August\n\n    // September: the ended line must not materialise — and a second reconcile\n    // pass must not bring it back either.\n    expect((await budget.ensureMonth(USER, SEP)).rolled).toBe(1);\n    expect((await budget.ensureMonth(USER, SEP)).rolled).toBe(0);\n    expect((await store.listAllocations(USER, \"2026-09\")).some((a) => a.envelopeId === \"carloan\")).toBe(false);\n  });\n\n  test(\"reconcile skips zero-resolving lines (no pointless zero rows appear)\", async () => {"
+    },
+    "timestamp": "2026-09-02T07:55:56.626Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "head -c 400 ~/.penny/backup-status.json; echo; ls -la ~/.penny/pre-deploy-snapshots/ 2>/dev/null | head -5",
+      "description": "Check backup recoverability for the purged rows"
+    },
+    "timestamp": "2026-09-02T07:55:57.369Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && timeout 300 bun test test/materialised-month-reconcile.test.ts 2>&1 | tail -5",
+      "description": "Run reconcile test file with resurrection probe"
+    },
+    "timestamp": "2026-09-02T07:56:10.456Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": " Live 2026-09 heals on Nick's first September view (grid GET → ensureMonth reconcile) — verified end-to-end on the snapshot, by design not front-run on the live ledger.",
+      "new_string": " Live 2026-09 heals on Nick's first September view (grid GET → ensureMonth reconcile) — verified end-to-end on the snapshot, by design not front-run on the live ledger.\n\n- 2026-09-02: v1.23.0 advisor-response probes. (1) Resurrection semantics: reconcile's predicate is template effective dating (resolveTemplateForMonth), never prior-month presence — new test \"an ENDED line never resurrects\" (line effectiveTo 2026-08-31 → absent from Sept on two consecutive reconcile passes, 9/9 green); the Aug-only zero rows (Car Loan, old Apple TV) had their lines version-DELETED, so no template line exists to re-add. (2) Purge recoverability: the 492 deleted rows exist in the nightly encrypted backup penny-crypt:/penny-2026-09-01.db (02:01 AEST 2 Sep, pre-deploy); delete predicate recorded in GARBAGE_PURGE_SQL. (3) Single-writer: penny runs only as this box's systemd user service; the crypt remote is backup-only — no second live copy to resurrect debris. (4) Boundary double-count: the pre-range fold is strictly m < range.from and visible months are ≥ range.from, so a movement month is counted on exactly one side; counterparty probed (inc-adhoc-income Sept carry 0 = +3044.05 +16.80 −3060.85, independent per-envelope folds, not error-netting). (5) Concurrency: raced ensureMonth double-rolls are safe via the (user_id, envelope_id, period) unique index + upsert + withTransaction. (6) Non-grid surfaces (Pulse income) resolve from template lines directly; allocation-reading surfaces follow a grid view — eventually consistent, documented here. (7) The budget-versions-overlap 409 failures touch applyVersionWrite supersession, untouched by this release — tracked as a separate open defect."
+    },
+    "timestamp": "2026-09-02T07:56:25.498Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/project-budgetbuddy-sept-2026-diagnosis.md",
+      "old_string": "description: Sept 2026 diagnosis — income pre-fold drops money_movements (Rental −$2,948); Sept plan missing Compliance+Leasing ($141.67); fixes not yet applied",
+      "new_string": "description: Sept 2026 diagnosis — income pre-fold dropped money_movements (Rental −$2,948); Sept plan missed Compliance+Leasing ($141.67); FIXED in v1.23.0 (2 Sep)"
+    },
+    "timestamp": "2026-09-02T07:56:28.116Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/project-budgetbuddy-sept-2026-diagnosis.md",
+      "limit": 10
+    },
+    "timestamp": "2026-09-02T07:56:31.367Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/project-budgetbuddy-sept-2026-diagnosis.md",
+      "old_string": "description: \"Sept 2026 diagnosis — income pre-fold drops money_movements (Rental −$2,948); Sept plan missing Compliance+Leasing ($141.67); fixes not yet applied\"",
+      "new_string": "description: \"Sept 2026 diagnosis — income pre-fold dropped money_movements (Rental −$2,948); Sept plan missed Compliance+Leasing ($141.67); FIXED in v1.23.0 (2 Sep)\""
+    },
+    "timestamp": "2026-09-02T07:56:37.255Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/MEMORY.md",
+      "old_string": "- [BudgetBuddy Sept 2026 diagnosis](project-budgetbuddy-sept-2026-diagnosis.md) — income pre-fold drops money_movements (Rental −$2,948); Sept missing Compliance+Leasing ($141.67); unfixed",
+      "new_string": "- [BudgetBuddy Sept 2026 diagnosis](project-budgetbuddy-sept-2026-diagnosis.md) — both defects FIXED in v1.23.0 (2 Sep): reconcile-on-view + creation rederive + movement-aware income fold; overlap-409 tests still open"
+    },
+    "timestamp": "2026-09-02T07:56:42.305Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/project-budgetbuddy-sept-2026-diagnosis.md",
+      "old_string": "**Why:** prevents rederiving this from scratch and mis-asserting engine behaviour when Nick asks to fix either defect.\n**How to apply:** if asked to fix, verify these file:line references still hold (v1.22.2 at diagnosis time), then target the two named mechanisms directly.",
+      "new_string": "**FIXED in v1.23.0 (2026-09-02, commit ad1fab2 in ~/Documents/workspace):** creation now calls rederiveMaterialisedMonths; ensureMonth reconciles missing envelopes (template-effective-dating predicate — ended/deleted lines never resurrect, tested); era guard format-aware + 492 \"203-xx\" debris rows purged on migrate (recoverable from penny-crypt:/penny-2026-09-01.db); foldIncomeCarry counts movements. Verified on a live-ledger snapshot: Rental Sept carry $0, zero-base $0, exactly Compliance+Leasing reconciled. Live September heals on Nick's first grid view (lazy by design). Still open, pre-existing: budget-versions-overlap.test.ts × 2 (409 supersession) — separate defect.\n\n**Why:** prevents rederiving this from scratch and mis-asserting engine behaviour.\n**How to apply:** treat v1.23.0 semantics as current: materialised months self-heal on view; income folds conserve movements. The two overlap-409 test failures are the known open defect if Nick reports version-edit 409s."
+    },
+    "timestamp": "2026-09-02T07:56:49.986Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace && git add projects/envelope-os/ISA.md projects/envelope-os/test/materialised-month-reconcile.test.ts && git commit -m \"envelope-os v1.23.0 follow-up: resurrection regression test + advisor-response verification notes\n\n- test: an ENDED template line (effectiveTo in month N) never re-materialises\n  in N+1 across consecutive reconcile passes (predicate = template effective\n  dating, not prior-month presence); 9/9 green\n- ISA: purge recoverability (penny-crypt:/penny-2026-09-01.db), single-writer,\n  fold boundary/counterparty, concurrency, lazy-heal surfaces documented\" | tail -2 && cd projects/envelope-os && timeout 600 bun test 2>&1 | tail -4",
+      "description": "Commit follow-up and run final full suite"
+    },
+    "timestamp": "2026-09-02T07:56:56.205Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sed -n '1,60p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/test/budget-versions-overlap.test.ts",
+      "description": "Read the failing overlap tests"
+    },
+    "timestamp": "2026-09-02T08:18:32.378Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -sk -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Executing using PAI native mode\", \"voice_id\": \"pNInz6obpgDQGcFmaJgB\", \"voice_enabled\": true}' > /dev/null 2>&1; rg -n \"neighbour_adjustments|NeighbourAdjustmentsError|acceptAdjustments\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/handlers/*.ts | head -6",
+      "description": "Voice curl; find the 409 mapping in handlers"
+    },
+    "timestamp": "2026-09-02T08:18:55.398Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Algorithm\", \"voice_id\": \"pNInz6obpgDQGcFmaJgB\", \"voice_enabled\": true}' > /dev/null 2>&1",
+      "description": "Voice: Algorithm entry"
+    },
+    "timestamp": "2026-09-02T08:20:12.667Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/hunt21494.ts",
+      "content": "/** Hunt for $214.94 (21494c) across the live ledger + full Sept/Aug grid output. */\nimport { Database } from \"bun:sqlite\";\nimport { SqliteStore } from \"/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/sqlite.ts\";\nimport { EnvelopeService } from \"/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts\";\n\nconst SNAP = \"/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/hunt.db\";\nawait Bun.$`rm -f ${SNAP}`.quiet();\nconst src = new Database(`${process.env.HOME}/.penny/penny.db`, { readonly: true });\nsrc.run(`VACUUM INTO '${SNAP}'`);\nsrc.close();\n\nconst out: string[] = [];\nconst db = new Database(SNAP, { readonly: true });\nfor (const table of [\"allocations\", \"transactions\", \"money_movements\", \"budget_template\", \"budget_history\", \"envelopes\", \"income_envelopes\"]) {\n  const cols = (db.query(`PRAGMA table_info(${table})`).all() as { name: string; type: string }[])\n    .filter((c) => /INT|BIG/i.test(c.type) && /cents/.test(c.name)).map((c) => c.name);\n  for (const col of cols) {\n    const hits = db.query(`SELECT COUNT(*) n FROM ${table} WHERE ABS(${col}) = 21494`).get() as { n: number };\n    if (hits.n > 0) out.push(`DB HIT: ${table}.${col} x${hits.n}`);\n  }\n}\ndb.close();\n\nconst store = new SqliteStore(SNAP);\nawait store.migrate();\nconst svc = new EnvelopeService(store, { holdingEnvelopeId: null, nabCardAccountIds: [\"acc-nab\"] }, { timezone: \"Australia/Melbourne\" });\n\nfor (const month of [{ year: 2026, month: 8 }, { year: 2026, month: 9 }]) {\n  const g = await svc.getGridRange(\"local\", { from: month, to: month });\n  const label = `${month.year}-${String(month.month).padStart(2, \"0\")}`;\n  // scan every numeric leaf in the grid response for ±21494\n  const walk = (v: unknown, path: string) => {\n    if (typeof v === \"number\" && Math.abs(v) === 21494) out.push(`GRID ${label} HIT: ${path} = ${v}`);\n    else if (Array.isArray(v)) v.forEach((x, i) => walk(x, `${path}[${(x as { name?: string; id?: string })?.name ?? (x as { id?: string })?.id ?? i}]`));\n    else if (v && typeof v === \"object\") for (const [k, x] of Object.entries(v)) walk(x, `${path}.${k}`);\n  };\n  walk(g, \"grid\");\n  const top = { unallocatedCents: (g as { unallocatedCents?: number }).unallocatedCents, zeroBasedAlert: (g as { zeroBasedAlert?: boolean }).zeroBasedAlert };\n  out.push(`${label} zero-base: ${JSON.stringify(top)}`);\n}\n\nawait Bun.write(\"/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/hunt.txt\", out.join(\"\\n\") || \"no hits\");\nprocess.exit(0);\n"
+    },
+    "timestamp": "2026-09-02T08:20:24.578Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && timeout 180 bun /home/nicholas-wood/.claude/jobs/b65b1bed/tmp/hunt21494.ts && cat /home/nicholas-wood/.claude/jobs/b65b1bed/tmp/hunt.txt",
+      "description": "Hunt for 21494 cents in ledger and grid outputs"
+    },
+    "timestamp": "2026-09-02T08:20:28.216Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -rn -i \"unexplained|netposition|net-position|deltaCents\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src --type ts -l | head; echo ===; rg -n -i \"unexplained\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/handlers/*.ts /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts | head -10",
+      "description": "Locate net-position/unexplained delta computation"
+    },
+    "timestamp": "2026-09-02T08:20:52.006Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sed -n '170,280p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/handlers/reconcile.ts",
+      "description": "Read the net-position/unexplained delta handler"
+    },
+    "timestamp": "2026-09-02T08:20:56.996Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/pending.ts",
+      "content": "import { Database } from \"bun:sqlite\";\nconst db = new Database(`${process.env.HOME}/.penny/penny.db`, { readonly: true });\nconst q = (sql: string) => db.query(sql).all();\nconsole.log(\"PENDING TXNS:\", JSON.stringify(q(`SELECT txn_date, amount_cents, payee, is_transfer, account_id FROM transactions WHERE is_pending = 1 ORDER BY txn_date`), null, 1));\nconsole.log(\"AUG PENDING NON-TRANSFER SUM:\", JSON.stringify(q(`SELECT SUM(amount_cents) c, COUNT(*) n FROM transactions WHERE is_pending = 1 AND is_transfer = 0 AND txn_date LIKE '2026-08%'`)));\nconsole.log(\"ALL PENDING NON-TRANSFER SUM:\", JSON.stringify(q(`SELECT SUM(amount_cents) c, COUNT(*) n FROM transactions WHERE is_pending = 1 AND is_transfer = 0`)));\nprocess.exit(0);\n"
+    },
+    "timestamp": "2026-09-02T08:21:34.587Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 60 bun /home/nicholas-wood/.claude/jobs/b65b1bed/tmp/pending.ts",
+      "description": "Query pending transactions and sums"
+    },
+    "timestamp": "2026-09-02T08:21:37.506Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -rn \"class PocketSmithClient|static forUser\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src --type ts | head -4; rg -n \"class LocalSecretStore\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/platform/secrets/local.ts | head -2; rg -n \"unresolvedActivityCents\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts | head -3",
+      "description": "Find PocketSmith client and secret store entry points"
+    },
+    "timestamp": "2026-09-02T08:22:10.326Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"export class PocketSmithClient\" -A 14 /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/ingest/client.ts | head -20; rg -n \"getGrid\\(\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts | head -3",
+      "description": "PocketSmithClient.forUser signature and getGrid"
+    },
+    "timestamp": "2026-09-02T08:22:15.898Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/netpos.ts",
+      "content": "/** Replicate /api/reconcile net-position exactly (reconcile.ts:180-273) on live data. */\nimport { Database } from \"bun:sqlite\";\nimport { SqliteStore } from \"/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/sqlite.ts\";\nimport { EnvelopeService } from \"/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts\";\nimport { PocketSmithClient } from \"/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/ingest/client.ts\";\nimport { LocalSecretStore } from \"/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/platform/secrets/local.ts\";\nimport { currentPeriod } from \"/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/platform/time.ts\";\n\nconst SNAP = \"/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/netpos.db\";\nawait Bun.$`rm -f ${SNAP}`.quiet();\nconst src = new Database(`${process.env.HOME}/.penny/penny.db`, { readonly: true });\nsrc.run(`VACUUM INTO '${SNAP}'`);\nsrc.close();\n\nconst store = new SqliteStore(SNAP);\nawait store.migrate();\nconst svc = new EnvelopeService(store, { holdingEnvelopeId: null, nabCardAccountIds: [\"acc-nab\"] }, { timezone: \"Australia/Melbourne\" });\n\nconst secrets = new LocalSecretStore();\nconst client = await PocketSmithClient.forUser(secrets, \"local\");\nconst user = await client.getAuthenticatedUser();\nconst accounts = await client.listTransactionAccounts(user.id!);\nconst toCents = (a: number | undefined | null) => (a === undefined || a === null || Number.isNaN(a) ? 0 : Math.round(a * 100));\nlet cashOnHandCents = 0, cardBalanceCents = 0;\nconst cardIds = new Set<string>();\nfor (const a of accounts) {\n  const isCard = (a.type ?? \"\").toLowerCase().includes(\"credit\");\n  if (isCard) { cardBalanceCents += toCents(a.current_balance); cardIds.add(String(a.id)); }\n  else cashOnHandCents += toCents(a.current_balance);\n  console.log(`account ${a.id} ${a.name ?? \"\"} type=${a.type} balance=${toCents(a.current_balance)}`);\n}\nconst cardOwedCents = Math.abs(cardBalanceCents);\n\nconst grid = await svc.getGrid(\"local\", currentPeriod(\"Australia/Melbourne\"));\nconst topLevel = grid.rows.filter((r: { parentId: string | null }) => r.parentId === null);\nconst leafLeftCents = topLevel.reduce((s: number, r: { leftCents: number }) => s + r.leftCents, 0);\nconst incomeLeftCents = grid.income.reduce((s: number, i: { carryoverCents: number; varianceCents: number }) => s + i.carryoverCents + i.varianceCents, 0);\nconst totalLeftCents = leafLeftCents + incomeLeftCents;\nconst awaitingIncomeCents = grid.income.reduce((s: number, i: { awaitingCents?: number }) => s + (i.awaitingCents ?? 0), 0);\nconst reconciledDeltaCents = cashOnHandCents - cardOwedCents - (totalLeftCents - awaitingIncomeCents);\nconst uncategorisedActivityCents = grid.unresolvedActivityCents ?? 0;\nconst unexplainedDeltaCents = reconciledDeltaCents - uncategorisedActivityCents;\n\nconsole.log(JSON.stringify({ cashOnHandCents, cardOwedCents, leafLeftCents, incomeLeftCents, totalLeftCents, awaitingIncomeCents, reconciledDeltaCents, uncategorisedActivityCents, unexplainedDeltaCents }, null, 1));\nconsole.log(\"income rows:\", JSON.stringify(grid.income.map((i: { id: string; carryoverCents: number; varianceCents: number; awaitingCents?: number }) => ({ id: i.id, carry: i.carryoverCents, variance: i.varianceCents, awaiting: i.awaitingCents }))));\nprocess.exit(0);\n"
+    },
+    "timestamp": "2026-09-02T08:22:32.807Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && timeout 180 bun /home/nicholas-wood/.claude/jobs/b65b1bed/tmp/netpos.ts 2>&1 | tail -14",
+      "description": "Replicate net-position widget computation on live data"
+    },
+    "timestamp": "2026-09-02T08:22:36.238Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/unresolved.ts",
+      "content": "/** Per-month unresolved (uncategorised) activity + wide-range widget check. */\nimport { Database } from \"bun:sqlite\";\nimport { SqliteStore } from \"/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/store/sqlite.ts\";\nimport { EnvelopeService } from \"/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/envelope/service.ts\";\n\nconst SNAP = \"/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/netpos.db\"; // reuse migrated snapshot\nconst store = new SqliteStore(SNAP);\nconst svc = new EnvelopeService(store, { holdingEnvelopeId: null, nabCardAccountIds: [\"acc-nab\"] }, { timezone: \"Australia/Melbourne\" });\n\nfor (const m of [6, 7, 8, 9]) {\n  const g = await svc.getGridRange(\"local\", { from: { year: 2026, month: m }, to: { year: 2026, month: m } });\n  console.log(`2026-0${m} unresolvedActivityCents:`, (g as { unresolvedActivityCents?: number }).unresolvedActivityCents);\n}\n// Wide view Jun..Sep — does the unexplained residue collapse into the uncat line?\nconst wide = await svc.getGridRange(\"local\", { from: { year: 2026, month: 6 }, to: { year: 2026, month: 9 } });\nconst top = (wide.rows as { parentId: string | null; leftCents: number }[]).filter((r) => r.parentId === null);\nconst leafLeft = top.reduce((s, r) => s + r.leftCents, 0);\nconst incLeft = (wide.income as { carryoverCents: number; varianceCents: number }[]).reduce((s, i) => s + i.carryoverCents + i.varianceCents, 0);\nconst awaiting = (wide.income as { awaitingCents?: number }[]).reduce((s, i) => s + (i.awaitingCents ?? 0), 0);\nconsole.log(\"WIDE Jun-Sep:\", JSON.stringify({ leafLeft, incLeft, totalLeft: leafLeft + incLeft, awaiting, unresolved: (wide as { unresolvedActivityCents?: number }).unresolvedActivityCents }));\n\n// Uncategorised transactions since 1 Aug, posted+pending, with dates\nconst db = new Database(SNAP, { readonly: true });\nconsole.log(\"UNCAT TXNS Aug+:\", JSON.stringify(db.query(`\n  SELECT t.txn_date, t.amount_cents, t.payee, t.is_pending FROM transactions t\n  LEFT JOIN mappings m ON m.category_id = t.category_id AND m.user_id = t.user_id\n    AND m.effective_from <= t.txn_date AND (m.effective_to IS NULL OR m.effective_to >= t.txn_date)\n  WHERE t.user_id='local' AND t.txn_date >= '2026-08-01' AND t.is_transfer = 0 AND m.id IS NULL\n  ORDER BY t.txn_date`).all(), null, 1));\nprocess.exit(0);\n"
+    },
+    "timestamp": "2026-09-02T08:23:34.677Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && timeout 180 bun /home/nicholas-wood/.claude/jobs/b65b1bed/tmp/unresolved.ts 2>&1 | tail -40",
+      "description": "Per-month unresolved activity and uncategorised transactions"
+    },
+    "timestamp": "2026-09-02T08:23:37.967Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace && git worktree add /home/nicholas-wood/.claude/jobs/b65b1bed/tmp/wt-pre123 HEAD~2 2>&1 | tail -1",
+      "description": "Worktree of pre-release commit for old-engine run"
+    },
+    "timestamp": "2026-09-02T08:25:38.547Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 60 bun -e 'import { Database } from \"bun:sqlite\"; const db = new Database(process.env.HOME + \"/.penny/penny.db\", { readonly: true }); console.log(JSON.stringify(db.query(\"SELECT id, substr(raw_json,1,120) rawhead FROM transactions WHERE payee LIKE \\\"%Pria Bax%\\\" AND is_pending = 1\").all(), null, 1)); console.log(\"RECONCILIATIONS:\", JSON.stringify(db.query(\"SELECT * FROM reconciliations ORDER BY rowid DESC LIMIT 3\").all(), null, 1));'",
+      "description": "Inspect duplicate pending ids and reconciliation baseline"
+    },
+    "timestamp": "2026-09-02T08:25:40.656Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sed -e 's|/home/nicholas-wood/Documents/workspace/projects/envelope-os/src|/home/nicholas-wood/.claude/jobs/b65b1bed/tmp/wt-pre123/projects/envelope-os/src|g' -e 's|netpos\\.db|netpos-old.db|g' /home/nicholas-wood/.claude/jobs/b65b1bed/tmp/netpos.ts > /home/nicholas-wood/.claude/jobs/b65b1bed/tmp/netpos-old.ts && cd /home/nicholas-wood/.claude/jobs/b65b1bed/tmp/wt-pre123/projects/envelope-os && timeout 180 bun /home/nicholas-wood/.claude/jobs/b65b1bed/tmp/netpos-old.ts 2>&1 | tail -6",
+      "description": "Run pre-v1.23.0 engine net-position on today's data"
+    },
+    "timestamp": "2026-09-02T08:25:57.048Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace && git worktree remove --force /home/nicholas-wood/.claude/jobs/b65b1bed/tmp/wt-pre123 && git worktree prune",
+      "description": "Remove old-engine worktree"
+    },
+    "timestamp": "2026-09-02T08:26:31.749Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -rn \"neighbour_adjustments|acceptAdjustments\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src --type ts --type tsx 2>/dev/null | head -12; rg -rn \"neighbour_adjustments|acceptAdjustments\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src 2>/dev/null | head -12",
+      "description": "Check whether the web UI handles the 409 consent flow"
+    },
+    "timestamp": "2026-09-02T08:26:33.037Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -l \"budget/edit\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src; rg -n \"adjustments|409\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/components/budget/VersionChronology.tsx | head; rg -rn \"completePrevious\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/handlers | head",
+      "description": "Find wizard edit call sites and completePrevious usage"
+    },
+    "timestamp": "2026-09-02T08:26:46.726Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "offset": 395,
+      "limit": 95
+    },
+    "timestamp": "2026-09-02T08:27:08.297Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"budget/edit\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/handlers/*.ts | head -3; rg -n \"NeighbourAdjustmentsError|ScheduledConflictError\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts | head -8",
+      "description": "Locate /api/budget/edit handler and error raisers"
+    },
+    "timestamp": "2026-09-02T08:27:14.967Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sed -n '22,80p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/handlers/budget.ts; echo ===; sed -n '655,675p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/budget/service.ts",
+      "description": "Read the /budget/edit handler and ScheduledConflictError site"
+    },
+    "timestamp": "2026-09-02T08:27:21.377Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -rn \"scheduled_conflict|supersedeScheduled\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src /home/nicholas-wood/Documents/workspace/projects/envelope-os/test /home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server 2>/dev/null | head -14",
+      "description": "Find scheduled_conflict handling in UI and tests"
+    },
+    "timestamp": "2026-09-02T08:27:55.227Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"async|save|mutate|ApiCallError|error\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/EditBudgetPage.tsx | head -25; wc -l /home/nicholas-wood/Documents/workspace/projects/envelope-os/web/src/pages/EditBudgetPage.tsx",
+      "description": "Map EditBudgetPage structure"
+    },
+    "timestamp": "2026-09-02T08:28:15.348Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sed -n '60,115p' /home/nicholas-wood/Documents/workspace/projects/envelope-os/test/budget-versions-overlap.test.ts; echo ===; rg -n \"scheduled version stands|supersede\" /home/nicholas-wood/Documents/workspace/projects/envelope-os/test/budget-window-integrity.test.ts | head -6",
+      "description": "Read failing tests and integrity coverage"
+    },
+    "timestamp": "2026-09-02T08:28:47.017Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/test/budget-versions-overlap.test.ts",
+      "old_string": " * version. Now every line of the envelope whose window still reaches the new\n * effectiveFrom is truncated to the day before it; fully-superseded lines\n * become degenerate windows that resolve to 0 (the template port has no\n * delete — append/update only).\n */",
+      "new_string": " * version. Now every line of the envelope whose window still reaches the new\n * effectiveFrom is truncated to the day before it; fully-superseded lines\n * become degenerate windows that resolve to 0 (the template port has no\n * delete — append/update only).\n *\n * CALENDAR NOTE (2026-09-02): the MID version starts on the 5th; on days 1-4\n * of a real month it is still date-SCHEDULED, so the guarded write refuses the\n * from-the-1st save with 409 scheduled_conflict (doctrine D3) until the client\n * consents. The wizard UI does exactly that (\"Replace scheduled budgets and\n * save\" → supersedeScheduled: true), so these tests mirror the consented\n * retry: the FIRST-dated edits carry supersedeScheduled — a no-op from the 5th\n * onward, consent on days 1-4 — keeping the exact-amount guard deterministic\n * year-round. The refusal contract itself is covered in\n * budget-window-integrity.test.ts with an always-scheduled next-month version.\n */"
+    },
+    "timestamp": "2026-09-02T08:29:06.310Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/test/budget-versions-overlap.test.ts",
+      "old_string": "async function editOngoing(t: TestApp, cookie: string, envelopeId: string, amountCents: number, effectiveFrom: string): Promise<Response> {\n  return postJson(\n    t.app,\n    \"/api/budget/edit\",\n    { lines: [{ envelopeId, amountCents }], scope: \"ongoing\", effectiveFrom, completePrevious: true },\n    cookie,\n  );\n}",
+      "new_string": "async function editOngoing(t: TestApp, cookie: string, envelopeId: string, amountCents: number, effectiveFrom: string, supersedeScheduled?: boolean): Promise<Response> {\n  return postJson(\n    t.app,\n    \"/api/budget/edit\",\n    {\n      lines: [{ envelopeId, amountCents }],\n      scope: \"ongoing\",\n      effectiveFrom,\n      completePrevious: true,\n      ...(supersedeScheduled !== undefined ? { supersedeScheduled } : {}),\n    },\n    cookie,\n  );\n}"
+    },
+    "timestamp": "2026-09-02T08:29:09.609Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/test/budget-versions-overlap.test.ts",
+      "old_string": "    // The ordinary later save: type 700 with the wizard's default From.\n    const res = await editOngoing(t, cookie, id, 70000, FIRST);\n    expect(res.status).toBe(200);",
+      "new_string": "    // The ordinary later save: type 700 with the wizard's default From\n    // (consented, as the wizard's retry does — see CALENDAR NOTE).\n    const res = await editOngoing(t, cookie, id, 70000, FIRST, true);\n    expect(res.status).toBe(200);"
+    },
+    "timestamp": "2026-09-02T08:29:16.737Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/test/budget-versions-overlap.test.ts",
+      "old_string": "    await editOngoing(t, cookie, id, 60000, MID);\n    await editOngoing(t, cookie, id, 70000, FIRST);\n    const history = await getJson(t.app, \"/api/budget/history\", cookie);",
+      "new_string": "    await editOngoing(t, cookie, id, 60000, MID);\n    await editOngoing(t, cookie, id, 70000, FIRST, true);\n    const history = await getJson(t.app, \"/api/budget/history\", cookie);"
+    },
+    "timestamp": "2026-09-02T08:29:19.569Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/test/budget-versions-overlap.test.ts",
+      "old_string": "      { id, type: \"income\", budgetedCents: 700000, targetCents: 700000, effectiveFrom: FIRST, completePrevious: true },",
+      "new_string": "      { id, type: \"income\", budgetedCents: 700000, targetCents: 700000, effectiveFrom: FIRST, completePrevious: true, supersedeScheduled: true },"
+    },
+    "timestamp": "2026-09-02T08:29:20.988Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/test/budget-versions-overlap.test.ts",
+      "old_string": "    await editOngoing(t, cookie, id, 60000, MID);\n    await editOngoing(t, cookie, id, 70000, FIRST); // truncates the MID version into an inverted window",
+      "new_string": "    await editOngoing(t, cookie, id, 60000, MID);\n    await editOngoing(t, cookie, id, 70000, FIRST, true); // truncates the MID version into an inverted window"
+    },
+    "timestamp": "2026-09-02T08:29:23.027Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && timeout 300 bun test test/budget-versions-overlap.test.ts 2>&1 | tail -5 && timeout 600 bun test 2>&1 | tail -3",
+      "description": "Run overlap file then full suite"
+    },
+    "timestamp": "2026-09-02T08:29:31.220Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace/projects/envelope-os && timeout 300 bunx tsc -p tsconfig.json --noEmit && cd /home/nicholas-wood/Documents/workspace && git add projects/envelope-os/test/budget-versions-overlap.test.ts && git commit -m \"envelope-os: fix calendar-dependent budget-versions-overlap tests\n\nThe MID version starts on the 5th; on days 1-4 of a real month it is still\ndate-scheduled, so the guarded write correctly refuses the from-the-1st save\nwith 409 scheduled_conflict (doctrine D3) until the client consents. The\nwizard UI already prompts and retries with supersedeScheduled; the tests now\nmirror that consented retry, keeping the exact-amount regression guard\ndeterministic year-round. No product change — refusal contract stays covered\nby budget-window-integrity.test.ts. Suite: 486/486.\" | tail -2",
+      "description": "Typecheck and commit test fix"
+    },
+    "timestamp": "2026-09-02T08:30:14.736Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "- [x] ISC-296: Anti: reconcile never touches an existing allocation row — a this_month override and an explicit zero row survive a reconcile pass unchanged",
+      "new_string": "- [x] ISC-296: Anti: reconcile never touches an existing allocation row — a this_month override and an explicit zero row survive a reconcile pass unchanged\n- [x] ISC-297: budget-versions-overlap tests are calendar-deterministic (consented supersede on the FIRST-dated edits) and the full suite is green on any day of the month\n- [x] ISC-298: the net-position widget's unexplained delta is decomposed with a named mechanism per contributor (fold-fix re-exposure quantified exactly via a pre-release-engine run on current data)"
+    },
+    "timestamp": "2026-09-02T08:30:27.568Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": "- conjectured: ensureMonth's materialise-if-empty guard",
+      "new_string": "- conjectured: the two budget-versions-overlap test failures (409 on the from-the-1st save) were a supersession regression introduced sometime after 2026-08-14.\n  refuted_by: 2026-09-02 investigation — the tests' MID version starts on the 5th; planVersionWrite classifies a version starting after TODAY as scheduled, so on days 1-4 of any month the from-the-1st save correctly 409s (scheduled_conflict, doctrine D3) awaiting consent. Green on 10-14 Aug, red on 2 Sep, engine unchanged. The wizard UI already handles it (\"Replace scheduled budgets and save\" → supersedeScheduled) and the refusal contract is deterministically covered in budget-window-integrity.test.ts.\n  learned: a test whose fixture dates are derived from the CURRENT month can encode a hidden day-of-month dependency; any \"pre-existing failure\" claim should note the calendar before assuming regression. Fixed by mirroring the UI's consented retry in the tests, keeping the exact-amount guard deterministic year-round.\n  criterion_now: ISC-297.\n\n- conjectured: ensureMonth's materialise-if-empty guard"
+    },
+    "timestamp": "2026-09-02T08:30:34.268Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/envelope-os/ISA.md",
+      "old_string": " (7) The budget-versions-overlap 409 failures touch applyVersionWrite supersession, untouched by this release — tracked as a separate open defect.",
+      "new_string": " (7) The budget-versions-overlap 409 failures touch applyVersionWrite supersession, untouched by this release — tracked as a separate open defect. [RESOLVED 2026-09-02: not a defect — calendar-dependent tests; see Changelog and ISC-297.]\n\n- 2026-09-02: unexplained-delta investigation (ISC-298). The net-position widget's $214.94 unexplained line reproduced to the cent by replicating reconcile.ts:180-273 against live PocketSmith balances (cash $736.90, card owed $64.02) + a ledger snapshot: reconciledDelta 21045 − Sept uncategorised (−449) = 21494. Attribution: (a) +11285 EXACT re-exposure of the pre-v1.23.0 income-fold bug — running the HEAD~2 engine on today's data gives unexplained 10209, so the fold fix moved the widget by precisely the bug's value absorbed into the 14-Aug manual $0.00 baseline; re-striking the baseline is a data decision, not a defect. (b) Inside the 10209: two distinct-PocketSmith-id pending payments \"ANZ ... 318485 TO Pria Bax\" −28000 each, same day/account/reference — if the bank moved once, +280.00 of delta that self-resolves at posting (or v1.19 prune); if Nick genuinely paid twice, contribution 0 and the residual drift is +$243.76 pending a fresh reconcile pass. (c) −14167 from the September Compliance/Leasing back-fill raising engine expectation. (d) July's −18495 uncategorised is invisible to the widget's uncategorised line (it accumulates over the VISIBLE range only — Sept-only view sees Sept's −449) but was absorbed into the 14-Aug baseline; noted as a widget-design caveat, not an error."
+    },
+    "timestamp": "2026-09-02T08:30:48.838Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/Documents/workspace && git add projects/envelope-os/ISA.md && git commit -m \"docs(envelope-os): ISC-297/298 — calendar-test root cause C/R/L + \\$214.94 unexplained-delta attribution\" | tail -1",
+      "description": "Commit ISA records"
+    },
+    "timestamp": "2026-09-02T08:30:54.709Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/project-budgetbuddy-sept-2026-diagnosis.md",
+      "old_string": "**Why:** prevents rederiving this from scratch and mis-asserting engine behaviour.\n**How to apply:** treat v1.23.0 semantics as current: materialised months self-heal on view; income folds conserve movements. The two overlap-409 test failures are the known open defect if Nick reports version-edit 409s.",
+      "new_string": "**Overlap-409 RESOLVED (2 Sep, feb9b4f):** never a product defect — the two budget-versions-overlap tests were calendar-dependent (their mid-month version starts the 5th; on days 1-4 it counts as scheduled, so the guarded write correctly 409s per doctrine D3). Wizard UI already prompts + retries with supersedeScheduled. Tests now mirror the consented retry; suite 486/486.\n\n**Widget unexplained delta ($214.94, 2 Sep):** = $102.09 pre-existing drift + $112.85 re-exposed by the fold fix (the 14-Aug manual $0.00 baseline absorbed the old bug; fixing it re-opens exactly that amount — baseline needs re-striking, Nick's call). Inside the $102.09: duplicate \"Pria Bax\" $280 pendings (distinct PS ids; ±$280 pending resolution at posting) and −$141.67 from the Sept back-fill. Widget caveat: its uncategorised line spans the visible range only, so prior-month uncategorised (July −$184.95) never appears in it.\n\n**Why:** prevents rederiving this from scratch and mis-asserting engine behaviour.\n**How to apply:** treat v1.23.0 semantics as current: materialised months self-heal on view; income folds conserve movements. If the widget delta bothers Nick, the fix is a baseline re-strike after the Pria Bax pendings post, not an engine change."
+    },
+    "timestamp": "2026-09-02T08:31:03.237Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/MEMORY.md",
+      "old_string": "- [BudgetBuddy Sept 2026 diagnosis](project-budgetbuddy-sept-2026-diagnosis.md) — both defects FIXED in v1.23.0 (2 Sep): reconcile-on-view + creation rederive + movement-aware income fold; overlap-409 tests still open",
+      "new_string": "- [BudgetBuddy Sept 2026 diagnosis](project-budgetbuddy-sept-2026-diagnosis.md) — v1.23.0 fixed both defects; overlap-409 = calendar-dependent tests (fixed feb9b4f, suite green); widget $214.94 attributed (baseline re-strike + Pria Bax pendings)"
+    },
+    "timestamp": "2026-09-02T08:31:16.817Z"
+  }
+]

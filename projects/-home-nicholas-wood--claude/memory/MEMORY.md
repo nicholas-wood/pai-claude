@@ -30,3 +30,5 @@
 - [BudgetBuddy v1.20.0 state](project-budgetbuddy-v1200-state.md) — shipped 13 Aug; roll_carry everywhere, grid counts pending, widget contains zero-base; verify before asserting
 - [Pulse latch + voice quota](gotcha-pulse-latch-voice-quota.md) — stop daemon before editing state.json; free ElevenLabs = Adam only, alert spam burns TTS quota; no claude-type jobs needing tools
 - [Inbox rescan before missing claim](gotcha-inbox-rescan-before-missing-claim.md) — 00_Inbox changes mid-session; fresh rclone lsl before saying a file Nick dropped is missing
+- [BudgetBuddy Sept 2026 diagnosis](project-budgetbuddy-sept-2026-diagnosis.md) — v1.23.0 fixed both defects; overlap-409 = calendar-dependent tests (fixed feb9b4f, suite green); widget $214.94 attributed (baseline re-strike + Pria Bax pendings)
+- [LIMSOC Brief 012 assessment](project-brief-012-assessment.md) — Flynn's brief not dev-ready (no Outcome reqs, migration too narrow, SOP 4.3 codes); fix list on file 30 Aug

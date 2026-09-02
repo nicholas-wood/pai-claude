@@ -1,17 +1,17 @@
 {
   "proto": 1,
-  "supervisorPid": 3581801,
-  "updatedAt": 1788218766769,
+  "supervisorPid": 1526071,
+  "updatedAt": 1788339130658,
   "workers": {
     "27495167": {
-      "pid": 2950681,
-      "procStart": "126295759",
+      "pid": 3136008,
+      "procStart": "143015129",
       "sessionId": "27495167-cfb4-4e4c-ba3a-beac1280c1fa",
       "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/27495167.sock",
       "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/6ff9018a.pty.sock",
-      "cliVersion": "2.1.251",
+      "cliVersion": "2.1.258",
       "startedAt": 1788215123762,
-      "attempt": 1,
+      "attempt": 2,
       "cwd": "/home/nicholas-wood/.claude",
       "dispatch": {
         "proto": 1,
@@ -55,10 +55,222 @@
         1004,
         2031
       ],
+      "firedInteractiveMarks": [
+        {
+          "kind": "content_paint",
+          "msgsLoaded": 766,
+          "msgsInJsonl": 766,
+          "msgsRenderedAtFirstPaint": 771
+        },
+        {
+          "kind": "prompt_idle"
+        }
+      ],
       "rvAuth": "72d166ee4316be2d948e8b86c8cd50b1",
       "ptyAuth": "67bcebbc37485bfe48a7de60f8875299",
-      "replPid": 2950703,
-      "replProcStart": "126295780"
+      "replPid": 3136014,
+      "replProcStart": "143015141"
+    },
+    "b65b1bed": {
+      "pid": 3581847,
+      "procStart": "130618857",
+      "sessionId": "b65b1bed-3632-4330-8120-f21c83b454ac",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/b65b1bed.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/d7926d9c.pty.sock",
+      "cliVersion": "2.1.252",
+      "startedAt": 1788331874972,
+      "attempt": 1,
+      "cwd": "/home/nicholas-wood/.claude",
+      "dispatch": {
+        "proto": 1,
+        "short": "b65b1bed",
+        "nonce": "08da8ad0",
+        "sessionId": "b65b1bed-3632-4330-8120-f21c83b454ac",
+        "createdAt": 1788331874968,
+        "source": "fleet",
+        "cwd": "/home/nicholas-wood/.claude",
+        "launch": {
+          "mode": "prompt",
+          "args": [
+            "--session-id",
+            "b65b1bed-3632-4330-8120-f21c83b454ac",
+            "--agent",
+            "claude",
+            "--",
+            "In budget buddy, I applied some adjustments last month, e.g. to the rental income category. They have not been applied to the rollover figure for this month. Secondly, could you please tell me why I have an unbalanced budget this month (it was balanced last month, I'd like to know what changed/ended)."
+          ],
+          "restoresTranscript": false
+        },
+        "env": {},
+        "isolation": "none",
+        "respawnFlags": [
+          "--agent",
+          "claude"
+        ],
+        "agent": "claude",
+        "seed": {
+          "intent": "In budget buddy, I applied some adjustments last month, e.g. to the rental income category. They have not been applied to the rollover figure for this month. Secondly, could you please tell me why I have an unbalanced budget this month (it was balanced last month, I'd like to know what changed/ended)."
+        },
+        "cols": 214,
+        "rows": 50
+      },
+      "decModes": [
+        1000,
+        1002,
+        1003,
+        1006,
+        2004,
+        1004,
+        2031
+      ],
+      "rvAuth": "d90904f84e1a7783474474f7177ec77d",
+      "ptyAuth": "e461bea77597a2375c472d736f390f08",
+      "replPid": 3582049,
+      "replProcStart": "130618878"
+    },
+    "1277ffe3": {
+      "pid": 1526191,
+      "procStart": "142295080",
+      "sessionId": "1277ffe3-c398-482d-a577-9c78f5db0215",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/1277ffe3.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/2d67f5b3.pty.sock",
+      "cliVersion": "2.1.258",
+      "startedAt": 1788335479353,
+      "attempt": 1,
+      "cwd": "/home/nicholas-wood/.claude",
+      "dispatch": {
+        "proto": 1,
+        "short": "1277ffe3",
+        "nonce": "0bb97e59",
+        "sessionId": "1277ffe3-c398-482d-a577-9c78f5db0215",
+        "createdAt": 1788335479348,
+        "source": "fleet",
+        "cwd": "/home/nicholas-wood/.claude",
+        "launch": {
+          "mode": "resume",
+          "sessionId": "1277ffe3-c398-482d-a577-9c78f5db0215",
+          "transcriptPath": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/1277ffe3-c398-482d-a577-9c78f5db0215.jsonl",
+          "fork": false,
+          "flagArgs": [
+            "--agent",
+            "claude",
+            "--model",
+            "claude-fable-5[1m]"
+          ],
+          "restoresTranscript": true
+        },
+        "env": {},
+        "isolation": "none",
+        "respawnFlags": [
+          "--agent",
+          "claude",
+          "--model",
+          "claude-fable-5[1m]"
+        ],
+        "agent": "claude",
+        "seed": {
+          "intent": "",
+          "name": "brief quality assessment"
+        },
+        "cols": 214,
+        "rows": 50
+      },
+      "decModes": [
+        1000,
+        1002,
+        1003,
+        1006,
+        2004,
+        1004,
+        2031
+      ],
+      "firedInteractiveMarks": [
+        {
+          "kind": "content_paint",
+          "msgsLoaded": 178,
+          "msgsInJsonl": 178,
+          "msgsRenderedAtFirstPaint": 183
+        },
+        {
+          "kind": "prompt_idle"
+        }
+      ],
+      "rvAuth": "5c5a4736253192a07fc4bd669298c55d",
+      "ptyAuth": "a6f55717f7517621994e713a4dc34992",
+      "replPid": 1526196,
+      "replProcStart": "142295093"
+    },
+    "2869fbd7": {
+      "pid": 2189649,
+      "procStart": "142650125",
+      "sessionId": "2869fbd7-6479-4f92-96a2-e0791fc3286f",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/2869fbd7.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/b3d8f02c.pty.sock",
+      "cliVersion": "2.1.258",
+      "startedAt": 1788335488338,
+      "attempt": 1,
+      "cwd": "/home/nicholas-wood/.claude",
+      "dispatch": {
+        "proto": 1,
+        "short": "2869fbd7",
+        "nonce": "d8c03861",
+        "sessionId": "2869fbd7-6479-4f92-96a2-e0791fc3286f",
+        "createdAt": 1788335488335,
+        "source": "fleet",
+        "cwd": "/home/nicholas-wood/.claude",
+        "launch": {
+          "mode": "resume",
+          "sessionId": "2869fbd7-6479-4f92-96a2-e0791fc3286f",
+          "transcriptPath": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/2869fbd7-6479-4f92-96a2-e0791fc3286f.jsonl",
+          "fork": false,
+          "flagArgs": [
+            "--agent",
+            "claude",
+            "--model",
+            "claude-fable-5[1m]"
+          ],
+          "restoresTranscript": true
+        },
+        "env": {},
+        "isolation": "none",
+        "respawnFlags": [
+          "--agent",
+          "claude",
+          "--model",
+          "claude-fable-5[1m]"
+        ],
+        "agent": "claude",
+        "seed": {
+          "intent": "",
+          "name": "state comms incident categorisation"
+        },
+        "cols": 214,
+        "rows": 50
+      },
+      "decModes": [
+        1000,
+        1002,
+        1003,
+        1006,
+        2004,
+        1004,
+        2031
+      ],
+      "firedInteractiveMarks": [
+        {
+          "kind": "content_paint",
+          "msgsLoaded": 488,
+          "msgsInJsonl": 488,
+          "msgsRenderedAtFirstPaint": 493
+        },
+        {
+          "kind": "prompt_idle"
+        }
+      ],
+      "rvAuth": "07303a0ceae16f7d793f8bf7ba1a45ca",
+      "ptyAuth": "58ab2257fdb13247d4126fb7e0f6dffd",
+      "replPid": 2189678,
+      "replProcStart": "142650140"
     }
   }
 }
