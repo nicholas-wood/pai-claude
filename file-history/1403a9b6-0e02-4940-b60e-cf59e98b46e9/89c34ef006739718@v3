@@ -1,0 +1,357 @@
+#!/usr/bin/env bun
+/**
+ * Backfill "credential reactivated" emails for fobs that went expired -> active
+ * before the live confirm-programming path started sending that email.
+ *
+ * Background: from the 2026/27 season rollover, confirm-programming reactivates
+ * an expired fob when it promotes a staged renewal expiry, and the admin edit
+ * form can flip expired -> active directly. Until v1.17.0 neither path told the
+ * member, even though the earlier "fob has expired" email promised automatic
+ * reactivation. This script finds those silent reactivations and queues the
+ * notice each member should have received.
+ *
+ * Delivery goes through email_queue (drained by the daily cron under the
+ * Resend send budget) rather than inline, so a large batch cannot blow the
+ * 100/day cap. Each queue row is tied to the credential, so the send is
+ * audited into that credential's access log when it drains.
+ *
+ * Usage (dry-run by default, prints candidates and writes nothing):
+ *   DATABASE_URL=postgres://... bun run packages/db/src/backfill-reactivation-emails.ts
+ *
+ * To actually enqueue, pass --apply:
+ *   DATABASE_URL=postgres://... bun run packages/db/src/backfill-reactivation-emails.ts --apply
+ *
+ * Optional:
+ *   --since <ISO>         window start (default 2026-09-01T00:00 Australia/Melbourne)
+ *   --tenant-slug <slug>  restrict to one tenant
+ *
+ * Safety:
+ *   - Idempotent: skips credentials that already have a credentialReactivated
+ *     email_sent audit entry, or a queued/sent queue row, since the window start.
+ *   - Skips credentials no longer active (re-expired, lost, returned).
+ *   - Skips owners with no email address and reports them.
+ *   - Read-only without --apply. Inserts run inside a per-tenant RLS transaction.
+ */
+
+import { db } from "./client";
+import {
+  auditLog,
+  credentials,
+  credentialTypes,
+  emailQueue,
+  tenantMemberships,
+  tenants,
+  users,
+} from "./schema";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
+
+const TEMPLATE_TYPE = "credentialReactivated";
+/** 2026-09-01 00:00 Australia/Melbourne (AEST, UTC+10). */
+const DEFAULT_SINCE = "2026-08-31T14:00:00.000Z";
+const TIMEZONE_FALLBACK = "Australia/Melbourne";
+
+type Args = { apply: boolean; tenantSlug: string | null; since: Date };
+
+function parseArgs(): Args {
+  const args: Args = { apply: false, tenantSlug: null, since: new Date(DEFAULT_SINCE) };
+  for (let i = 2; i < process.argv.length; i++) {
+    const a = process.argv[i];
+    if (a === "--apply") args.apply = true;
+    else if (a === "--tenant-slug") args.tenantSlug = process.argv[++i] ?? null;
+    else if (a === "--since") {
+      const raw = process.argv[++i];
+      const parsed = raw ? new Date(raw) : NaN;
+      if (!(parsed instanceof Date) || Number.isNaN(parsed.getTime())) {
+        console.error(`Invalid --since value: ${raw}`);
+        process.exit(1);
+      }
+      args.since = parsed;
+    } else if (a === "--help" || a === "-h") {
+      console.log(
+        "Usage: bun run backfill-reactivation-emails.ts [--apply] [--since <ISO>] [--tenant-slug <slug>]"
+      );
+      process.exit(0);
+    }
+  }
+  return args;
+}
+
+/** Season ending at the expiry, e.g. 1 Sep 2027 -> "2026/2027". Fallback when the membership has no currentSeason. */
+function seasonEndingAt(date: Date, timezone: string): string {
+  const endYear = Number(
+    new Intl.DateTimeFormat("en-AU", { year: "numeric", timeZone: timezone }).format(date)
+  );
+  return `${endYear - 1}/${endYear}`;
+}
+
+function formatExpiryDate(date: Date | null, timezone: string): string | null {
+  if (!date) return null;
+  return date.toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: timezone,
+  });
+}
+
+async function main() {
+  const { apply, tenantSlug, since } = parseArgs();
+  console.log(
+    `Mode: ${apply ? "APPLY (will enqueue emails)" : "dry-run (no changes will be written)"}`
+  );
+  console.log(`Window start: ${since.toISOString()}`);
+
+  const tenantRows = tenantSlug
+    ? await db.select().from(tenants).where(eq(tenants.slug, tenantSlug))
+    : await db.select().from(tenants);
+
+  if (tenantRows.length === 0) {
+    console.error("No tenants matched.");
+    process.exit(1);
+  }
+
+  let totalCandidates = 0;
+  let totalEnqueued = 0;
+  let totalSkipped = 0;
+
+  for (const tenant of tenantRows) {
+    console.log(`\n=== Tenant: ${tenant.slug} (${tenant.id}) ===`);
+    const timezone = (tenant as { timezone?: string | null }).timezone ?? TIMEZONE_FALLBACK;
+
+    // audit_log is FORCE RLS: set the tenant context for the reads below.
+    await db.execute(
+      sql`SELECT set_config('app.current_tenant_id', ${tenant.id}, false)`
+    );
+
+    // Every expired -> active transition on a credential in the window,
+    // whichever path wrote it (confirm_programming or admin_edit).
+    const transitions = await db
+      .select({
+        credentialId: auditLog.entityId,
+        at: auditLog.createdAt,
+        metadata: auditLog.metadata,
+      })
+      .from(auditLog)
+      .where(
+        and(
+          eq(auditLog.tenantId, tenant.id),
+          eq(auditLog.entityType, "credential"),
+          eq(auditLog.action, "status_change"),
+          eq(auditLog.fromState, "expired"),
+          eq(auditLog.toState, "active"),
+          gte(auditLog.createdAt, since)
+        )
+      );
+
+    if (transitions.length === 0) {
+      console.log("  No expired -> active transitions in window.");
+      continue;
+    }
+
+    // One notice per credential: keep the latest transition.
+    const latestByCredential = new Map<string, { at: Date; source: string }>();
+    for (const t of transitions) {
+      const meta = (t.metadata ?? {}) as Record<string, unknown>;
+      const source = typeof meta.action === "string" ? meta.action : "unknown";
+      const prev = latestByCredential.get(t.credentialId);
+      if (!prev || t.at > prev.at) {
+        latestByCredential.set(t.credentialId, { at: t.at, source });
+      }
+    }
+    const credentialIds = Array.from(latestByCredential.keys());
+    console.log(
+      `  ${transitions.length} transition(s) across ${credentialIds.length} credential(s).`
+    );
+
+    const [credRows, sentAudits, queueRows] = await Promise.all([
+      db
+        .select({
+          id: credentials.id,
+          serialNumber: credentials.serialNumber,
+          credentialTypeId: credentials.credentialTypeId,
+          status: credentials.status,
+          ownerId: credentials.ownerId,
+          expiresAt: credentials.expiresAt,
+        })
+        .from(credentials)
+        .where(
+          and(eq(credentials.tenantId, tenant.id), inArray(credentials.id, credentialIds))
+        ),
+      db
+        .select({ entityId: auditLog.entityId })
+        .from(auditLog)
+        .where(
+          and(
+            eq(auditLog.tenantId, tenant.id),
+            eq(auditLog.entityType, "credential"),
+            eq(auditLog.action, "email_sent"),
+            inArray(auditLog.entityId, credentialIds),
+            gte(auditLog.createdAt, since),
+            sql`${auditLog.metadata} ->> 'templateType' = ${TEMPLATE_TYPE}`
+          )
+        ),
+      db
+        .select({ entityId: emailQueue.entityId })
+        .from(emailQueue)
+        .where(
+          and(
+            eq(emailQueue.tenantId, tenant.id),
+            eq(emailQueue.templateType, TEMPLATE_TYPE),
+            inArray(emailQueue.entityId, credentialIds),
+            inArray(emailQueue.status, ["queued", "sent"]),
+            gte(emailQueue.createdAt, since)
+          )
+        ),
+    ]);
+
+    const alreadyNotified = new Set<string>([
+      ...sentAudits.map((a) => a.entityId),
+      ...queueRows.map((q) => q.entityId).filter((id): id is string => !!id),
+    ]);
+
+    const ownerIds = Array.from(
+      new Set(credRows.map((c) => c.ownerId).filter((id): id is string => !!id))
+    );
+    const ownerRows = ownerIds.length
+      ? await db
+          .select({
+            id: users.id,
+            email: users.email,
+            firstName: users.firstName,
+            lastName: users.lastName,
+          })
+          .from(users)
+          .where(inArray(users.id, ownerIds))
+      : [];
+    const ownerById = new Map(ownerRows.map((o) => [o.id, o]));
+
+    const typeIds = Array.from(new Set(credRows.map((c) => c.credentialTypeId)));
+    const typeRows = typeIds.length
+      ? await db
+          .select({ id: credentialTypes.id, name: credentialTypes.name })
+          .from(credentialTypes)
+          .where(inArray(credentialTypes.id, typeIds))
+      : [];
+    const typeNameById = new Map(typeRows.map((t) => [t.id, t.name]));
+
+    const membershipRows = ownerIds.length
+      ? await db
+          .select({
+            userId: tenantMemberships.userId,
+            currentSeason: tenantMemberships.currentSeason,
+          })
+          .from(tenantMemberships)
+          .where(
+            and(
+              eq(tenantMemberships.tenantId, tenant.id),
+              inArray(tenantMemberships.userId, ownerIds)
+            )
+          )
+      : [];
+    const seasonByOwner = new Map(membershipRows.map((m) => [m.userId, m.currentSeason]));
+
+    type Candidate = {
+      credentialId: string;
+      serialNumber: string;
+      credentialType: string;
+      season: string | null;
+      memberName: string;
+      recipient: string;
+      expiryDate: string | null;
+      reactivatedAt: Date;
+      source: string;
+    };
+    const candidates: Candidate[] = [];
+
+    for (const cred of credRows) {
+      const transition = latestByCredential.get(cred.id)!;
+      const tag = `#${cred.serialNumber ?? "N/A"} (${cred.id})`;
+
+      if (cred.status !== "active") {
+        console.log(`  SKIP ${tag}: current status is ${cred.status}, not active.`);
+        totalSkipped++;
+        continue;
+      }
+      if (alreadyNotified.has(cred.id)) {
+        console.log(`  SKIP ${tag}: reactivation email already sent or queued.`);
+        totalSkipped++;
+        continue;
+      }
+      const owner = cred.ownerId ? ownerById.get(cred.ownerId) : undefined;
+      if (!owner) {
+        console.log(`  SKIP ${tag}: no owner on credential.`);
+        totalSkipped++;
+        continue;
+      }
+      if (!owner.email) {
+        console.log(
+          `  SKIP ${tag}: owner ${owner.firstName} ${owner.lastName} has no email address.`
+        );
+        totalSkipped++;
+        continue;
+      }
+
+      candidates.push({
+        credentialId: cred.id,
+        serialNumber: cred.serialNumber ?? "N/A",
+        credentialType: typeNameById.get(cred.credentialTypeId) ?? "Fob",
+        season:
+          seasonByOwner.get(owner.id) ??
+          (cred.expiresAt ? seasonEndingAt(cred.expiresAt, timezone) : null),
+        memberName: `${owner.firstName} ${owner.lastName}`.trim() || "Member",
+        recipient: owner.email,
+        expiryDate: formatExpiryDate(cred.expiresAt, timezone),
+        reactivatedAt: transition.at,
+        source: transition.source,
+      });
+    }
+
+    totalCandidates += candidates.length;
+    console.log(`\n  ${candidates.length} candidate(s) to notify:`);
+    for (const c of candidates) {
+      console.log(
+        `    ${c.memberName.padEnd(28)} #${c.serialNumber.padEnd(10)} ${c.recipient.padEnd(36)} ${c.credentialType.padEnd(6)} season ${c.season ?? "(none)"} reactivated ${c.reactivatedAt.toISOString()} via ${c.source}  expires ${c.expiryDate ?? "(none)"}`
+      );
+    }
+
+    if (!apply || candidates.length === 0) continue;
+
+    await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT set_config('app.current_tenant_id', ${tenant.id}, true)`
+      );
+      for (const c of candidates) {
+        await tx.insert(emailQueue).values({
+          tenantId: tenant.id,
+          templateType: TEMPLATE_TYPE,
+          recipient: c.recipient,
+          payload: {
+            memberName: c.memberName,
+            credentialType: c.credentialType,
+            serialNumber: c.serialNumber,
+            expiryDate: c.expiryDate,
+            season: c.season,
+          },
+          priority: 2,
+          entityType: "credential",
+          entityId: c.credentialId,
+        });
+        totalEnqueued++;
+      }
+    });
+    console.log(`  Enqueued ${candidates.length} email(s).`);
+  }
+
+  console.log(
+    `\nDone. Candidates: ${totalCandidates}, enqueued: ${totalEnqueued}, skipped: ${totalSkipped}.` +
+      (apply
+        ? " Rows drain on the next daily cron run under the send budget."
+        : " Re-run with --apply to enqueue.")
+  );
+  process.exit(0);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

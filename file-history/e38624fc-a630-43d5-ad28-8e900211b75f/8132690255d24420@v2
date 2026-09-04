@@ -1,0 +1,272 @@
+import { z } from "zod";
+import {
+  RequestType,
+  RequestStatus,
+  CredentialStatus,
+  CredentialCategory,
+  MembershipStatus,
+  Permission,
+  AdminRoleType,
+  NotificationType,
+  NotificationFrequency,
+} from "./enums";
+
+// ---- Common ----
+
+export const uuidSchema = z.string().uuid();
+export const slugSchema = z
+  .string()
+  .min(2)
+  .max(63)
+  .regex(/^[a-z0-9-]+$/);
+
+// ---- Auth ----
+
+export const magicLinkRequestSchema = z.object({
+  email: z.string().email(),
+});
+
+export const otpRequestSchema = z.object({
+  phone: z.string().min(8).max(20),
+});
+
+// ---- Requests ----
+
+export const createRequestSchema = z.object({
+  requestType: z.nativeEnum(RequestType),
+  credentialTypeId: uuidSchema,
+  firstName: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(100),
+  email: z.string().email(),
+  phone: z.string().min(8).max(20).optional(),
+  dateOfBirth: z.string().date().optional(),
+  membershipCategory: z.string().min(1).max(100).optional(),
+  replacesCredentialId: uuidSchema.optional(),
+});
+
+export const approveRequestSchema = z.object({
+  accessLevelId: uuidSchema,
+  note: z.string().max(500).optional(),
+  isOfficer: z.boolean().optional(),
+  isBoardMember: z.boolean().optional(),
+  isStaff: z.boolean().optional(),
+  officerExpiresAt: z.string().optional(),
+  boardExpiresAt: z.string().optional(),
+});
+
+const reasonSchema = z.object({
+  reason: z.string().min(1).max(500),
+});
+
+export const rejectRequestSchema = reasonSchema;
+export const holdRequestSchema = reasonSchema;
+export const cancelRequestSchema = reasonSchema;
+
+export const programRequestSchema = z.object({
+  serialNumber: z.string().min(1).max(100),
+  credentialId: uuidSchema.optional(),
+});
+
+export const setPickupSchema = z.object({
+  pickupLocationId: uuidSchema,
+});
+
+// ---- Members ----
+
+export const updateProfileSchema = z.object({
+  email: z.string().email().optional(),
+  phone: z.string().min(8).max(20).optional(),
+});
+
+export const updateMembershipSchema = z.object({
+  membershipCategory: z.string().min(1).max(100).optional(),
+  accessLevelId: z.string().uuid().nullable().optional(),
+  isOfficer: z.boolean().optional(),
+  isBoardMember: z.boolean().optional(),
+  isStaff: z.boolean().optional(),
+  officerExpiresAt: z.string().datetime().optional(),
+  boardExpiresAt: z.string().datetime().optional(),
+});
+
+export const renewMembershipSchema = z.object({
+  season: z.string().min(1).max(20),
+});
+
+export const inviteMemberSchema = z.object({
+  email: z.string().email(),
+  firstName: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(100),
+  phone: z.string().min(8).max(20).optional(),
+});
+
+// ---- Configuration ----
+
+export const credentialTypeSchema = z.object({
+  name: z.string().min(1).max(100),
+  description: z.string().max(500).optional(),
+  category: z.nativeEnum(CredentialCategory),
+  priceCents: z.number().int().min(0),
+  depositCents: z.number().int().min(0).default(0),
+});
+
+export const accessLevelSchema = z.object({
+  name: z.string().min(1).max(100),
+  description: z.string().max(500).optional(),
+  externalGroupId: z.string().max(255).optional(),
+});
+
+export const pickupLocationSchema = z.object({
+  name: z.string().min(1).max(100),
+  address: z.string().max(500).optional(),
+  instructions: z.string().max(1000).optional(),
+});
+
+export const userGroupRuleConditionsSchema = z.object({
+  membershipCategory: z.array(z.string()).optional(),
+  minAge: z.number().int().min(0).optional(),
+  maxAge: z.number().int().min(0).optional(),
+  isOfficer: z.boolean().optional(),
+  isBoardMember: z.boolean().optional(),
+  isStaff: z.boolean().optional(),
+});
+
+export const userGroupRuleSchema = z.object({
+  name: z.string().min(1).max(100),
+  priority: z.number().int().min(0),
+  conditions: userGroupRuleConditionsSchema,
+  accessLevelId: uuidSchema,
+});
+
+export const tenantSettingsSchema = z.object({
+  credentialExpiryMonths: z.number().int().min(1).default(12),
+  membershipRolloverMonth: z.number().int().min(1).max(12).default(7),
+  credentialRolloverMonth: z.number().int().min(1).max(12).default(9),
+  paymentExemptMembershipCategories: z.array(z.string()).default([]),
+  paymentExemptRequestTypes: z
+    .array(z.nativeEnum(RequestType))
+    .default([]),
+  allowSelfServiceLostReport: z.boolean().default(true),
+  allowFobCreationAtProgramming: z.boolean().default(false),
+  splitPickupFromProgramming: z.boolean().default(false),
+  maxActiveCredentialsPerMember: z.number().int().min(1).default(3),
+  membershipCategories: z.array(z.string()).default([]),
+  seasons: z.array(z.string()).default([]),
+  attestationTokenExpiryDays: z.number().int().min(1).default(7),
+  // When true (default), the nightly cron replaces a lapsed renewal
+  // attestation with a fresh one and re-queues the email, so the member is
+  // re-asked every attestationTokenExpiryDays until they complete it.
+  attestationAutoResend: z.boolean().default(true),
+  fromEmailPrefix: z.string().max(64).regex(/^[a-zA-Z0-9._%+-]*$/, "Only letters, numbers, dots, hyphens, underscores").optional(),
+  replyToEmail: z.string().email().optional(),
+  emailPrimaryColour: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a hex colour").optional(),
+  emailSecondaryColour: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a hex colour").optional(),
+  issuedEmailAttachmentUrls: z.array(z.object({
+    name: z.string().min(1),
+    url: z.string().url(),
+  })).default([]),
+  // Master email kill-switch. When false, the email service silently
+  // suppresses every send for this tenant while still writing an audit entry
+  // marked `suppressed: true`. Used during migrations and staging to prevent
+  // real members receiving test emails.
+  sendEmails: z.boolean().default(true),
+  // Maps an Integriti "Card Type" string (e.g. "Tags 9020", "Iclass Fobs") to
+  // one or more credential_type_ids in this tenant. Used by the reconciliation
+  // feature to match Integriti rows against AccessBuddy credentials. The value
+  // is an array; legacy single-string values are accepted for backwards
+  // compatibility and normalised to an array at read time.
+  integritiCardTypeMapping: z
+    .record(
+      z.string(),
+      z.union([z.string().uuid(), z.array(z.string().uuid())])
+    )
+    .optional(),
+});
+
+export type TenantSettings = z.infer<typeof tenantSettingsSchema>;
+export type UserGroupRuleConditions = z.infer<
+  typeof userGroupRuleConditionsSchema
+>;
+
+// ---- Exemption ----
+
+export const requestExemptionSchema = z.object({
+  reason: z.string().min(1).max(1000),
+});
+
+export const approveExemptionSchema = z.object({
+  note: z.string().max(500).optional(),
+});
+
+export const rejectExemptionSchema = z.object({
+  reason: z.string().min(1).max(500),
+});
+
+// ---- Refund ----
+
+export const refundRequestSchema = z.object({
+  reason: z.string().min(1).max(500),
+});
+
+// ---- Revoke / Swap ----
+
+export const revokeCredentialSchema = z.object({
+  reason: z.string().min(1).max(500),
+});
+
+export const swapCredentialSchema = z.object({
+  newSerialNumber: z.string().min(1, "New serial number is required"),
+  newCredentialTypeId: z.string().uuid("Invalid credential type"),
+  newAccessLevelId: z.string().uuid().optional(),
+  newCredentialId: z.string().uuid().optional(),
+  reason: z.string().min(1).max(500),
+});
+
+// ---- Manual Add ----
+
+export const manualAddMemberSchema = z.object({
+  email: z.string().email(),
+  firstName: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(100),
+  phone: z.string().min(8).max(20).optional(),
+  membershipCategory: z.string().min(1).max(100).optional(),
+  membershipNumber: z.string().max(50).optional(),
+});
+
+export const manualAddCredentialSchema = z.object({
+  ownerId: z.string().uuid(),
+  credentialTypeId: z.string().uuid().optional(),
+  accessLevelId: z.string().uuid().optional(),
+  serialNumber: z.string().min(1).max(100),
+  accessStartsAt: z.string().optional(),
+  expiresAt: z.string().optional(),
+  stage: z.enum(["programming", "pickup", "issued"]).default("programming"),
+});
+
+// ---- Attestation ----
+
+export const attestationResponseSchema = z.object({
+  responses: z.array(z.object({
+    credentialId: z.string().uuid(),
+    confirmed: z.boolean(),
+    note: z.string().max(500).optional(),
+  })),
+});
+
+export const forceRenewSchema = z.object({
+  season: z.string().min(1).max(20),
+  reason: z.string().min(1).max(500),
+});
+
+// ---- Admin ----
+
+export const assignAdminSchema = z.object({
+  email: z.string().email(),
+  roleType: z.nativeEnum(AdminRoleType),
+  permissions: z.array(z.nativeEnum(Permission)).default([]),
+});
+
+export const updateNotificationPreferencesSchema = z.object({
+  notificationType: z.nativeEnum(NotificationType),
+  emailEnabled: z.boolean(),
+  frequency: z.nativeEnum(NotificationFrequency),
+});

@@ -1,0 +1,47 @@
+#!/bin/bash
+# Opens the Cloud SQL public-IP window and runs cloud-sql-proxy on 127.0.0.1:5433
+# so the reactivation backfill can be run from the Linux box over an SSH tunnel.
+# Writes the proxy-local DATABASE_URL to ~/pai-tmp/.dburl (mode 600) and never
+# prints it. Closes the window when ~/pai-tmp/rx-close appears or after 20 min,
+# then verifies ipv4Enabled is False.
+set -u
+G=/opt/homebrew/bin/gcloud
+P=/opt/homebrew/opt/libpq/bin/psql
+PROXY=/opt/homebrew/bin/cloud-sql-proxy
+PROJECT=accessbuddy-prod
+INST=accessbuddy-production
+REGION=australia-southeast1
+FLAG="$HOME/pai-tmp/rx-close"
+PROXY_PID=""
+rm -f "$FLAG"
+
+cleanup() {
+  [ -n "$PROXY_PID" ] && kill "$PROXY_PID" 2>/dev/null
+  rm -f "$HOME/pai-tmp/.dburl"
+  $G sql instances patch $INST --project $PROJECT --no-assign-ip --quiet >/dev/null 2>&1
+  echo "IPV4_ENABLED_AFTER=$($G sql instances describe $INST --project $PROJECT --format='value(settings.ipConfiguration.ipv4Enabled)')"
+  echo "CLOSED_AT=$(date -u +%FT%TZ)"
+}
+trap cleanup EXIT
+
+DBURL=$($G run services describe accessbuddy-production --region $REGION --project $PROJECT --format=json 2>/dev/null \
+  | python3 -c "import sys,json; env=json.load(sys.stdin)['spec']['template']['spec']['containers'][0]['env']; print([e['value'] for e in env if e['name']=='DATABASE_URL'][0])")
+if [ -z "$DBURL" ]; then echo "NO_DBURL"; exit 1; fi
+LOCALURL=$(printf '%s' "$DBURL" | sed -E 's#@[^/@]+/#@127.0.0.1:5433/#')
+umask 077
+printf '%s' "$LOCALURL" > "$HOME/pai-tmp/.dburl"
+
+echo "== opening IP window $(date -u +%FT%TZ)"
+$G sql instances patch $INST --project $PROJECT --assign-ip --quiet >/dev/null 2>&1 || { echo "PATCH_FAILED"; exit 1; }
+$PROXY --port 5433 "$PROJECT:$REGION:$INST" >"$HOME/pai-tmp/proxy.log" 2>&1 &
+PROXY_PID=$!
+for i in $(seq 1 30); do
+  if $P "$LOCALURL" -Atc "select 1" >/dev/null 2>&1; then echo "DB_CONNECTED after ${i}s"; break; fi
+  sleep 1
+done
+echo "READY"
+
+for i in $(seq 1 1200); do
+  [ -f "$FLAG" ] && { echo "close flag seen"; break; }
+  sleep 1
+done

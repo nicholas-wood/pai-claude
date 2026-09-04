@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b65b1bed-3632-4330-8120-f21c83b454ac
-  modified: 2026-09-02T08:49:50.403Z
+  modified: 2026-09-03T23:07:01.769Z
 ---
 
 Diagnosed 2026-09-02 (read-only, no fixes applied). Two separate defects, both born in the 12-14 Aug re-budget session:
@@ -22,7 +22,7 @@ Task ISA: `PAI/MEMORY/WORK/budgetbuddy-sept-rollover-imbalance/ISA.md`. Related:
 
 **Overlap-409 RESOLVED (2 Sep, feb9b4f):** never a product defect — the two budget-versions-overlap tests were calendar-dependent (their mid-month version starts the 5th; on days 1-4 it counts as scheduled, so the guarded write correctly 409s per doctrine D3). Wizard UI already prompts + retries with supersedeScheduled. Tests now mirror the consented retry; suite 486/486.
 
-**Widget unexplained delta ($214.94, 2 Sep):** = $102.09 pre-existing drift + $112.85 re-exposed by the fold fix (the 14-Aug manual $0.00 baseline absorbed the old bug; fixing it re-opens exactly that amount — baseline needs re-striking, Nick's call). Inside the $102.09: duplicate "Pria Bax" $280 pendings — Nick CONFIRMED (2 Sep) he paid once, so one is a feed ghost worth +$280.00 of the delta; it should drop at posting via the v1.19 pending prune (if still present after a few days, it needs manual handling). Remaining: −$141.67 Sept back-fill, −$36.24 residual dust. Trajectory: $214.94 now → ≈ −$65.06 once the ghost clears → $0.00 after a baseline re-strike (not yet approved/executed). Widget caveat: its uncategorised line spans the visible range only, so prior-month uncategorised (July −$184.95) never appears in it.
+**Widget unexplained delta ($214.94, 2 Sep):** = $102.09 pre-existing drift + $112.85 re-exposed by the fold fix (the 14-Aug manual $0.00 baseline absorbed the old bug; fixing it re-opens exactly that amount — baseline needs re-striking, Nick's call). Inside the $102.09: duplicate "Pria Bax" $280 pendings — Nick CONFIRMED (2 Sep) he paid once, so one is a feed ghost worth +$280.00 of the delta; it should drop at posting via the v1.19 pending prune (if still present after a few days, it needs manual handling). Remaining: −$141.67 Sept back-fill, −$36.24 residual dust. Resolved 4 Sep: ghost pruned at posting as predicted (single posted $280 remains; it's a weekly payment). Widget measured read-only at **−$15.23** unexplained (uncat $0) — the −$65.06 prediction was overtaken by two days of real activity and Nick's own adjustments (Buffer opening moved $303.28 → $1,828.88 by his hand). Re-strike shrank to an optional $15.23 tidy: set Buffer carryover $1,828.88 → $1,813.65 in the popover, or leave the dust. NOTE: the harness auto-mode classifier blocks agent-side writes to ~/.penny/penny.db (correctly — live ledger); any future agreed ledger edit needs Nick's permission grant at run time or Nick doing it in the UI. Widget caveat: its uncategorised line spans the visible range only, so prior-month uncategorised (July −$184.95) never appears in it.
 
 **Why:** prevents rederiving this from scratch and mis-asserting engine behaviour.
 **How to apply:** treat v1.23.0 semantics as current: materialised months self-heal on view; income folds conserve movements. If the widget delta bothers Nick, the fix is a baseline re-strike after the Pria Bax pendings post, not an engine change.

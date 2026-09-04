@@ -1,0 +1,47 @@
+\set ON_ERROR_STOP on
+BEGIN;
+SELECT set_config('app.current_tenant_id', (SELECT id::text FROM tenants WHERE slug = 'south-melb-lsc'), true) AS tenant_ctx;
+
+WITH tr AS (
+  SELECT DISTINCT ON (a.entity_id) a.entity_id AS credential_id, a.created_at AS reactivated_at
+  FROM audit_log a
+  WHERE a.entity_type = 'credential' AND a.action = 'status_change'
+    AND a.from_state = 'expired' AND a.to_state = 'active'
+    AND a.created_at >= '2026-08-31T14:00:00Z'
+  ORDER BY a.entity_id, a.created_at DESC
+),
+cand AS (
+  SELECT c.id AS credential_id, c.tenant_id, u.email,
+         trim(coalesce(u.first_name,'') || ' ' || coalesce(u.last_name,'')) AS member_name,
+         coalesce(ct.name, 'Fob') AS credential_type,
+         coalesce(c.serial_number, 'N/A') AS serial_number,
+         to_char(c.expires_at AT TIME ZONE 'Australia/Melbourne', 'FMDD FMMonth YYYY') AS expiry_date,
+         coalesce(tm.current_season,
+                  (extract(year FROM c.expires_at AT TIME ZONE 'Australia/Melbourne')::int - 1)::text || '/' ||
+                  extract(year FROM c.expires_at AT TIME ZONE 'Australia/Melbourne')::int::text) AS season
+  FROM tr
+  JOIN credentials c ON c.id = tr.credential_id
+  JOIN users u ON u.id = c.owner_id
+  LEFT JOIN credential_types ct ON ct.id = c.credential_type_id
+  LEFT JOIN tenant_memberships tm ON tm.user_id = c.owner_id AND tm.tenant_id = c.tenant_id
+  WHERE c.status = 'active' AND coalesce(u.email,'') <> ''
+    AND NOT EXISTS (SELECT 1 FROM audit_log e WHERE e.entity_id = c.id AND e.action = 'email_sent'
+                    AND e.metadata->>'templateType' = 'credentialReactivated'
+                    AND e.created_at >= '2026-08-31T14:00:00Z')
+    AND NOT EXISTS (SELECT 1 FROM email_queue q WHERE q.entity_id = c.id
+                    AND q.template_type = 'credentialReactivated' AND q.status IN ('queued','sent'))
+)
+INSERT INTO email_queue (tenant_id, template_type, recipient, payload, priority, entity_type, entity_id)
+SELECT tenant_id, 'credentialReactivated', email,
+       jsonb_build_object('memberName', coalesce(nullif(member_name,''), 'Member'),
+                          'credentialType', credential_type,
+                          'serialNumber', serial_number,
+                          'expiryDate', expiry_date,
+                          'season', season),
+       2, 'credential', credential_id
+FROM cand
+RETURNING recipient, payload->>'credentialType' AS type, payload->>'serialNumber' AS serial,
+          payload->>'season' AS season, payload->>'expiryDate' AS expires;
+
+SELECT count(*) AS queued_now FROM email_queue WHERE template_type = 'credentialReactivated' AND status = 'queued';
+COMMIT;

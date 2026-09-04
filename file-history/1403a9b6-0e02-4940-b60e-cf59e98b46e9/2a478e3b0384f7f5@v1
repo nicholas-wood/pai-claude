@@ -1,0 +1,632 @@
+/**
+ * Email Event Registry
+ *
+ * Code-defined registry of all email events in the system.
+ * Each event maps to a notification that can be sent, with metadata about
+ * its trigger, recipient, and available template variables.
+ *
+ * Tenant-specific overrides (enable/disable, subject, blocks) are stored
+ * in the `email_configurations` table and take precedence over defaults.
+ */
+
+export type EmailBlock =
+  | { type: "heading"; content: string }
+  | { type: "paragraph"; content: string }
+  | { type: "button"; label: string; urlVariable: string }
+  | { type: "callout"; content: string; variant?: "info" | "warning" | "error" | "success" }
+  | { type: "divider" };
+
+export type EmailVariable = {
+  key: string;
+  label: string;
+  example: string;
+};
+
+export type EmailEventCategory = "member" | "admin" | "system";
+export type EmailRecipientType = "member" | "admins_with_permission" | "specific";
+
+export type EmailEvent = {
+  id: string;
+  name: string;
+  description: string;
+  category: EmailEventCategory;
+  defaultRecipient: EmailRecipientType;
+  defaultRecipientPermission?: string;
+  variables: EmailVariable[];
+  timeCritical: boolean;
+  defaultEnabled: boolean;
+  defaultSubject: string;
+  defaultBlocks: EmailBlock[] | null; // null = complex template, code-managed only
+};
+
+// Common variables shared across many templates
+const COMMON_VARS: EmailVariable[] = [
+  { key: "memberName", label: "Member Name", example: "Sarah Johnson" },
+  { key: "clubName", label: "Club Name", example: "Bondi SLSC" },
+];
+
+export const EMAIL_EVENTS: EmailEvent[] = [
+  // ─── Member-facing: Request lifecycle ─────────────────────────────
+  {
+    id: "request_submitted",
+    name: "Request Submitted",
+    description: "Sent to the member when their request is received",
+    category: "member",
+    defaultRecipient: "member",
+    variables: [
+      ...COMMON_VARS,
+      { key: "requestType", label: "Request Type", example: "New credential" },
+    ],
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Request Received",
+    defaultBlocks: [
+      { type: "heading", content: "Request Received" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "We have received your {{requestType}} request. An administrator will review it shortly." },
+      { type: "paragraph", content: "You will receive further updates by email as your request progresses." },
+    ],
+  },
+  {
+    id: "request_approved",
+    name: "Request Approved",
+    description: "Sent to the member when their request is approved",
+    category: "member",
+    defaultRecipient: "member",
+    variables: COMMON_VARS,
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Request Approved",
+    defaultBlocks: [
+      { type: "heading", content: "Request Approved" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "Your request has been approved. Your credential is now being prepared." },
+      { type: "paragraph", content: "We will let you know when it is ready for collection." },
+    ],
+  },
+  {
+    id: "request_rejected",
+    name: "Request Rejected",
+    description: "Sent to the member when their request is not approved",
+    category: "member",
+    defaultRecipient: "member",
+    variables: [
+      ...COMMON_VARS,
+      { key: "reason", label: "Rejection Reason", example: "Membership has expired" },
+    ],
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Request Not Approved",
+    defaultBlocks: [
+      { type: "heading", content: "Request Not Approved" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "Unfortunately, your request was not approved." },
+      { type: "callout", content: "Reason: {{reason}}", variant: "error" },
+      { type: "paragraph", content: "If you believe this was a mistake, please contact an administrator." },
+    ],
+  },
+  {
+    id: "ready_for_pickup",
+    name: "Ready for Pickup",
+    description: "Sent to the member when their credential is ready for collection",
+    category: "member",
+    defaultRecipient: "member",
+    variables: [
+      ...COMMON_VARS,
+      { key: "pickupLocation", label: "Pickup Location", example: "Club Reception" },
+    ],
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Ready for Collection",
+    defaultBlocks: [
+      { type: "heading", content: "Ready for Collection" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "Your credential is ready for collection." },
+      { type: "callout", content: "Pickup Location: {{pickupLocation}}", variant: "info" },
+      { type: "paragraph", content: "Please collect your credential at your earliest convenience." },
+    ],
+  },
+  {
+    id: "pickup_reminder",
+    name: "Pickup Reminder",
+    description: "Reminder sent when a credential has been awaiting pickup",
+    category: "member",
+    defaultRecipient: "member",
+    variables: [
+      ...COMMON_VARS,
+      { key: "pickupLocation", label: "Pickup Location", example: "Club Reception" },
+      { key: "daysWaiting", label: "Days Waiting", example: "7" },
+    ],
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Pickup Reminder",
+    defaultBlocks: [
+      { type: "heading", content: "Pickup Reminder" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "Your credential has been waiting for collection for {{daysWaiting}} days." },
+      { type: "callout", content: "Pickup Location: {{pickupLocation}}", variant: "info" },
+      { type: "paragraph", content: "Please collect it at your earliest convenience." },
+    ],
+  },
+  {
+    id: "credential_issued",
+    name: "Credential Issued",
+    description: "Sent when a credential is issued to the member",
+    category: "member",
+    defaultRecipient: "member",
+    variables: [
+      ...COMMON_VARS,
+      { key: "serialNumber", label: "Serial Number", example: "AB-1234" },
+      { key: "accessLevel", label: "Access Level", example: "Full Member" },
+    ],
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Credential Issued",
+    defaultBlocks: [
+      { type: "heading", content: "Credential Issued" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "Your credential has been issued." },
+      { type: "callout", content: "Serial: {{serialNumber}} | Access: {{accessLevel}}", variant: "success" },
+    ],
+  },
+  {
+    id: "access_revoked",
+    name: "Access Revoked",
+    description: "Sent when a member's access is revoked",
+    category: "member",
+    defaultRecipient: "member",
+    variables: [
+      ...COMMON_VARS,
+      { key: "reason", label: "Reason", example: "Membership expired" },
+    ],
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Access Revoked",
+    defaultBlocks: [
+      { type: "heading", content: "Access Revoked" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "Your access has been revoked." },
+      { type: "callout", content: "Reason: {{reason}}", variant: "warning" },
+      { type: "paragraph", content: "If you have any questions, please contact an administrator." },
+    ],
+  },
+  {
+    id: "request_cancelled",
+    name: "Request Cancelled",
+    description: "Sent when a request is cancelled",
+    category: "member",
+    defaultRecipient: "member",
+    variables: [
+      ...COMMON_VARS,
+      { key: "reason", label: "Reason", example: "Cancelled by admin" },
+    ],
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Request Cancelled",
+    defaultBlocks: [
+      { type: "heading", content: "Request Cancelled" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "Your request has been cancelled." },
+      { type: "callout", content: "Reason: {{reason}}", variant: "warning" },
+      { type: "paragraph", content: "If you have any questions, please contact an administrator." },
+    ],
+  },
+  {
+    id: "payment_received",
+    name: "Payment Received",
+    description: "Sent when payment is confirmed",
+    category: "member",
+    defaultRecipient: "member",
+    variables: [
+      ...COMMON_VARS,
+      { key: "amount", label: "Amount", example: "$25.00" },
+    ],
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Payment Confirmed",
+    defaultBlocks: [
+      { type: "heading", content: "Payment Confirmed" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "We have received your payment of {{amount}}. Thank you." },
+      { type: "paragraph", content: "Your request will now continue to be processed." },
+    ],
+  },
+  {
+    id: "payment_reminder",
+    name: "Payment Reminder",
+    description: "Sent when payment is overdue",
+    category: "member",
+    defaultRecipient: "member",
+    variables: [
+      ...COMMON_VARS,
+      { key: "amount", label: "Amount", example: "$25.00" },
+      { key: "paymentUrl", label: "Payment URL", example: "https://..." },
+    ],
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Payment Reminder",
+    defaultBlocks: [
+      { type: "heading", content: "Payment Reminder" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "Your payment of {{amount}} is still outstanding. Please complete payment to proceed with your request." },
+      { type: "button", label: "Pay Now", urlVariable: "paymentUrl" },
+    ],
+  },
+  {
+    id: "payment_refunded",
+    name: "Payment Refunded",
+    description: "Sent when a refund is processed",
+    category: "member",
+    defaultRecipient: "member",
+    variables: [
+      ...COMMON_VARS,
+      { key: "amount", label: "Amount", example: "$25.00" },
+    ],
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Refund Processed",
+    defaultBlocks: [
+      { type: "heading", content: "Refund Processed" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "A refund of {{amount}} has been processed. Please allow 5-10 business days for the funds to appear." },
+    ],
+  },
+  {
+    id: "request_on_hold",
+    name: "Request On Hold",
+    description: "Sent when a request is placed on hold",
+    category: "member",
+    defaultRecipient: "member",
+    variables: [
+      ...COMMON_VARS,
+      { key: "reason", label: "Reason", example: "Awaiting documentation" },
+    ],
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Request On Hold",
+    defaultBlocks: [
+      { type: "heading", content: "Request On Hold" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "Your request has been placed on hold." },
+      { type: "callout", content: "Reason: {{reason}}", variant: "warning" },
+      { type: "paragraph", content: "We will be in touch when your request can continue." },
+    ],
+  },
+  {
+    id: "exemption_requested",
+    name: "Exemption Requested",
+    description: "Sent when a payment exemption is submitted",
+    category: "member",
+    defaultRecipient: "member",
+    variables: COMMON_VARS,
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Exemption Request Received",
+    defaultBlocks: [
+      { type: "heading", content: "Exemption Request Received" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "Your payment exemption request has been received and will be reviewed by an administrator." },
+    ],
+  },
+  {
+    id: "exemption_approved",
+    name: "Exemption Approved",
+    description: "Sent when a payment exemption is granted",
+    category: "member",
+    defaultRecipient: "member",
+    variables: COMMON_VARS,
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Exemption Approved",
+    defaultBlocks: [
+      { type: "heading", content: "Exemption Approved" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "Your payment exemption has been approved. Your request will now continue to be processed." },
+    ],
+  },
+  {
+    id: "exemption_rejected",
+    name: "Exemption Rejected",
+    description: "Sent when a payment exemption is denied",
+    category: "member",
+    defaultRecipient: "member",
+    variables: [
+      ...COMMON_VARS,
+      { key: "reason", label: "Reason", example: "Does not meet criteria" },
+      { key: "paymentUrl", label: "Payment URL", example: "https://..." },
+    ],
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Exemption Not Approved",
+    defaultBlocks: [
+      { type: "heading", content: "Exemption Not Approved" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "Unfortunately, your payment exemption was not approved." },
+      { type: "callout", content: "Reason: {{reason}}", variant: "error" },
+      { type: "paragraph", content: "Please complete payment to proceed with your request." },
+      { type: "button", label: "Pay Now", urlVariable: "paymentUrl" },
+    ],
+  },
+  {
+    id: "attestation_requested",
+    name: "Attestation Requested",
+    description: "Sent when a renewal verification is needed",
+    category: "member",
+    defaultRecipient: "member",
+    variables: [
+      ...COMMON_VARS,
+      { key: "attestUrl", label: "Attestation URL", example: "https://..." },
+    ],
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Verification Required",
+    defaultBlocks: [
+      { type: "heading", content: "Verification Required" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "Your credential is due for renewal. Please complete the verification process to maintain your access." },
+      { type: "button", label: "Complete Verification", urlVariable: "attestUrl" },
+    ],
+  },
+  {
+    id: "credential_expired",
+    name: "Credential Expired",
+    description: "Sent when a credential expires",
+    category: "member",
+    defaultRecipient: "member",
+    variables: COMMON_VARS,
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Credential Expired",
+    defaultBlocks: [
+      { type: "heading", content: "Credential Expired" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "Your credential has expired. Please contact an administrator if you need to renew." },
+    ],
+  },
+  {
+    id: "credential_expiry_warning",
+    name: "Credential Expiry Warning",
+    description: "Sent when a credential is about to expire",
+    category: "member",
+    defaultRecipient: "member",
+    variables: [
+      ...COMMON_VARS,
+      { key: "expiryDate", label: "Expiry Date", example: "15 Mar 2026" },
+    ],
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Credential Expiring Soon",
+    defaultBlocks: [
+      { type: "heading", content: "Credential Expiring Soon" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "Your credential will expire on {{expiryDate}}. Please renew before this date to maintain access." },
+    ],
+  },
+  {
+    id: "credential_deactivated",
+    name: "Credential Deactivated",
+    description: "Sent when a credential is reported lost or damaged",
+    category: "member",
+    defaultRecipient: "member",
+    variables: COMMON_VARS,
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Credential Deactivated",
+    defaultBlocks: [
+      { type: "heading", content: "Credential Deactivated" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "Your credential has been deactivated. If you need a replacement, please submit a new request." },
+    ],
+  },
+  {
+    id: "credential_access_updated",
+    name: "Access Level Updated",
+    description: "Sent when a credential's access level changes",
+    category: "member",
+    defaultRecipient: "member",
+    variables: [
+      ...COMMON_VARS,
+      { key: "newAccessLevel", label: "New Access Level", example: "Full Member" },
+    ],
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Access Level Updated",
+    defaultBlocks: [
+      { type: "heading", content: "Access Level Updated" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "Your access level has been updated to {{newAccessLevel}}." },
+    ],
+  },
+  {
+    id: "credential_return_confirmation",
+    name: "Return Confirmation",
+    description: "Sent when a credential return is completed",
+    category: "member",
+    defaultRecipient: "member",
+    variables: COMMON_VARS,
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Credential Returned",
+    defaultBlocks: [
+      { type: "heading", content: "Credential Returned" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "Your credential has been returned successfully. Thank you." },
+    ],
+  },
+  {
+    id: "credential_change_confirmation",
+    name: "Credential Change Confirmation",
+    description: "Sent when a credential type change is completed",
+    category: "member",
+    defaultRecipient: "member",
+    variables: [
+      ...COMMON_VARS,
+      { key: "newType", label: "New Type", example: "Wristband" },
+    ],
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Credential Change Confirmed",
+    defaultBlocks: [
+      { type: "heading", content: "Credential Change Confirmed" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "Your credential has been changed to {{newType}}." },
+    ],
+  },
+  {
+    id: "damaged_fob_reported",
+    name: "Damaged Fob Reported",
+    description: "Sent when a member reports a damaged fob",
+    category: "member",
+    defaultRecipient: "member",
+    variables: COMMON_VARS,
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Damaged Fob Report Received",
+    defaultBlocks: [
+      { type: "heading", content: "Damaged Fob Report Received" },
+      { type: "paragraph", content: "Dear {{memberName}}," },
+      { type: "paragraph", content: "We have received your report of a damaged fob. An administrator will review your report shortly." },
+      { type: "callout", content: "If the fob is found to be faulty, it will be replaced at no cost. If not, you may need to pay for a replacement.", variant: "info" },
+    ],
+  },
+
+  // ─── Admin-facing notifications ─────────────────────────────────────
+  {
+    id: "admin_approval_needed",
+    name: "Approval Needed",
+    description: "Sent to admins when a request needs approval",
+    category: "admin",
+    defaultRecipient: "admins_with_permission",
+    defaultRecipientPermission: "APPROVE",
+    variables: [
+      { key: "clubName", label: "Club Name", example: "Bondi SLSC" },
+      { key: "memberName", label: "Member Name", example: "Sarah Johnson" },
+      { key: "requestType", label: "Request Type", example: "New credential" },
+    ],
+    timeCritical: true,
+    defaultEnabled: true,
+    defaultSubject: "New Request Awaiting Approval",
+    defaultBlocks: [
+      { type: "heading", content: "Approval Needed" },
+      { type: "paragraph", content: "A new {{requestType}} request from {{memberName}} requires your approval." },
+    ],
+  },
+  {
+    id: "admin_programming_needed",
+    name: "Programming Needed",
+    description: "Sent to admins when a credential needs programming",
+    category: "admin",
+    defaultRecipient: "admins_with_permission",
+    defaultRecipientPermission: "PROGRAM",
+    variables: [
+      { key: "clubName", label: "Club Name", example: "Bondi SLSC" },
+      { key: "memberName", label: "Member Name", example: "Sarah Johnson" },
+      { key: "serialNumber", label: "Serial Number", example: "AB-1234" },
+    ],
+    timeCritical: true,
+    defaultEnabled: true,
+    defaultSubject: "Credential Ready for Programming",
+    defaultBlocks: [
+      { type: "heading", content: "Programming Needed" },
+      { type: "paragraph", content: "A credential for {{memberName}} ({{serialNumber}}) is ready for programming." },
+    ],
+  },
+  {
+    id: "admin_exemption_review",
+    name: "Exemption Review Needed",
+    description: "Sent to admins when an exemption needs review",
+    category: "admin",
+    defaultRecipient: "admins_with_permission",
+    defaultRecipientPermission: "APPROVE",
+    variables: [
+      { key: "clubName", label: "Club Name", example: "Bondi SLSC" },
+      { key: "memberName", label: "Member Name", example: "Sarah Johnson" },
+    ],
+    timeCritical: true,
+    defaultEnabled: true,
+    defaultSubject: "Exemption Awaiting Review",
+    defaultBlocks: [
+      { type: "heading", content: "Exemption Review Needed" },
+      { type: "paragraph", content: "{{memberName}} has requested a payment exemption that requires your review." },
+    ],
+  },
+  {
+    id: "admin_ready_for_collection",
+    name: "Admin: Ready for Collection",
+    description: "Sent to admins when a credential is awaiting pickup",
+    category: "admin",
+    defaultRecipient: "admins_with_permission",
+    defaultRecipientPermission: "VIEW",
+    variables: [
+      { key: "clubName", label: "Club Name", example: "Bondi SLSC" },
+      { key: "memberName", label: "Member Name", example: "Sarah Johnson" },
+    ],
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Credential Awaiting Collection",
+    defaultBlocks: [
+      { type: "heading", content: "Awaiting Collection" },
+      { type: "paragraph", content: "A credential for {{memberName}} is ready and awaiting collection." },
+    ],
+  },
+
+  // ─── System emails ──────────────────────────────────────────────────
+  {
+    id: "verification_code",
+    name: "Verification Code",
+    description: "OTP code for authentication",
+    category: "system",
+    defaultRecipient: "specific",
+    variables: [
+      { key: "code", label: "Code", example: "123456" },
+    ],
+    timeCritical: true,
+    defaultEnabled: true,
+    defaultSubject: "Your Verification Code",
+    defaultBlocks: null, // System email, not configurable
+  },
+  {
+    id: "magic_link",
+    name: "Magic Link",
+    description: "Passwordless login link",
+    category: "system",
+    defaultRecipient: "specific",
+    variables: [
+      { key: "url", label: "Login URL", example: "https://..." },
+    ],
+    timeCritical: true,
+    defaultEnabled: true,
+    defaultSubject: "Your Login Link",
+    defaultBlocks: null, // System email, not configurable
+  },
+  {
+    id: "daily_summary",
+    name: "Daily Summary",
+    description: "Daily digest of activity for admins",
+    category: "admin",
+    defaultRecipient: "admins_with_permission",
+    defaultRecipientPermission: "VIEW",
+    variables: [
+      { key: "clubName", label: "Club Name", example: "Bondi SLSC" },
+    ],
+    timeCritical: false,
+    defaultEnabled: true,
+    defaultSubject: "Daily Summary",
+    defaultBlocks: null, // Complex template with dynamic sections
+  },
+];
+
+/**
+ * Look up an email event by ID.
+ */
+export function getEmailEvent(id: string): EmailEvent | undefined {
+  return EMAIL_EVENTS.find((e) => e.id === id);
+}
+
+/**
+ * Get all configurable events (those with defaultBlocks).
+ * System emails without blocks are not configurable beyond enable/disable.
+ */
+export function getConfigurableEvents(): EmailEvent[] {
+  return EMAIL_EVENTS.filter((e) => e.defaultBlocks !== null);
+}

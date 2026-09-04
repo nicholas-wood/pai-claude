@@ -1,0 +1,334 @@
+import { sql, and, eq, gte, lte, asc } from "drizzle-orm";
+import { db, emailQueue, auditLog, tenants } from "@accessbuddy/db";
+import { AuditAction, AuditEntityType } from "@accessbuddy/shared";
+import {
+  buildEmailConfig,
+  sendTemplatedEmail,
+  type TemplateVariables,
+} from "@/lib/services/email";
+import { withTenant, type TransactionClient } from "@/lib/with-tenant";
+import {
+  budgetLeft,
+  hasDuplicateInWindow,
+  retryDecision,
+  startOfUtcDay,
+} from "@/lib/email-queue-logic";
+
+/**
+ * Templates that are allowed through the queue. Bulk (cron-driven) mail
+ * only; transactional flows (payment, approval, pickup) stay inline for
+ * now and are future queue candidates.
+ */
+export const QUEUEABLE_TEMPLATE_TYPES = [
+  "credentialExpiryWarning",
+  "credentialExpired",
+  // Automatic weekly resend of a lapsed renewal attestation (cron step 1b2).
+  // The admin-initiated Renew and Resend actions still send inline.
+  "attestationRequested",
+] as const;
+
+export type QueueableTemplateType = (typeof QUEUEABLE_TEMPLATE_TYPES)[number];
+
+/**
+ * Count of real send attempts against Resend so far in the current UTC day,
+ * derived from the audit trail (email_sent + email_failed, excluding
+ * entries flagged suppressed or noop, which never hit Resend).
+ *
+ * Derived counting is chosen over a separate counter table because the
+ * audit trail is already written transactionally with every send — inline
+ * auth mail (magic link, OTP) counts automatically with no new write path,
+ * and there is no counter to drift out of sync. email_failed is included
+ * because a failed attempt may still have consumed Resend quota; slightly
+ * under-sending beats breaching the cap.
+ */
+export async function getTodaysSendCount(now: Date = new Date()): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(auditLog)
+    .where(
+      and(
+        sql`${auditLog.action} in (${AuditAction.EMAIL_SENT}, ${AuditAction.EMAIL_FAILED})`,
+        gte(auditLog.createdAt, startOfUtcDay(now)),
+        sql`NOT (${auditLog.metadata} ? 'suppressed')`,
+        sql`NOT (${auditLog.metadata} ? 'noop')`
+      )
+    );
+  return row?.count ?? 0;
+}
+
+/** Number of rows still waiting in the queue (status = queued). */
+export async function getQueueDepth(): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(emailQueue)
+    .where(eq(emailQueue.status, "queued"));
+  return row?.count ?? 0;
+}
+
+/** Queued-row counts per tenant, for admin daily-summary visibility. */
+export async function getQueueDepthByTenant(): Promise<Map<string, number>> {
+  const rows = await db
+    .select({
+      tenantId: emailQueue.tenantId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(emailQueue)
+    .where(eq(emailQueue.status, "queued"))
+    .groupBy(emailQueue.tenantId);
+  return new Map(rows.map((r) => [r.tenantId, r.count]));
+}
+
+/**
+ * Window dedupe: has an email for this entity + template already been sent
+ * (email_sent audit entry) or enqueued (queue row in any status except
+ * cancelled/failed) at/after windowStart? Makes multi-day spreading safe:
+ * a credential missed on a capped day is backfilled on a later day within
+ * the same window, without ever double-sending.
+ */
+export async function hasEmailForEntityInWindow(params: {
+  tenantId: string;
+  entityType: AuditEntityType;
+  entityId: string;
+  templateType: QueueableTemplateType;
+  windowStart: Date;
+}): Promise<boolean> {
+  const [auditEntries, queueRows] = await Promise.all([
+    db
+      .select({ createdAt: auditLog.createdAt, metadata: auditLog.metadata })
+      .from(auditLog)
+      .where(
+        and(
+          eq(auditLog.tenantId, params.tenantId),
+          eq(auditLog.entityType, params.entityType),
+          eq(auditLog.entityId, params.entityId),
+          eq(auditLog.action, AuditAction.EMAIL_SENT),
+          gte(auditLog.createdAt, params.windowStart)
+        )
+      ),
+    db
+      .select({ status: emailQueue.status, createdAt: emailQueue.createdAt })
+      .from(emailQueue)
+      .where(
+        and(
+          eq(emailQueue.tenantId, params.tenantId),
+          eq(emailQueue.entityId, params.entityId),
+          eq(emailQueue.templateType, params.templateType),
+          gte(emailQueue.createdAt, params.windowStart)
+        )
+      ),
+  ]);
+
+  return hasDuplicateInWindow({
+    auditEntries,
+    queueRows,
+    templateType: params.templateType,
+    windowStart: params.windowStart,
+  });
+}
+
+/**
+ * Insert a queue row. The tx must already have tenant RLS context set
+ * (i.e. be inside withTenant for params.tenantId).
+ */
+export async function enqueueEmail<T extends QueueableTemplateType>(
+  tx: TransactionClient,
+  params: {
+    tenantId: string;
+    templateType: T;
+    recipient: string;
+    variables: TemplateVariables[T];
+    entityType: AuditEntityType;
+    entityId: string;
+    /** 1 = transactional, 2 = bulk (default). Drained priority ASC. */
+    priority?: 1 | 2;
+  }
+): Promise<void> {
+  await tx.insert(emailQueue).values({
+    tenantId: params.tenantId,
+    templateType: params.templateType,
+    recipient: params.recipient,
+    payload: params.variables,
+    priority: params.priority ?? 2,
+    entityType: params.entityType,
+    entityId: params.entityId,
+  });
+}
+
+type QueueRow = typeof emailQueue.$inferSelect;
+
+/**
+ * Record a failed send attempt on a queue row: attempts+1, lastError, retry
+ * backoff via earliestSendAt, failed permanently after MAX_SEND_ATTEMPTS.
+ * Returns the decision so callers can count permanent failures.
+ */
+async function recordFailedAttempt(
+  client: TransactionClient | typeof db,
+  row: QueueRow,
+  now: Date,
+  errorMessage: string
+) {
+  const decision = retryDecision(row.attempts, now);
+  await client
+    .update(emailQueue)
+    .set({
+      status: decision.status,
+      attempts: decision.attempts,
+      lastError: errorMessage,
+      earliestSendAt: decision.earliestSendAt,
+    })
+    .where(eq(emailQueue.id, row.id));
+  return decision;
+}
+
+export type DrainResult = {
+  drained: number;
+  failed: number;
+  cancelled: number;
+  remaining: number;
+  budgetLeft: number;
+  sentToday: number;
+};
+
+/**
+ * Drain due queue rows under the daily send budget.
+ *
+ * - Budget = 85 minus all real sends already made today (queued AND inline,
+ *   via the audit trail), so queued mail can never crowd auth email out of
+ *   Resend's 100/day free-tier cap.
+ * - Order: priority ASC, createdAt ASC.
+ * - Failure: attempts+1, lastError recorded, retry after attempts * 4h;
+ *   marked failed permanently after 3 attempts.
+ * - Renders through sendTemplatedEmail so branding and audit standards hold.
+ */
+export async function drainEmailQueue(now: Date = new Date()): Promise<DrainResult> {
+  const sentToday = await getTodaysSendCount(now);
+  let budget = budgetLeft(sentToday);
+
+  let drained = 0;
+  let failed = 0;
+  let cancelled = 0;
+
+  if (budget > 0) {
+    const due = await db
+      .select()
+      .from(emailQueue)
+      .where(and(eq(emailQueue.status, "queued"), lte(emailQueue.earliestSendAt, now)))
+      .orderBy(asc(emailQueue.priority), asc(emailQueue.createdAt))
+      .limit(budget);
+
+    // Tenant rows cached per drain run — bulk batches are usually one tenant.
+    const tenantCache = new Map<string, Parameters<typeof buildEmailConfig>[0] | null>();
+
+    // When RESEND_API_KEY is missing every send no-ops; stop instead of
+    // spinning through the whole queue doing nothing.
+    let apiKeyMissing = false;
+
+    for (const row of due) {
+      if (budget <= 0 || apiKeyMissing) break;
+
+      try {
+        if (!tenantCache.has(row.tenantId)) {
+          const [tenantRow] = await db
+            .select({ name: tenants.name, settings: tenants.settings, logoUrl: tenants.logoUrl })
+            .from(tenants)
+            .where(eq(tenants.id, row.tenantId))
+            .limit(1);
+          tenantCache.set(row.tenantId, tenantRow ?? null);
+        }
+        const tenantRow = tenantCache.get(row.tenantId);
+
+        if (!tenantRow) {
+          await db
+            .update(emailQueue)
+            .set({ status: "failed", lastError: "Tenant not found" })
+            .where(eq(emailQueue.id, row.id));
+          failed++;
+          continue;
+        }
+
+        if (!QUEUEABLE_TEMPLATE_TYPES.includes(row.templateType as QueueableTemplateType)) {
+          await db
+            .update(emailQueue)
+            .set({ status: "failed", lastError: `Unknown template type: ${row.templateType}` })
+            .where(eq(emailQueue.id, row.id));
+          failed++;
+          continue;
+        }
+        const templateType = row.templateType as QueueableTemplateType;
+
+        const config = buildEmailConfig(tenantRow);
+
+        await withTenant(row.tenantId, async (tx) => {
+          const result = await sendTemplatedEmail(
+            row.recipient,
+            templateType,
+            row.payload as TemplateVariables[QueueableTemplateType],
+            config,
+            undefined,
+            {
+              tx,
+              tenantId: row.tenantId,
+              entityType: (row.entityType ?? AuditEntityType.CREDENTIAL) as AuditEntityType,
+              entityId: row.entityId ?? row.id,
+              actorId: null,
+            }
+          );
+
+          if (result.sent) {
+            await tx
+              .update(emailQueue)
+              .set({ status: "sent", sentAt: new Date() })
+              .where(eq(emailQueue.id, row.id));
+            drained++;
+            budget--;
+            return;
+          }
+
+          if (result.suppressed) {
+            // Tenant has sendEmails=false — cancel rather than retry.
+            await tx
+              .update(emailQueue)
+              .set({ status: "cancelled", lastError: "Tenant email sending disabled" })
+              .where(eq(emailQueue.id, row.id));
+            cancelled++;
+            return;
+          }
+
+          if (result.noop) {
+            // No RESEND_API_KEY configured. Leave the row queued.
+            apiKeyMissing = true;
+            return;
+          }
+
+          // Real failure — a send attempt was made against Resend, so it
+          // counts against the budget.
+          const decision = await recordFailedAttempt(
+            tx,
+            row,
+            now,
+            result.error ?? "Send failed"
+          );
+          if (decision.status === "failed") failed++;
+          budget--;
+        });
+      } catch (err) {
+        console.error(`[email-queue] drain error for row ${row.id}:`, err);
+        const decision = await recordFailedAttempt(
+          db,
+          row,
+          now,
+          err instanceof Error ? err.message : String(err)
+        );
+        if (decision.status === "failed") failed++;
+      }
+    }
+  }
+
+  const remaining = await getQueueDepth();
+  console.log(
+    `[email-queue] drained ${drained}, remaining ${remaining}, budget left ${budget}` +
+      (failed || cancelled ? ` (failed ${failed}, cancelled ${cancelled})` : "")
+  );
+
+  return { drained, failed, cancelled, remaining, budgetLeft: budget, sentToday };
+}
