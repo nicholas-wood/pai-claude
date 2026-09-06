@@ -33,3 +33,4 @@
 - [BudgetBuddy Sept 2026 diagnosis](project-budgetbuddy-sept-2026-diagnosis.md) — v1.23.0 fixed both defects; overlap-409 = calendar-dependent tests (fixed feb9b4f, suite green); widget $214.94 attributed (baseline re-strike + Pria Bax pendings)
 - [LIMSOC Brief 012 assessment](project-brief-012-assessment.md) — Flynn's brief not dev-ready (no Outcome reqs, migration too narrow, SOP 4.3 codes); fix list on file 30 Aug
 - [Auto-mode blocks prod DB window](gotcha-automode-blocks-prod-db-window.md) — classifier denies gcloud-over-ssh for AccessBuddy Cloud SQL in bg jobs; hand Nick the one-line opener instead of retrying
+- [AccessBuddy vitest TSX render probe](gotcha-accessbuddy-vitest-tsx-render-probe.md) — default vitest cannot transform TSX; throwaway config with esbuild.jsx automatic + renderToString to verify copy, delete before commit

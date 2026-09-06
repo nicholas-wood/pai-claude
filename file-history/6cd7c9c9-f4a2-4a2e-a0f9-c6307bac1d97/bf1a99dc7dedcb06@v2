@@ -1,0 +1,96 @@
+# ============================================================================
+# EV Charging Monitor — Lovelace view
+# Add via Dashboard > Edit > Raw configuration editor, as a new view, OR
+# create a new manual dashboard and paste under `views:`.
+# ============================================================================
+title: EV Charging
+path: ev-charging
+icon: mdi:car-electric
+cards:
+  # --- Status banner: solar source + any simplification (ISC-34) ------------
+  - type: markdown
+    content: >
+      ### BYD charge — fair-share billing
+
+      {% set src = states('sensor.ev_grid_export_w') %}
+      {% if states('sensor.CHANGE_ME_grid_export_power') in
+            ['unavailable','unknown','none', none] %}
+      ⚠️ **Solar source not wired** — every charge is billed as **100% grid**
+      (conservative). Set the grid-export sensor in
+      `ev_charging_monitor.yaml` to enable solar attribution.
+      {% else %}
+      ✅ Solar attribution active. Feed-in valued at the **marginal** tier:
+      tier 1 below {{ states('input_number.tariff_fit_tier1_limit_kwh') }} kWh
+      exported/day, tier 2 above.
+      {% endif %}
+
+  # --- Live charge state ----------------------------------------------------
+  - type: entities
+    title: Now
+    entities:
+      - entity: sensor.ev_car_power_w
+        name: Charge power
+      - entity: binary_sensor.ev_charging_active
+        name: Charging
+      - entity: sensor.ev_session_energy_kwh
+        name: This session — energy
+      - entity: sensor.ev_session_cost
+        name: This session — cost
+      - entity: switch.athom_smart_plug_v3_4cb818
+        name: Plug
+
+  # --- Month to date: the number that matters (ISC-32) ----------------------
+  - type: glance
+    title: Month to date
+    columns: 2
+    entities:
+      - entity: sensor.ev_cost_month
+        name: Owed this month
+      - entity: sensor.ev_billed_energy_monthly
+        name: Total kWh
+      - entity: sensor.ev_solar_kwh_month
+        name: Solar kWh
+      - entity: sensor.ev_grid_kwh_month
+        name: Grid kWh
+
+  - type: entities
+    title: Today
+    entities:
+      - entity: sensor.ev_cost_today
+        name: Owed today
+      - entity: sensor.ev_billed_energy_daily
+        name: Total kWh
+      - entity: sensor.ev_counterfactual_daily_export
+        name: Counterfactual export (FIT tier gate)
+      - entity: sensor.ev_split_residual_kwh
+        name: Split residual (health check, ~0)
+
+  # --- Controls (ISC-33) ----------------------------------------------------
+  - type: entities
+    title: Controls
+    entities:
+      - entity: input_boolean.ev_solar_charge_mode
+        name: Solar-following mode (automation)
+      - entity: input_boolean.ev_charge_now
+        name: Charge now (force on)
+
+  - type: entities
+    title: Tariffs (adjustable)
+    entities:
+      - entity: input_number.tariff_consumption
+        name: Consumption (import)
+      - entity: input_number.tariff_fit_tier1
+        name: Feed-in tier 1
+      - entity: input_number.tariff_fit_tier2
+        name: Feed-in tier 2
+      - entity: input_number.tariff_fit_tier1_limit_kwh
+        name: Tier 1 daily limit
+
+  # --- History --------------------------------------------------------------
+  - type: history-graph
+    title: Charge power & solar/grid split (24 h)
+    hours_to_show: 24
+    entities:
+      - sensor.ev_car_power_w
+      - sensor.ev_solar_to_car_w
+      - sensor.ev_grid_to_car_w
