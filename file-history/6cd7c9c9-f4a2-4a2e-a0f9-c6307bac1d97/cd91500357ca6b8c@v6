@@ -1,0 +1,93 @@
+# Memory -- home-automation-sme
+
+What I have learnt over time. Maintain IN PLACE: when something changes, replace the outdated line --
+do not append a stale duplicate below. This file must always reflect the latest state.
+
+## Voice
+
+(No agent-specific voice notes yet. Follow global PAI rules: Australian English, no em dashes,
+recommendation-first, treat Nick as a capable senior engineer, grounded pushback welcome.)
+
+## Process
+
+- Always orient to existing YAML in `artifacts/Home_Automation/` before writing new automations.
+- Use modern HA schema: `triggers:`/`conditions:`/`actions:` as top-level keys; `trigger:` and `action:` inside list items.
+- Every automation must include `mode:` -- default `single` unless queueing/restart is justified.
+- Synced-switch circuits require three automations per circuit: (1) master-off cascades to children, (2) any child-on activates master, (3) all-children-off deactivates master.
+- Always include `condition: state` guards on the master entity in automations 2 and 3 to avoid feedback loops.
+
+## People
+
+- **Nick:** principal. Senior engineer. Recommendation-first. No hand-holding.
+- **Ruby:** Hazel co-owner (dog thread, not HA). No HA involvement noted.
+
+## Projects
+
+- **personal (workspace project):** HA is one thread in `~/Documents/workspace/personal/`. Artefacts at `~/Documents/workspace/personal/artifacts/Home_Automation/`.
+- **Seeded 2026-06-03:** agent created by agent-onboarder during PAI convergence.
+
+### Confirmed HA environment (Nick, 2026-06-03)
+
+- **Instance URL:** http://homeassistant.local:8123/
+- **Install method:** Home Assistant OS
+- **Core:** 2025.7.3 (fully supports modern automation schema — `triggers:`/`conditions:`/`actions:` top-level keys, `trigger:`/`action:` item keys; default to this)
+- **Supervisor:** 2026.05.1 · **OS:** 16.3 · **Frontend:** 20250702.3
+- **Network:** WiFi
+- **Zigbee:** uses a Zigbee controller (ZHA vs Zigbee2MQTT not yet confirmed — ask only if it becomes relevant)
+- **Entity naming convention:** CONFIRMED `switch.<room>_<device>` and `light.<room>_<device>` global pattern — generate IDs to match without prompting
+- **Lovelace:** NOT in use — do not propose dashboards unless Nick asks
+- Previously-open onboarding gaps now resolved except ZHA-vs-Z2M detail.
+
+### Known entities (from `ha_automations_new.yaml`, confirmed 2026-06-03)
+
+**Entrance Bottom Left circuit** (controls: bathroom light, bathroom fan, spare bedroom light):
+- `switch.entrance_bottom_left` -- master/virtual circuit switch
+- `switch.bathroom_light`
+- `switch.bathroom_fan`
+- `switch.spare_bedroom_light`
+
+**Entrance Bottom Right circuit** (controls: ensuite light, ensuite fan, bedroom light, bedroom lamps):
+- `switch.entrance_bottom_right` -- master/virtual circuit switch
+- `switch.ensuite_light`
+- `switch.ensuite_fan`
+- `switch.bedroom_light`
+- `light.bedroom_lamps` -- note: this is a `light.` domain entity, not `switch.`
+
+**Standalone:**
+- `light.bedroom_lamps` -- nightly schedule: on at 50% brightness at 20:00; re-enable 1 min after off during 20:00--23:59
+
+**Athom Smart Plug V3 (EV charging monitor, added 2026-09-06):**
+- Device node `athom-smart-plug-v3-4cb818`, IP 192.168.68.53 (SSID TpLink_Deco6R), MAC 8C:FD:49:4C:B8:18. ESPHome integration. FW v2.0.6 (v2.0.8 available).
+- CONFIRMED HA entity slugs (Nick, Developer Tools > States, 2026-09-06): prefix is `athom_plug_v3_4cb818` (NOT `athom_smart_plug...`). Billing uses `sensor.athom_plug_v3_4cb818_power`, `sensor.athom_plug_v3_4cb818_total_energy` (lifetime kWh), and the relay `switch.athom_plug_v3_4cb818_switch` (note the `_switch` suffix). Also present: `_current`, `_voltage`, `_energy`, `_total_daily_energy`, `_apparent_power`, `_reactive_power`, `_power_factor`.
+- Purpose: monitors BYD Shark 6 charging (~2.3 kW / 10 A) at a share house to split cost solar-vs-grid for reimbursement.
+
+### EV charging monitor package (DEPLOYED & LIVE 2026-09-06)
+- Artefacts: `artifacts/Home_Automation/ev_charging_monitor.yaml` (HA package) + `ev_charging_dashboard.yaml` (Lovelace, `views:`-wrapped raw-config form). ISA at `~/.claude/PAI/MEMORY/WORK/ev-charging-monitor/ISA.md` (38 ISCs, E3).
+- STATUS: loaded into HA via `packages: !include_dir_named packages` and restarted; entities live, dashboard cards render. Grid-only billing collecting. Nick set the 4 tariff helpers (start at 0, cost reads $0 until set): consumption 0.24, FIT tier1 0.08, tier2 0.02, tier1 limit 8 kWh.
+- Added 2026-09-06: `sensor.ev_cost_last_month` + `sensor.ev_billed_energy_last_month` (from utility_meter `last_period`; empty until first month rollover ~1 Oct), plus statistics-graph cards (cost per month, daily solar/grid kWh). Freeform ranges via Developer Tools > Statistics on `sensor.ev_cost_cumulative` (end − start).
+- Fair-share model: solar-to-car valued at the MARGINAL feed-in tier (opportunity cost), grid at consumption tariff; tiered FIT via counterfactual daily export = actual export + car-solar today. Billed kWh anchored to the plug HARDWARE total-energy register (drift-free); Riemann integrals drive only the solar:grid ratio. Session cost by snapshot differencing. Conservative degrade: no solar data ⇒ 100% grid.
+- Solar source NOT wired. LOCAL MODBUS PATH RULED OUT 2026-09-06: dongle IS connected to house WiFi (TpLink_Deco6R, confirmed by Nick in WiNet-S web UI at 11.11.11.1, admin/pw8888), but its firmware exposes NO Modbus toggle. WiNet-S admin Settings menu = Grid Standard / System Parameters / Operation Parameters / Protection Parameters / Power Control (all inverter params); Advanced Settings = raw register writer (Parameter Address/Data Type/Setpoint). Repeated port-502 LAN sweeps (/22) found only 192.168.68.57 = RAK LoRa gateway, never the dongle → Modbus TCP not listening. Local Modbus likely needs installer/O&M account (not pw8888) or iSolarCloud app device settings — not available to Nick (share house, no installer creds).
+- SOLAR WIRED via OPTION B (cloud PV estimate) 2026-09-07. Nick installed the **Sungrow iSolarCloud** HACS integration (developer account) — NOT GoSungrow/MQTT, and NOT Modbus. Config-flow integration, appears under Settings > Devices & Services with devices: plant "Rankin Street", "Inverter1" = **SG5K-D** (5kW single-phase string inverter), "Communication Module1" = WiFi-V31 dongle (older WiFi dongle, hence no Modbus).
+- CRITICAL: this system has **NO grid meter**. iSolarCloud exposes PV GENERATION only — entities incl. `sensor.inverter1_inverter_ac_power` (W, PV AC output), Daily/Total Yield, plant Power. NO grid import/export/consumption entities exist. ("Export Limit (Power)"/"Export Limitation" are inverter SETTINGS, "Import Price" is a tariff field — not measurements.)
+- OPTION B model (Nick's call): surplus = max(0, PV − `input_number.house_baseline_w`); solar_to_car = min(car_power, surplus). Baseline default **0** = "take the whole PV yield", agreed basis since solar was unused before Nick moved in (household not self-consuming/exporting). Car still capped at its own draw. Adjustable helper to carve out household daytime use later. Whole-house usage ~15 kWh/day (on file, only relevant if baseline raised).
+- WIRING (package): PV source `sensor.inverter1_inverter_ac_power` feeds `ev_grid_export_w` (= exportable surplus); new Riemann `ev_grid_export_energy_kwh` → `ev_daily_grid_export` meter → counterfactual (NO +car_solar under Option B — surplus is already pre-car, else double-count). Solar-follow-off automation retargeted to surplus < 1500W deadband (no import sensor). Banner flags "ESTIMATED, no grid meter". Both YAMLs parse; no CHANGE_ME refs remain.
+- CAVEAT accepted by Nick: baseline 0 counts house-concurrent daytime solar as car-solar (favours Nick vs household); fine given solar was unused pre-arrival. iSolarCloud ~5min cloud poll, unavailable⇒100% grid (conservative). Redeploy: re-paste package + RESTART (new sensors), re-paste dashboard.
+- BACKDATED CHARGES (2026-09-07/08): plug wasn't installed last week; SG5K-D has no metered kWh history for it. Estimated from BYD Shark 6 battery = 29.58 kWh usable, 88% AC→DC charge efficiency. Last week 20→100% (80%) = 23.7 kWh battery / 26.9 kWh plug; last two days (Mon) 69→100% (31%) = 9.2 kWh battery / 10.4 kWh plug. Both charged 10am–3pm ⇒ solar. At 8c FIT: last week $2.15 + Mon $0.83 = $2.98 gross; net correction vs Mon-already-billed-as-grid = +$0.48.
+- DECISION (Nick 2026-09-08): handling Sept backdate MANUALLY, NOT deploying the in-HA adjustment machinery. LIVE HA = measured plug billing + Option B solar + last-month/stats cards (all confirmed working). NOT deployed: `input_number.ev_cost_adjustment` (+wiring into ev_cost_month +dashboard entry), `ev_cost_adjustment_last_month` snapshot, `ev_month_rollover_adjustment` automation. These EXIST in the artifact file (parses clean) but are ahead of live — if ever deploying the file wholesale, they go live too. Offered to strip them back out to match live; awaiting Nick's preference.
+- Dormant switching automation (`initial_state: false`, gated on `input_boolean.ev_solar_charge_mode`) — do not enable until BYD auto-resume-after-power-loss is tested.
+
+### Automation IDs in use (do not reuse)
+- `1744300001002`, `1744300001003`, `1744300001004` (Entrance Bottom Left circuit)
+- `1744300002002`, `1744300002003`, `1744300002004` (Entrance Bottom Right circuit)
+- `1744300003001`, `1744300003002` (Bedroom Lamps schedule)
+
+## Output
+
+- YAML artefacts go to `~/Documents/workspace/personal/artifacts/Home_Automation/`.
+- Tell Nick exactly which file to update and where to paste in HA (Configuration > Automations > import, or `/config/automation/edit/` in UI, or `automations.yaml` file edit depending on his setup).
+- File naming: `ha_automations_new.yaml` is the current primary file -- add new automations as appended list items or create feature-scoped files when scope warrants it.
+
+## Tools
+
+- Read, Bash, Write, Edit for YAML artefacts.
+- WebSearch/WebFetch for HA documentation lookups (docs.home-assistant.io).

@@ -1,0 +1,164 @@
+# ============================================================================
+# EV Charging Monitor — Lovelace dashboard (RAW CONFIG form)
+# ----------------------------------------------------------------------------
+# HOW TO USE (pick one):
+#
+#  A) NEW DASHBOARD (safest — won't touch your existing dashboards):
+#     Settings > Dashboards > + Add Dashboard > New dashboard from scratch >
+#     open it > top-right ⋮ (three dots) > Edit dashboard > ⋮ again >
+#     Raw configuration editor > select-all, delete, paste THIS WHOLE FILE > Save.
+#     This file already includes the top-level `views:` key the raw editor wants.
+#
+#  B) ADD AS A VIEW to an existing dashboard instead:
+#     Edit dashboard > "+" tab > (create the view) > that view's ⋮ >
+#     Edit in YAML, and paste ONLY the content under the `- title:` item
+#     (i.e. from `title: EV Charging` down), WITHOUT the `views:` line.
+#
+# The earlier error ("views -- Expected an array value") happened because the
+# previous file was a single view with no `views:` wrapper. This version fixes
+# that.
+# ============================================================================
+views:
+  - title: EV Charging
+    path: ev-charging
+    icon: mdi:car-electric
+    cards:
+      # --- Status banner: solar source + any simplification (ISC-34) --------
+      - type: markdown
+        content: >
+          ### BYD charge — fair-share billing
+
+          {% if states('sensor.inverter1_inverter_ac_power') in
+                ['unavailable','unknown','none', none] %}
+          ⚠️ **Solar feed unavailable right now** — charging bills as **100% grid**
+          until the Sungrow sensor reports again (conservative).
+          {% else %}
+          ☀️ **Solar attribution: ESTIMATED** (this inverter has no grid meter).
+          Surplus = PV generation − assumed house baseline
+          (**{{ states('input_number.house_baseline_w') }} W**); the car is
+          credited with solar up to its own draw. Feed-in valued at the marginal
+          tier (tier 1 below {{ states('input_number.tariff_fit_tier1_limit_kwh') }}
+          kWh/day of surplus, tier 2 above). Adjust the baseline below to tune the
+          household's share.
+          {% endif %}
+
+      # --- Live charge state ------------------------------------------------
+      - type: entities
+        title: Now
+        entities:
+          - entity: sensor.ev_car_power_w
+            name: Charge power
+          - entity: binary_sensor.ev_charging_active
+            name: Charging
+          - entity: sensor.ev_session_energy_kwh
+            name: This session — energy
+          - entity: sensor.ev_session_cost
+            name: This session — cost
+          - entity: switch.athom_plug_v3_4cb818_switch
+            name: Plug
+
+      # --- Month to date: the number that matters (ISC-32) ------------------
+      - type: glance
+        title: Month to date
+        columns: 2
+        entities:
+          - entity: sensor.ev_cost_month
+            name: Owed this month
+          - entity: sensor.ev_billed_energy_monthly
+            name: Total kWh
+          - entity: sensor.ev_solar_kwh_month
+            name: Solar kWh
+          - entity: sensor.ev_grid_kwh_month
+            name: Grid kWh
+
+      - type: entities
+        title: Today
+        entities:
+          - entity: sensor.ev_cost_today
+            name: Owed today
+          - entity: sensor.ev_billed_energy_daily
+            name: Total kWh
+          - entity: sensor.ev_counterfactual_daily_export
+            name: Counterfactual export (FIT tier gate)
+          - entity: sensor.ev_split_residual_kwh
+            name: Split residual (health check, ~0)
+
+      # --- Last completed month --------------------------------------------
+      - type: entities
+        title: Last month
+        entities:
+          - entity: sensor.ev_cost_last_month
+            name: Owed last month
+          - entity: sensor.ev_billed_energy_last_month
+            name: Total kWh last month
+
+      # --- History / date ranges -------------------------------------------
+      # Monthly cost bars: each bar is the cost for that calendar month. Scroll
+      # the card back to read any previous month. ("change" of the cumulative
+      # cost over each month.)
+      - type: statistics-graph
+        title: Cost per month
+        chart_type: bar
+        period: month
+        days_to_show: 365
+        stat_types:
+          - change
+        entities:
+          - sensor.ev_cost_cumulative
+      # Daily solar vs grid kWh — change the range with the card's period menu.
+      - type: statistics-graph
+        title: Daily solar vs grid (kWh)
+        chart_type: bar
+        period: day
+        days_to_show: 31
+        stat_types:
+          - change
+        entities:
+          - sensor.ev_car_solar_kwh
+          - sensor.ev_car_grid_kwh
+      # For a freeform start–end range, use the History panel or Developer
+      # Tools > Statistics on sensor.ev_cost_cumulative (end value − start value).
+
+      # --- Controls (ISC-33) ------------------------------------------------
+      - type: entities
+        title: Controls
+        entities:
+          - entity: input_boolean.ev_solar_charge_mode
+            name: Solar-following mode (automation)
+          - entity: input_boolean.ev_charge_now
+            name: Charge now (force on)
+
+      - type: entities
+        title: Tariffs (adjustable)
+        entities:
+          - entity: input_number.tariff_consumption
+            name: Consumption (import)
+          - entity: input_number.tariff_fit_tier1
+            name: Feed-in tier 1
+          - entity: input_number.tariff_fit_tier2
+            name: Feed-in tier 2
+          - entity: input_number.tariff_fit_tier1_limit_kwh
+            name: Tier 1 daily limit
+
+      - type: entities
+        title: Solar estimate (Option B)
+        entities:
+          - entity: input_number.house_baseline_w
+            name: Assumed house baseline (0 = whole yield)
+          - entity: sensor.inverter1_inverter_ac_power
+            name: PV generation now
+          - entity: sensor.ev_grid_export_w
+            name: Exportable surplus (PV − baseline)
+          - entity: sensor.ev_solar_to_car_w
+            name: Solar going to car now
+          - entity: sensor.ev_grid_to_car_w
+            name: Grid going to car now
+
+      # --- History ----------------------------------------------------------
+      - type: history-graph
+        title: Charge power & solar/grid split (24 h)
+        hours_to_show: 24
+        entities:
+          - sensor.ev_car_power_w
+          - sensor.ev_solar_to_car_w
+          - sensor.ev_grid_to_car_w
