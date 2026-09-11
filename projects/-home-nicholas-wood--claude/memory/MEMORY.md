@@ -35,4 +35,6 @@
 - [Auto-mode blocks prod DB window](gotcha-automode-blocks-prod-db-window.md) — classifier denies gcloud-over-ssh for AccessBuddy Cloud SQL in bg jobs; hand Nick the one-line opener instead of retrying
 - [AccessBuddy vitest TSX render probe](gotcha-accessbuddy-vitest-tsx-render-probe.md) — default vitest cannot transform TSX; throwaway config with esbuild.jsx automatic + renderToString to verify copy, delete before commit
 - [Headless claude -p auth gotcha](gotcha-claude-headless-bare-auth.md) — --bare drops subscription login; MCP stdio + --tools '' proven; advisor needs 3 args + 180s
+- [BudgetBuddy unpaired-transfer gap](project-budgetbuddy-unpaired-transfer-gap.md) — Sept 2026 +$415 = $429.30 ATM cash deposit flagged is_transfer; run pair-match scan first; explainer lacks that signal
 - [BudgetBuddy v1.24.0 explainer](project-budgetbuddy-v1240-explainer.md) — deterministic Why? sheet shipped 8 Sep; components vs signals honesty rule; chat v1.25.0 decisions recorded (ISC-45.1, typed tools, masked payees, Sonnet)
+- [Algo trading advice](project-algo-trading-advice.md) — 11 Sep recommendation delivered, not built; IBKR no-OAuth, Alpaca AU unconfirmed, TS no backtester, VA policy first
