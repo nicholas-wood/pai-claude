@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: ef252aad-8fb2-47d8-b675-f77609c21d47
-  modified: 2026-09-04T00:58:37.538Z
+  modified: 2026-09-12T10:15:03.525Z
 ---
 
 AccessBuddy prod access from the Linux box, all via `ssh mac` (nothing installed locally):
@@ -18,4 +18,6 @@ AccessBuddy prod access from the Linux box, all via `ssh mac` (nothing installed
 - **Postgres RLS flags**: `forcerowsecurity` is NOT in pg_tables — use `pg_class.relforcerowsecurity` (this wrong-column mistake was made twice in Aug 2026).
 - Complex ssh one-liners with nested quotes break silently and can leave the IP window open — always ship a script file via scp instead, with the IP disable inside it, and verify the flag after.
 - The Mac drops off Tailscale for 10-30 min at a time (Sept 2026: three dropouts in one hour). Run pulls from a background retry loop, write the script's output to a file on the Mac (`nohup … > ~/pai-tmp/x.out`) then cat it, so a dropped link cannot lose it, and re-check `ipv4Enabled` after any run whose SSH session died mid-flight.
+- **IP-window scripts can leave prod exposed for hours (12 Sep 2026):** the open-query-close script's cleanup (`--no-assign-ip`) needs network; the Mac dropped off Tailscale mid-run and the window stayed open from 15:52 to 19:58 Melbourne before cleanup completed. Put a hard `timeout` on the psql step and run the close as its own retry loop, and always re-check `ipv4Enabled` after any run that overlapped a dropout.
+- In this bg-job session (12 Sep 2026) gcloud read-only and scheduler create/update/run over `ssh mac` were all allowed; only earlier `sql instances patch` shapes were denied. Nick launching the DB script via `!` is still the reliable path.
 - Renewal forensics: "renewed" on the member page means only that an admin clicked Renew; check `attestation_requests.status` and `credentials.programming_required` before reasoning about the daily summary.

@@ -1,0 +1,13 @@
+import { buildContainer } from "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/composition.ts";
+import { buildServices } from "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/services.ts";
+import { currentPeriod } from "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/http.ts";
+const container = await buildContainer();
+const services = buildServices(container);
+const userId = "local" as never;
+const p = process.env.PERIOD ? { year: Number(process.env.PERIOD.slice(0,4)), month: Number(process.env.PERIOD.slice(5,7)) } : currentPeriod(container.config.timezone);
+const grid = await services.envelopes.getGrid(userId, p as any);
+const topLevel = grid.rows.filter((r) => r.parentId === null);
+const leafLeft = topLevel.reduce((s, r) => s + r.leftCents, 0);
+const incomeLeft = grid.income.reduce((s, i) => s + i.carryoverCents + i.varianceCents, 0);
+const awaiting = grid.income.reduce((s, i) => s + (i.awaitingCents ?? 0), 0);
+console.log(JSON.stringify({ budgetSide: leafLeft + incomeLeft - awaiting, unresolved: grid.unresolvedActivityCents ?? 0, unallocated: grid.unallocatedCents }));

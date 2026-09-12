@@ -1,0 +1,34 @@
+// Exact daily reconstruction of the widget's unexplained delta from backups.
+// liquid(D) = liquid(today) − Σ amounts of rows present today but not in backup D
+//             − Σ (amount_today − amount_D) for rows whose amount changed.
+// Valid because the ledger matches PocketSmith with no deletions (verified 12 Sep).
+// Budget side and uncategorised for D come from the engine run on backup D.
+import { Database } from "bun:sqlite";
+import { spawnSync } from "bun";
+
+const TODAY_DB = "/home/nicholas-wood/.claude/jobs/73733c4b/tmp/live5.db";
+const LIQUID_TODAY = Number(process.argv[2]); // cents: cash − cardOwed from the live computation
+const days = process.argv.slice(3);
+const today = new Database(TODAY_DB, { readonly: true });
+const tRows = new Map<string, number>();
+for (const r of today.query("select id, amount_cents from transactions").all() as any[]) tRows.set(String(r.id), r.amount_cents);
+
+for (const d of days) {
+  const path = `/home/nicholas-wood/.claude/jobs/73733c4b/tmp/backups/penny-${d}.db`;
+  const bdb = new Database(path, { readonly: true });
+  const bRows = new Map<string, number>();
+  for (const r of bdb.query("select id, amount_cents from transactions").all() as any[]) bRows.set(String(r.id), r.amount_cents);
+  let added = 0, changed = 0, removed = 0;
+  for (const [id, amt] of tRows) {
+    const b = bRows.get(id);
+    if (b === undefined) added += amt; else if (b !== amt) changed += amt - b;
+  }
+  for (const [id, amt] of bRows) if (!tRows.has(id)) removed += amt; // rows pruned since (pending ghosts): they were in the bank then? no — a pruned pending never posted; treat as not-in-bank
+  const liquidD = LIQUID_TODAY - added - changed; // pruned ghosts excluded on purpose
+  const probe = spawnSync(["bun", "/home/nicholas-wood/.claude/jobs/73733c4b/tmp/probe-grid.ts"], { env: { ...process.env, PENNY_SQLITE_PATH: path, PERIOD: process.env.PERIOD ?? "" }, stdout: "pipe", stderr: "pipe" });
+  const out = probe.stdout.toString().trim().split("\n").pop() ?? "";
+  let budget = NaN, unc = NaN, unalloc = NaN;
+  try { const j = JSON.parse(out); budget = j.budgetSide; unc = j.unresolved; unalloc = j.unallocated; } catch { console.log(d, "probe failed", probe.stderr.toString().slice(0, 200)); continue; }
+  const U = liquidD - budget - unc;
+  console.log(`${d}  liquid=${(liquidD/100).toFixed(2).padStart(9)}  budget=${(budget/100).toFixed(2).padStart(9)}  unc=${(unc/100).toFixed(2).padStart(9)}  unalloc=${(unalloc/100).toFixed(2).padStart(8)}  U=${(U/100).toFixed(2).padStart(8)}   (added=${(added/100).toFixed(2)} changed=${(changed/100).toFixed(2)} pruned=${(removed/100).toFixed(2)})`);
+}

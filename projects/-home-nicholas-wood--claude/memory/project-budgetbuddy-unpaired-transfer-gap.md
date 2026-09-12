@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 73733c4b-8aa3-4a4a-9ca7-048e89d1f2ac
-  modified: 2026-09-11T10:38:35.374Z
+  modified: 2026-09-12T10:15:24.573Z
 ---
 
 Diagnosed 2026-09-11 (read-only, no fixes). Widget unexplained delta: +$391.00 (9 Sep), +$392.00 (10 Sep), +$415.30 (11 Sep); 4 Sep baseline was −$15.23.
@@ -16,7 +16,13 @@ Diagnosed 2026-09-11 (read-only, no fixes). Widget unexplained delta: +$391.00 (
 
 **Clearing action (Nick's, in PocketSmith):** un-flag the cash deposit as a transfer and categorise it (e.g. $300 to the envelope the paintball money reimburses, $129.30 Surplus Income; needs a split or one category). The next hourly sync picks it up and the widget drops to about −$14. The alternative (un-flag the two ANZ inbound legs instead, which already carry the intended categories) has the same effect. The two options are MUTUALLY EXCLUSIVE: doing both double-counts and swings the widget to about −$444.
 
-**Product gap:** `src/reconcile/explain.ts` has no "unpaired transfer" signal. A candidate v1.25 signal: transfer-flagged rows with no opposite-amount counterpart on another account within ±4 days, cents = their sum. It would have named this in one click.
+**Root cause (5 Whys, confirmed by RCA fork 12 Sep):** the engine trusts PocketSmith's transaction-level `is_transfer` flag with no counterpart check. The `transaction_overrides` table (ISC-13, ARCHITECT_REVIEW "UI override required" Medium risk) exists but is empty, nothing reads it, and the web UI has no transfer toggle: the override was scaffolded, never built. The Basiq migration spec (`docs/BASIQ_MIGRATION_SPEC.md:161`, `class === 'transfer'` → `isTransfer`) inherits the same trust, so the provider pivot will not fix it. Recurs every time Nick banks physical cash.
+
+**−$14 origin (proven 12 Sep):** bank timing frozen into the 14 Aug 06:53 Buffer strike. Evidence: pre-v1.23 and current engines give the identical budget side on the 14 Aug backup; PocketSmith↔ledger diff clean; exact daily reconstruction (today's balances minus rows-added-since, by id) reads −$14.00 on every clean day from 14 Aug. Tidy applied 12 Sep 20:12 via `resetCarryover` (Buffer opening $1,828.88 → $1,814.88; stored 30328 → 181488, anchor 2026-09-12; audited event). v1.25.1: a reset counts as a re-strike only if that day's snapshot is balanced (`reStrikeDay`), so the tidy does not hide later unpaired transfers. Engine blind spot recorded: pending rows dated in an already-folded month are invisible until they post (Bunnings −$48.83 on 30 Aug → +$48.83 step 4 Sep). Method: `recon.ts` + daily `penny-crypt:` backups; `git worktree add` of ad1fab2~1 to run the old engine.
+
+**12 Sep follow-up:** Nick un-flagged the deposit AND the CBA −$129.30 "Cash" leg in PocketSmith (both now category "Transfers" → env-transfers working envelope), leaving the ANZ +$129.30 Surplus Income leg still transfer-flagged → pair broken, widget +$115.30 (= 129.30 − 14.00 dust). The v1.24.1 sheet named it. Fix: re-flag the CBA −$129.30 leg as a transfer (or un-flag its ANZ partner). The deposit now sits in the Transfers working envelope rather than Surplus Income/Travel; cosmetic for the widget, wrong for the envelope. v1.24.2 (engine committed 6e34b1f; sheet hunks pending with the chatbot session, which owns the next deploy) gates suspects on max($20, pending card spend) and hides the since-section unless anchored on a balanced day.
+
+**Shipped v1.24.1 (12 Sep 2026):** `src/reconcile/explain.ts` now has `findUnpairedTransfers` (posted transfer-flagged rows, 120-day scan, no opposite-amount transfer on another account within ±4 days, legs consumed once). Rows dated after the latest carryover reset are an exact COMPONENT `unpaired-transfer`; on or before it, a SIGNAL `unpaired-transfer-absorbed`. Live probe on the 11 Sep ledger copy: component $429.30 naming the CASH DEPOSIT, residual −$14.00, residual alarm silent. Nick's standard for the Why? sheet: it must name the PocketSmith transfer itself or it is useless to him.
 
 **Method that worked:** copy `~/.penny/penny.db` (+wal/shm) to the job tmp dir, rerun `getGrid`/`computeNetPosition`/`explainNetPosition` via a bun probe with `PENNY_SQLITE_PATH`, and replay the same probe over `rclone copy penny-crypt:penny-YYYY-MM-DD.db` backups to see which day the budget side moved. No sqlite3 CLI on the box; use bun:sqlite.
 

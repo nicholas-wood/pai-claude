@@ -1,0 +1,103 @@
+/**
+ * Service composition for the route layer. Builds the envelope engine, the
+ * budget engine, and the Pulse source from the container's resolved store, and
+ * resolves the engine wiring constants (Holding envelope id, NAB card accounts)
+ * from configuration.
+ *
+ * The engine config is read from environment here, NOT from DEPLOY_MODE — these
+ * are per-deployment data ids, not deployment-mode behaviour, so reading them
+ * outside the composition root does not violate ISC-51. The store is already
+ * typed BudgetStore on the container, so the engines are constructed without an
+ * unsafe cast.
+ */
+
+import type { Container } from "../composition.ts";
+import type { EngineConfig } from "../envelope/ports.ts";
+import { EnvelopeService } from "../envelope/service.ts";
+import { BudgetService } from "../budget/service.ts";
+import { StorePulseSource } from "../pulse/source.ts";
+import { fileURLToPath } from "node:url";
+import {
+  ClaudeCliDiagnosticProvider,
+  UnavailableDiagnosticProvider,
+  type DiagnosticProvider,
+} from "../diagnostics/provider.ts";
+
+export interface Services {
+  readonly envelopes: EnvelopeService;
+  readonly budget: BudgetService;
+  readonly pulse: StorePulseSource;
+  readonly engineConfig: EngineConfig;
+  /** The consented AI channel (v1.25.0, ISC-45.1); Unavailable unless enabled for this deployment. */
+  readonly diagnostics: DiagnosticProvider;
+}
+
+/**
+ * Resolve the diagnostic provider. Off unless PENNY_AI_DIAGNOSTICS=on (the
+ * deployment's explicit enablement; the per-question consent is separate) and
+ * the deployment is local. Reads env here for the same reason engine wiring
+ * does: these are per-deployment facts, not deployment-mode branching.
+ */
+export function buildDiagnosticProvider(
+  container: Container,
+  env: Record<string, string | undefined> = process.env,
+): DiagnosticProvider {
+  if (container.config.deployMode !== "local") return new UnavailableDiagnosticProvider("Not available in cloud mode yet.");
+  if ((env.PENNY_AI_DIAGNOSTICS ?? "").trim().toLowerCase() !== "on") {
+    return new UnavailableDiagnosticProvider("AI diagnostics are switched off for this deployment (PENNY_AI_DIAGNOSTICS).");
+  }
+  const home = env.HOME ?? ".";
+  const projectDir = fileURLToPath(new URL("../../", import.meta.url));
+  const engineEnv: Record<string, string> = {};
+  for (const key of ["PENNY_NAB_ACCOUNT_IDS", "PENNY_NAB_ACCOUNT_ID", "PENNY_HOLDING_ENVELOPE_ID"]) {
+    const v = env[key];
+    if (v) engineEnv[key] = v;
+  }
+  return new ClaudeCliDiagnosticProvider({
+    claudeBin: env.PENNY_CLAUDE_BIN?.trim() || `${home}/.local/bin/claude`,
+    bunBin: process.execPath,
+    projectDir,
+    mcpScript: `${projectDir}scripts/diagnose-mcp.ts`,
+    sqlitePath: container.config.sqlitePath,
+    timezone: container.config.timezone,
+    engineEnv,
+    scratchDir: `${home}/.penny/diag`,
+  });
+}
+
+/** Resolve the engine wiring constants from env, with local-sensible defaults. */
+export function resolveEngineConfig(
+  env: Record<string, string | undefined> = process.env,
+): EngineConfig {
+  const nab = (env.PENNY_NAB_ACCOUNT_IDS ?? env.PENNY_NAB_ACCOUNT_ID ?? "acc-nab")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  const holding = env.PENNY_HOLDING_ENVELOPE_ID?.trim();
+  return {
+    holdingEnvelopeId: holding && holding.length > 0 ? holding : null,
+    nabCardAccountIds: nab,
+  };
+}
+
+/** Construct the per-request-stateless services once from the container. */
+export function buildServices(container: Container): Services {
+  const engineConfig = resolveEngineConfig();
+  // The budget calendar runs in the configured timezone (AppConfig.timezone,
+  // default Australia/Melbourne) — the engine derives "today" from it, not UTC.
+  const envelopes = new EnvelopeService(container.store, engineConfig, {
+    timezone: container.config.timezone,
+  });
+  const budget = new BudgetService(container.store, envelopes, container.config.timezone);
+
+  const sourceOpts: { nabAccountId?: string; holdingMatch?: string } = {};
+  const nab = process.env.PENNY_NAB_ACCOUNT_ID?.trim();
+  const holdingMatch = process.env.PENNY_HOLDING_MATCH?.trim();
+  if (nab) sourceOpts.nabAccountId = nab;
+  if (holdingMatch) sourceOpts.holdingMatch = holdingMatch;
+  const pulse = new StorePulseSource(container.store, sourceOpts);
+
+  const diagnostics = buildDiagnosticProvider(container);
+
+  return { envelopes, budget, pulse, engineConfig, diagnostics };
+}

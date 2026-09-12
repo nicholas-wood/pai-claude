@@ -1,0 +1,63 @@
+/**
+ * Diagnostic chat routes (v1.25.0, ISC-45.1) over the real app assembly. The
+ * test deployment has no PENNY_AI_DIAGNOSTICS, so the provider is Unavailable:
+ * status says so, a question without consent is a 400 before any gate, a
+ * consented question is a 403 from the egress gate, and the refusal lands in
+ * the audit trail with actor "agent". Contract parity covers registration.
+ */
+
+import { describe, test, expect } from "bun:test";
+import type { DiagnoseAuditResponse, DiagnoseStatusResponse } from "../src/server/contract.ts";
+import { makeTestApp, getJson, postJson, LOCAL_USER_ID } from "./server-test-app.ts";
+
+describe("diagnostic chat routes", () => {
+  test("all three routes reject an unauthenticated request with 401", async () => {
+    const t = await makeTestApp();
+    expect((await getJson(t.app, "/api/diagnose/status")).status).toBe(401);
+    expect((await postJson(t.app, "/api/diagnose", { question: "why?", consent: true })).status).toBe(401);
+    expect((await getJson(t.app, "/api/diagnose/audit")).status).toBe(401);
+  });
+
+  test("status reports unavailable with the disclosure text when the deployment has the feature off", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const res = await getJson(t.app, "/api/diagnose/status", cookie);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as DiagnoseStatusResponse;
+    expect(body.available).toBe(false);
+    expect(body.reason).toContain("PENNY_AI_DIAGNOSTICS");
+    expect(body.disclosure).toContain("Anthropic");
+    expect(body.model).toBe("sonnet");
+  });
+
+  test("consent must be literally true: false or missing is a 400 before any gate runs", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    expect((await postJson(t.app, "/api/diagnose", { question: "why?", consent: false }, cookie)).status).toBe(400);
+    expect((await postJson(t.app, "/api/diagnose", { question: "why?" }, cookie)).status).toBe(400);
+    expect((await postJson(t.app, "/api/diagnose", { question: "", consent: true }, cookie)).status).toBe(400);
+    // Nothing reached the audit log: validation failed before the gate.
+    const audit = (await (await getJson(t.app, "/api/diagnose/audit", cookie)).json()) as DiagnoseAuditResponse;
+    expect(audit.entries).toEqual([]);
+  });
+
+  test("a consented question against a disabled channel is refused by the egress gate and audited as actor agent", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const res = await postJson(t.app, "/api/diagnose", { question: "Why is my budget unbalanced?", consent: true }, cookie);
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { code: string; error: string };
+    expect(body.code).toBe("ai_egress_refused");
+    expect(body.error).toContain("feature disabled");
+
+    const audit = (await (await getJson(t.app, "/api/diagnose/audit", cookie)).json()) as DiagnoseAuditResponse;
+    expect(audit.entries).toHaveLength(1);
+    expect(audit.entries[0]!.kind).toBe("agent.refused");
+    expect(audit.entries[0]!.summary).toContain("feature disabled");
+    const events = await t.store.listEventsByKind(LOCAL_USER_ID, "agent.refused");
+    expect(events).toHaveLength(1);
+    expect(events[0]!.actor).toBe("agent");
+    // The question text is recorded (it is the owner's own data) but never a key.
+    expect(events[0]!.payloadJson).toContain("unbalanced");
+  });
+});

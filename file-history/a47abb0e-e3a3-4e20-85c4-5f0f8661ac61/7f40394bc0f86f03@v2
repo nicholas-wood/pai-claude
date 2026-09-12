@@ -1,0 +1,37 @@
+#!/bin/bash
+# Runs ON THE MAC. Pause drain job -> guarded cancel of Gordon's queued row ->
+# terraform import of the drain job (with the two unknown for_each entries
+# temporarily removed) -> restore main.tf -> targeted plan -> resume drain job.
+set -u
+G=/opt/homebrew/bin/gcloud
+TF=/opt/homebrew/bin/terraform
+TFDIR="$HOME/Documents/workspace/projects/accessbuddy/code/infra/terraform"
+JOB=accessbuddy-email-queue-drain
+LOC=australia-southeast1
+PROJ=accessbuddy-prod
+OUT="$HOME/pai-tmp/chain.out"
+: > "$OUT"
+log() { echo "[$(date -u +%FT%TZ)] $*" >> "$OUT"; }
+
+log "pause drain job"
+$G scheduler jobs pause $JOB --project $PROJ --location $LOC --format="value(state)" >> "$OUT" 2>&1
+
+log "cancel row"
+bash "$HOME/pai-tmp/gordon-cancel2.sh" >> "$OUT" 2>&1
+
+log "terraform import (temp for_each trim)"
+cd "$TFDIR" || { log "NO_TFDIR"; exit 1; }
+cp main.tf "$HOME/pai-tmp/main.tf.orig"
+sed -i '' '/google_secret_manager_secret.stripe_platform_webhook_secret.secret_id,/d; /google_secret_manager_secret.session_signing_secret.secret_id,/d' main.tf
+grep -c 'secret_id,' main.tf >> "$OUT"
+$TF import -input=false -no-color -var-file=prod.tfvars "google_cloud_scheduler_job.email_queue_drain[0]" projects/$PROJ/locations/$LOC/jobs/$JOB 2>&1 | grep -v "Refreshing state" >> "$OUT"
+log "restore main.tf"
+cp "$HOME/pai-tmp/main.tf.orig" main.tf
+grep -c 'secret_id,' main.tf >> "$OUT"
+
+log "targeted plan after import"
+$TF plan -input=false -no-color -var-file=prod.tfvars -target="google_cloud_scheduler_job.email_queue_drain[0]" 2>&1 | grep -v "Refreshing state" | grep -E "email_queue_drain|Plan:|No changes|Error" >> "$OUT"
+
+log "resume drain job"
+$G scheduler jobs resume $JOB --project $PROJ --location $LOC --format="value(state)" >> "$OUT" 2>&1
+log "CHAIN_DONE"

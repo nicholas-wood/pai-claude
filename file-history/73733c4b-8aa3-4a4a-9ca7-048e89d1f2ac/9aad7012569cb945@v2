@@ -1,0 +1,37 @@
+// Read-only probe: run the engine's own grid maths against a ledger copy.
+// Usage: PENNY_SQLITE_PATH=<copy> bun probe.ts [--net]
+import { buildContainer } from "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/composition.ts";
+import { buildServices } from "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/services.ts";
+import { currentPeriod } from "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/http.ts";
+import { computeNetPosition, explainNetPosition } from "/home/nicholas-wood/Documents/workspace/projects/envelope-os/src/server/net-position.ts";
+
+const container = await buildContainer();
+const services = buildServices(container);
+const userId = "local" as never;
+const period = currentPeriod(container.config.timezone);
+const grid = await services.envelopes.getGrid(userId, period);
+const topLevel = grid.rows.filter((r) => r.parentId === null);
+const leafLeft = topLevel.reduce((s, r) => s + r.leftCents, 0);
+const incomeLeft = grid.income.reduce((s, i) => s + i.carryoverCents + i.varianceCents, 0);
+const awaiting = grid.income.reduce((s, i) => s + (i.awaitingCents ?? 0), 0);
+const totalLeft = leafLeft + incomeLeft;
+const d = (c: number) => (c / 100).toFixed(2);
+console.log(JSON.stringify({
+  db: process.env.PENNY_SQLITE_PATH,
+  period: grid.period,
+  unallocated: d(grid.unallocatedCents),
+  unresolvedActivity: d(grid.unresolvedActivityCents ?? 0),
+  uncategorisedVisible: d(grid.uncategorisedTotalCents),
+  leafLeft: d(leafLeft), incomeLeft: d(incomeLeft), awaiting: d(awaiting), totalLeft: d(totalLeft),
+  budgetSide_totalLeft_minus_awaiting: d(totalLeft - awaiting),
+  income: grid.income.map((i) => ({ name: i.name, carry: d(i.carryoverCents), received: d(i.receivedCents), variance: d(i.varianceCents), awaiting: d(i.awaitingCents ?? 0), left: d(i.leftCents), budget: d((i as any).budgetCents ?? 0) })),
+}));
+if (process.argv.includes("--rows")) {
+  for (const r of topLevel) console.log("ROW", r.name, r.type, d(r.leftCents));
+}
+if (process.argv.includes("--net")) {
+  const computed = await computeNetPosition(container, services, userId);
+  console.log("NET", JSON.stringify(computed.res));
+  const ex = await explainNetPosition(container, services, userId, computed);
+  console.log("EXPLAIN", JSON.stringify(ex, null, 1));
+}

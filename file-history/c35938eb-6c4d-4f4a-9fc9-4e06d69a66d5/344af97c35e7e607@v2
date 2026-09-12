@@ -1,0 +1,102 @@
+/**
+ * DiagnosticProvider (v1.25.0, ISC-45.1): the consent gate, the stream-json
+ * parser, and the runtime tool-list assertion that kills a session exposing any
+ * tool outside the penny MCP set. The live subprocess path is exercised by the
+ * deploy probe, not here; these are the pure guards it depends on.
+ */
+
+import { describe, test, expect } from "bun:test";
+import { assertConsentedAiEgress, EgressBlockedError, AI_EGRESS_DISCLOSURE } from "../src/security/egress.ts";
+import {
+  ALLOWED_TOOL_NAMES,
+  DISALLOWED_BUILTINS,
+  EMPTY_STREAM,
+  initViolation,
+  parseStreamLine,
+  systemPrompt,
+  UnavailableDiagnosticProvider,
+  type StreamInit,
+} from "../src/diagnostics/provider.ts";
+import type { DiagnosticContext } from "../src/diagnostics/tools.ts";
+
+const okInit: StreamInit = {
+  tools: [...ALLOWED_TOOL_NAMES],
+  mcpServers: [{ name: "penny", status: "connected" }],
+  sessionId: "s-1",
+  model: "claude-sonnet-5",
+  cliVersion: "2.1.269",
+};
+
+describe("ISC-45.1 consent gate", () => {
+  test("refuses without consent, refuses when the feature is off, passes only with both", () => {
+    expect(() => assertConsentedAiEgress({ consent: false, featureEnabled: true })).toThrow(EgressBlockedError);
+    expect(() => assertConsentedAiEgress({ consent: true, featureEnabled: false })).toThrow(EgressBlockedError);
+    expect(() => assertConsentedAiEgress({ consent: true, featureEnabled: true })).not.toThrow();
+  });
+
+  test("the disclosure names Anthropic, the subscription, masking and the audit log", () => {
+    expect(AI_EGRESS_DISCLOSURE).toContain("Anthropic");
+    expect(AI_EGRESS_DISCLOSURE).toContain("Claude subscription");
+    expect(AI_EGRESS_DISCLOSURE).toContain("masked");
+    expect(AI_EGRESS_DISCLOSURE).toContain("audit log");
+  });
+
+  test("the unavailable provider refuses and audits, never answers", async () => {
+    const p = new UnavailableDiagnosticProvider("off");
+    const events: string[] = [];
+    const r = await p.ask(
+      { userId: "u", question: "why?", consent: true, context: {} as DiagnosticContext },
+      async (kind) => {
+        events.push(kind);
+      },
+    );
+    expect(r.ok).toBe(false);
+    expect(events).toEqual(["agent.refused"]);
+  });
+});
+
+describe("runtime tool-list assertion", () => {
+  test("accepts exactly the penny tool set with the server connected on the configured model", () => {
+    expect(initViolation(okInit)).toBeNull();
+  });
+
+  test("rejects any built-in tool, any unknown penny tool, a disconnected server, or another model", () => {
+    expect(initViolation({ ...okInit, tools: [...okInit.tools, "Bash"] })).toContain("Bash");
+    expect(initViolation({ ...okInit, tools: [...okInit.tools, "mcp__penny__run_sql"] })).toContain("run_sql");
+    expect(initViolation({ ...okInit, mcpServers: [{ name: "penny", status: "failed" }] })).toContain("not connected");
+    expect(initViolation({ ...okInit, mcpServers: [] })).toContain("not connected");
+    expect(initViolation({ ...okInit, model: "claude-opus-5" })).toContain("unexpected model");
+  });
+
+  test("every built-in that could touch files or the network is on the explicit disallow list", () => {
+    for (const t of ["Bash", "Edit", "Write", "Read", "WebFetch", "WebSearch", "Agent"]) expect(DISALLOWED_BUILTINS).toContain(t);
+  });
+});
+
+describe("stream-json parsing", () => {
+  test("collects init, tool calls and the result; ignores noise", () => {
+    let s = EMPTY_STREAM;
+    s = parseStreamLine("not json", s);
+    s = parseStreamLine(JSON.stringify({ type: "system", subtype: "hook_started" }), s);
+    s = parseStreamLine(
+      JSON.stringify({ type: "system", subtype: "init", tools: okInit.tools, mcp_servers: okInit.mcpServers, session_id: "s-1", model: "claude-sonnet-5", claude_code_version: "2.1.269" }),
+      s,
+    );
+    s = parseStreamLine(JSON.stringify({ type: "assistant", message: { content: [{ type: "thinking", text: "" }, { type: "tool_use", name: "mcp__penny__explain_delta", input: {} }] } }), s);
+    s = parseStreamLine(JSON.stringify({ type: "user", message: { content: [{ type: "tool_result" }] } }), s);
+    s = parseStreamLine(JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "It is off by $3.94." }] } }), s);
+    s = parseStreamLine(JSON.stringify({ type: "result", is_error: false, result: "It is off by $3.94.", session_id: "s-1", num_turns: 2 }), s);
+    expect(s.init?.sessionId).toBe("s-1");
+    expect(s.init?.cliVersion).toBe("2.1.269");
+    expect(s.toolCalls).toEqual([{ name: "mcp__penny__explain_delta", input: "{}" }]);
+    expect(s.result).toEqual({ text: "It is off by $3.94.", isError: false, sessionId: "s-1", turns: 2 });
+  });
+
+  test("system prompt pins the rules the owner set: tool-sourced numbers, explain_delta first, read-only, masked payees", () => {
+    const p = systemPrompt({ period: "2026-09", today: "2026-09-12", timezone: "Australia/Melbourne" } as DiagnosticContext);
+    expect(p).toContain("explain_delta first");
+    expect(p).toContain("read-only");
+    expect(p).toContain("masked");
+    expect(p).toContain("must come from a tool result");
+  });
+});

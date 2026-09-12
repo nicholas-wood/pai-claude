@@ -1,0 +1,136 @@
+/**
+ * Typed read-only diagnostic tools (v1.25.0, ISC-45.1): data minimisation
+ * (payees masked, raw provider JSON dropped), tenant scoping (tenant B's rows
+ * never appear for tenant A), row caps, the closed tool list, and the context
+ * passthrough for the two tools that need PocketSmith figures.
+ */
+
+import { describe, test, expect } from "bun:test";
+import { MemoryStore } from "./penny-memory-store.ts";
+import { EnvelopeService } from "../src/envelope/service.ts";
+import { TOOL_DEFINITIONS, TOOL_NAMES, maskPayee, sanitise, runTool, UnknownToolError, type DiagnosticContext, type ToolDeps } from "../src/diagnostics/tools.ts";
+import type { Tx } from "../src/platform/store.ts";
+
+function tx(id: string, over: Partial<Tx> = {}): Tx {
+  return {
+    id,
+    date: "2026-09-05",
+    amountCents: -1234,
+    accountId: "acc-nab",
+    categoryId: "cat-1",
+    envelopeId: "env-1",
+    payee: "Pria Bax Gymnastics",
+    isTransfer: false,
+    isPending: false,
+    rawJson: JSON.stringify({ secret: "never-leaves" }),
+    ...over,
+  };
+}
+
+const context: DiagnosticContext = {
+  period: "2026-09",
+  today: "2026-09-12",
+  timezone: "Australia/Melbourne",
+  netPosition: {
+    ok: true,
+    cashOnHandCents: 100,
+    cardOwedCents: 0,
+    totalLeftCents: 100,
+    sectionLeftCents: { income: 0, saving: 0, expense: 100, envelope: 0, working: 0 },
+    reconciledDeltaCents: 0,
+    asOf: 1,
+  },
+  explanation: null,
+};
+
+async function deps(): Promise<{ a: ToolDeps; b: ToolDeps; store: MemoryStore }> {
+  const store = new MemoryStore();
+  const envelopes = new EnvelopeService(store, { holdingEnvelopeId: null, nabCardAccountIds: ["acc-nab"] }, { timezone: "Australia/Melbourne" });
+  await store.upsertTransactions("A", [tx("a1"), tx("a2", { isPending: true, payee: "Coles Express" }), tx("a3", { isTransfer: true })]);
+  await store.upsertTransactions("B", [tx("b1", { payee: "Tenant B Secret Merchant" })]);
+  return {
+    a: { store, envelopes, userId: "A", context },
+    b: { store, envelopes, userId: "B", context },
+    store,
+  };
+}
+
+describe("diagnostic tools: data minimisation", () => {
+  test("maskPayee keeps the initials and hides the rest", () => {
+    expect(maskPayee("Pria Bax")).toBe("P••• B••");
+    expect(maskPayee("Coles")).toBe("C••••");
+    expect(maskPayee("A B C D E")).toBe("A B C …");
+    expect(maskPayee("")).toBe("");
+  });
+
+  test("sanitise drops raw provider JSON and masks free-text merchant fields, recursively", () => {
+    const out = sanitise({ rows: [{ id: "x", payee: "Pria Bax", rawJson: "{}", nested: { description: "Coles Express", amountCents: 5 } }] });
+    expect(out as unknown).toEqual({ rows: [{ id: "x", payee: "P••• B••", nested: { description: "C•••• E••••", amountCents: 5 } }] });
+  });
+
+  test("transactions tool masks payees, never returns rawJson, and honours filters + caps", async () => {
+    const { a } = await deps();
+    const all = (await runTool(a, "transactions", {})) as { total: number; rows: Record<string, unknown>[] };
+    expect(all.total).toBe(3);
+    for (const r of all.rows) {
+      expect(r.rawJson).toBeUndefined();
+      expect(String(r.payee)).not.toContain("Pria");
+      expect(String(r.payee)).not.toContain("Coles");
+    }
+    const pending = (await runTool(a, "transactions", { pendingOnly: true })) as { rows: { id: string }[] };
+    expect(pending.rows.map((r) => r.id)).toEqual(["a2"]);
+    const transfers = (await runTool(a, "transactions", { transferOnly: true })) as { rows: { id: string }[] };
+    expect(transfers.rows.map((r) => r.id)).toEqual(["a3"]);
+    const capped = (await runTool(a, "transactions", { limit: 1 })) as { returned: number; rows: unknown[] };
+    expect(capped.returned).toBe(1);
+    expect(capped.rows).toHaveLength(1);
+  });
+});
+
+describe("diagnostic tools: scoping and surface", () => {
+  test("tenant A never sees tenant B's rows (ISC-49)", async () => {
+    const { a, b } = await deps();
+    const forA = (await runTool(a, "transactions", {})) as { rows: { id: string }[] };
+    expect(forA.rows.map((r) => r.id).sort()).toEqual(["a1", "a2", "a3"]);
+    const forB = (await runTool(b, "transactions", {})) as { rows: { id: string; payee: string }[] };
+    expect(forB.rows.map((r) => r.id)).toEqual(["b1"]);
+    expect(forB.rows[0]!.payee).not.toContain("Secret");
+  });
+
+  test("the tool list is closed: typed tools only, no free-form SQL, unknown names throw", async () => {
+    const { a } = await deps();
+    expect(TOOL_NAMES).toEqual([
+      "explain_delta",
+      "net_position",
+      "grid",
+      "envelope_detail",
+      "transactions",
+      "movements",
+      "budget_history",
+      "carryover_events",
+      "reconciliation_snapshots",
+      "engine_facts",
+    ]);
+    expect(TOOL_NAMES.some((n) => /sql|query|exec|write|update|delete/i.test(n))).toBe(false);
+    for (const d of TOOL_DEFINITIONS) expect((d.inputSchema as { additionalProperties?: boolean }).additionalProperties).toBe(false);
+    await expect(runTool(a, "run_readonly_sql", { sql: "select 1" })).rejects.toBeInstanceOf(UnknownToolError);
+  });
+
+  test("explain_delta and net_position return the precomputed context; engine_facts is non-empty", async () => {
+    const { a } = await deps();
+    expect(await runTool(a, "net_position", {})).toEqual(context.netPosition);
+    const noExplain = (await runTool(a, "explain_delta", {})) as { ok: boolean };
+    expect(noExplain.ok).toBe(false);
+    const facts = (await runTool(a, "engine_facts", {})) as { facts: string[]; period: string };
+    expect(facts.facts.length).toBeGreaterThan(5);
+    expect(facts.period).toBe("2026-09");
+  });
+
+  test("grid tool returns the month's zero-base gap and rows without raw fields", async () => {
+    const { a } = await deps();
+    const g = (await runTool(a, "grid", { period: "2026-09" })) as { period: string; unallocatedCents: number; rows: unknown[] };
+    expect(g.period).toBe("2026-09");
+    expect(typeof g.unallocatedCents).toBe("number");
+    expect(Array.isArray(g.rows)).toBe(true);
+  });
+});

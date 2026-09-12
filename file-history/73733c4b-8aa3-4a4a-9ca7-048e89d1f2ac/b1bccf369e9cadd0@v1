@@ -1,0 +1,166 @@
+# Divergence Explainer and In-App Diagnostic Chat: Feasibility and Design
+
+Date: 2026-09-08. Status: assessment for decision, no code written. Task ISA: `PAI/MEMORY/WORK/budgetbuddy-explainer-chat-design/ISA.md`.
+
+## Verdict
+
+Both facilities are feasible on the current codebase.
+
+1. **Divergence explainer: yes, and it needs no AI call.** Every divergence we have diagnosed by hand (Aug and Sept 2026) was attributed to the cent by deterministic queries; the model only narrated. The explainer is a reconciliation-attribution engine that extends the existing net-position computation.
+2. **In-app read-only diagnostic chat on Nick's Claude subscription: yes, proven headless today.** A smoke test from this box ran `claude -p` under the subscription with a custom system prompt, a stdio MCP server exposing one read-only tool, and no built-in tools; it called the tool and answered in two turns. The one real blocker is a product decision, not a technical one: the local-mode no-egress guard (ISC-45) must be amended to add a consented, audited AI channel.
+
+Recommended build order: explainer first, chat second. The explainer is the chat's most important tool, and it delivers most of the value without any egress decision.
+
+## Facility 1: the divergence explainer
+
+### What exists today
+
+`src/server/handlers/reconcile.ts:259-263` computes the net-position figures:
+
+```
+reconciledDeltaCents  = cashOnHand − cardOwed − (totalLeft − awaitingIncome)
+unexplainedDeltaCents = reconciledDeltaCents − uncategorisedActivityCents
+```
+
+The banner grades on `unexplainedDeltaCents` (ISC-275..277). Uncategorised activity is already one named "explained" line. The explainer generalises that: it is a list of named lines whose sum plus a residual equals `unexplainedDeltaCents`.
+
+### Attribution catalogue
+
+Each row is a cause we have met in a real diagnosis, with how the engine detects it. "Det" means fully computable from the ledger; "Model" means the deterministic tier can only flag it and narration adds value.
+
+| # | Cause | Detection | Evidence source | Tier |
+|---|-------|-----------|-----------------|------|
+| 1 | Zero-base gap (income − allocations ≠ 0 in the visible month) | `zerobased.ts` figure; the widget reads high by exactly this amount (engine fact, v1.20 memory) | `allocations`, income budget lines | Det |
+| 2 | Envelope missing from a materialised month | template line effective in month M with no `allocations` row for (envelope, M); fixed to self-heal in v1.23.0 but still worth asserting | `budget_template` vs `allocations` | Det |
+| 3 | Income fold dropped a money movement | prior-month income carry recomputed with and without `money_movements`; any difference is this cause (fixed v1.23.0; keep as regression sentinel) | `money_movements`, `service.ts` foldIncomeCarry | Det |
+| 4 | Duplicate or ghost pending | two pending rows same account, amount, payee within N days; or a pending whose posted twin exists | `transactions` where is_pending | Det (flag), Model (judgement) |
+| 5 | Feed staleness (bank ahead of sync) | `feedRefreshedAt` vs `lastSyncAt` gap and pending card spend | net-position response fields already present | Det |
+| 6 | Uncategorised activity outside the visible range | widget's uncategorised line spans the visible range only (memory note, July −$184.95 case); compute cumulative-from-era minus visible | `spend.ts` unresolved activity | Det |
+| 7 | Manual carryover edits / baseline re-strikes since last balanced | `events` of kind `carryover.reset` after the last zero-delta timestamp, with amounts | `events` table | Det |
+| 8 | Budget version edits mid-month (expected-day income, proration) | `budget_history` rows with actor ui/agent after last balanced | `budget_history` | Det |
+| 9 | Working/archived envelope moved real cash but sits outside zero-base | section totals by type from the grid | grid rows | Det |
+| 10 | Card payment transfer mishandled (holding vs card drift) | existing balance-reconciliation tripwire `reconcile/balances.ts` | PocketSmith balances | Det |
+| 11 | Residual dust | whatever remains after 1..10 | arithmetic | Model narrates options |
+
+Conservation rule: `Σ lines + residual = unexplainedDeltaCents` to the cent, asserted in a unit test so the explainer can never "explain" more than exists.
+
+Several rows need a "last balanced" anchor: the most recent time the unexplained delta was within tolerance. The `snapshots` table exists but is never populated (engine fact). The explainer should write a small daily `reconciliation_snapshots` row (delta, uncategorised, unexplained, as-of) so the anchor and the trend both exist. This is the one schema addition.
+
+### Output contract
+
+`GET /api/net-position/explain` returns:
+
+```
+{
+  unexplainedDeltaCents, asOf, lastBalancedAt,
+  lines: [{ cause, cents, detail, evidence: [{ kind: "query"|"code"|"event", ref }] }],
+  residualCents,
+  suggestions: [{ text, action?: "open-envelope"|"open-pending"|"open-carryover" }]
+}
+```
+
+Evidence refs are what make it "similar to the explanations we work through here": each line names the rows or code path it came from, and the chat can quote them.
+
+### UI placement
+
+Tap target on the widget banner ("unexplained −$15.23 · why?") opening a sheet on the Balance page, reusing the pending-marker and carryover-popover patterns already in the SPA. A one-line summary belongs in the Pulse widget JSON too.
+
+### Effort
+
+Two to three focused sessions: engine (attribution module plus conservation test), handler and contract, UI sheet, snapshot job on the sync timer. No new dependencies. No AI dependency.
+
+## Facility 2: the in-app diagnostic chat
+
+### Billing path
+
+"Use my Claude account" means subscription billing, which is only served through the Claude Code harness, not the `@anthropic-ai/sdk` API-key path. PAI already runs this pattern: `PAI/TOOLS/Inference.ts` spawns `claude --print` and is subscription-billed. The penny systemd unit has no `CLAUDECODE` in its environment, so nesting is not an issue.
+
+### Harness options
+
+| Option | How | Pros | Cons |
+|--------|-----|------|------|
+| A. `claude -p` subprocess (recommended) | Spawn per question with `--system-prompt`, `--mcp-config` pointing at a penny-owned stdio MCP server, `--strict-mcp-config`, `--allowedTools mcp__penny__*`, `--tools ""`, `--output-format stream-json`, `--resume <session>` for follow-ups | Proven today on this box; zero new dependencies; same pattern as Inference.ts; session resume gives multi-turn | Process per turn (~2-10 s cold); depends on the CLI's login state; not usable in cloud mode |
+| B. Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`) | In-process `query()` with an SDK MCP server | Typed, in-process tools, streaming events | Adds a dependency; wraps the same binary; the CLI-vs-SDK auth story is less certain and the smoke test did not cover it |
+
+Recommend A behind a `DiagnosticProvider` interface (mirroring `AuthProvider` and `SecretStore`) so a cloud adapter with an API key can be added later without touching business code.
+
+Smoke test evidence (2026-09-08, this box): `claude -p --model sonnet --mcp-config … --strict-mcp-config --allowedTools mcp__probe__ledger_probe --tools ""` returned `is_error: false`, `num_turns: 2`, result "The unexplained delta is -$15.23." Gotcha: `--bare` skips credential loading and fails with "Not logged in"; do not use it.
+
+### Read-only by construction
+
+Three independent layers, none of them a prompt instruction:
+
+1. The MCP server opens the store with a readonly handle (`bun:sqlite` `{ readonly: true }`, or a read-only Postgres role in cloud).
+2. `--allowedTools` lists only the penny MCP tools; `--tools ""` removes every built-in (Bash, Edit, Write, Read, WebFetch). The smoke test confirmed no built-in tool was available.
+3. The MCP server is started by penny with the session's `userId` baked in, so every tool call is tenant-scoped exactly like the store methods (ISC-49).
+
+The chat therefore cannot change code, config, or data. It can only read what the tools expose.
+
+### Tool surface
+
+| Tool | Purpose |
+|------|---------|
+| `explain_delta()` | Facility 1's output; the first thing the system prompt tells it to call |
+| `net_position()` | current widget figures |
+| `grid(month)` | envelope rows, income rows, zero-base for a month |
+| `envelope_detail(id, month)` | carry, allocated, spent, left, movements |
+| `transactions(filter)` | envelope, account, date range, pending flag, capped rows |
+| `movements(range)` | money_movements rows |
+| `budget_history(range)` | version edits with actor |
+| `events(kind, range)` | carryover resets and other audit events |
+| `run_readonly_sql(sql)` | optional, SELECT-only over the readonly handle, capped rows and time; the tool that makes "investigate" open-ended. Gate behind a settings flag |
+| `engine_facts()` | the memory-file facts we keep correcting ourselves on (roll_carry everywhere, pendings counted in grid, moves don't write allocations, widget contains zero-base) as a static reference so the model does not re-derive them wrong |
+
+### The security decision Nick must make
+
+`src/security/egress.ts` hard-denies `api.anthropic.com` in local mode and ISC-45's repo test asserts no cloud-AI call sites in business code. The project Constraints already say cloud AI inference "stays off by default and opt-in per query". A `claude -p` subprocess does not pass through the fetch guard, but shipping it without amending the guard would be a loophole, not a design.
+
+Proposed amendment, for Nick's approval:
+
+- ISC-45 stays: no financial data leaves by default. Add ISC-45.1: AI egress happens only through `DiagnosticProvider`, only when the per-session consent toggle is on, and every question and tool call is written to `events` with actor `agent` (the actor enum already exists in `platform/store.ts:53`).
+- The egress guard gains an explicit `allowConsentedAI` channel rather than a new permitted host, so the default posture is unchanged and the exception is greppable.
+- Data minimisation: only tool results the model requests leave the machine, never the whole ledger; payees can be masked by a setting; the PocketSmith key never enters the subprocess environment.
+- The consent toggle lives on the chat panel and in Settings, off by default, with the plain sentence "Questions and the ledger rows needed to answer them are sent to Anthropic under your Claude subscription."
+
+### Failure modes and mitigations
+
+| Failure | Mitigation |
+|---------|------------|
+| Confident wrong figure | System prompt requires every number to come from a tool result; the explainer is the first call; answers show the tool calls used |
+| CLI login expiry under systemd | Health check runs `claude -p` with a trivial prompt weekly; chat panel shows "sign in on the box" instead of failing silently |
+| Latency on phone | Stream via `--output-format stream-json`; show tool-call progress lines |
+| Consent becomes always-on | Per-session toggle resets on sign-out; Settings shows last 20 agent events |
+| Runaway tool loops | `--max-turns` and per-tool row caps; `run_readonly_sql` time-limited |
+| Cloud mode | Provider returns "not available" until an API-key adapter exists |
+
+### Effort and cost
+
+Three to four sessions after the explainer: MCP server (tools over existing services), provider and consent gate, egress amendment and test, chat panel with streaming and resume. Running cost is subscription usage only; the smoke test's nominal `total_cost_usd` was $0.09 for two turns on Sonnet, charged as subscription quota, not dollars.
+
+## Advisor review (folded in)
+
+An independent advisor pass (Opus, 2026-09-08) raised three points. Adopted:
+
+- **Disclosure, not just consent.** The consent copy must state what leaves the box (merchant names, amounts, balances), that it goes to Anthropic under the consumer subscription's retention terms, and that zero-data-retention does not apply to subscription use. ISC-45.1 should carry that sentence verbatim.
+- **Redacted aggregates by default.** Tools return envelope and month aggregates with row caps; raw transaction rows require the settings flag, and `run_readonly_sql` stays off unless Nick turns it on. No account numbers or BSBs are ever exposed by any tool.
+- **Assert the tool list at runtime.** `--tools ""` is a negation the next CLI release could weaken. Pin the CLI version in the provider, pass `--disallowedTools Bash,Edit,Write,Read,WebFetch,WebSearch,Agent` as well, and have the provider read the `stream-json` init event and refuse to continue if any non-`mcp__penny__` tool is listed.
+- **Catalogue additions:** internal transfers double-counted, refunds and reversals, split transactions, retroactive recategorisation, posting-date versus transaction-date boundaries, duplicate re-imports from the feed. Each is deterministic to detect.
+- **Residual alarm.** A residual above a threshold (say $20) is itself a finding that must not be absorbed silently; surface it as "unattributed" with the same prominence as the banner.
+
+Disagreed, recorded: the advisor preferred the Agent SDK for its `canUseTool` gate. The SDK drives the same `claude` binary, so CLI drift affects both paths equally; the runtime tool-list assertion above gives the same guarantee without a new dependency. Revisit if the subprocess path proves brittle.
+
+## Questions for Nick
+
+1. Approve the ISC-45.1 amendment (consented, audited AI channel) or keep local mode strictly AI-free and stop at the explainer?
+2. Include `run_readonly_sql` (open-ended investigation) or limit the chat to the typed tools?
+3. Payee masking on by default, or send payees as-is for better answers?
+4. Model choice for the chat: Opus for accuracy, or Sonnet for speed on the phone?
+5. Explainer first as a standalone release (v1.24), chat as v1.25?
+
+## Decisions (Nick, 2026-09-08)
+
+1. ISC-45.1 approved: local mode keeps no-egress by default; one consented, disclosed, audited AI channel is added behind `DiagnosticProvider`.
+2. Chat tools are typed only. No `run_readonly_sql`.
+3. Payees masked by default in every tool result.
+4. Chat model: Sonnet.
+5. Explainer ships first as v1.24.0; chat follows as v1.25.0.

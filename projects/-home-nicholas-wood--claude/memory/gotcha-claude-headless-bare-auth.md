@@ -11,3 +11,5 @@ Verified 2026-09-08 on the Linux box (claude 2.1.263): `claude -p --bare …` fa
 
 **Why:** the BudgetBuddy diagnostic-chat design ([[project-budgetbuddy-sept-2026-diagnosis]]) depends on this pattern; the first probe wasted a run on `--bare`.
 **How to apply:** never add `--bare` to subscription-billed headless calls; assert the tool list from the stream-json init event rather than trusting the flag alone.
+
+**Added 2026-09-12:** `--allowedTools`/`--disallowedTools` are variadic; put the prompt immediately after `-p` or it is swallowed as a tool name (the CLI then exits in ~1.5 s with no result event). `--setting-sources project` drops user hooks but NOT the user CLAUDE.md; add `--exclude-dynamic-system-prompt-sections` or answers arrive in PAI format.

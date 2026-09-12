@@ -1,0 +1,164 @@
+/**
+ * Diagnostic chat routes (v1.25.0, ISC-45.1): the consented, audited AI channel.
+ *
+ *   GET  /api/diagnose/status  can the channel open here, and the disclosure text
+ *   POST /api/diagnose         one question; consent must be literally true
+ *   GET  /api/diagnose/audit   the agent's own trail from the ledger event log
+ *
+ * The route computes the net position and the explanation FIRST (they need the
+ * PocketSmith key, which the tool process never holds), hands both to the
+ * provider as read-only context, and writes every question, tool call, answer
+ * and refusal to the event log with actor "agent" so the trail lives where every
+ * other ledger change lives.
+ */
+
+import { Hono } from "hono";
+import type { Container } from "../../composition.ts";
+import type { Services } from "../services.ts";
+import type { ApiError, DiagnoseAuditEntry, DiagnoseAuditResponse, DiagnoseResponse, DiagnoseStatusResponse } from "../contract.ts";
+import type { UserId } from "../../platform/auth.ts";
+import { resolveSession, UNAUTHENTICATED, currentPeriod } from "../http.ts";
+import { parseBody, diagnoseSchema } from "../validate.ts";
+import { AI_EGRESS_DISCLOSURE, assertConsentedAiEgress, EgressBlockedError } from "../../security/egress.ts";
+import { computeNetPosition, explainNetPosition } from "../net-position.ts";
+import { periodKey } from "../../envelope/period.ts";
+import { todayISO } from "../../platform/time.ts";
+import type { DiagnosticContext } from "../../diagnostics/tools.ts";
+
+const AUDIT_KINDS = ["agent.question", "agent.tool_call", "agent.answer", "agent.refused"] as const;
+
+/** One question in flight per tenant: the subprocess is not cheap and answers share a session. */
+const inFlight = new Map<UserId, Promise<unknown>>();
+
+export function registerDiagnose(api: Hono, container: Container, services: Services): void {
+  const provider = services.diagnostics;
+
+  const appendAgentEvent = async (userId: UserId, correlationId: string, kind: string, payload: Record<string, unknown>): Promise<void> => {
+    try {
+      await container.store.appendEvent(userId, {
+        id: crypto.randomUUID(),
+        ts: Date.now(),
+        actor: "agent",
+        correlationId,
+        kind,
+        payloadJson: JSON.stringify(payload),
+      });
+    } catch {
+      // The audit write must never break the answer path; the refusal path
+      // below still returns honestly if the event log is unavailable.
+    }
+  };
+
+  api.get("/diagnose/status", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const local = container.config.deployMode === "local";
+    const res: DiagnoseStatusResponse = {
+      available: local && provider.available,
+      ...(local ? (provider.reason ? { reason: provider.reason } : {}) : { reason: "Not available in cloud mode yet." }),
+      disclosure: AI_EGRESS_DISCLOSURE,
+      model: provider.model,
+    };
+    return c.json(res);
+  });
+
+  api.post("/diagnose", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const parsed = await parseBody(c, diagnoseSchema);
+    if (!parsed.ok) return parsed.response;
+    const { question, consent, sessionId } = parsed.value;
+    const userId = session.userId;
+    const correlationId = crypto.randomUUID();
+
+    // ISC-45.1 gate, before any context is computed or any process spawned.
+    try {
+      assertConsentedAiEgress({ consent, featureEnabled: container.config.deployMode === "local" && provider.available });
+    } catch (err) {
+      const reason = err instanceof EgressBlockedError ? err.message : "AI egress refused.";
+      await appendAgentEvent(userId, correlationId, "agent.refused", { reason, question: question.slice(0, 200) });
+      const body: ApiError = { error: reason, code: "ai_egress_refused" };
+      return c.json(body, 403);
+    }
+
+    if (inFlight.has(userId)) {
+      const body: ApiError = { error: "A question is already being answered; wait for it to finish.", code: "diagnose_busy" };
+      return c.json(body, 409);
+    }
+
+    const run = (async (): Promise<DiagnoseResponse> => {
+      await appendAgentEvent(userId, correlationId, "agent.question", {
+        question: question.slice(0, 2000),
+        model: provider.model,
+        resume: sessionId ?? null,
+      });
+      const computed = await computeNetPosition(container, services, userId);
+      const explanation = computed.res.ok ? await explainNetPosition(container, services, userId, computed) : null;
+      const now = Date.now();
+      const context: DiagnosticContext = {
+        period: periodKey(currentPeriod(container.config.timezone)),
+        today: todayISO(container.config.timezone, new Date(now)),
+        timezone: container.config.timezone,
+        netPosition: computed.res,
+        explanation: explanation === null ? null : { ok: true, ...explanation },
+      };
+      const result = await provider.ask(
+        { userId, question, consent, ...(sessionId ? { sessionId } : {}), context },
+        (kind, payload) => appendAgentEvent(userId, correlationId, kind, payload),
+      );
+      const res: DiagnoseResponse = {
+        ok: result.ok,
+        answer: result.answer,
+        sessionId: result.sessionId,
+        toolCalls: result.toolCalls,
+        model: result.model,
+        turns: result.turns,
+        durationMs: result.durationMs,
+        ...(result.message ? { message: result.message } : {}),
+      };
+      return res;
+    })();
+    inFlight.set(userId, run);
+    try {
+      return c.json(await run);
+    } finally {
+      inFlight.delete(userId);
+    }
+  });
+
+  api.get("/diagnose/audit", async (c) => {
+    const session = await resolveSession(c, container);
+    if (!session) return c.json(UNAUTHENTICATED, 401);
+    const lists = await Promise.all(AUDIT_KINDS.map((k) => container.store.listEventsByKind(session.userId, k)));
+    const entries: DiagnoseAuditEntry[] = lists
+      .flat()
+      .sort((a, b) => b.ts - a.ts || b.id.localeCompare(a.id))
+      .slice(0, 50)
+      .map((e) => {
+        let payload: Record<string, unknown> = {};
+        try {
+          payload = JSON.parse(e.payloadJson) as Record<string, unknown>;
+        } catch {
+          // keep an empty payload; the kind and time still tell the story
+        }
+        return { ts: e.ts, kind: e.kind as DiagnoseAuditEntry["kind"], correlationId: e.correlationId, summary: summarise(e.kind, payload) };
+      });
+    const res: DiagnoseAuditResponse = { entries };
+    return c.json(res);
+  });
+}
+
+function summarise(kind: string, p: Record<string, unknown>): string {
+  switch (kind) {
+    case "agent.question":
+      return `Asked: ${String(p.question ?? "").slice(0, 140)}`;
+    case "agent.tool_call":
+      return `Tool ${String(p.name ?? "?").replace(/^mcp__penny__/, "")} ${String(p.input ?? "{}").slice(0, 100)}`;
+    case "agent.answer":
+      return `Answered in ${String(p.turns ?? "?")} turns, ${String(p.toolCalls ?? 0)} tool calls, ${Math.round(Number(p.durationMs ?? 0) / 1000)}s`;
+    case "agent.refused":
+      return `Refused: ${String(p.reason ?? "")}`;
+    default:
+      return kind;
+  }
+}

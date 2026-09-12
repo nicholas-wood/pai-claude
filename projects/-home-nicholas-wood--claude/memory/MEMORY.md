@@ -35,6 +35,8 @@
 - [Auto-mode blocks prod DB window](gotcha-automode-blocks-prod-db-window.md) — classifier denies gcloud-over-ssh for AccessBuddy Cloud SQL in bg jobs; hand Nick the one-line opener instead of retrying
 - [AccessBuddy vitest TSX render probe](gotcha-accessbuddy-vitest-tsx-render-probe.md) — default vitest cannot transform TSX; throwaway config with esbuild.jsx automatic + renderToString to verify copy, delete before commit
 - [Headless claude -p auth gotcha](gotcha-claude-headless-bare-auth.md) — --bare drops subscription login; MCP stdio + --tools '' proven; advisor needs 3 args + 180s
-- [BudgetBuddy unpaired-transfer gap](project-budgetbuddy-unpaired-transfer-gap.md) — Sept 2026 +$415 = $429.30 ATM cash deposit flagged is_transfer; run pair-match scan first; explainer lacks that signal
+- [BudgetBuddy unpaired-transfer gap](project-budgetbuddy-unpaired-transfer-gap.md) — Sept 2026 +$415 = $429.30 ATM cash deposit flagged is_transfer; v1.24.1 explainer names unpaired transfers as a component; Nick: Why? sheet must name the cause or it's useless
 - [BudgetBuddy v1.24.0 explainer](project-budgetbuddy-v1240-explainer.md) — deterministic Why? sheet shipped 8 Sep; components vs signals honesty rule; chat v1.25.0 decisions recorded (ISC-45.1, typed tools, masked payees, Sonnet)
+- [AccessBuddy Terraform drift](gotcha-accessbuddy-terraform-drift.md) — state behind live (auth-hardening secrets, cron_secret tfvars ≠ live); never targeted-apply Cloud Run, gcloud-create + import instead
 - [Algo trading advice](project-algo-trading-advice.md) — 11 Sep recommendation delivered, not built; IBKR no-OAuth, Alpaca AU unconfirmed, TS no backtester, VA policy first
+- [BudgetBuddy v1.25.0 chat](project-budgetbuddy-v1250-chat.md) — read-only diagnostic chat live 12 Sep behind Why? sheet; claude -p recipe + variadic-flag/CLAUDE.md-leak traps; consent per request, audit to events

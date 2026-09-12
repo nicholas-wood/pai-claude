@@ -1,0 +1,45 @@
+-- Cancel Gordon Porter's queued attestationRequested email ONLY if its link is
+-- already dead (the pending attestation's token no longer matches the queued URL,
+-- i.e. an admin clicked Resend). If the token still matches, cancelling would
+-- leave him with no link at all, so we leave it and report.
+\set ON_ERROR_STOP on
+\pset format aligned
+
+select set_config('app.current_tenant_id',
+       (select id::text from tenants where slug = 'south-melb-lsc'), false);
+
+\echo '== before'
+select q.id, q.status, q.created_at at time zone 'Australia/Melbourne' as queued_melb,
+       left(regexp_replace(q.payload->>'attestUrl', '.*/attest/', ''), 8) || '…' as queued_token_prefix,
+       left(a.token, 8) || '…' as pending_token_prefix,
+       (q.payload->>'attestUrl' like '%' || a.token || '%') as queued_link_still_live
+from email_queue q
+join attestation_requests a on a.id = '87a4f905-2034-4b8a-9f46-2876071d4648'
+where q.template_type = 'attestationRequested'
+  and q.recipient = (select email from users where id = '48d56fcb-dfc0-491f-b5ca-11cfdf8e6f25')
+  and q.status = 'queued';
+
+\echo '== resend audit'
+select created_at at time zone 'Australia/Melbourne' as at_melb, metadata->>'action' as meta_action
+from audit_log
+where entity_type = 'member' and entity_id = '48d56fcb-dfc0-491f-b5ca-11cfdf8e6f25'
+  and metadata->>'action' in ('attestation_resent','attestation_auto_resent')
+order by created_at desc limit 3;
+
+\echo '== cancel (guarded)'
+update email_queue q
+   set status = 'cancelled', last_error = 'cancelled by admin 2026-09-12: link superseded by manual Resend'
+ where q.template_type = 'attestationRequested'
+   and q.status = 'queued'
+   and q.recipient = (select email from users where id = '48d56fcb-dfc0-491f-b5ca-11cfdf8e6f25')
+   and exists (select 1 from attestation_requests a
+               where a.id = '87a4f905-2034-4b8a-9f46-2876071d4648'
+                 and a.status = 'pending'
+                 and q.payload->>'attestUrl' not like '%' || a.token || '%')
+returning q.id, q.status;
+
+\echo '== after'
+select q.id, q.status from email_queue q
+where q.template_type = 'attestationRequested'
+  and q.recipient = (select email from users where id = '48d56fcb-dfc0-491f-b5ca-11cfdf8e6f25')
+order by q.created_at desc limit 2;

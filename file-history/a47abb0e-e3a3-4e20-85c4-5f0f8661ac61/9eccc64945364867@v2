@@ -1,0 +1,28 @@
+-- Cancel Gordon Porter's queued attestationRequested email if its link is dead:
+-- the URL's token no longer matches the attestation row's current token
+-- (rotated by Resend at 12:34). Status of the attestation is reported but not
+-- required to be pending (he may already have completed it).
+\set ON_ERROR_STOP on
+\pset format aligned
+
+select set_config('app.current_tenant_id',
+       (select id::text from tenants where slug = 'south-melb-lsc'), false);
+
+\echo '== attestation now'
+select id, status, completed_at at time zone 'Australia/Melbourne' as completed_melb,
+       token_expires_at at time zone 'Australia/Melbourne' as token_expires_melb,
+       left(token, 8) || '…' as token_prefix
+from attestation_requests where id = '87a4f905-2034-4b8a-9f46-2876071d4648';
+
+\echo '== cancel (token-mismatch guard)'
+update email_queue q
+   set status = 'cancelled', last_error = 'cancelled by admin 2026-09-12: link superseded by manual Resend'
+ where q.id = 'b8c54bd3-abc9-4661-81ff-508a3ef0f735'
+   and q.status = 'queued'
+   and exists (select 1 from attestation_requests a
+               where a.id = '87a4f905-2034-4b8a-9f46-2876071d4648'
+                 and q.payload->>'attestUrl' not like '%' || a.token || '%')
+returning q.id, q.status;
+
+\echo '== after'
+select id, status, last_error from email_queue where id = 'b8c54bd3-abc9-4661-81ff-508a3ef0f735';
