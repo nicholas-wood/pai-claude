@@ -40,3 +40,6 @@
 - [AccessBuddy Terraform drift](gotcha-accessbuddy-terraform-drift.md) — state behind live (auth-hardening secrets, cron_secret tfvars ≠ live); never targeted-apply Cloud Run, gcloud-create + import instead
 - [Algo trading advice](project-algo-trading-advice.md) — 11 Sep recommendation delivered, not built; IBKR no-OAuth, Alpaca AU unconfirmed, TS no backtester, VA policy first
 - [BudgetBuddy v1.25.0 chat](project-budgetbuddy-v1250-chat.md) — read-only diagnostic chat live 12 Sep behind Why? sheet; claude -p recipe + variadic-flag/CLAUDE.md-leak traps; consent per request, audit to events
+- [envelope-os shared checkout](gotcha-envelope-os-shared-checkout-concurrent-sessions.md) — parallel sessions edit the same tree; stage hunks with git apply --cached --directory, build live bundle from a clean worktree, never restart penny with foreign WIP
+- [BudgetBuddy recurring moves v1.27/1.28](project-budgetbuddy-v1270-recurring-moves.md) — Once/Repeat inside Move money modal, interval N, lazy catch-up on reads + sync, run_date bucketing, income destinations ok / sources refused; live UI probe deferred
+- [Helm trading engine](project-helm-trading-engine.md) — built 12-13 Sep, deployed paper timers; replay: strategies lost vs STW, costs dominate, no LLM leakage edge; VA policy gate

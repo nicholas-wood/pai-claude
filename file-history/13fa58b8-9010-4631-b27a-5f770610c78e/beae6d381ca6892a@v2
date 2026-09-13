@@ -1,0 +1,60 @@
+/**
+ * POST /api/envelopes/edit — parent re-assignment (v1.25.2). The parent must
+ * persist (including a nested parent), "Top level" clears it, and the tree can
+ * never be closed into a cycle.
+ */
+
+import { describe, test, expect } from "bun:test";
+import type { ApiError, CreateEnvelopeResponse, GridResponse } from "../src/server/contract.ts";
+import { makeTestApp, postJson, getJson, type TestApp } from "./server-test-app.ts";
+
+async function create(t: TestApp, cookie: string, body: unknown): Promise<string> {
+  const res = await postJson(t.app, "/api/envelopes", body, cookie);
+  expect(res.status).toBe(200);
+  return ((await res.json()) as CreateEnvelopeResponse).id;
+}
+
+async function parentOf(t: TestApp, cookie: string, id: string): Promise<string | null> {
+  const res = await getJson(t.app, "/api/envelopes", cookie);
+  expect(res.status).toBe(200);
+  const grid = (await res.json()) as GridResponse;
+  return grid.rows.find((r) => r.id === id)!.parentId;
+}
+
+describe("POST /api/envelopes/edit — parentId", () => {
+  test("re-parents under a nested envelope and back to top level", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const house = await create(t, cookie, { name: "House", type: "expense" });
+    const leasing = await create(t, cookie, { name: "Apartment Leasing", type: "expense", parentId: house });
+    const rates = await create(t, cookie, { name: "Council Rates", type: "expense", parentId: house });
+
+    let res = await postJson(t.app, "/api/envelopes/edit", { id: rates, parentId: leasing }, cookie);
+    expect(res.status).toBe(200);
+    expect(await parentOf(t, cookie, rates)).toBe(leasing);
+    // Siblings untouched.
+    expect(await parentOf(t, cookie, leasing)).toBe(house);
+
+    res = await postJson(t.app, "/api/envelopes/edit", { id: rates, parentId: null }, cookie);
+    expect(res.status).toBe(200);
+    expect(await parentOf(t, cookie, rates)).toBeNull();
+  });
+
+  test("refuses self-parenting and parenting under a descendant", async () => {
+    const t = await makeTestApp();
+    const cookie = await t.signIn();
+    const leasing = await create(t, cookie, { name: "Apartment Leasing", type: "expense" });
+    const fees = await create(t, cookie, { name: "Leasing Fees", type: "expense", parentId: leasing });
+
+    let res = await postJson(t.app, "/api/envelopes/edit", { id: leasing, parentId: leasing }, cookie);
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as ApiError).code).toBe("bad_request");
+
+    res = await postJson(t.app, "/api/envelopes/edit", { id: leasing, parentId: fees }, cookie);
+    expect(res.status).toBe(400);
+    expect(await parentOf(t, cookie, leasing)).toBeNull();
+
+    res = await postJson(t.app, "/api/envelopes/edit", { id: leasing, parentId: "no-such-envelope" }, cookie);
+    expect(res.status).toBe(404);
+  });
+});

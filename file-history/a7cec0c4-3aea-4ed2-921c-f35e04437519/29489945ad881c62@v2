@@ -1,0 +1,356 @@
+import * as React from "react";
+import { ArrowRight, CheckCircle2, AlertTriangle } from "lucide-react";
+import type { EnvelopeRow } from "@contract";
+import type { ChangeScope } from "@domain";
+import { call, isApiError } from "@/lib/api";
+import { useInvalidateBudget } from "@/lib/queries";
+import { formatCents, cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SearchableSelectContent,
+  type SearchableSelectOption,
+} from "@/components/ui/select";
+
+interface Props {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  rows: readonly EnvelopeRow[];
+  /**
+   * Income envelopes offered in BOTH pickers (owner requests 2026-08-14): as a
+   * source, only the excess over budget is movable (server caps at Left); as a
+   * destination, the move registers as received and covers an expected
+   * shortfall (e.g. adhoc excess → this month's missing rental).
+   */
+  incomes?: readonly { id: string; name: string; leftCents: number }[];
+  /** Optionally preselect the destination (e.g. opened from an envelope row). */
+  defaultToId?: string;
+  /** Optionally preselect the source (e.g. "move out of this envelope"). */
+  defaultFromId?: string;
+}
+
+/** Whole dollars typed in a field → integer cents (blank or junk → 0). */
+function toCents(text: string): number {
+  return Math.round((parseFloat(text) || 0) * 100);
+}
+
+/**
+ * Move-money (reallocation) modal. Names an explicit source (From) and
+ * destination (To); the amount leaving the source equals the amount entering
+ * the destination (ISC-66). Scope is this-month-only or every-month (ongoing,
+ * which edits the recurring template — ISC-67). A live indicator shows whether
+ * the plan stays balanced (ISC-69): a same-envelope reallocation always
+ * balances; moving from an envelope into deficit is allowed but flagged.
+ *
+ * Split funding (ISC-342..349, owner request 2026-09-12): when the source is a
+ * parent envelope the modal shows each child's Budget and Left and lets the
+ * total be made up from the children and the parent's own bucket in ONE
+ * action. The child amounts are typed; the parent's own bucket takes the
+ * remainder automatically, so the breakdown always sums to the total.
+ */
+export function MoveMoneyModal({ open, onOpenChange, rows, incomes = [], defaultToId, defaultFromId }: Props) {
+  const invalidateBudget = useInvalidateBudget();
+  // Free rebalancing: any envelope can be a source or destination (ISC-89).
+  const spendable = rows;
+  const [toId, setToId] = React.useState(defaultToId ?? spendable[0]?.id ?? "");
+  const [fromId, setFromId] = React.useState(defaultFromId ?? spendable[1]?.id ?? spendable[0]?.id ?? "");
+  const [amount, setAmount] = React.useState("");
+  // Per-child "take" amounts (dollars as typed), keyed by child envelope id.
+  const [childAmounts, setChildAmounts] = React.useState<Record<string, string>>({});
+  const [busy, setBusy] = React.useState(false);
+  const [result, setResult] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (open && defaultToId) setToId(defaultToId);
+  }, [open, defaultToId]);
+  React.useEffect(() => {
+    if (open && defaultFromId) setFromId(defaultFromId);
+  }, [open, defaultFromId]);
+
+  // Seed/repair both selections when the rows arrive while the modal is open.
+  // The detail page fetches the grid only once the modal opens, so the useState
+  // initialisers above ran with rows=[] and never re-run; without this the From
+  // select opened empty. A selection that still exists in rows is kept.
+  React.useEffect(() => {
+    if (!open || spendable.length === 0) return;
+    const has = (id: string) => spendable.some((r) => r.id === id);
+    setToId((prev) =>
+      prev !== "" && has(prev) ? prev : defaultToId && has(defaultToId) ? defaultToId : spendable[0]?.id ?? ""
+    );
+    setFromId((prev) => {
+      if (prev !== "" && has(prev)) return prev;
+      if (defaultFromId && has(defaultFromId)) return defaultFromId;
+      // Default the source to the first envelope that is not the preselected
+      // destination, mirroring the rows[1] ?? rows[0] initialiser intent.
+      return (spendable.find((r) => r.id !== defaultToId) ?? spendable[0])?.id ?? "";
+    });
+  }, [open, spendable, defaultToId, defaultFromId]);
+
+  // A fresh source means a fresh breakdown: the child amounts belong to the
+  // parent they were typed against.
+  React.useEffect(() => {
+    setChildAmounts({});
+  }, [fromId, open]);
+
+  // Both pickers share one list: envelopes plus income envelopes, searched and
+  // sorted with balances in the labels. Income as a SOURCE moves its excess
+  // (server-capped at Left); income as a DESTINATION covers an expected
+  // shortfall (the moved amount registers as received, shrinking the deficit).
+  const envelopeOptions = React.useMemo<readonly SearchableSelectOption[]>(
+    () => spendable.map((r) => ({ value: r.id, label: r.name, render: `${r.name} (${formatCents(r.leftCents)})` })),
+    [spendable],
+  );
+  const moveOptions = React.useMemo<readonly SearchableSelectOption[]>(
+    () => [
+      ...envelopeOptions.map((o) => ({ ...o, group: "envelopes" })),
+      ...incomes.map((i) => ({
+        value: i.id,
+        label: i.name,
+        render: `${i.name} (income · ${formatCents(i.leftCents)} excess)`,
+        group: "income",
+      })),
+    ],
+    [envelopeOptions, incomes],
+  );
+
+  const amountCents = toCents(amount);
+  const from = rows.find((r) => r.id === fromId);
+  const fromIncome = incomes.find((i) => i.id === fromId);
+  const sourceLeft = from?.leftCents ?? fromIncome?.leftCents ?? 0;
+  const sameEnvelope = fromId === toId;
+
+  // Split funding: the source's direct children (rolled figures each), the
+  // parent's OWN bucket (rolled minus the children, exact by the rollup's
+  // construction), and the remainder the parent absorbs.
+  const children = React.useMemo(
+    () => rows.filter((r) => r.parentId === fromId && r.id !== toId),
+    [rows, fromId, toId],
+  );
+  const isSplit = from !== undefined && children.length > 0;
+  const childrenLeft = children.reduce((s, c) => s + c.leftCents, 0);
+  const ownLeft = (from?.leftCents ?? 0) - childrenLeft;
+  const ownBudget = from?.ownAllocationCents ?? 0;
+  const childLegs = children.map((c) => ({ row: c, cents: toCents(childAmounts[c.id] ?? "") }));
+  const childCents = childLegs.reduce((s, l) => s + l.cents, 0);
+  const remainder = amountCents - childCents;
+  const overAllocated = isSplit && remainder < 0;
+  const deficitLegs = isSplit
+    ? [
+        ...childLegs.filter((l) => l.cents > l.row.leftCents).map((l) => l.row.name),
+        ...(remainder > ownLeft ? [`${from.name} (own)`] : []),
+      ]
+    : [];
+
+  // The plan stays balanced when every funding bucket can pay its leg without
+  // going negative. Conservation always holds (out === in); "balanced" here
+  // means no source falls into deficit.
+  const staysBalanced =
+    amountCents > 0 &&
+    !sameEnvelope &&
+    (isSplit ? !overAllocated && deficitLegs.length === 0 : amountCents <= sourceLeft);
+  const canSubmit = amountCents > 0 && !sameEnvelope && !overAllocated;
+
+  const onSubmit = async () => {
+    if (!canSubmit) return;
+    setBusy(true);
+    setResult(null);
+    try {
+      // Post to the free-reallocation endpoint; the move is recorded as a
+      // traceable movement (ISC-90) the History view then surfaces. A split
+      // carries its legs; the server checks they sum to the total and sit in
+      // the origin's subtree, and writes one movement row per leg.
+      const sources = isSplit
+        ? [
+            ...childLegs.filter((l) => l.cents > 0).map((l) => ({ envelopeId: l.row.id, amountCents: l.cents })),
+            ...(remainder > 0 ? [{ envelopeId: fromId, amountCents: remainder }] : []),
+          ]
+        : undefined;
+      const res = await call("POST /api/move", {
+        fromEnvelopeId: fromId,
+        toEnvelopeId: toId,
+        amountCents,
+        scope: "this_month",
+        ...(sources !== undefined ? { sources } : {}),
+      });
+      if (isApiError(res)) {
+        setResult(res.error);
+        return;
+      }
+      setAmount("");
+      setChildAmounts({});
+      // Invalidate the shared budget queries so the grid and net-position banner
+      // refresh atomically (the same money move touches both).
+      invalidateBudget();
+      onOpenChange(false);
+    } catch (e) {
+      setResult(e instanceof Error ? e.message : "Could not move money.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Move money</DialogTitle>
+          <DialogDescription>Reallocate between envelopes. Every dollar is conserved.</DialogDescription>
+        </DialogHeader>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
+          <div className="space-y-2">
+            <Label>From (source)</Label>
+            <Select value={fromId} onValueChange={setFromId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Source envelope" />
+              </SelectTrigger>
+              <SearchableSelectContent options={moveOptions} />
+            </Select>
+          </div>
+          <div className="hidden pb-2 sm:block">
+            <ArrowRight className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <div className="space-y-2">
+            <Label>To</Label>
+            <Select value={toId} onValueChange={setToId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Destination envelope" />
+              </SelectTrigger>
+              <SearchableSelectContent options={moveOptions} />
+            </Select>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="amount">{isSplit ? "Total amount (AUD)" : "Amount (AUD)"}</Label>
+          <Input
+            id="amount"
+            type="number"
+            min="0"
+            step="0.01"
+            inputMode="decimal"
+            placeholder="0.00"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Moves money between the two envelopes and shows as a line item in both. Budgets are not
+            changed.
+          </p>
+        </div>
+
+        {/* Split funding: make up the total from the parent's own bucket and its children */}
+        {isSplit && (
+          <div className="space-y-2" data-testid="split-panel">
+            <Label>Make up the total from</Label>
+            <div className="overflow-x-auto rounded-md border">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-muted-foreground">
+                  <tr>
+                    <th className="px-2 py-1 text-left font-medium">Envelope</th>
+                    <th className="px-2 py-1 text-right font-medium">Budget</th>
+                    <th className="px-2 py-1 text-right font-medium">Left</th>
+                    <th className="px-2 py-1 text-right font-medium">Take</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className={cn("border-t", remainder > ownLeft && "text-warning")} data-testid="split-own-row">
+                    <td className="px-2 py-1">{from.name} (own)</td>
+                    <td className="px-2 py-1 text-right tabular-nums">{formatCents(ownBudget)}</td>
+                    <td className="px-2 py-1 text-right tabular-nums">{formatCents(ownLeft)}</td>
+                    <td className="px-2 py-1 text-right tabular-nums" data-testid="split-remainder">
+                      {formatCents(Math.max(0, remainder))}
+                      <span className="block text-[10px] text-muted-foreground">remainder</span>
+                    </td>
+                  </tr>
+                  {childLegs.map(({ row, cents }) => (
+                    <tr key={row.id} className={cn("border-t", cents > row.leftCents && "text-warning")}>
+                      <td className="px-2 py-1">{row.name}</td>
+                      <td className="px-2 py-1 text-right tabular-nums">{formatCents(row.allocationCents)}</td>
+                      <td className="px-2 py-1 text-right tabular-nums">{formatCents(row.leftCents)}</td>
+                      <td className="px-2 py-1 text-right">
+                        <Input
+                          aria-label={`Take from ${row.name}`}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          className="h-8 w-24 text-right"
+                          value={childAmounts[row.id] ?? ""}
+                          onChange={(e) => setChildAmounts((prev) => ({ ...prev, [row.id]: e.target.value }))}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Type what each child gives; {from.name}&apos;s own bucket covers the rest. Each leg shows as its
+              own line item.
+            </p>
+          </div>
+        )}
+
+        {/* Budget-stays-balanced indicator */}
+        <div
+          className={cn(
+            "flex items-center gap-2 rounded-md px-3 py-2 text-sm",
+            sameEnvelope
+              ? "bg-muted text-muted-foreground"
+              : staysBalanced
+                ? "bg-success/15 text-success"
+                : "bg-warning/15 text-warning"
+          )}
+        >
+          {sameEnvelope ? (
+            <>Pick a different source and destination.</>
+          ) : overAllocated ? (
+            <>
+              <AlertTriangle className="h-4 w-4" /> The child amounts exceed the total by{" "}
+              {formatCents(-remainder)}. Lower them or raise the total.
+            </>
+          ) : staysBalanced ? (
+            <>
+              <CheckCircle2 className="h-4 w-4" /> Budget stays balanced — {from?.name} keeps{" "}
+              {formatCents(sourceLeft - amountCents)}.
+            </>
+          ) : isSplit ? (
+            <>
+              <AlertTriangle className="h-4 w-4" /> This move puts {deficitLegs.join(", ")} into deficit. Allowed,
+              but the zero-based alert will fire.
+            </>
+          ) : (
+            <>
+              <AlertTriangle className="h-4 w-4" /> This move puts {from?.name} into deficit. Allowed, but the
+              zero-based alert will fire.
+            </>
+          )}
+        </div>
+        {result && <p className="text-sm text-destructive">{result}</p>}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={onSubmit} disabled={busy || !canSubmit}>
+            {busy ? "Moving…" : "Move money"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

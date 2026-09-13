@@ -1,0 +1,274 @@
+import * as React from "react";
+import { Save, Wallet, TrendingUp, PiggyBank, Mail } from "lucide-react";
+import type { EnvelopeRow } from "@contract";
+import type { EnvelopeType } from "@domain";
+import { call, isApiError, ApiCallError } from "@/lib/api";
+import { useInvalidateBudget } from "@/lib/queries";
+import { cn, todayIso } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SearchableSelectContent,
+  type SearchableSelectOption,
+} from "@/components/ui/select";
+
+/**
+ * Edit CATEGORY modal (owner decision 2026-08-12): the category's identity and
+ * schedule anchors — name, parent, type, rollover start date, and (income) the
+ * expected receipt day. Budget amounts and windows are NOT here: they live in
+ * the budget widget and the category page's per-version editors. This is the
+ * "Edit category" button at the top of the category page.
+ */
+
+export interface CategoryEditTarget {
+  readonly id: string;
+  readonly name: string;
+  readonly type: EnvelopeType;
+  readonly parentId: string | null;
+  readonly rolloverStart: string | null;
+  /** Income only: expected receipt day (1..31) or null; undefined = unknown. */
+  readonly expectedDay?: number | null;
+}
+
+interface Props {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  target: CategoryEditTarget | null;
+  /** Parent candidates (expense-family). */
+  rows: readonly EnvelopeRow[];
+}
+
+/**
+ * Parent candidates for the picker: every expense-family grid row except the
+ * target itself and its descendants (re-parenting under your own child would
+ * create a cycle), preceded by the pinned "Top level" sentinel.
+ */
+export function parentCandidates(
+  rows: readonly Pick<EnvelopeRow, "id" | "name" | "parentId" | "type">[],
+  targetId: string | null | undefined,
+  currentParentId?: string | null,
+): readonly SearchableSelectOption[] {
+  const excluded = new Set<string>();
+  if (targetId) {
+    excluded.add(targetId);
+    // Walk the tree until no new descendants appear (rows are unordered).
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const r of rows) {
+        if (r.parentId && excluded.has(r.parentId) && !excluded.has(r.id)) {
+          excluded.add(r.id);
+          grew = true;
+        }
+      }
+    }
+  }
+  const options = rows
+    .filter((r) => r.type !== "income" && !excluded.has(r.id))
+    .map((r) => ({ value: r.id, label: r.name }));
+  // The current parent must always be selectable so the trigger never renders
+  // blank and an untouched save re-sends the same parent: cover the grid still
+  // loading and a parent that has since been archived (absent from the grid).
+  if (currentParentId && !options.some((o) => o.value === currentParentId)) {
+    options.unshift({ value: currentParentId, label: "Current parent" });
+  }
+  return [{ value: "__top__", label: "Top level (no parent)", pin: "top" }, ...options];
+}
+
+const TYPE_OPTIONS: readonly { value: EnvelopeType; label: string; icon: typeof Wallet }[] = [
+  { value: "income", label: "Income", icon: TrendingUp },
+  { value: "expense", label: "Expense", icon: Wallet },
+  { value: "saving", label: "Saving", icon: PiggyBank },
+  { value: "envelope", label: "Envelope", icon: Mail },
+];
+
+export function EditCategoryModal({ open, onOpenChange, target, rows }: Props) {
+  const invalidateBudget = useInvalidateBudget();
+  const isIncome = target?.type === "income";
+
+  const [name, setName] = React.useState("");
+  const [type, setType] = React.useState<EnvelopeType>("expense");
+  const [parentId, setParentId] = React.useState("__top__");
+  const parentOptions = React.useMemo<readonly SearchableSelectOption[]>(
+    () => parentCandidates(rows, target?.id, target?.parentId),
+    [rows, target],
+  );
+  const [rolloverStart, setRolloverStart] = React.useState("");
+  const [expectedDay, setExpectedDay] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  // Value-keyed reset (never object identity — see AddBudgetModal).
+  const resetKeyRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    const key = open ? target?.id ?? null : null;
+    if (!open) {
+      resetKeyRef.current = null;
+      return;
+    }
+    if (resetKeyRef.current === key || !target) return;
+    resetKeyRef.current = key;
+    setError(null);
+    setBusy(false);
+    setName(target.name);
+    setType(target.type);
+    setParentId(target.parentId ?? "__top__");
+    setRolloverStart(target.rolloverStart ?? "");
+    setExpectedDay(target.expectedDay != null ? String(target.expectedDay) : "");
+  }, [open, target]);
+
+  const canSubmit = name.trim().length > 0 && !busy;
+
+  const onSubmit = async () => {
+    if (!canSubmit || !target) return;
+    setBusy(true);
+    setError(null);
+    try {
+      // The rollover anchor first (its own owned route), then the identity.
+      if (rolloverStart && rolloverStart !== (target.rolloverStart ?? "")) {
+        const rr = await call("POST /api/envelopes/rollover", {
+          envelopeId: target.id,
+          rolloverStart,
+        });
+        if (isApiError(rr)) {
+          setError(rr.error);
+          return;
+        }
+      }
+      const res = await call("POST /api/envelopes/edit", {
+        id: target.id,
+        name: name.trim(),
+        ...(isIncome
+          ? {
+              // Blank clears only when the opener KNEW the current value.
+              ...(expectedDay
+                ? { expectedDay: Math.min(31, Math.max(1, Number(expectedDay))) }
+                : target.expectedDay != null
+                  ? { expectedDay: null }
+                  : {}),
+            }
+          : {
+              type,
+              parentId: parentId !== "__top__" ? parentId : null,
+            }),
+      });
+      if (isApiError(res)) {
+        setError(res.error);
+        return;
+      }
+      invalidateBudget();
+      onOpenChange(false);
+    } catch (e) {
+      setError(e instanceof ApiCallError || e instanceof Error ? e.message : "Could not save the category.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit category{target ? ` — ${target.name}` : ""}</DialogTitle>
+          <DialogDescription>
+            The category's identity and schedule anchors. Budgets are edited from the budget widget or the
+            version list below the category.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-2">
+          <Label htmlFor="cat-name">Name</Label>
+          <Input id="cat-name" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+
+        {!isIncome && (
+          <>
+            <div className="space-y-2">
+              <Label>Type</Label>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {TYPE_OPTIONS.filter((t) => t.value !== "income").map(({ value, label, icon: Icon }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setType(value)}
+                    className={cn(
+                      "flex items-center justify-center gap-1.5 rounded-md border px-2 py-2 text-sm font-medium transition-colors",
+                      type === value ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent",
+                    )}
+                  >
+                    <Icon className="h-4 w-4" /> {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Parent / category</Label>
+              <Select value={parentId} onValueChange={setParentId}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SearchableSelectContent options={parentOptions} />
+              </Select>
+            </div>
+          </>
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor="cat-rollover">Rollover start date</Label>
+          <Input
+            id="cat-rollover"
+            type="date"
+            max={todayIso()}
+            value={rolloverStart}
+            onChange={(e) => setRolloverStart(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            The anchor the rollover schedule counts from. Changing it re-anchors running balances.
+          </p>
+        </div>
+
+        {isIncome && (
+          <div className="space-y-2">
+            <Label htmlFor="cat-expected-day">Expected on day of month (optional)</Label>
+            <Input
+              id="cat-expected-day"
+              type="number"
+              min="1"
+              max="31"
+              inputMode="numeric"
+              placeholder="e.g. 11"
+              value={expectedDay}
+              onChange={(e) => setExpectedDay(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Until this day the income reads carryover + received; from it the month's income is due.
+            </p>
+          </div>
+        )}
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={() => void onSubmit()} disabled={!canSubmit}>
+            <Save className="h-4 w-4" /> {busy ? "Saving…" : "Save category"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

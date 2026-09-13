@@ -1,0 +1,51 @@
+/**
+ * Edit category → parent picker candidates (v1.25.2). The picker was starved on
+ * the detail page (the grid was only fetched for the move/edit modals), and the
+ * candidate list must never offer the target itself or its own descendants.
+ */
+import { describe, it, expect } from "bun:test";
+import { parentCandidates } from "@/components/EditCategoryModal";
+
+const rows = [
+  { id: "cat-house", name: "House", parentId: null, type: "expense" as const },
+  { id: "env-council-rates", name: "Council Rates", parentId: "cat-house", type: "expense" as const },
+  { id: "apt-leasing", name: "Apartment Leasing", parentId: "cat-house", type: "expense" as const },
+  { id: "apt-maint", name: "Apartment Maintenance", parentId: "apt-leasing", type: "expense" as const },
+  { id: "leasing-fees", name: "Leasing Fees", parentId: "apt-leasing", type: "expense" as const },
+  { id: "inc-salary", name: "Salary", parentId: null, type: "income" as const },
+];
+
+describe("parentCandidates", () => {
+  it("offers nested envelopes (Apartment Leasing) as a parent for Council Rates", () => {
+    const labels = parentCandidates(rows, "env-council-rates").map((o) => o.label);
+    expect(labels[0]).toBe("Top level (no parent)");
+    expect(labels).toContain("Apartment Leasing");
+    expect(labels).toContain("House");
+    expect(labels).toContain("Apartment Maintenance");
+  });
+
+  it("excludes the target itself, its descendants, and income rows", () => {
+    const labels = parentCandidates(rows, "apt-leasing").map((o) => o.label);
+    expect(labels).not.toContain("Apartment Leasing");
+    expect(labels).not.toContain("Apartment Maintenance");
+    expect(labels).not.toContain("Leasing Fees");
+    expect(labels).not.toContain("Salary");
+    expect(labels).toEqual(["Top level (no parent)", "House", "Council Rates"]);
+  });
+
+  it("with no target only filters income", () => {
+    expect(parentCandidates(rows, null).map((o) => o.label)).toHaveLength(6);
+  });
+
+  it("keeps the current parent selectable while the grid is loading or the parent is archived", () => {
+    // Grid not loaded yet: rows empty, the current parent must still resolve.
+    expect(parentCandidates([], "env-council-rates", "cat-house")).toEqual([
+      { value: "__top__", label: "Top level (no parent)", pin: "top" },
+      { value: "cat-house", label: "Current parent" },
+    ]);
+    // Parent present in the grid: no synthetic entry, the real name wins.
+    const labels = parentCandidates(rows, "env-council-rates", "cat-house").map((o) => o.label);
+    expect(labels.filter((l) => l === "House")).toHaveLength(1);
+    expect(labels).not.toContain("Current parent");
+  });
+});

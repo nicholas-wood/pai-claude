@@ -1,0 +1,144 @@
+/**
+ * Split funding from a parent source (ISC-342..349, owner request 2026-09-12):
+ * when the From envelope has children the modal shows each child's Budget and
+ * Left, lets the total be made up from the children, and the parent's own
+ * bucket absorbs the remainder — one submit, one payload with `sources`.
+ * The From selection is seeded via defaultFromId (Radix Select cannot be driven
+ * in happy-dom); the API is mocked to capture the posted body.
+ */
+import { describe, it, expect, mock, beforeEach } from "bun:test";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import type { EnvelopeRow } from "@contract";
+import * as realApi from "@/lib/api";
+import { TestQueryProvider } from "@/test/utils";
+
+let posted: { path: string; body: unknown }[] = [];
+const call = mock(async (path: string, body?: unknown) => {
+  posted.push({ path, body });
+  return { ok: true, fromLeftCents: 0, toLeftCents: 0, zeroBasedAlert: false, legs: [] };
+});
+mock.module("@/lib/api", () => ({ ...realApi, call }));
+
+const { MoveMoneyModal } = await import("@/components/MoveMoneyModal");
+
+function row(id: string, name: string, over: Partial<EnvelopeRow> = {}): EnvelopeRow {
+  return {
+    id,
+    parentId: null,
+    name,
+    group: "Living",
+    rolloverRule: "roll_carry",
+    targetType: "no_target",
+    targetAmountCents: 0,
+    type: "expense",
+    active: true,
+    archived: false,
+    period: "monthly",
+    rolloverStart: null,
+    carryoverCents: 0,
+    allocationCents: 10000,
+    totalCents: 10000,
+    leftCents: 10000,
+    depth: 0,
+    ...over,
+  };
+}
+
+// Kids (parent): rolled Left 300 = own 50 + School 150 + Sport 100; own budget 80.
+const rows = [
+  row("P", "Kids", { allocationCents: 33000, ownAllocationCents: 8000, totalCents: 33000, leftCents: 30000 }),
+  row("C1", "School", { parentId: "P", depth: 1, allocationCents: 15000, totalCents: 15000, leftCents: 15000 }),
+  row("C2", "Sport", { parentId: "P", depth: 1, allocationCents: 10000, totalCents: 10000, leftCents: 10000 }),
+  row("D", "Holiday"),
+];
+
+const noop = () => undefined;
+
+function renderModal(defaultFromId: string) {
+  return render(
+    <TestQueryProvider>
+      <MoveMoneyModal open onOpenChange={noop} rows={rows} defaultFromId={defaultFromId} defaultToId="D" />
+    </TestQueryProvider>
+  );
+}
+
+beforeEach(() => {
+  posted = [];
+  call.mockClear();
+});
+
+describe("MoveMoneyModal — split funding from a parent source", () => {
+  it("seeds From with defaultFromId (ISC-342)", async () => {
+    renderModal("P");
+    const combos = screen.getAllByRole("combobox");
+    await waitFor(() => expect(combos[0]!).toHaveTextContent("Kids"));
+    expect(combos[1]!).toHaveTextContent("Holiday");
+  });
+
+  it("a leaf source renders no breakdown panel and posts no sources (ISC-349)", async () => {
+    renderModal("C1");
+    await waitFor(() => expect(screen.getAllByRole("combobox")[0]!).toHaveTextContent("School"));
+    expect(screen.queryByTestId("split-panel")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Amount (AUD)"), { target: { value: "10" } });
+    fireEvent.click(screen.getByRole("button", { name: "Move money" }));
+    await waitFor(() => expect(posted.length).toBe(1));
+    expect(posted[0]!.body).toEqual({ fromEnvelopeId: "C1", toEnvelopeId: "D", amountCents: 1000, scope: "this_month" });
+  });
+
+  it("a parent source shows each child's Budget and Left plus the parent's own row (ISC-343, ISC-344)", async () => {
+    renderModal("P");
+    const panel = await screen.findByTestId("split-panel");
+    const rowsIn = within(panel).getAllByRole("row");
+    // header + own + School + Sport
+    expect(rowsIn.length).toBe(4);
+    expect(within(panel).getByText("School")).toBeTruthy();
+    expect(within(panel).getByText("Sport")).toBeTruthy();
+    const school = within(panel).getByText("School").closest("tr")!;
+    expect(school).toHaveTextContent("$150.00");
+    const own = within(panel).getByTestId("split-own-row");
+    expect(own).toHaveTextContent("Kids (own)");
+    // Own budget 80.00; own left = 300 − (150 + 100) = 50.00.
+    expect(own).toHaveTextContent("$80.00");
+    expect(own).toHaveTextContent("$50.00");
+  });
+
+  it("the parent's own row takes the remainder and a leg beyond its Left is flagged (ISC-345, ISC-348)", async () => {
+    renderModal("P");
+    await screen.findByTestId("split-panel");
+    fireEvent.change(screen.getByLabelText("Total amount (AUD)"), { target: { value: "120" } });
+    fireEvent.change(screen.getByLabelText("Take from School"), { target: { value: "50" } });
+    expect(screen.getByTestId("split-remainder")).toHaveTextContent("$70.00");
+    // Remainder 70 > own Left 50: flagged, allowed.
+    expect(screen.getByText(/puts Kids \(own\) into deficit/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Move money" })).not.toBeDisabled();
+  });
+
+  it("submit posts the child legs plus the parent remainder as sources (ISC-346)", async () => {
+    renderModal("P");
+    await screen.findByTestId("split-panel");
+    fireEvent.change(screen.getByLabelText("Total amount (AUD)"), { target: { value: "120" } });
+    fireEvent.change(screen.getByLabelText("Take from School"), { target: { value: "50" } });
+    fireEvent.click(screen.getByRole("button", { name: "Move money" }));
+    await waitFor(() => expect(posted.length).toBe(1));
+    expect(posted[0]!.path).toBe("POST /api/move");
+    expect(posted[0]!.body).toEqual({
+      fromEnvelopeId: "P",
+      toEnvelopeId: "D",
+      amountCents: 12000,
+      scope: "this_month",
+      sources: [
+        { envelopeId: "C1", amountCents: 5000 },
+        { envelopeId: "P", amountCents: 7000 },
+      ],
+    });
+  });
+
+  it("child amounts above the total disable submit with a message (ISC-347)", async () => {
+    renderModal("P");
+    await screen.findByTestId("split-panel");
+    fireEvent.change(screen.getByLabelText("Total amount (AUD)"), { target: { value: "100" } });
+    fireEvent.change(screen.getByLabelText("Take from School"), { target: { value: "150" } });
+    expect(screen.getByText(/exceed the total by \$50\.00/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Move money" })).toBeDisabled();
+  });
+});
