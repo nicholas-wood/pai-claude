@@ -1,50 +1,47 @@
 {
   "proto": 1,
   "supervisorPid": 708864,
-  "updatedAt": 1789300340627,
+  "updatedAt": 1789368321225,
   "workers": {
-    "8b23591a": {
-      "pid": 698373,
-      "procStart": "235473579",
-      "sessionId": "8b23591a-7a7b-4d5a-a193-46c8953e6011",
-      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/8b23591a.sock",
-      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/d5b06ffa.pty.sock",
-      "cliVersion": "2.1.269",
-      "startedAt": 1789263719010,
+    "bd0bfa70": {
+      "pid": 708879,
+      "procStart": "235476147",
+      "sessionId": "bd0bfa70-fd6d-4150-a9ec-b00f1f99d0aa",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/bd0bfa70.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/64d1b1b1.pty.sock",
+      "cliVersion": "2.1.270",
+      "startedAt": 1789364689053,
       "attempt": 1,
       "cwd": "/home/nicholas-wood/.claude",
       "dispatch": {
         "proto": 1,
-        "short": "8b23591a",
-        "nonce": "ec6b4c05",
-        "sessionId": "8b23591a-7a7b-4d5a-a193-46c8953e6011",
-        "createdAt": 1789263719006,
+        "short": "bd0bfa70",
+        "nonce": "6c589c3f",
+        "sessionId": "bd0bfa70-fd6d-4150-a9ec-b00f1f99d0aa",
+        "createdAt": 1789364689048,
         "source": "fleet",
         "cwd": "/home/nicholas-wood/.claude",
         "launch": {
-          "mode": "resume",
-          "sessionId": "8b23591a-7a7b-4d5a-a193-46c8953e6011",
-          "transcriptPath": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/8b23591a-7a7b-4d5a-a193-46c8953e6011.jsonl",
-          "fork": false,
-          "flagArgs": [
+          "mode": "prompt",
+          "args": [
+            "--session-id",
+            "bd0bfa70-fd6d-4150-a9ec-b00f1f99d0aa",
             "--agent",
             "claude",
-            "--model",
-            "fable[1m]"
+            "--",
+            "Summarise all the activities I have done in my SLCO role since setting this up. Headlines only. LIMSOC Priorities doc is one, incident categorisation is another."
           ],
-          "restoresTranscript": true
+          "restoresTranscript": false
         },
         "env": {},
         "isolation": "none",
         "respawnFlags": [
           "--agent",
-          "claude",
-          "--model",
-          "fable[1m]"
+          "claude"
         ],
         "agent": "claude",
         "seed": {
-          "intent": ""
+          "intent": "Summarise all the activities I have done in my SLCO role since setting this up. Headlines only. LIMSOC Priorities doc is one, incident categorisation is another."
         },
         "cols": 214,
         "rows": 50
@@ -58,21 +55,10 @@
         2031,
         1004
       ],
-      "firedInteractiveMarks": [
-        {
-          "kind": "content_paint",
-          "msgsLoaded": 15,
-          "msgsInJsonl": 15,
-          "msgsRenderedAtFirstPaint": 15
-        },
-        {
-          "kind": "prompt_idle"
-        }
-      ],
-      "rvAuth": "1c832931dc1221413457f7018f028f39",
-      "ptyAuth": "bc6ac423dc4eddd0f158cfd78403908e",
-      "replPid": 698391,
-      "replProcStart": "235473600"
+      "rvAuth": "d9774058fb0d96879645eeacbf4b50e9",
+      "ptyAuth": "74b7df478d8931e13d34179271a65f8c",
+      "replPid": 709003,
+      "replProcStart": "235476163"
     }
   }
 }
