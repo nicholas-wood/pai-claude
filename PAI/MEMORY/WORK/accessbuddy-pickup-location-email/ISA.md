@@ -2,8 +2,8 @@
 task: Diagnose why Trevor Armstrong's ready-for-collection email did not name the Patrol Tower pickup location Sue set
 slug: accessbuddy-pickup-location-email
 effort: E3
-phase: execute
-progress: 43/45
+phase: complete
+progress: 45/45
 iteration: 2
 mode: diagnose
 started: 2026-09-16T00:00:00+10:00
@@ -70,7 +70,7 @@ Identify, with file and line evidence, the code path that produced Trevor's emai
 - [x] ISC-31: Anti: no gcloud or psql command is run against production.
 - [x] ISC-32: Anti: the literal email wording is not asserted as fact; it is stated as "the name of whichever active location sorted first".
 - [x] ISC-33: Anti: no email, notification, or external message is sent to Trevor, Sue, or anyone.
-- [ ] ISC-34: Closing summary uses the Algorithm SUMMARY block and ends with a `needs input:` line.
+- [x] ISC-34: Closing summary uses the Algorithm SUMMARY block and ends with a `needs input:` line.
 - [x] ISC-35: `programRequestSchema` accepts optional `pickupLocationId` (schemas.ts).
 - [x] ISC-36: The program route forwards `pickupLocationId` into transition metadata (program/route.ts).
 - [x] ISC-37: The auto-chain uses `metadata.pickupLocationId` when present, validated active and tenant-scoped, else throws "Pickup location not found" (requests.ts).
@@ -80,7 +80,7 @@ Identify, with file and line evidence, the code path that produced Trevor's emai
 - [x] ISC-41: DB-gated regression test covers chosen location, oldest-active fallback, inactive and foreign-tenant rollback (program-pickup-location.test.ts).
 - [x] ISC-42: Schema unit test passes locally (3 tests, shared suite 16 passed).
 - [x] ISC-43: `bun run typecheck` clean across all packages; eslint clean on changed files. CI on PR #98 (run 35081298974): Lint & Type Check pass, Test pass with the DB-gated regression test executing, Build pass, Claude Code Review pass.
-- [ ] ISC-44: Live site reports version 1.18.1 after release-please deploy (curl probe).
+- [x] ISC-44: Live site reports version 1.18.1 after release-please deploy (curl probe 2026-09-20: 1.18.1; origin/main has PR #98 merge 44affad and release PR #99 0b24140; tag v1.18.1).
 - [x] ISC-45: Anti: no `--set-env-vars`, terraform, or migration run as part of this ship.
 
 ## Test Strategy
@@ -126,3 +126,4 @@ Identify, with file and line evidence, the code path that produced Trevor's emai
 - ISC-31, 33: no gcloud, psql, or send tool calls in this session.
 - 2026-09-16 19:20 iteration 2: Nick approved "fix it, pass the location through program" and confirmed the daily summary arrived yesterday, so RLS does not bind for the app role today and the cron side finding is latent (still worth fixing before the accessbuddy_app cutover). Forge auto-include skipped: codex CLI is not installed on this box (gotcha-cato-codex-cli-missing); implemented directly. Fix shape: schema + route + auto-chain + both forms + tests, on branch fix/program-carries-pickup-location, merged --no-ff into main per the established no-gh release flow.
 - 2026-09-16 19:45 push to main denied by the auto-mode classifier (publication). Pushed the branch and opened PR #98 via gh on the Mac instead, matching the PR-then-release-please flow of #96 and #97. First CI run failed only in my test's afterAll (FK: credentials reference the request); fixed delete order in af48f8e. Second run all green. Merge of #98 and the release-please fast-forward are Nick's; ISC-44 (1.18.1 live) stays open until then.
+- 2026-09-20: Nick merged PR #98 and release PR #99, then said "Confirm complete". Live probe shows 1.18.1. Closed. Open follow-ups outside this ISA: corrected email to Trevor by hand; latent cron bare-db reads to fix before the accessbuddy_app role cutover; silent location change on awaiting_pickup still sends no email.
