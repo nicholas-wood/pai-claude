@@ -1,6 +1,0 @@
-import { Database } from "bun:sqlite";
-const db = new Database(`${process.env.HOME}/.penny/penny.db`, { readonly: true });
-const bad = db.query(`SELECT COUNT(*) n FROM allocations WHERE length(period) <> 7 OR substr(period,5,1) <> '-'`).get();
-const sep = db.query(`SELECT COUNT(*) n, SUM(amount_cents) c FROM allocations WHERE period='2026-09'`).get();
-console.log("live malformed rows:", JSON.stringify(bad), "| live 2026-09:", JSON.stringify(sep));
-process.exit(0);

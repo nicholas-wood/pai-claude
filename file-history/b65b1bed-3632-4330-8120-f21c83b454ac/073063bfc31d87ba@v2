@@ -1,7 +1,0 @@
-import { Database } from "bun:sqlite";
-const db = new Database(`${process.env.HOME}/.penny/penny.db`, { readonly: true });
-const q = (sql: string) => db.query(sql).all();
-console.log("PENDING TXNS:", JSON.stringify(q(`SELECT txn_date, amount_cents, payee, is_transfer, account_id FROM transactions WHERE is_pending = 1 ORDER BY txn_date`), null, 1));
-console.log("AUG PENDING NON-TRANSFER SUM:", JSON.stringify(q(`SELECT SUM(amount_cents) c, COUNT(*) n FROM transactions WHERE is_pending = 1 AND is_transfer = 0 AND txn_date LIKE '2026-08%'`)));
-console.log("ALL PENDING NON-TRANSFER SUM:", JSON.stringify(q(`SELECT SUM(amount_cents) c, COUNT(*) n FROM transactions WHERE is_pending = 1 AND is_transfer = 0`)));
-process.exit(0);
