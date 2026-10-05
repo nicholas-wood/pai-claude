@@ -46,3 +46,4 @@
 - [AccessBuddy v1.18.1 pickup location](project-accessbuddy-v1181-pickup-location.md) — email fired before admin's location saved; fixed 20 Sep; latent cron bare-db RLS risk at accessbuddy_app cutover, silent location change still open
 - [AccessBuddy contact form fix](project-accessbuddy-contact-form-fix.md) — prod form rejected all enquiries (blank destination, Belinda Porter 20 Sep); v1.18.2 live with global-admin fallback; set CONTACT_EMAIL before RLS cutover; delivery unprobed
 - [AccessBuddy PR #102 audit log](project-accessbuddy-pr102-audit-log.md) — resend label + change-only member edit diff, open 20 Sep awaiting merge; form PUTs every field, new metadata.action needs labels in both renderers
+- [Two Pulse daemons (Mac + Linux)](gotcha-two-pulse-daemons-mac-linux.md) — alerts Nick hears may come from the Mac instance; fixes do not sync; check ssh mac before saying a job is healthy
