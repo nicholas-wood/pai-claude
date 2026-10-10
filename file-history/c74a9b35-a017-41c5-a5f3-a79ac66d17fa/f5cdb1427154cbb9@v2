@@ -1,0 +1,101 @@
+-- Read-only: login/activity check for membership@ and belinda.porter@ (tenant south-melb-lsc).
+-- SELECT-only. No writes.
+\set ON_ERROR_STOP off
+\pset format aligned
+\pset pager off
+\timing off
+
+select now() at time zone 'Australia/Melbourne' as db_now_melb;
+
+select set_config('app.current_tenant_id',
+       (select id::text from tenants where slug = 'south-melb-lsc'), false) as tenant_ctx;
+
+\echo '== 1. users rows (exact stored email shows any case mismatch)'
+select id as user_id, first_name, last_name, email,
+       (email = lower(email)) as email_is_lowercase,
+       left(firebase_uid, 6) as fb_uid_prefix,
+       created_at at time zone 'Australia/Melbourne' as created_melb
+from users
+where lower(email) in ('membership@southmelbournelsc.com.au','belinda.porter@southmelbournelsc.com.au')
+   or (first_name ilike 'belinda%' and last_name ilike 'porter%')
+order by email;
+
+\echo '== 2. admin assignments for those users'
+select u.email, a.role_type, a.permissions, t.slug as tenant,
+       a.created_at at time zone 'Australia/Melbourne' as created_melb
+from users u
+join admin_assignments a on a.user_id = u.id
+left join tenants t on t.id = a.tenant_id
+where lower(u.email) in ('membership@southmelbournelsc.com.au','belinda.porter@southmelbournelsc.com.au')
+   or (u.first_name ilike 'belinda%' and u.last_name ilike 'porter%');
+
+\echo '== 3. memberships for those users'
+select u.email, m.status, m.membership_category, m.current_season,
+       m.is_officer, m.is_board_member, m.is_staff,
+       m.expires_at at time zone 'Australia/Melbourne' as expires_melb
+from users u
+join tenant_memberships m on m.user_id = u.id
+where lower(u.email) in ('membership@southmelbournelsc.com.au','belinda.porter@southmelbournelsc.com.au')
+   or (u.first_name ilike 'belinda%' and u.last_name ilike 'porter%');
+
+\echo '== 4. all admins in the tenant (is Belinda an admin under another address?)'
+select u.first_name, u.last_name, u.email, a.role_type
+from admin_assignments a join users u on u.id = a.user_id
+order by u.last_name, u.first_name;
+
+\echo '== 5. login audit entries, last 60 days (tenant-scoped rows only; RLS hides null-tenant logins)'
+select l.created_at at time zone 'Australia/Melbourne' as at_melb,
+       u.email, l.metadata->>'method' as method, l.ip_address
+from audit_log l join users u on u.id = l.actor_id
+where l.action = 'login'
+  and lower(u.email) in ('membership@southmelbournelsc.com.au','belinda.porter@southmelbournelsc.com.au')
+  and l.created_at > now() - interval '60 days'
+order by l.created_at desc
+limit 40;
+
+\echo '== 6. activity by action as actor, last 30 days'
+select u.email, l.action, count(*) as n,
+       max(l.created_at) at time zone 'Australia/Melbourne' as latest_melb
+from audit_log l join users u on u.id = l.actor_id
+where lower(u.email) in ('membership@southmelbournelsc.com.au','belinda.porter@southmelbournelsc.com.au')
+  and l.created_at > now() - interval '30 days'
+group by u.email, l.action
+order by u.email, n desc;
+
+\echo '== 7. activity per day as actor, last 30 days'
+select u.email, (l.created_at at time zone 'Australia/Melbourne')::date as day_melb, count(*) as n
+from audit_log l join users u on u.id = l.actor_id
+where lower(u.email) in ('membership@southmelbournelsc.com.au','belinda.porter@southmelbournelsc.com.au')
+  and l.created_at > now() - interval '30 days'
+group by 1, 2 order by 2 desc, 1;
+
+\echo '== 8. emails sent to / failed for these users, last 30 days'
+select l.created_at at time zone 'Australia/Melbourne' as at_melb, u.email, l.action,
+       coalesce(l.metadata->>'template', l.metadata->>'templateName', l.metadata->>'event') as template,
+       l.metadata->>'error' as error
+from audit_log l join users u on u.id = l.entity_id
+where l.action in ('email_sent','email_failed')
+  and lower(u.email) in ('membership@southmelbournelsc.com.au','belinda.porter@southmelbournelsc.com.au')
+  and l.created_at > now() - interval '30 days'
+order by l.created_at desc
+limit 30;
+
+\echo '== 9. OTP codes issued, last 30 days (hash never selected)'
+select email, created_at at time zone 'Australia/Melbourne' as created_melb,
+       expires_at at time zone 'Australia/Melbourne' as expires_melb,
+       attempts, consumed_at at time zone 'Australia/Melbourne' as consumed_melb
+from otp_codes
+where lower(email) in ('membership@southmelbournelsc.com.au','belinda.porter@southmelbournelsc.com.au')
+  and created_at > now() - interval '30 days'
+order by created_at desc
+limit 30;
+
+\echo '== 10. live rate-limit buckets for either address'
+select key, count, reset_at at time zone 'Australia/Melbourne' as reset_melb
+from rate_limit_buckets
+where key ilike '%membership@southmelbournelsc%' or key ilike '%belinda.porter%';
+
+\echo '== 11. passkeys registered'
+select u.email, w.device_name, w.created_at at time zone 'Australia/Melbourne' as created_melb
+from webauthn_credentials w join users u on u.id = w.user_id
+where lower(u.email) in ('membership@southmelbournelsc.com.au','belinda.porter@southmelbournelsc.com.au');

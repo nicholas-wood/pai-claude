@@ -1,0 +1,132 @@
+/**
+ * Pure diff for the admin member edit. The edit form submits every field on
+ * each save, so "field present in the body" says nothing about whether it
+ * changed. Audit lines and the credential review flag must come from a
+ * comparison against the stored values.
+ */
+
+export type StoredMember = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  membershipCategory: string | null;
+  isOfficer: boolean;
+  isBoardMember: boolean;
+  isStaff: boolean;
+  accessLevelId: string | null;
+  officerExpiresAt: Date | null;
+  boardExpiresAt: Date | null;
+};
+
+export type SubmittedMember = {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  membershipCategory?: string;
+  isOfficer?: boolean;
+  isBoardMember?: boolean;
+  isStaff?: boolean;
+  accessLevelId?: string | null;
+  officerExpiresAt?: string;
+  boardExpiresAt?: string;
+};
+
+export type MemberField =
+  | "name"
+  | "email"
+  | "membershipCategory"
+  | "isOfficer"
+  | "isBoardMember"
+  | "isStaff"
+  | "accessLevelId"
+  | "officerExpiresAt"
+  | "boardExpiresAt";
+
+export type MemberUpdateDiff = {
+  changed: Set<MemberField>;
+  /**
+   * Audit lines for every changed field except the access level, whose line
+   * needs access level names (and the rule-override context) from the DB.
+   */
+  lines: string[];
+  /** Officer, board, staff or category changed: active credentials need an access review. */
+  accessAffecting: boolean;
+};
+
+export function normaliseEmail(email: string): string {
+  return email.toLowerCase().trim();
+}
+
+// The form edits expiries as calendar dates, so compare on the date alone.
+function dateOnly(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  const d = typeof value === "string" ? new Date(value) : value;
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+}
+
+export function diffMemberUpdate(stored: StoredMember, submitted: SubmittedMember): MemberUpdateDiff {
+  const changed = new Set<MemberField>();
+  const lines: string[] = [];
+
+  const nextFirst = submitted.firstName ?? stored.firstName;
+  const nextLast = submitted.lastName ?? stored.lastName;
+  if (nextFirst !== stored.firstName || nextLast !== stored.lastName) {
+    changed.add("name");
+    lines.push(`name: ${`${stored.firstName} ${stored.lastName}`.trim()} -> ${`${nextFirst} ${nextLast}`.trim()}`);
+  }
+
+  if (submitted.email !== undefined && normaliseEmail(submitted.email) !== normaliseEmail(stored.email)) {
+    changed.add("email");
+    lines.push(`email: ${stored.email} -> ${normaliseEmail(submitted.email)}`);
+  }
+
+  if (
+    submitted.membershipCategory !== undefined &&
+    submitted.membershipCategory !== stored.membershipCategory
+  ) {
+    changed.add("membershipCategory");
+    lines.push(`category: ${stored.membershipCategory ?? "(none)"} -> ${submitted.membershipCategory}`);
+  }
+
+  if (submitted.isOfficer !== undefined && submitted.isOfficer !== stored.isOfficer) {
+    changed.add("isOfficer");
+    lines.push(`officer: ${submitted.isOfficer}`);
+  }
+  if (submitted.isBoardMember !== undefined && submitted.isBoardMember !== stored.isBoardMember) {
+    changed.add("isBoardMember");
+    lines.push(`board: ${submitted.isBoardMember}`);
+  }
+  if (submitted.isStaff !== undefined && submitted.isStaff !== stored.isStaff) {
+    changed.add("isStaff");
+    lines.push(`staff: ${submitted.isStaff}`);
+  }
+
+  if (submitted.accessLevelId !== undefined && submitted.accessLevelId !== stored.accessLevelId) {
+    changed.add("accessLevelId");
+  }
+
+  if (submitted.officerExpiresAt !== undefined) {
+    const from = dateOnly(stored.officerExpiresAt);
+    const to = dateOnly(submitted.officerExpiresAt);
+    if (from !== to) {
+      changed.add("officerExpiresAt");
+      lines.push(`officer expiry: ${from ?? "(none)"} -> ${to ?? "(none)"}`);
+    }
+  }
+  if (submitted.boardExpiresAt !== undefined) {
+    const from = dateOnly(stored.boardExpiresAt);
+    const to = dateOnly(submitted.boardExpiresAt);
+    if (from !== to) {
+      changed.add("boardExpiresAt");
+      lines.push(`board expiry: ${from ?? "(none)"} -> ${to ?? "(none)"}`);
+    }
+  }
+
+  const accessAffecting =
+    changed.has("isOfficer") ||
+    changed.has("isBoardMember") ||
+    changed.has("isStaff") ||
+    changed.has("membershipCategory");
+
+  return { changed, lines, accessAffecting };
+}

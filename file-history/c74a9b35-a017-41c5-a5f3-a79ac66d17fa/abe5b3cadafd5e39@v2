@@ -1,0 +1,54 @@
+#!/bin/bash
+# Read-only prod pull for the membership@ / belinda.porter@ login check.
+# Opens the Cloud SQL public-IP window, runs ~/pai-tmp/bp.sql (SELECT-only)
+# through cloud-sql-proxy with a statement timeout and a 120s watchdog, then
+# closes the window in a retry loop and verifies ipv4Enabled is False.
+# Never prints DATABASE_URL.
+set -u
+G=/opt/homebrew/bin/gcloud
+P=/opt/homebrew/opt/libpq/bin/psql
+PROXY=/opt/homebrew/bin/cloud-sql-proxy
+PROJECT=accessbuddy-prod
+INST=accessbuddy-production
+REGION=australia-southeast1
+SQL="$HOME/pai-tmp/bp.sql"
+PROXY_PID=""
+
+cleanup() {
+  [ -n "$PROXY_PID" ] && kill "$PROXY_PID" 2>/dev/null
+  # Close needs network; retry so a Tailscale/wifi dropout cannot leave the window open.
+  for i in $(seq 1 20); do
+    $G sql instances patch $INST --project $PROJECT --no-assign-ip --quiet >/dev/null 2>&1
+    STATE=$($G sql instances describe $INST --project $PROJECT --format='value(settings.ipConfiguration.ipv4Enabled)' 2>/dev/null)
+    if [ "$STATE" = "False" ]; then break; fi
+    sleep 30
+  done
+  echo "IPV4_ENABLED_AFTER=${STATE:-UNKNOWN}"
+  echo "CLOSED_AT=$(date -u +%FT%TZ)"
+}
+trap cleanup EXIT
+
+DBURL=$($G run services describe accessbuddy-production --region $REGION --project $PROJECT --format=json 2>/dev/null \
+  | python3 -c "import sys,json; env=json.load(sys.stdin)['spec']['template']['spec']['containers'][0]['env']; print([e['value'] for e in env if e['name']=='DATABASE_URL'][0])")
+if [ -z "$DBURL" ]; then echo "NO_DBURL"; exit 1; fi
+LOCALURL=$(printf '%s' "$DBURL" | sed -E 's#@[^/@]+/#@127.0.0.1:5433/#')
+
+echo "== opening IP window $(date -u +%FT%TZ)"
+$G sql instances patch $INST --project $PROJECT --assign-ip --quiet >/dev/null 2>&1 || { echo "PATCH_FAILED"; exit 1; }
+$PROXY --port 5433 "$PROJECT:$REGION:$INST" >"$HOME/pai-tmp/proxy.log" 2>&1 &
+PROXY_PID=$!
+CONNECTED=0
+for i in $(seq 1 30); do
+  if PGCONNECT_TIMEOUT=5 $P "$LOCALURL" -Atc "select 1" >/dev/null 2>&1; then echo "DB_CONNECTED after ${i}s"; CONNECTED=1; break; fi
+  sleep 1
+done
+if [ "$CONNECTED" != "1" ]; then echo "DB_CONNECT_FAILED"; exit 1; fi
+
+PGCONNECT_TIMEOUT=15 PGOPTIONS="-c statement_timeout=30000 -c default_transaction_read_only=on" \
+  $P "$LOCALURL" -f "$SQL" 2>&1 &
+PSQL_PID=$!
+( sleep 120; kill "$PSQL_PID" 2>/dev/null ) &
+WATCH_PID=$!
+wait "$PSQL_PID"
+kill "$WATCH_PID" 2>/dev/null
+echo "QUERY_DONE"
