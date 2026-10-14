@@ -1,0 +1,47 @@
+import { NextRequest, NextResponse } from "next/server";
+import { Permission } from "@accessbuddy/shared";
+import { getAuthUser } from "@/lib/auth";
+import { resolveTenant } from "@/lib/tenant";
+import { checkPermission } from "@/lib/permissions";
+import { withTenant } from "@/lib/with-tenant";
+import { sendPaymentLinkEmail } from "@/lib/services/requests";
+
+/**
+ * Admin "resend payment link". No status change: re-emails the member the
+ * pay link (and the signed cancel link) for a request that is still unpaid.
+ * Creates the Stripe intent if the request never got one.
+ */
+export async function POST(
+  _request: NextRequest,
+  { params }: { params: Promise<{ slug: string; id: string }> }
+) {
+  try {
+    const auth = await getAuthUser();
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    const { slug, id: requestId } = await params;
+    const tenant = await resolveTenant(slug);
+    if (!tenant) {
+      return NextResponse.json({ error: "Organisation not found" }, { status: 404 });
+    }
+
+    const permResult = checkPermission(auth, tenant.id, Permission.APPROVE_EXEMPTION);
+    if (!permResult.granted) {
+      return NextResponse.json({ error: permResult.reason }, { status: 403 });
+    }
+
+    const result = await withTenant(tenant.id, (tx) =>
+      sendPaymentLinkEmail(tx, { requestId, tenantId: tenant.id, actorId: auth.user.id })
+    );
+
+    return NextResponse.json({ ok: true, sentTo: result.sentTo });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal server error";
+    const status =
+      message.includes("Cannot") || message.includes("not found") ? 400 : 500;
+    if (status === 500) console.error("Resend payment link error:", err);
+    return NextResponse.json({ error: message }, { status });
+  }
+}

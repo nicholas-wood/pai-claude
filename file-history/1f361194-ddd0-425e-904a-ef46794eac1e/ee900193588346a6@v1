@@ -1,0 +1,252 @@
+import { NextRequest, NextResponse } from "next/server";
+import { and, eq } from "drizzle-orm";
+import {
+  Permission,
+  AuditEntityType,
+  AuditAction,
+  CredentialStatus,
+} from "@accessbuddy/shared";
+import { credentials, tenantMemberships, users } from "@accessbuddy/db";
+import { getAuthUser } from "@/lib/auth";
+import { resolveTenant } from "@/lib/tenant";
+import { checkPermission } from "@/lib/permissions";
+import { withTenant } from "@/lib/with-tenant";
+import { createAuditEntry } from "@/lib/services/audit";
+import { parseDateWithTimezone } from "@/lib/timezone";
+import { z } from "zod";
+
+/**
+ * Admin edit endpoint for an existing credential. Supports updating:
+ *   - ownerId        (reassign to a different member, or null to unallocate)
+ *   - status         (any CredentialStatus)
+ *   - expiresAt      (ISO date, or null to clear)
+ *   - accessStartsAt (ISO date, or null to clear)
+ *
+ * Guarded by the MANUAL_ADD permission so non-admin roles can't edit records.
+ * Every changed field is recorded in a single audit_log entry with before/
+ * after values so the credential's history remains traceable.
+ */
+const ALLOWED_STATUSES = [
+  CredentialStatus.ACTIVE,
+  CredentialStatus.PENDING_PROGRAMMING,
+  CredentialStatus.LOST,
+  CredentialStatus.DAMAGED,
+  CredentialStatus.INACTIVE_LOST,
+  CredentialStatus.INACTIVE_DAMAGED,
+  CredentialStatus.INACTIVE_STOLEN,
+  CredentialStatus.DEACTIVATED,
+  CredentialStatus.EXPIRED,
+  CredentialStatus.RETURNED,
+] as const;
+
+const patchSchema = z
+  .object({
+    ownerId: z.string().uuid().nullable().optional(),
+    status: z.enum(ALLOWED_STATUSES).optional(),
+    expiresAt: z.string().nullable().optional(),
+    accessStartsAt: z.string().nullable().optional(),
+  })
+  .refine(
+    (data) =>
+      data.ownerId !== undefined ||
+      data.status !== undefined ||
+      data.expiresAt !== undefined ||
+      data.accessStartsAt !== undefined,
+    { message: "At least one field must be provided" }
+  );
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string; id: string }> }
+) {
+  try {
+    const auth = await getAuthUser();
+    if (!auth) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    const { slug, id: credentialId } = await params;
+    const tenant = await resolveTenant(slug);
+    if (!tenant) {
+      return NextResponse.json(
+        { error: "Organisation not found" },
+        { status: 404 }
+      );
+    }
+
+    const permResult = checkPermission(auth, tenant.id, Permission.MANUAL_ADD);
+    if (!permResult.granted) {
+      return NextResponse.json(
+        { error: permResult.reason },
+        { status: 403 }
+      );
+    }
+
+    const body = await request.json();
+    const parsed = patchSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+
+    const { ownerId, status, expiresAt, accessStartsAt } = parsed.data;
+
+    const result = await withTenant(tenant.id, async (tx) => {
+      const [cred] = await tx
+        .select()
+        .from(credentials)
+        .where(eq(credentials.id, credentialId))
+        .limit(1);
+
+      if (!cred) return null;
+
+      // Validate the new owner is a member of this tenant
+      if (ownerId && ownerId !== cred.ownerId) {
+        const [membership] = await tx
+          .select({ userId: tenantMemberships.userId })
+          .from(tenantMemberships)
+          .where(
+            and(
+              eq(tenantMemberships.userId, ownerId),
+              eq(tenantMemberships.tenantId, tenant.id)
+            )
+          )
+          .limit(1);
+        if (!membership) {
+          throw new Error("New owner is not a member of this organisation");
+        }
+      }
+
+      const now = new Date();
+      const updates: Record<string, unknown> = {
+        updatedAt: now,
+      };
+      const changes: Record<string, { from: unknown; to: unknown }> = {};
+
+      if (ownerId !== undefined && ownerId !== cred.ownerId) {
+        updates.ownerId = ownerId;
+        // Resolve names for audit trail
+        let fromName = "(unallocated)";
+        let toName = "(unallocated)";
+        if (cred.ownerId) {
+          const [prev] = await tx.select({ firstName: users.firstName, lastName: users.lastName }).from(users).where(eq(users.id, cred.ownerId)).limit(1);
+          if (prev) fromName = `${prev.firstName} ${prev.lastName}`.trim();
+        }
+        if (ownerId) {
+          const [next] = await tx.select({ firstName: users.firstName, lastName: users.lastName }).from(users).where(eq(users.id, ownerId)).limit(1);
+          if (next) toName = `${next.firstName} ${next.lastName}`.trim();
+        }
+        changes.owner = { from: fromName, to: toName };
+      }
+
+      if (status !== undefined && status !== cred.status) {
+        updates.status = status;
+        changes.status = { from: cred.status, to: status };
+
+        // Keep timestamp side-effects consistent with each status transition
+        const inactiveStates: string[] = [
+          CredentialStatus.DEACTIVATED,
+          CredentialStatus.INACTIVE_LOST,
+          CredentialStatus.INACTIVE_DAMAGED,
+          CredentialStatus.INACTIVE_STOLEN,
+          CredentialStatus.EXPIRED,
+          CredentialStatus.RETURNED,
+        ];
+        if (inactiveStates.includes(status)) {
+          if (!cred.deactivatedAt) {
+            updates.deactivatedAt = now;
+            updates.deactivatedBy = auth.user.id;
+          }
+          if (!cred.deactivationReason) {
+            updates.deactivationReason = "Admin edited credential status";
+          }
+        }
+        if (status === CredentialStatus.LOST && !cred.lostReportedAt) {
+          updates.lostReportedAt = now;
+        }
+        if (status === CredentialStatus.ACTIVE) {
+          updates.deactivatedAt = null;
+          updates.deactivatedBy = null;
+          updates.deactivationReason = null;
+          updates.lostReportedAt = null;
+        }
+      }
+
+      if (expiresAt !== undefined) {
+        const newExpiry =
+          expiresAt === null
+            ? null
+            : parseDateWithTimezone(expiresAt, tenant.timezone);
+        updates.expiresAt = newExpiry;
+        changes.expiresAt = {
+          from: cred.expiresAt?.toISOString() ?? null,
+          to: newExpiry?.toISOString() ?? null,
+        };
+      }
+
+      if (accessStartsAt !== undefined) {
+        const newStart =
+          accessStartsAt === null
+            ? null
+            : parseDateWithTimezone(accessStartsAt, tenant.timezone);
+        updates.accessStartsAt = newStart;
+        changes.accessStartsAt = {
+          from: cred.accessStartsAt?.toISOString() ?? null,
+          to: newStart?.toISOString() ?? null,
+        };
+      }
+
+      // No-op if nothing actually changed
+      if (Object.keys(changes).length === 0) {
+        return cred;
+      }
+
+      const [updated] = await tx
+        .update(credentials)
+        .set(updates)
+        .where(eq(credentials.id, credentialId))
+        .returning();
+
+      await createAuditEntry(tx, {
+        tenantId: tenant.id,
+        entityType: AuditEntityType.CREDENTIAL,
+        entityId: credentialId,
+        action: changes.status
+          ? AuditAction.STATUS_CHANGE
+          : AuditAction.UPDATE,
+        fromState: changes.status?.from as string | undefined,
+        toState: changes.status?.to as string | undefined,
+        actorId: auth.user.id,
+        metadata: {
+          action: "admin_edit",
+          changes,
+        },
+      });
+
+      return updated;
+    });
+
+    if (!result) {
+      return NextResponse.json(
+        { error: "Credential not found" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ credential: result });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Internal server error";
+    console.error("Credential PATCH error:", err);
+    const status =
+      message.includes("not a member") || message.includes("not found")
+        ? 400
+        : 500;
+    return NextResponse.json({ error: message }, { status });
+  }
+}

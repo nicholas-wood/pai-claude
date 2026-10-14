@@ -1,0 +1,65 @@
+import { NextRequest, NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+import { fobRequests, tenants } from "@accessbuddy/db";
+import { resolveTenant } from "@/lib/tenant";
+import { withTenant } from "@/lib/with-tenant";
+
+/**
+ * Public endpoint to get payment info for a request.
+ * No auth required - used by the email payment link.
+ */
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ slug: string; id: string }> }
+) {
+  const { slug, id: requestId } = await params;
+  const tenant = await resolveTenant(slug);
+  if (!tenant) {
+    return NextResponse.json({ error: "Organisation not found" }, { status: 404 });
+  }
+
+  const result = await withTenant(tenant.id, async (tx) => {
+    const [req] = await tx
+      .select({
+        id: fobRequests.id,
+        status: fobRequests.status,
+        stripePaymentIntentId: fobRequests.stripePaymentIntentId,
+        paymentAmountCents: fobRequests.paymentAmountCents,
+        paidAt: fobRequests.paidAt,
+        orphanFirstName: fobRequests.orphanFirstName,
+        orphanLastName: fobRequests.orphanLastName,
+      })
+      .from(fobRequests)
+      .where(eq(fobRequests.id, requestId))
+      .limit(1);
+
+    return req ?? null;
+  });
+
+  if (!result) {
+    return NextResponse.json({ error: "Request not found" }, { status: 404 });
+  }
+
+  if (result.paidAt) {
+    return NextResponse.json({ alreadyPaid: true, clubName: tenant.name });
+  }
+
+  if (!result.stripePaymentIntentId || !result.paymentAmountCents) {
+    return NextResponse.json({ error: "No payment required for this request" }, { status: 400 });
+  }
+
+  // Retrieve the client secret from Stripe (must use connected account if set)
+  const { getStripe } = await import("@/lib/stripe");
+  const stripe = getStripe();
+  const stripeAccountId = tenant.stripeAccountId ?? null;
+  const options = stripeAccountId ? { stripeAccount: stripeAccountId } : undefined;
+  const intent = await stripe.paymentIntents.retrieve(result.stripePaymentIntentId, options);
+
+  return NextResponse.json({
+    clientSecret: intent.client_secret,
+    amount: result.paymentAmountCents,
+    clubName: tenant.name,
+    memberName: [result.orphanFirstName, result.orphanLastName].filter(Boolean).join(" ") || "Member",
+    stripeAccountId,
+  });
+}

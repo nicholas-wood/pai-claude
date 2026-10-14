@@ -1,0 +1,54 @@
+import { describe, it, expect } from "vitest";
+import { paymentRequiredEmail, paymentReminderEmail } from "../lib/email-templates";
+import { EMAIL_EVENTS } from "@accessbuddy/shared";
+
+const PAY = "https://accessbuddy.example/t/smlsc/pay/abc";
+const CANCEL = `${PAY}?cancel=123.sig`;
+
+describe("paymentRequiredEmail", () => {
+  it("renders the amount, pay button and cancel link", () => {
+    const html = paymentRequiredEmail("SMLSC", "Sarah Johnson", "$25.00", PAY, CANCEL);
+    expect(html).toContain("Dear Sarah,");
+    expect(html).toContain("$25.00");
+    expect(html).toContain(`href="${PAY}"`);
+    expect(html).toContain(`href="${CANCEL}"`);
+    expect(html).toContain("Cancel this request");
+    expect(html).not.toContain("Note from the club");
+  });
+
+  it("includes the admin reason when supplied", () => {
+    const html = paymentRequiredEmail("SMLSC", "Sarah Johnson", "$25.00", PAY, CANCEL, "Exemption was granted in error");
+    expect(html).toContain("Note from the club");
+    expect(html).toContain("Exemption was granted in error");
+  });
+});
+
+describe("paymentReminderEmail", () => {
+  it("renders with no links when none are supplied (legacy call shape)", () => {
+    const html = paymentReminderEmail("SMLSC", "Sarah Johnson", "$25.00");
+    expect(html).toContain("$25.00");
+    expect(html).not.toContain("Pay Now");
+    expect(html).not.toContain("Cancel this request");
+  });
+
+  it("renders the pay button and cancel link when supplied", () => {
+    const html = paymentReminderEmail("SMLSC", "Sarah Johnson", "$25.00", PAY, CANCEL);
+    expect(html).toContain(`href="${PAY}"`);
+    expect(html).toContain("Pay Now");
+    expect(html).toContain(`href="${CANCEL}"`);
+  });
+});
+
+describe("email event registry", () => {
+  it("registers payment_required with pay and cancel URL variables", () => {
+    const event = EMAIL_EVENTS.find((e) => e.id === "payment_required");
+    expect(event).toBeDefined();
+    const keys = event!.variables.map((v) => v.key);
+    expect(keys).toEqual(expect.arrayContaining(["memberName", "amount", "paymentUrl", "cancelUrl"]));
+  });
+
+  it("payment_reminder now exposes cancelUrl", () => {
+    const event = EMAIL_EVENTS.find((e) => e.id === "payment_reminder");
+    expect(event!.variables.map((v) => v.key)).toContain("cancelUrl");
+  });
+});

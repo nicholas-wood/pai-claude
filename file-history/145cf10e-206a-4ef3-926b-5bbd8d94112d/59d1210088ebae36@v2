@@ -1,0 +1,2139 @@
+import { eq, and, asc, desc, sql } from "drizzle-orm";
+import {
+  fobRequests,
+  credentials,
+  credentialTypes,
+  accessLevels,
+  tenantMemberships,
+  tenants,
+  users,
+  pickupLocations,
+} from "@accessbuddy/db";
+import {
+  RequestStatus,
+  RequestType,
+  CredentialStatus,
+  AuditEntityType,
+  AuditAction,
+  Permission,
+  NotificationType,
+  getValidEvents,
+  requestProducesCredential,
+  type TenantSettings,
+} from "@accessbuddy/shared";
+import { createAuditEntry } from "./audit";
+import {
+  sendTemplatedEmail,
+  sendAdminNotification,
+  shouldSendNotification,
+  buildEmailConfig,
+  fetchAttachments,
+} from "./email";
+import {
+  adminApprovalNeededEmail,
+  adminProgrammingNeededEmail,
+  adminExemptionReviewEmail,
+  adminReadyForCollectionEmail,
+  adminAccessUpdateEmail,
+} from "@/lib/email-templates";
+import { determinePayment, shouldAutoApprove } from "./payment";
+import {
+  createPaymentIntent,
+  createRefund,
+  cancelPaymentIntent,
+  retrievePaymentIntent,
+  intentIsPaidOrProcessing,
+} from "@/lib/stripe";
+import { membershipYearExpiry } from "@/lib/timezone";
+import { buildPaymentLinks, formatAmountCents } from "@/lib/payment-links";
+
+type TransactionClient = Parameters<
+  Parameters<typeof import("@accessbuddy/db").db.transaction>[0]
+>[0];
+
+// Events that trigger member-facing emails
+const MEMBER_EMAIL_EVENTS = [
+  "APPROVE", "REJECT", "SET_PICKUP", "ISSUE", "CANCEL",
+  "PAYMENT_RECEIVED", "HOLD", "REQUEST_EXEMPTION", "APPROVE_EXEMPTION", "REJECT_EXEMPTION",
+  "PAYMENT_EXEMPT", "PAYMENT_REQUIRED",
+  "PROGRAM",
+];
+
+// Map transition events to NotificationType for preference lookup
+const EVENT_TO_NOTIFICATION_TYPE: Record<string, string> = {
+  APPROVE: NotificationType.REQUEST_APPROVED,
+  REJECT: NotificationType.REQUEST_REJECTED,
+  SET_PICKUP: NotificationType.READY_FOR_PICKUP,
+  ISSUE: NotificationType.CREDENTIAL_ISSUED,
+  CANCEL: NotificationType.REQUEST_CANCELLED,
+  PAYMENT_RECEIVED: NotificationType.PAYMENT_RECEIVED,
+  HOLD: NotificationType.REQUEST_ON_HOLD,
+  REQUEST_EXEMPTION: NotificationType.EXEMPTION_REVIEW_NEEDED,
+  APPROVE_EXEMPTION: NotificationType.EXEMPTION_APPROVED,
+  REJECT_EXEMPTION: NotificationType.EXEMPTION_REJECTED,
+  PAYMENT_EXEMPT: NotificationType.EXEMPTION_APPROVED,
+  PROGRAM: NotificationType.CREDENTIAL_ISSUED,
+};
+
+// Events that trigger admin-facing emails (checked by resolved new status)
+const ADMIN_TRIGGER_EVENTS = [
+  "PAYMENT_RECEIVED", "APPROVE_EXEMPTION", "PAYMENT_EXEMPT", // -> AWAITING_APPROVAL
+  "APPROVE",                                // -> AWAITING_PROGRAMMING
+  "REQUEST_EXEMPTION",                      // -> AWAITING_EXEMPTION_REVIEW
+  "SET_PICKUP",                             // -> AWAITING_PICKUP (admin collection notification)
+];
+
+/**
+ * Validate that a state transition is allowed by the state machine.
+ */
+function validateTransition(currentStatus: string, event: string): boolean {
+  const validEvents = getValidEvents(currentStatus);
+  return validEvents.includes(event);
+}
+
+/**
+ * Credential expiry stamped on a request at APPROVE, for request types that
+ * produce a credential. Staff or board members get no expiry; everyone else
+ * gets the membership-year expiry (1 September, with the July rollover) in
+ * the tenant's timezone. Works for orphaned requests too: with no linked
+ * user, the staff/board flags come from the approval form metadata.
+ */
+async function resolveApprovalCredentialExpiry(
+  tx: TransactionClient,
+  tenantId: string,
+  memberUserId: string | null,
+  metadata: Record<string, unknown> | undefined
+): Promise<Date | null> {
+  let isStaffOrBoard = false;
+
+  if (memberUserId) {
+    const [mem] = await tx
+      .select({ isStaff: tenantMemberships.isStaff, isBoardMember: tenantMemberships.isBoardMember })
+      .from(tenantMemberships)
+      .where(
+        and(
+          eq(tenantMemberships.userId, memberUserId),
+          eq(tenantMemberships.tenantId, tenantId)
+        )
+      )
+      .limit(1);
+    if (mem) {
+      isStaffOrBoard = mem.isStaff || mem.isBoardMember;
+    }
+  } else {
+    // No user linked yet - check the flags from the approval form
+    const approveFlags = metadata ?? {};
+    isStaffOrBoard = !!approveFlags.isStaff || !!approveFlags.isBoardMember;
+  }
+
+  if (isStaffOrBoard) return null;
+
+  const [tenantRow] = await tx
+    .select({ timezone: tenants.timezone })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+
+  return membershipYearExpiry(tenantRow?.timezone ?? "Australia/Melbourne");
+}
+
+/**
+ * Create a new fob request.
+ * Handles: payment determination, auto-approval, Stripe payment intent creation.
+ */
+export async function createRequest(
+  tx: TransactionClient,
+  params: {
+    tenantId: string;
+    requesterId: string;
+    credentialTypeId: string;
+    requestType: string;
+    membershipCategory: string | null;
+    replacesCredentialId?: string;
+    tenantSettings: TenantSettings;
+    stripeAccountId: string | null;
+  }
+) {
+  // Look up credential type for pricing. Scoped to the tenant so a request
+  // cannot be created against another tenant's credential type/pricing.
+  const [credType] = await tx
+    .select()
+    .from(credentialTypes)
+    .where(
+      and(
+        eq(credentialTypes.id, params.credentialTypeId),
+        eq(credentialTypes.tenantId, params.tenantId)
+      )
+    )
+    .limit(1);
+
+  if (!credType) {
+    throw new Error("Credential type not found");
+  }
+
+  // Determine payment requirement
+  const payment = determinePayment({
+    requestType: params.requestType,
+    membershipCategory: params.membershipCategory,
+    tenantSettings: params.tenantSettings,
+    credentialPriceCents: credType.priceCents,
+  });
+
+  // Determine initial status
+  let initialStatus: string = RequestStatus.SUBMITTED;
+  if (payment.required) {
+    initialStatus = RequestStatus.AWAITING_PAYMENT;
+  } else if (shouldAutoApprove(params.requestType)) {
+    initialStatus = RequestStatus.AWAITING_PROGRAMMING;
+  } else if (params.requestType === RequestType.REPLACEMENT_DAMAGED) {
+    // Damaged fobs are implicitly exempt — the admin reviews whether the
+    // fob is genuinely faulty (approve exemption → free) or not (reject
+    // exemption → member pays).
+    initialStatus = RequestStatus.AWAITING_EXEMPTION_REVIEW;
+  } else {
+    initialStatus = RequestStatus.AWAITING_APPROVAL;
+  }
+
+  // Create the request
+  const [request] = await tx
+    .insert(fobRequests)
+    .values({
+      tenantId: params.tenantId,
+      requesterId: params.requesterId,
+      credentialTypeId: params.credentialTypeId,
+      requestType: params.requestType,
+      replacesCredentialId: params.replacesCredentialId ?? null,
+      paymentExempt: !payment.required,
+      paymentAmountCents: payment.required ? payment.amountCents : null,
+      status: initialStatus,
+    })
+    .returning();
+
+  // Create audit entry
+  await createAuditEntry(tx, {
+    tenantId: params.tenantId,
+    entityType: AuditEntityType.FOB_REQUEST,
+    entityId: request.id,
+    action: AuditAction.CREATE,
+    toState: initialStatus,
+    actorId: params.requesterId,
+    metadata: {
+      requestType: params.requestType,
+      paymentRequired: payment.required,
+      paymentReason: payment.reason,
+    },
+  });
+
+  // If auto-approved, add an audit entry for the auto-approval
+  if (shouldAutoApprove(params.requestType) && !payment.required) {
+    await createAuditEntry(tx, {
+      tenantId: params.tenantId,
+      entityType: AuditEntityType.FOB_REQUEST,
+      entityId: request.id,
+      action: AuditAction.STATUS_CHANGE,
+      fromState: RequestStatus.SUBMITTED,
+      toState: RequestStatus.AWAITING_PROGRAMMING,
+      actorType: "system",
+      metadata: { reason: "Auto-approved based on request type" },
+    });
+  }
+
+  // Create Stripe payment intent if payment required
+  let stripeClientSecret: string | null = null;
+  if (payment.required) {
+    const intent = await createPaymentIntent({
+      amountCents: payment.amountCents,
+      stripeAccountId: params.stripeAccountId,
+      metadata: {
+        requestId: request.id,
+        tenantId: params.tenantId,
+      },
+    });
+
+    await tx
+      .update(fobRequests)
+      .set({ stripePaymentIntentId: intent.paymentIntentId })
+      .where(eq(fobRequests.id, request.id));
+
+    stripeClientSecret = intent.clientSecret;
+  }
+
+  return { request, stripeClientSecret };
+}
+
+/**
+ * Transition a request to a new state with validation and audit logging.
+ */
+export async function transitionRequest(
+  tx: TransactionClient,
+  params: {
+    requestId: string;
+    tenantId: string;
+    event: string;
+    actorId: string | null;
+    updates?: Partial<typeof fobRequests.$inferInsert>;
+    metadata?: Record<string, unknown>;
+  }
+) {
+  // Fetch current request. Scoped to the tenant — this is the primary IDOR
+  // guard for the whole request lifecycle: without the tenantId predicate,
+  // any caller who knows (or guesses) another tenant's request id could
+  // read and, worse, transition that request. Never trust RLS alone here.
+  const [request] = await tx
+    .select()
+    .from(fobRequests)
+    .where(
+      and(
+        eq(fobRequests.id, params.requestId),
+        eq(fobRequests.tenantId, params.tenantId)
+      )
+    )
+    .limit(1);
+
+  if (!request) {
+    throw new Error("Request not found");
+  }
+
+  // Validate the transition
+  if (!validateTransition(request.status, params.event)) {
+    throw new Error(
+      `Cannot "${params.event}" from status "${request.status}"`
+    );
+  }
+
+  // Determine the new status based on the event
+  let newStatus = resolveNewStatus(request.status, params.event);
+
+  // Lost/damaged requests have a single review step (exemption review for
+  // damaged, awaiting programming for lost). Reopening should return them
+  // there, not to the generic AWAITING_APPROVAL.
+  if (params.event === "REOPEN" && request.requestType === RequestType.REPLACEMENT_DAMAGED) {
+    newStatus = RequestStatus.AWAITING_EXEMPTION_REVIEW;
+  } else if (params.event === "REOPEN" && request.requestType === RequestType.REPLACEMENT_LOST) {
+    newStatus = RequestStatus.AWAITING_PROGRAMMING;
+  }
+
+  // Build the update object
+  const updateValues: Record<string, unknown> = {
+    status: newStatus,
+    updatedAt: new Date(),
+    ...params.updates,
+  };
+
+  // For HOLD, save the previous state so RESUME can restore it
+  if (params.event === "HOLD") {
+    updateValues.holdReason = params.metadata?.reason ?? null;
+    updateValues.holdPreviousStatus = request.status;
+  }
+
+  // For RESUME, restore the previous state and clear hold fields
+  if (params.event === "RESUME") {
+    if (request.holdPreviousStatus) {
+      updateValues.status = request.holdPreviousStatus;
+    }
+    updateValues.holdReason = null;
+    updateValues.holdPreviousStatus = null;
+  }
+
+  // For REOPEN on lost/damaged, re-mark the credential as reported
+  if (
+    params.event === "REOPEN" &&
+    request.replacesCredentialId &&
+    (request.requestType === RequestType.REPLACEMENT_LOST ||
+     request.requestType === RequestType.REPLACEMENT_DAMAGED)
+  ) {
+    const credStatus = request.requestType === RequestType.REPLACEMENT_LOST
+      ? CredentialStatus.LOST
+      : CredentialStatus.DAMAGED;
+
+    const [cred] = await tx
+      .select({ id: credentials.id, status: credentials.status })
+      .from(credentials)
+      .where(
+        and(
+          eq(credentials.id, request.replacesCredentialId),
+          eq(credentials.tenantId, params.tenantId)
+        )
+      )
+      .limit(1);
+
+    if (cred && cred.status === CredentialStatus.ACTIVE) {
+      const now = new Date();
+      await tx
+        .update(credentials)
+        .set({
+          status: credStatus,
+          ...(credStatus === CredentialStatus.LOST ? { lostReportedAt: now } : {}),
+          updatedAt: now,
+        })
+        .where(eq(credentials.id, cred.id));
+
+      await createAuditEntry(tx, {
+        tenantId: params.tenantId,
+        entityType: AuditEntityType.CREDENTIAL,
+        entityId: cred.id,
+        action: AuditAction.STATUS_CHANGE,
+        fromState: cred.status,
+        toState: credStatus,
+        actorId: params.actorId,
+        metadata: {
+          action: "reopen_remark",
+          reason: `Request reopened — credential re-marked as ${credStatus}`,
+          reopenedRequestId: params.requestId,
+        },
+      });
+    }
+  }
+
+  // For CANCEL, save reason and actor
+  if (params.event === "CANCEL") {
+    updateValues.cancelReason = params.metadata?.reason ?? null;
+    updateValues.cancelledBy = params.actorId;
+
+    // If a programmed credential is linked to this request, flag it for
+    // deactivation and prompt removal from pickup location. The fob is
+    // physically programmed so it can't be silently unallocated — it needs
+    // to go through the programming queue for deactivation in the access
+    // control system.
+    //
+    // Look up by requestId first, then fall back to serial number (for
+    // migrated data where requestId on the credential may be null).
+    let [linkedCred] = await tx
+      .select({ id: credentials.id, status: credentials.status })
+      .from(credentials)
+      .where(
+        and(
+          eq(credentials.requestId, params.requestId),
+          eq(credentials.tenantId, params.tenantId)
+        )
+      )
+      .limit(1);
+
+    if (!linkedCred && request.serialNumber) {
+      [linkedCred] = await tx
+        .select({ id: credentials.id, status: credentials.status })
+        .from(credentials)
+        .where(
+          and(
+            eq(credentials.serialNumber, request.serialNumber),
+            eq(credentials.tenantId, params.tenantId)
+          )
+        )
+        .limit(1);
+    }
+
+    if (linkedCred && linkedCred.status !== CredentialStatus.DEACTIVATED) {
+      const now = new Date();
+      await tx
+        .update(credentials)
+        .set({
+          ownerId: null,
+          programmingRequired: true,
+          programmingReason: "Request cancelled after programming — deactivate fob and remove from pickup location",
+          programmingRequestedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(credentials.id, linkedCred.id));
+
+      await createAuditEntry(tx, {
+        tenantId: params.tenantId,
+        entityType: AuditEntityType.CREDENTIAL,
+        entityId: linkedCred.id,
+        action: AuditAction.UPDATE,
+        actorId: params.actorId,
+        metadata: {
+          action: "cancel_deactivation_queued",
+          reason: "Request cancelled — fob unallocated, queued for deactivation, remove from pickup location",
+          cancelledRequestId: params.requestId,
+        },
+      });
+    }
+
+    // Revert credential status when a lost/damaged request is cancelled
+    // before the credential was fully deactivated (programmed).
+    if (
+      request.replacesCredentialId &&
+      (request.requestType === RequestType.REPLACEMENT_LOST ||
+       request.requestType === RequestType.REPLACEMENT_DAMAGED)
+    ) {
+      const [cred] = await tx
+        .select({ id: credentials.id, status: credentials.status, expiresAt: credentials.expiresAt })
+        .from(credentials)
+        .where(
+          and(
+            eq(credentials.id, request.replacesCredentialId),
+            eq(credentials.tenantId, params.tenantId)
+          )
+        )
+        .limit(1);
+
+      if (cred) {
+        const isReportedState =
+          cred.status === CredentialStatus.LOST ||
+          cred.status === CredentialStatus.DAMAGED;
+
+        if (isReportedState) {
+          // Revert to active, or expired if the expiry has passed
+          const now = new Date();
+          const revertStatus =
+            cred.expiresAt && cred.expiresAt < now
+              ? CredentialStatus.EXPIRED
+              : CredentialStatus.ACTIVE;
+
+          await tx
+            .update(credentials)
+            .set({
+              status: revertStatus,
+              lostReportedAt: null,
+              updatedAt: now,
+            })
+            .where(eq(credentials.id, cred.id));
+
+          await createAuditEntry(tx, {
+            tenantId: params.tenantId,
+            entityType: AuditEntityType.CREDENTIAL,
+            entityId: cred.id,
+            action: AuditAction.STATUS_CHANGE,
+            fromState: cred.status,
+            toState: revertStatus,
+            actorId: params.actorId,
+            metadata: {
+              action: "cancel_revert",
+              reason: `${request.requestType} request cancelled — credential reverted`,
+              cancelledRequestId: params.requestId,
+            },
+          });
+        }
+        // If already INACTIVE_LOST/INACTIVE_DAMAGED (programmed), don't revert —
+        // the physical deactivation in the access system can't be undone here.
+      }
+    }
+  }
+
+  // For timestamp fields
+  if (params.event === "PAYMENT_RECEIVED") updateValues.paidAt = new Date();
+  if (params.event === "APPROVE") {
+    updateValues.approvedAt = new Date();
+    updateValues.approvedBy = params.actorId;
+
+    // Resolve the requester - find or create user from orphan details
+    let memberUserId = request.requesterId;
+    if (!memberUserId && request.orphanEmail) {
+      const [userByEmail] = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, request.orphanEmail))
+        .limit(1);
+
+      if (userByEmail) {
+        memberUserId = userByEmail.id;
+      } else {
+        // Create user record from orphan details so they appear in members immediately
+        // Firebase sign-up will later link the Firebase UID to this record by email
+        const [newUser] = await tx
+          .insert(users)
+          .values({
+            firebaseUid: `pending_${request.orphanEmail}`,
+            email: request.orphanEmail,
+            firstName: request.orphanFirstName ?? "",
+            lastName: request.orphanLastName ?? "",
+            dateOfBirth: request.orphanDateOfBirth ?? null,
+          })
+          .returning();
+        memberUserId = newUser.id;
+      }
+
+      // Link the request to this user
+      await tx
+        .update(fobRequests)
+        .set({ requesterId: memberUserId })
+        .where(eq(fobRequests.id, params.requestId));
+      updateValues.requesterId = memberUserId;
+    }
+
+    // Populate user name from orphan fields if blank
+    if (memberUserId && (request.orphanFirstName || request.orphanLastName)) {
+      const [currentUser] = await tx
+        .select({ firstName: users.firstName, lastName: users.lastName })
+        .from(users)
+        .where(eq(users.id, memberUserId))
+        .limit(1);
+
+      if (currentUser && !currentUser.firstName && !currentUser.lastName) {
+        await tx.update(users).set({
+          firstName: request.orphanFirstName ?? "",
+          lastName: request.orphanLastName ?? "",
+        }).where(eq(users.id, memberUserId));
+      }
+    }
+
+    // Auto-create tenant membership if the requester doesn't have one
+    if (memberUserId) {
+      const [existingMembership] = await tx
+        .select({ id: tenantMemberships.id })
+        .from(tenantMemberships)
+        .where(
+          and(
+            eq(tenantMemberships.userId, memberUserId),
+            eq(tenantMemberships.tenantId, params.tenantId)
+          )
+        )
+        .limit(1);
+
+      if (!existingMembership) {
+        await tx.insert(tenantMemberships).values({
+          tenantId: params.tenantId,
+          userId: memberUserId,
+          membershipCategory: request.membershipCategory ?? null,
+          accessLevelId: (updateValues.accessLevelId as string | undefined) ?? null,
+          status: "active",
+          currentSeason: null,
+        });
+      } else {
+        // Capture previous access level to detect changes
+        const [prevMembership] = await tx
+          .select({ accessLevelId: tenantMemberships.accessLevelId })
+          .from(tenantMemberships)
+          .where(
+            and(
+              eq(tenantMemberships.userId, memberUserId),
+              eq(tenantMemberships.tenantId, params.tenantId)
+            )
+          )
+          .limit(1);
+        const previousAccessLevelId = prevMembership?.accessLevelId ?? null;
+
+        // Set the access level on the existing membership
+        if (updateValues.accessLevelId) {
+          await tx
+            .update(tenantMemberships)
+            .set({ accessLevelId: updateValues.accessLevelId as string })
+            .where(
+              and(
+                eq(tenantMemberships.userId, memberUserId),
+                eq(tenantMemberships.tenantId, params.tenantId)
+              )
+            );
+
+          // If access level changed, flag other active credentials for reprogramming
+          // (The fob being created by this request will get the new level automatically)
+          if (previousAccessLevelId !== updateValues.accessLevelId) {
+            const otherCreds = await tx
+              .select({ id: credentials.id })
+              .from(credentials)
+              .where(
+                and(
+                  eq(credentials.ownerId, memberUserId),
+                  eq(credentials.tenantId, params.tenantId),
+                  eq(credentials.status, CredentialStatus.ACTIVE)
+                )
+              );
+
+            if (otherCreds.length > 0) {
+              const now = new Date();
+              const reason = "Access level changed via request approval - reprogramming required";
+              for (const cred of otherCreds) {
+                await tx
+                  .update(credentials)
+                  .set({
+                    programmingRequired: true,
+                    programmingReason: reason,
+                    programmingRequestedAt: now,
+                    updatedAt: now,
+                  })
+                  .where(eq(credentials.id, cred.id));
+
+                await createAuditEntry(tx, {
+                  tenantId: params.tenantId,
+                  entityType: AuditEntityType.CREDENTIAL,
+                  entityId: cred.id,
+                  action: AuditAction.UPDATE,
+                  actorId: params.actorId,
+                  metadata: {
+                    action: "cascade_access_level_change",
+                    triggeredByRequestId: params.requestId,
+                    reason,
+                  },
+                });
+              }
+            }
+          }
+        }
+      }
+
+      // Update membership with officer/board/staff flags if provided
+      const approveData = params.metadata ?? {};
+      if (approveData.isOfficer !== undefined || approveData.isBoardMember !== undefined || approveData.isStaff !== undefined) {
+        const membershipUpdates: Record<string, unknown> = {};
+        if (approveData.isOfficer !== undefined) membershipUpdates.isOfficer = approveData.isOfficer;
+        if (approveData.isBoardMember !== undefined) membershipUpdates.isBoardMember = approveData.isBoardMember;
+        if (approveData.isStaff !== undefined) membershipUpdates.isStaff = approveData.isStaff;
+        if (approveData.officerExpiresAt) membershipUpdates.officerExpiresAt = new Date(approveData.officerExpiresAt as string);
+        if (approveData.boardExpiresAt) membershipUpdates.boardExpiresAt = new Date(approveData.boardExpiresAt as string);
+
+        await tx
+          .update(tenantMemberships)
+          .set(membershipUpdates)
+          .where(
+            and(
+              eq(tenantMemberships.userId, memberUserId),
+              eq(tenantMemberships.tenantId, params.tenantId)
+            )
+          );
+      }
+
+    }
+
+    // Stamp the credential expiry on the request - but only for request types
+    // that produce a credential. An access_update (and the lost/damaged
+    // deactivation types) must never carry a credential expiry: expiry is
+    // driven solely by the membership year (renewal attestation /
+    // confirm-programming), not the request pipeline. The explicit null also
+    // scrubs any expiry stamped by an approve/reopen cycle before this rule.
+    updateValues.credentialExpiresAt = requestProducesCredential(request.requestType)
+      ? await resolveApprovalCredentialExpiry(tx, params.tenantId, memberUserId, params.metadata)
+      : null;
+  }
+  if (params.event === "PROGRAM") {
+    updateValues.programmedAt = new Date();
+    updateValues.programmedBy = params.actorId;
+  }
+  if (params.event === "ISSUE") {
+    updateValues.issuedAt = new Date();
+    updateValues.issuedBy = params.actorId;
+  }
+
+  // Update the request
+  const [updated] = await tx
+    .update(fobRequests)
+    .set(updateValues)
+    .where(eq(fobRequests.id, params.requestId))
+    .returning();
+
+  // When payment becomes due (exemption rejected, or an admin / the nightly
+  // abandoned-payment sweep requires payment), make sure a Stripe payment
+  // intent exists and the amount is recorded so the public pay page can
+  // render. REJECT_EXEMPTION keeps its historical lenience (no price means no
+  // intent); PAYMENT_REQUIRED is an explicit demand for money, so a missing
+  // price is an error and the whole transition rolls back.
+  if (params.event === "REJECT_EXEMPTION" || params.event === "PAYMENT_REQUIRED") {
+    const ensured = await ensurePaymentIntent(tx, {
+      request,
+      tenantId: params.tenantId,
+    });
+    if (params.event === "PAYMENT_REQUIRED") {
+      if (ensured === "no_price") {
+        throw new Error(
+          "Cannot require payment: no price is configured for this request's credential type"
+        );
+      }
+      if (ensured === "paid") {
+        throw new Error(
+          "Cannot require payment: Stripe shows a payment already received or processing for this request. Check the Stripe dashboard and the webhook log."
+        );
+      }
+    }
+  }
+
+  // When programming a lost/damaged deactivation request, confirm deactivation on the credential
+  // Transitions: lost -> inactive_lost, damaged -> inactive_damaged
+  if (
+    params.event === "PROGRAM" &&
+    request.replacesCredentialId &&
+    (request.requestType === RequestType.REPLACEMENT_LOST ||
+     request.requestType === RequestType.REPLACEMENT_DAMAGED)
+  ) {
+    const newCredStatus = request.requestType === RequestType.REPLACEMENT_LOST
+      ? CredentialStatus.INACTIVE_LOST
+      : CredentialStatus.INACTIVE_DAMAGED;
+
+    const [oldCred] = await tx
+      .select({ id: credentials.id, status: credentials.status })
+      .from(credentials)
+      .where(
+        and(
+          eq(credentials.id, request.replacesCredentialId),
+          eq(credentials.tenantId, params.tenantId)
+        )
+      )
+      .limit(1);
+
+    if (oldCred) {
+      const deactivatedAt = new Date();
+      await tx
+        .update(credentials)
+        .set({
+          status: newCredStatus,
+          deactivatedAt,
+          deactivatedBy: params.actorId,
+          deactivationReason: request.accessUpdateReason ?? `Deactivated - ${newCredStatus.replace("_", " ")}`,
+          updatedAt: deactivatedAt,
+        })
+        .where(eq(credentials.id, request.replacesCredentialId));
+
+      await createAuditEntry(tx, {
+        tenantId: params.tenantId,
+        entityType: AuditEntityType.CREDENTIAL,
+        entityId: request.replacesCredentialId,
+        action: AuditAction.STATUS_CHANGE,
+        fromState: oldCred.status,
+        toState: newCredStatus,
+        actorId: params.actorId,
+        metadata: {
+          reason: request.accessUpdateReason,
+          triggeredByRequestId: params.requestId,
+          action: "program_deactivation",
+        },
+      });
+    }
+  }
+
+  // On PROGRAM, allocate the credential to the member. After programming the
+  // fob is live in the access control system, so the credential record should
+  // reflect ownership immediately — the subsequent ISSUE event is just the
+  // physical handover timestamp. We use the serial number from the request
+  // (which may have been set in the program route via a picked credentialId).
+  // Skip for access_update and deactivations, which don't produce a new fob.
+  const serialForAlloc = (updateValues.serialNumber as string | undefined) ?? request.serialNumber;
+  const typeForAlloc = (updateValues.credentialTypeId as string | undefined) ?? request.credentialTypeId;
+  if (
+    params.event === "PROGRAM" &&
+    request.requesterId &&
+    serialForAlloc &&
+    typeForAlloc &&
+    requestProducesCredential(request.requestType)
+  ) {
+    await issueCredential(tx, {
+      tenantId: params.tenantId,
+      requestId: params.requestId,
+      ownerId: request.requesterId,
+      credentialTypeId: typeForAlloc,
+      accessLevelId: request.accessLevelId ?? "",
+      serialNumber: serialForAlloc,
+      expiresAt: request.credentialExpiresAt,
+      actorId: params.actorId ?? "",
+    });
+  }
+
+  // When issuing, activate any pending_programming credential linked to this request
+  if (params.event === "ISSUE") {
+    const [pendingCred] = await tx
+      .select({ id: credentials.id, status: credentials.status })
+      .from(credentials)
+      .where(
+        and(
+          eq(credentials.requestId, params.requestId),
+          eq(credentials.status, CredentialStatus.PENDING_PROGRAMMING),
+          eq(credentials.tenantId, params.tenantId)
+        )
+      )
+      .limit(1);
+
+    if (pendingCred) {
+      const activatedAt = new Date();
+      await tx
+        .update(credentials)
+        .set({
+          status: CredentialStatus.ACTIVE,
+          issuedAt: activatedAt,
+          updatedAt: activatedAt,
+        })
+        .where(eq(credentials.id, pendingCred.id));
+
+      await createAuditEntry(tx, {
+        tenantId: params.tenantId,
+        entityType: AuditEntityType.CREDENTIAL,
+        entityId: pendingCred.id,
+        action: AuditAction.STATUS_CHANGE,
+        fromState: CredentialStatus.PENDING_PROGRAMMING,
+        toState: CredentialStatus.ACTIVE,
+        actorId: params.actorId,
+        metadata: {
+          triggeredByRequestId: params.requestId,
+          action: "program_activation",
+        },
+      });
+    }
+  }
+
+  // Create audit entry (use actual resolved status, which may differ from newStatus for RESUME)
+  const actualNewStatus = (updateValues.status as string) ?? newStatus;
+  // For PROGRAM/ISSUE events, look up the credential type name so the audit
+  // trail can render "Wristband Large #1572 programmed" rather than a bare
+  // "Credential programmed".
+  let credentialTypeName: string | null = null;
+  const resolvedTypeId = (updateValues.credentialTypeId as string | undefined) ?? request.credentialTypeId;
+  if ((params.event === "PROGRAM" || params.event === "ISSUE") && resolvedTypeId) {
+    const [ct] = await tx
+      .select({ name: credentialTypes.name })
+      .from(credentialTypes)
+      .where(
+        and(
+          eq(credentialTypes.id, resolvedTypeId),
+          eq(credentialTypes.tenantId, params.tenantId)
+        )
+      )
+      .limit(1);
+    credentialTypeName = ct?.name ?? null;
+  }
+  const resolvedSerialNumber = (updateValues.serialNumber as string | undefined) ?? request.serialNumber;
+  // Enrich the stored metadata with the request's type so the audit trail
+  // can render more specific labels (e.g. "Update cancelled" for a
+  // cancelled access_update, rather than a plain "Cancelled").
+  const enrichedMetadata = {
+    ...(params.metadata ?? {}),
+    requestType: request.requestType,
+    ...(resolvedSerialNumber && !("serialNumber" in (params.metadata ?? {}))
+      ? { serialNumber: resolvedSerialNumber }
+      : {}),
+    ...(credentialTypeName ? { credentialTypeName } : {}),
+  };
+  await createAuditEntry(tx, {
+    tenantId: params.tenantId,
+    entityType: AuditEntityType.FOB_REQUEST,
+    entityId: params.requestId,
+    action: AuditAction.STATUS_CHANGE,
+    fromState: request.status,
+    toState: actualNewStatus,
+    actorId: params.actorId,
+    metadata: enrichedMetadata,
+  });
+
+  // Leaving the "money owed" states with an intent still live: cancel, reject,
+  // or an exemption granted after a pay link went out. First ask Stripe
+  // whether money has in fact been taken (a late webhook leaves paidAt null).
+  //   - processing: refuse the transition; the webhook will settle it shortly.
+  //   - succeeded: record paidAt now so the auto-refund branch below fires on
+  //     CANCEL / REJECT; for an exemption, refuse (admin must refund first).
+  //   - otherwise: void the intent so a stale pay link cannot take money for
+  //     a request that no longer needs it. Best-effort.
+  const LEAVES_PAYMENT_STATES = ["CANCEL", "REJECT", "PAYMENT_EXEMPT", "APPROVE_EXEMPTION"];
+  if (LEAVES_PAYMENT_STATES.includes(params.event) && !request.paidAt && request.stripePaymentIntentId) {
+    const [tenantForIntent] = await tx
+      .select({ stripeAccountId: tenants.stripeAccountId })
+      .from(tenants)
+      .where(eq(tenants.id, params.tenantId))
+      .limit(1);
+    const stripeAccountId = tenantForIntent?.stripeAccountId ?? null;
+
+    let liveStatus: Awaited<ReturnType<typeof retrievePaymentIntent>>["status"] | null = null;
+    try {
+      liveStatus = (await retrievePaymentIntent({ paymentIntentId: request.stripePaymentIntentId, stripeAccountId })).status;
+    } catch (err) {
+      console.error("Failed to read Stripe intent before leaving payment state:", params.requestId, err);
+    }
+
+    if (liveStatus === "processing") {
+      throw new Error(
+        `Cannot ${params.event.toLowerCase().replace(/_/g, " ")}: a payment is still processing in Stripe for this request. Try again in a few minutes.`
+      );
+    }
+    if (liveStatus === "succeeded") {
+      if (params.event === "CANCEL" || params.event === "REJECT") {
+        const paidNow = new Date();
+        await tx.update(fobRequests).set({ paidAt: paidNow }).where(eq(fobRequests.id, params.requestId));
+        request.paidAt = paidNow; // lets the auto-refund branch below run
+      } else {
+        throw new Error(
+          "Cannot grant exemption: Stripe shows this request has already been paid. Refund it first, or approve it as paid."
+        );
+      }
+    } else if (liveStatus !== null) {
+      try {
+        await cancelPaymentIntent({ paymentIntentId: request.stripePaymentIntentId, stripeAccountId });
+      } catch (err) {
+        console.error("Failed to cancel Stripe intent on", params.event, params.requestId, err);
+      }
+    }
+  }
+
+  // Auto-refund on cancel/reject if payment was made and not yet refunded
+  if (
+    (params.event === "CANCEL" || params.event === "REJECT") &&
+    request.paidAt &&
+    !request.refundedAt &&
+    request.stripePaymentIntentId
+  ) {
+    // Look up tenant's Stripe account
+    const [tenantForRefund] = await tx
+      .select({ stripeAccountId: tenants.stripeAccountId })
+      .from(tenants)
+      .where(eq(tenants.id, params.tenantId))
+      .limit(1);
+
+    // Fire-and-forget: refund failure should not block the state transition
+    try {
+      const refundResult = await createRefund({
+        paymentIntentId: request.stripePaymentIntentId,
+        stripeAccountId: tenantForRefund?.stripeAccountId ?? null,
+        reason: `Auto-refund: request ${params.event.toLowerCase()}`,
+      });
+
+      await tx
+        .update(fobRequests)
+        .set({
+          refundedAt: new Date(),
+          refundedBy: params.actorId,
+          refundReason: `Auto-refund on ${params.event.toLowerCase()}`,
+          stripeRefundId: refundResult.refundId,
+        })
+        .where(eq(fobRequests.id, params.requestId));
+
+      await createAuditEntry(tx, {
+        tenantId: params.tenantId,
+        entityType: AuditEntityType.FOB_REQUEST,
+        entityId: params.requestId,
+        action: AuditAction.UPDATE,
+        actorType: "system",
+        metadata: {
+          action: "auto_refund",
+          trigger: params.event.toLowerCase(),
+          stripeRefundId: refundResult.refundId,
+          paymentAmountCents: request.paymentAmountCents,
+        },
+      });
+
+      // Send refund notification to the member
+      let refundEmail: string | null = null;
+      let refundName = "Member";
+      if (request.requesterId) {
+        const [user] = await tx
+          .select({ email: users.email, firstName: users.firstName, lastName: users.lastName })
+          .from(users)
+          .where(eq(users.id, request.requesterId))
+          .limit(1);
+        if (user) {
+          refundEmail = user.email;
+          refundName = `${user.firstName} ${user.lastName}`;
+        }
+      }
+      if (refundEmail) {
+        const [tenantRow] = await tx
+          .select({ name: tenants.name, settings: tenants.settings })
+          .from(tenants)
+          .where(eq(tenants.id, params.tenantId))
+          .limit(1);
+        if (tenantRow) {
+          const s = (tenantRow.settings ?? {}) as Record<string, unknown>;
+          try {
+            await sendTemplatedEmail(
+              refundEmail,
+              "paymentRefunded",
+              { memberName: refundName, reason: `Your request was ${params.event.toLowerCase()}` },
+              { clubName: tenantRow.name, fromEmailPrefix: s.fromEmailPrefix as string | undefined, replyToEmail: s.replyToEmail as string | undefined },
+              undefined,
+              {
+                tx,
+                tenantId: params.tenantId,
+                entityType: AuditEntityType.FOB_REQUEST,
+                entityId: params.requestId,
+                actorId: params.actorId ?? null,
+              }
+            );
+          } catch (err) {
+            console.error("Failed to send auto-refund email:", err);
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`Auto-refund failed for request ${params.requestId}:`, err);
+      // Don't throw - the cancel/reject should still succeed
+    }
+  }
+
+  // Send notification emails inside the transaction so the audit_log entries
+  // share the same tenant RLS context as the state change.
+  try {
+    await sendTransitionEmail(tx, {
+      event: params.event,
+      request,
+      tenantId: params.tenantId,
+      actorId: params.actorId,
+      metadata: params.metadata,
+    });
+  } catch (err) {
+    console.error("Failed to send transition email:", err);
+  }
+
+  // For damaged fob requests: when exemption is approved, auto-approve the
+  // request itself since there's nothing else to decide — the only question
+  // was whether the member pays. Chain APPROVE_EXEMPTION → AWAITING_APPROVAL → APPROVE.
+  if (
+    params.event === "APPROVE_EXEMPTION" &&
+    request.requestType === RequestType.REPLACEMENT_DAMAGED
+  ) {
+    const now = new Date();
+    await tx
+      .update(fobRequests)
+      .set({
+        status: RequestStatus.AWAITING_PROGRAMMING,
+        approvedAt: now,
+        approvedBy: params.actorId,
+        updatedAt: now,
+      })
+      .where(eq(fobRequests.id, params.requestId));
+
+    await createAuditEntry(tx, {
+      tenantId: params.tenantId,
+      entityType: AuditEntityType.FOB_REQUEST,
+      entityId: params.requestId,
+      action: AuditAction.STATUS_CHANGE,
+      fromState: RequestStatus.AWAITING_APPROVAL,
+      toState: RequestStatus.AWAITING_PROGRAMMING,
+      actorType: "system",
+      metadata: { action: "auto_approved", reason: "Damaged fob exemption approved — auto-approved for programming" },
+    });
+  }
+
+  // For deactivation requests (lost/damaged), auto-complete after programming
+  // There's no physical fob to pick up or issue - the programmer just deactivates in the access system
+  if (
+    params.event === "PROGRAM" &&
+    (request.requestType === RequestType.REPLACEMENT_LOST ||
+     request.requestType === RequestType.REPLACEMENT_DAMAGED)
+  ) {
+    const now = new Date();
+    const [completedRequest] = await tx
+      .update(fobRequests)
+      .set({
+        status: RequestStatus.ISSUED,
+        issuedAt: now,
+        issuedBy: params.actorId,
+        updatedAt: now,
+      })
+      .where(eq(fobRequests.id, params.requestId))
+      .returning();
+
+    await createAuditEntry(tx, {
+      tenantId: params.tenantId,
+      entityType: AuditEntityType.FOB_REQUEST,
+      entityId: params.requestId,
+      action: AuditAction.STATUS_CHANGE,
+      fromState: RequestStatus.PROGRAMMED,
+      toState: RequestStatus.ISSUED,
+      actorType: "system",
+      metadata: { action: "deactivation_complete", reason: "Fob deactivated in access system" },
+    });
+
+    // Send deactivation confirmed email to the member
+    if (request.requesterId) {
+      const [member] = await tx
+        .select({ email: users.email, firstName: users.firstName, lastName: users.lastName })
+        .from(users)
+        .where(eq(users.id, request.requesterId))
+        .limit(1);
+
+      if (member?.email) {
+        const [tenantRow] = await tx
+          .select({ name: tenants.name, settings: tenants.settings, logoUrl: tenants.logoUrl })
+          .from(tenants)
+          .where(eq(tenants.id, params.tenantId))
+          .limit(1);
+
+        if (tenantRow) {
+          let credTypeName = "Credential";
+          if (request.credentialTypeId) {
+            const [ct] = await tx
+              .select({ name: credentialTypes.name })
+              .from(credentialTypes)
+              .where(
+                and(
+                  eq(credentialTypes.id, request.credentialTypeId),
+                  eq(credentialTypes.tenantId, params.tenantId)
+                )
+              )
+              .limit(1);
+            if (ct) credTypeName = ct.name;
+          }
+
+          try {
+            await sendTemplatedEmail(
+              member.email,
+              "credentialDeactivated",
+              {
+                memberName: `${member.firstName} ${member.lastName}`.trim(),
+                credentialType: credTypeName,
+                serialNumber: request.serialNumber ?? "N/A",
+                reason: request.requestType === RequestType.REPLACEMENT_LOST ? "lost" : "damaged",
+              },
+              buildEmailConfig(tenantRow),
+              undefined,
+              {
+                tx,
+                tenantId: params.tenantId,
+                entityType: AuditEntityType.FOB_REQUEST,
+                entityId: params.requestId,
+                actorId: params.actorId ?? null,
+              }
+            );
+          } catch (err) {
+            console.error("Failed to send deactivation email:", err);
+          }
+        }
+      }
+    }
+
+    return completedRequest ?? updated;
+  }
+
+  // Auto-chain: when PROGRAM completes and splitPickupFromProgramming is false,
+  // automatically chain SET_PICKUP in the same transaction (issue is always separate)
+  if (params.event === "PROGRAM") {
+    const [tenant] = await tx
+      .select({ settings: tenants.settings })
+      .from(tenants)
+      .where(eq(tenants.id, params.tenantId))
+      .limit(1);
+
+    const tenantSettings = (tenant?.settings ?? {}) as TenantSettings;
+
+    if (!tenantSettings.splitPickupFromProgramming) {
+      // The member's "ready for collection" email is sent inside the chained
+      // SET_PICKUP below, so the location it names is decided HERE. Prefer the
+      // location the admin chose on the program call (metadata.pickupLocationId).
+      // Before v1.18.1 the UI sent that choice in a follow-up set-pickup call,
+      // which landed after the email had already gone out naming whichever
+      // active location happened to sort first.
+      //
+      // Every lookup MUST be tenant-scoped: without the tenantId predicate this
+      // silently picks a location across ALL tenants (auto-chain wiring a
+      // member's request to another club's physical location).
+      const chosenLocationId = params.metadata?.pickupLocationId
+        ? String(params.metadata.pickupLocationId)
+        : null;
+
+      let location: { id: string } | undefined;
+      if (chosenLocationId) {
+        [location] = await tx
+          .select({ id: pickupLocations.id })
+          .from(pickupLocations)
+          .where(
+            and(
+              eq(pickupLocations.id, chosenLocationId),
+              eq(pickupLocations.isActive, true),
+              eq(pickupLocations.tenantId, params.tenantId)
+            )
+          )
+          .limit(1);
+        // Roll the whole PROGRAM back rather than email an arbitrary location.
+        if (!location) throw new Error("Pickup location not found");
+      } else {
+        // No choice supplied: fall back to the oldest active location so the
+        // default is deterministic (heap order is not).
+        [location] = await tx
+          .select({ id: pickupLocations.id })
+          .from(pickupLocations)
+          .where(
+            and(
+              eq(pickupLocations.isActive, true),
+              eq(pickupLocations.tenantId, params.tenantId)
+            )
+          )
+          .orderBy(asc(pickupLocations.createdAt))
+          .limit(1);
+      }
+
+      if (location) {
+        // Chain SET_PICKUP transition (issue remains a separate manual step)
+        await transitionRequest(tx, {
+          requestId: params.requestId,
+          tenantId: params.tenantId,
+          event: "SET_PICKUP",
+          actorId: params.actorId,
+          updates: { pickupLocationId: location.id },
+          metadata: {
+            pickupLocationId: location.id,
+            autoChained: true,
+            adminChosen: chosenLocationId !== null,
+          },
+        });
+
+        // Re-fetch the final state to return
+        const [finalRequest] = await tx
+          .select()
+          .from(fobRequests)
+          .where(eq(fobRequests.id, params.requestId))
+          .limit(1);
+
+        return finalRequest ?? updated;
+      }
+      // If no pickup locations exist, leave at PROGRAMMED state
+    }
+  }
+
+  return updated;
+}
+
+/**
+ * When a request is issued, create the credential record.
+ * If accessLevelId is not provided, look it up from the member's tenant_memberships.
+ */
+export async function issueCredential(
+  tx: TransactionClient,
+  params: {
+    tenantId: string;
+    requestId: string;
+    ownerId: string;
+    credentialTypeId: string;
+    accessLevelId?: string;
+    serialNumber: string;
+    expiresAt: Date | null;
+    actorId: string;
+  }
+) {
+  // If accessLevelId not provided, look up from the member's membership
+  let resolvedAccessLevelId = params.accessLevelId || undefined;
+  if (!resolvedAccessLevelId) {
+    const [membership] = await tx
+      .select({ accessLevelId: tenantMemberships.accessLevelId })
+      .from(tenantMemberships)
+      .where(
+        and(
+          eq(tenantMemberships.userId, params.ownerId),
+          eq(tenantMemberships.tenantId, params.tenantId)
+        )
+      )
+      .limit(1);
+    resolvedAccessLevelId = membership?.accessLevelId ?? undefined;
+  }
+
+  // Check for existing credential with same serial + type to reassign
+  const [existing] = await tx
+    .select({ id: credentials.id })
+    .from(credentials)
+    .where(
+      and(
+        eq(credentials.tenantId, params.tenantId),
+        eq(credentials.credentialTypeId, params.credentialTypeId),
+        eq(credentials.serialNumber, params.serialNumber)
+      )
+    )
+    .limit(1);
+
+  let credential;
+  const now = new Date();
+
+  if (existing) {
+    // Reassign existing credential record - keep the original credential type (it's a physical object)
+    [credential] = await tx
+      .update(credentials)
+      .set({
+        ownerId: params.ownerId,
+        accessLevelId: resolvedAccessLevelId ?? null,
+        requestId: params.requestId,
+        status: CredentialStatus.ACTIVE,
+        issuedAt: now,
+        expiresAt: params.expiresAt,
+        deactivatedAt: null,
+        deactivatedBy: null,
+        deactivationReason: null,
+        lostReportedAt: null,
+        programmingRequired: false,
+        programmingReason: null,
+        programmingRequestedAt: null,
+        updatedAt: now,
+      })
+      .where(eq(credentials.id, existing.id))
+      .returning();
+  } else {
+    // Create new credential record
+    [credential] = await tx
+      .insert(credentials)
+      .values({
+        tenantId: params.tenantId,
+        ownerId: params.ownerId,
+        credentialTypeId: params.credentialTypeId,
+        accessLevelId: resolvedAccessLevelId ?? null,
+        requestId: params.requestId,
+        serialNumber: params.serialNumber,
+        status: CredentialStatus.ACTIVE,
+        issuedAt: now,
+        expiresAt: params.expiresAt,
+      })
+      .returning();
+  }
+
+  // Look up the member name for the audit entry
+  let assignedMemberName = "Member";
+  const [assignedUser] = await tx
+    .select({ firstName: users.firstName, lastName: users.lastName })
+    .from(users)
+    .where(eq(users.id, params.ownerId))
+    .limit(1);
+  if (assignedUser) {
+    assignedMemberName = `${assignedUser.firstName} ${assignedUser.lastName}`.trim();
+  }
+
+  // Create a single audit entry for the assignment. Both new and reassign
+  // cases include assignedTo/assignedToId so the credential history always
+  // shows who the fob was issued to.
+  await createAuditEntry(tx, {
+    tenantId: params.tenantId,
+    entityType: AuditEntityType.CREDENTIAL,
+    entityId: credential.id,
+    action: existing ? AuditAction.UPDATE : AuditAction.CREATE,
+    toState: CredentialStatus.ACTIVE,
+    actorId: params.actorId,
+    metadata: {
+      action: existing ? "reassigned" : "assigned",
+      requestId: params.requestId,
+      serialNumber: params.serialNumber,
+      assignedTo: assignedMemberName,
+      assignedToId: params.ownerId,
+    },
+  });
+
+  return credential;
+}
+
+/**
+ * Send a notification email after a state transition. All sends are awaited
+ * inside the caller's transaction so that the email_sent / email_failed audit
+ * entries share the tenant RLS context.
+ */
+async function sendTransitionEmail(
+  tx: TransactionClient,
+  params: {
+    event: string;
+    request: typeof fobRequests.$inferSelect;
+    tenantId: string;
+    actorId?: string | null;
+    metadata?: Record<string, unknown>;
+  }
+) {
+  const { event, request, tenantId, actorId, metadata } = params;
+
+  // Audit context for every email sent about this request.
+  const requestAudit = {
+    tx,
+    tenantId,
+    entityType: AuditEntityType.FOB_REQUEST,
+    entityId: request.id,
+    actorId: actorId ?? null,
+  };
+
+  const hasMemberEmail = MEMBER_EMAIL_EVENTS.includes(event);
+  const hasAdminTrigger = ADMIN_TRIGGER_EVENTS.includes(event);
+
+  console.log(`[notify] Event: ${event}, hasMemberEmail: ${hasMemberEmail}, hasAdminTrigger: ${hasAdminTrigger}, requesterId: ${request.requesterId}, orphanEmail: ${request.orphanEmail}`);
+
+  if (!hasMemberEmail && !hasAdminTrigger) return;
+
+  // Resolve the requester's email and name
+  let recipientEmail: string | null = null;
+  let memberName = "Member";
+
+  if (request.requesterId) {
+    const [user] = await tx
+      .select({ email: users.email, firstName: users.firstName, lastName: users.lastName })
+      .from(users)
+      .where(eq(users.id, request.requesterId))
+      .limit(1);
+    if (user) {
+      recipientEmail = user.email;
+      memberName = `${user.firstName} ${user.lastName}`;
+    }
+  } else if (request.orphanEmail) {
+    recipientEmail = request.orphanEmail;
+    memberName = [request.orphanFirstName, request.orphanLastName].filter(Boolean).join(" ") || "Member";
+  }
+
+  console.log(`[notify] Resolved recipient: ${recipientEmail}, memberName: ${memberName}`);
+
+  // Get tenant info for email config
+  const [tenant] = await tx
+    .select({ name: tenants.name, slug: tenants.slug, settings: tenants.settings, logoUrl: tenants.logoUrl })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+
+  if (!tenant) return;
+
+  const emailConfig = buildEmailConfig(tenant);
+
+  // --- Member-facing emails ---
+  if (hasMemberEmail && recipientEmail) {
+    // Check notification preferences for member-facing emails.
+    // Only check when request has a requesterId (not orphaned requests).
+    // Orphaned requests always receive emails since there's no user account for preferences.
+    let sendMemberEmail = true;
+
+    if (request.requesterId) {
+      const notificationType = EVENT_TO_NOTIFICATION_TYPE[event];
+      if (notificationType) {
+        sendMemberEmail = await shouldSendNotification(tx, {
+          tenantId,
+          userId: request.requesterId,
+          notificationType,
+        });
+      }
+    }
+
+    if (sendMemberEmail) {
+      // Damaged fob reports get a specific email on any initial event
+      // (PAYMENT_EXEMPT, REQUEST_EXEMPTION, PAYMENT_RECEIVED) instead of
+      // the generic requestSubmitted/exemptionApproved template.
+      const isDamagedReport = request.requestType === RequestType.REPLACEMENT_DAMAGED;
+      const isDamagedInitialEvent = ["PAYMENT_EXEMPT", "PAYMENT_RECEIVED", "REQUEST_EXEMPTION"].includes(event);
+      const isDamagedApproval = isDamagedReport && event === "APPROVE_EXEMPTION";
+      if (isDamagedReport) {
+        console.log(`[email] Damaged fob email routing: event=${event}, isDamagedInitialEvent=${isDamagedInitialEvent}, isDamagedApproval=${isDamagedApproval}, requestType=${request.requestType}`);
+      }
+      if (isDamagedReport && isDamagedInitialEvent) {
+        await sendTemplatedEmail(recipientEmail, "damagedFobReported", { memberName }, emailConfig, undefined, requestAudit);
+      } else if (isDamagedApproval) {
+        // No email — suppressed by design
+      } else switch (event) {
+        case "APPROVE":
+          await sendTemplatedEmail(recipientEmail, "requestApproved", { memberName }, emailConfig, undefined, requestAudit);
+          break;
+        case "REJECT":
+          await sendTemplatedEmail(
+            recipientEmail,
+            "requestRejected",
+            { memberName, reason: String(metadata?.reason ?? "No reason provided") },
+            emailConfig,
+            undefined,
+            requestAudit
+          );
+          break;
+        case "SET_PICKUP": {
+          let locationName = "See your club for details";
+          if (metadata?.pickupLocationId) {
+            const [loc] = await tx
+              .select({ name: pickupLocations.name })
+              .from(pickupLocations)
+              .where(
+                and(
+                  eq(pickupLocations.id, String(metadata.pickupLocationId)),
+                  eq(pickupLocations.tenantId, tenantId)
+                )
+              )
+              .limit(1);
+            if (loc) locationName = loc.name;
+          }
+          await sendTemplatedEmail(
+            recipientEmail,
+            "readyForPickup",
+            { memberName, pickupLocation: locationName },
+            emailConfig,
+            undefined,
+            requestAudit
+          );
+          break;
+        }
+        case "ISSUE": {
+          if (request.requestType === RequestType.RETURN) {
+            // Return confirmation
+            await sendTemplatedEmail(
+              recipientEmail,
+              "credentialReturnConfirmation",
+              { memberName },
+              emailConfig,
+              undefined,
+              requestAudit
+            );
+          } else if (request.requestType === RequestType.CHANGE_TYPE) {
+            // Change type confirmation - look up old and new type names
+            let oldTypeName = "Previous";
+            let newTypeName = "New";
+            if (request.replacesCredentialId) {
+              const [oldCred] = await tx
+                .select({ credentialTypeId: credentials.credentialTypeId })
+                .from(credentials)
+                .where(
+                  and(
+                    eq(credentials.id, request.replacesCredentialId),
+                    eq(credentials.tenantId, tenantId)
+                  )
+                )
+                .limit(1);
+              if (oldCred?.credentialTypeId) {
+                const [oldCt] = await tx
+                  .select({ name: credentialTypes.name })
+                  .from(credentialTypes)
+                  .where(
+                    and(
+                      eq(credentialTypes.id, oldCred.credentialTypeId),
+                      eq(credentialTypes.tenantId, tenantId)
+                    )
+                  )
+                  .limit(1);
+                if (oldCt) oldTypeName = oldCt.name;
+              }
+            }
+            if (request.credentialTypeId) {
+              const [newCt] = await tx
+                .select({ name: credentialTypes.name })
+                .from(credentialTypes)
+                .where(
+                  and(
+                    eq(credentialTypes.id, request.credentialTypeId),
+                    eq(credentialTypes.tenantId, tenantId)
+                  )
+                )
+                .limit(1);
+              if (newCt) newTypeName = newCt.name;
+            }
+            await sendTemplatedEmail(
+              recipientEmail,
+              "credentialChangeConfirmation",
+              { memberName, oldType: oldTypeName, newType: newTypeName },
+              emailConfig,
+              undefined,
+              requestAudit
+            );
+          } else {
+            // Standard credential issued email with optional document attachments
+            let credTypeName = "Credential";
+            if (request.credentialTypeId) {
+              const [ct] = await tx
+                .select({ name: credentialTypes.name })
+                .from(credentialTypes)
+                .where(
+                  and(
+                    eq(credentialTypes.id, request.credentialTypeId),
+                    eq(credentialTypes.tenantId, tenantId)
+                  )
+                )
+                .limit(1);
+              if (ct) credTypeName = ct.name;
+            }
+
+            // Fetch configured attachments (by-laws, policies, etc.)
+            const settings = (tenant.settings ?? {}) as Record<string, unknown>;
+            const attachmentUrls = Array.isArray(settings.issuedEmailAttachmentUrls)
+              ? (settings.issuedEmailAttachmentUrls as { name: string; url: string }[])
+              : [];
+            let attachments: { filename: string; content: Buffer }[] | undefined;
+            if (attachmentUrls.length > 0) {
+              attachments = await fetchAttachments(attachmentUrls);
+            }
+
+            await sendTemplatedEmail(
+              recipientEmail,
+              "credentialIssued",
+              {
+                memberName,
+                credentialType: credTypeName,
+                serialNumber: request.serialNumber ?? "N/A",
+              },
+              emailConfig,
+              attachments,
+              requestAudit
+            );
+          }
+          break;
+        }
+        case "PROGRAM": {
+          // Send access updated email to member when access_update request is programmed
+          if (request.requestType === RequestType.ACCESS_UPDATE) {
+            await sendTemplatedEmail(
+              recipientEmail,
+              "credentialAccessUpdated",
+              { memberName, serialNumber: request.serialNumber ?? "N/A" },
+              emailConfig,
+              undefined,
+              requestAudit
+            );
+          }
+          break;
+        }
+        case "CANCEL":
+          await sendTemplatedEmail(
+            recipientEmail,
+            "requestCancelled",
+            { memberName, reason: String(metadata?.reason ?? "No reason provided") },
+            emailConfig,
+            undefined,
+            requestAudit
+          );
+          break;
+        case "PAYMENT_RECEIVED":
+          await sendTemplatedEmail(recipientEmail, "requestSubmitted", { memberName, requestType: request.requestType, paymentReceived: true }, emailConfig, undefined, requestAudit);
+          break;
+        case "HOLD":
+          await sendTemplatedEmail(
+            recipientEmail,
+            "requestOnHold",
+            { memberName, reason: String(metadata?.reason ?? "No reason provided") },
+            emailConfig,
+            undefined,
+            requestAudit
+          );
+          break;
+        case "REQUEST_EXEMPTION":
+          await sendTemplatedEmail(recipientEmail, "requestSubmitted", { memberName, requestType: request.requestType, exemptionRequested: true }, emailConfig, undefined, requestAudit);
+          break;
+        case "APPROVE_EXEMPTION":
+        case "PAYMENT_EXEMPT":
+          // Damaged fobs get their own email on submission; suppress here.
+          if (request.requestType !== RequestType.REPLACEMENT_DAMAGED) {
+            await sendTemplatedEmail(recipientEmail, "exemptionApproved", { memberName }, emailConfig, undefined, requestAudit);
+          }
+          break;
+        case "REJECT_EXEMPTION": {
+          const { paymentUrl } = buildPaymentLinks({ tenantSlug: tenant.slug, tenantId, requestId: request.id });
+          await sendTemplatedEmail(
+            recipientEmail,
+            "exemptionRejected",
+            { memberName, reason: String(metadata?.reason ?? "No reason provided"), paymentUrl },
+            emailConfig,
+            undefined,
+            requestAudit
+          );
+          break;
+        }
+        case "PAYMENT_REQUIRED": {
+          // The amount may have been set moments ago by ensurePaymentIntent,
+          // so re-read it rather than trusting the pre-transition row.
+          const [fresh] = await tx
+            .select({ paymentAmountCents: fobRequests.paymentAmountCents })
+            .from(fobRequests)
+            .where(eq(fobRequests.id, request.id))
+            .limit(1);
+          const amount = formatAmountCents(fresh?.paymentAmountCents ?? request.paymentAmountCents);
+          const { paymentUrl, cancelUrl } = buildPaymentLinks({ tenantSlug: tenant.slug, tenantId, requestId: request.id });
+          const reason = metadata?.reason ? String(metadata.reason) : undefined;
+          await sendTemplatedEmail(
+            recipientEmail,
+            "paymentRequired",
+            { memberName, amount, paymentUrl, cancelUrl, reason },
+            emailConfig,
+            undefined,
+            requestAudit
+          );
+          break;
+        }
+      }
+    }
+  }
+
+  // --- Admin-facing notifications (fire-and-forget) ---
+  if (hasAdminTrigger) {
+    // Resolve the new status to determine which admin notification to send
+    let resolvedNewStatus: string;
+    try {
+      resolvedNewStatus = resolveNewStatus(request.status, event);
+    } catch {
+      // If we can't resolve the status, skip admin notifications
+      return;
+    }
+
+    // sendAdminNotification accepts Omit<EmailAuditContext, "tx">, so reuse
+    // the already-built requestAudit minus its tx field rather than restate
+    // tenantId / entityType / entityId / actorId.
+    const { tx: _tx, ...adminAudit } = requestAudit;
+    void _tx;
+    try {
+      switch (resolvedNewStatus) {
+        case RequestStatus.AWAITING_APPROVAL:
+          await sendAdminNotification(tx, {
+            tenantId,
+            requiredPermission: Permission.APPROVE,
+            subject: `New request awaiting approval from ${memberName}`,
+            html: adminApprovalNeededEmail(
+              emailConfig.clubName,
+              memberName,
+              request.requestType ?? "new"
+            ),
+            tenantEmailConfig: emailConfig,
+            notificationType: NotificationType.APPROVAL_NEEDED,
+            summaryData: {
+              label: memberName,
+              detail: `${request.requestType ?? "new"} request`,
+            },
+            audit: adminAudit,
+          });
+          break;
+        case RequestStatus.AWAITING_PROGRAMMING: {
+          await sendAdminNotification(tx, {
+            tenantId,
+            requiredPermission: Permission.PROGRAM,
+            subject: `Request ready for programming - ${memberName}`,
+            html: adminProgrammingNeededEmail(
+              emailConfig.clubName,
+              memberName,
+              request.serialNumber ?? undefined
+            ),
+            tenantEmailConfig: emailConfig,
+            notificationType: NotificationType.PROGRAMMING_NEEDED,
+            summaryData: {
+              label: memberName,
+              detail: request.serialNumber
+                ? `Serial: ${request.serialNumber}`
+                : "Pending programming",
+            },
+            audit: adminAudit,
+          });
+          // Additional access update notification for access_update requests
+          if (request.requestType === RequestType.ACCESS_UPDATE) {
+            let accessLevelName = "Updated";
+            if (request.accessLevelId) {
+              const [al] = await tx
+                .select({ name: accessLevels.name })
+                .from(accessLevels)
+                .where(
+                  and(
+                    eq(accessLevels.id, request.accessLevelId),
+                    eq(accessLevels.tenantId, tenantId)
+                  )
+                )
+                .limit(1);
+              if (al) accessLevelName = al.name;
+            }
+            await sendAdminNotification(tx, {
+              tenantId,
+              requiredPermission: Permission.PROGRAM,
+              subject: `Access level update required - ${memberName}`,
+              html: adminAccessUpdateEmail(
+                emailConfig.clubName,
+                memberName,
+                accessLevelName
+              ),
+              tenantEmailConfig: emailConfig,
+              audit: adminAudit,
+            });
+          }
+          break;
+        }
+        case RequestStatus.AWAITING_EXEMPTION_REVIEW:
+          await sendAdminNotification(tx, {
+            tenantId,
+            requiredPermission: Permission.APPROVE_EXEMPTION,
+            subject: `Payment exemption request from ${memberName} needs review`,
+            html: adminExemptionReviewEmail(
+              emailConfig.clubName,
+              memberName,
+              String(metadata?.reason ?? "No reason provided")
+            ),
+            tenantEmailConfig: emailConfig,
+            notificationType: NotificationType.EXEMPTION_REVIEW_NEEDED,
+            summaryData: {
+              label: memberName,
+              detail: String(metadata?.reason ?? "No reason provided"),
+            },
+            audit: adminAudit,
+          });
+          break;
+        case RequestStatus.AWAITING_PICKUP: {
+          // Notify issuers that a credential is ready for collection
+          let pickupLocationName = "See club for details";
+          if (metadata?.pickupLocationId) {
+            const [loc] = await tx
+              .select({ name: pickupLocations.name })
+              .from(pickupLocations)
+              .where(
+                and(
+                  eq(pickupLocations.id, String(metadata.pickupLocationId)),
+                  eq(pickupLocations.tenantId, tenantId)
+                )
+              )
+              .limit(1);
+            if (loc) pickupLocationName = loc.name;
+          }
+          await sendAdminNotification(tx, {
+            tenantId,
+            requiredPermission: Permission.ISSUE,
+            subject: `Credential ready for collection - ${memberName}`,
+            html: adminReadyForCollectionEmail(
+              emailConfig.clubName,
+              memberName,
+              request.serialNumber ?? "N/A",
+              pickupLocationName
+            ),
+            tenantEmailConfig: emailConfig,
+            notificationType: NotificationType.READY_FOR_PICKUP,
+            summaryData: {
+              label: memberName,
+              detail: `Serial: ${request.serialNumber ?? "N/A"} at ${pickupLocationName}`,
+            },
+            audit: adminAudit,
+          });
+          break;
+        }
+      }
+    } catch (err) {
+      console.error("Failed to send admin notification:", err);
+    }
+  }
+}
+
+type EnsureIntentResult =
+  | "ready" // a usable intent exists (already, or just created)
+  | "paid" // Stripe shows the intent succeeded or processing: do not demand money
+  | "no_price"; // nothing to charge (no credential type, or price 0)
+
+/**
+ * Make sure an unpaid request has a usable Stripe payment intent and a
+ * recorded amount. Checks Stripe for an existing intent rather than trusting
+ * paidAt (a late webhook leaves paidAt null after a real payment), and
+ * replaces an intent that is cancelled (cancel then reopen) or whose amount
+ * no longer matches the price. Shared by REJECT_EXEMPTION, PAYMENT_REQUIRED
+ * and the admin resend action.
+ */
+async function ensurePaymentIntent(
+  tx: TransactionClient,
+  params: {
+    request: typeof fobRequests.$inferSelect;
+    tenantId: string;
+  }
+): Promise<EnsureIntentResult> {
+  const { request, tenantId } = params;
+
+  let amountCents = request.paymentAmountCents ?? 0;
+  if (amountCents <= 0 && request.credentialTypeId) {
+    const [credType] = await tx
+      .select({ priceCents: credentialTypes.priceCents })
+      .from(credentialTypes)
+      .where(
+        and(
+          eq(credentialTypes.id, request.credentialTypeId),
+          eq(credentialTypes.tenantId, tenantId)
+        )
+      )
+      .limit(1);
+    amountCents = credType?.priceCents ?? 0;
+  }
+
+  const [tenant] = await tx
+    .select({ stripeAccountId: tenants.stripeAccountId })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+  const stripeAccountId = tenant?.stripeAccountId ?? null;
+
+  if (request.stripePaymentIntentId) {
+    const existing = await retrievePaymentIntent({
+      paymentIntentId: request.stripePaymentIntentId,
+      stripeAccountId,
+    });
+    if (intentIsPaidOrProcessing(existing.status)) return "paid";
+    const amountMatches = amountCents <= 0 || existing.amountCents === amountCents;
+    if (existing.status !== "canceled" && amountMatches) return "ready";
+    // Cancelled, or the price changed: fall through and create a fresh one.
+    // Void the old one first so a pay page still open on it cannot take the
+    // wrong amount against an intent id the request no longer points at.
+    if (existing.status !== "canceled") {
+      try {
+        await cancelPaymentIntent({ paymentIntentId: request.stripePaymentIntentId, stripeAccountId });
+      } catch (err) {
+        console.error("Failed to cancel superseded Stripe intent:", request.id, err);
+      }
+    }
+  }
+
+  if (amountCents <= 0) return "no_price";
+
+  const intent = await createPaymentIntent({
+    amountCents,
+    stripeAccountId,
+    metadata: { requestId: request.id, tenantId },
+  });
+
+  await tx
+    .update(fobRequests)
+    .set({ stripePaymentIntentId: intent.paymentIntentId, paymentAmountCents: amountCents })
+    .where(eq(fobRequests.id, request.id));
+
+  return "ready";
+}
+
+/**
+ * Live Stripe check used by the public cancel-by-link route: refuse to cancel
+ * when money has been, or is being, taken even if paidAt is still null.
+ */
+export async function requestHasPaymentInFlight(
+  tx: TransactionClient,
+  params: { request: typeof fobRequests.$inferSelect; tenantId: string }
+): Promise<boolean> {
+  if (params.request.paidAt) return true;
+  if (!params.request.stripePaymentIntentId) return false;
+  const [tenant] = await tx
+    .select({ stripeAccountId: tenants.stripeAccountId })
+    .from(tenants)
+    .where(eq(tenants.id, params.tenantId))
+    .limit(1);
+  const existing = await retrievePaymentIntent({
+    paymentIntentId: params.request.stripePaymentIntentId,
+    stripeAccountId: tenant?.stripeAccountId ?? null,
+  });
+  return intentIsPaidOrProcessing(existing.status);
+}
+
+/**
+ * Admin "resend payment link": email the member the pay / cancel links for an
+ * unpaid request without changing its status. Creates the Stripe intent if
+ * the request never got one. Audited as an update with
+ * metadata.action = payment_link_resent.
+ */
+export async function sendPaymentLinkEmail(
+  tx: TransactionClient,
+  params: { requestId: string; tenantId: string; actorId: string | null }
+): Promise<{ sentTo: string }> {
+  const [request] = await tx
+    .select()
+    .from(fobRequests)
+    .where(and(eq(fobRequests.id, params.requestId), eq(fobRequests.tenantId, params.tenantId)))
+    .limit(1);
+  if (!request) throw new Error("Request not found");
+
+  if (request.paidAt) {
+    throw new Error("Cannot resend a payment link: this request has already been paid");
+  }
+  if (request.isOrphaned) {
+    throw new Error("Cannot resend a payment link on an orphaned request. Link it to a member first.");
+  }
+  const resendable: string[] = [RequestStatus.SUBMITTED, RequestStatus.AWAITING_PAYMENT];
+  if (!resendable.includes(request.status)) {
+    throw new Error(
+      `Cannot resend a payment link when status is "${request.status}". Must be awaiting payment.`
+    );
+  }
+  if (request.paymentExempt) {
+    throw new Error("Cannot resend a payment link: this request is payment exempt");
+  }
+
+  const ensured = await ensurePaymentIntent(tx, { request, tenantId: params.tenantId });
+  if (ensured === "no_price") {
+    throw new Error("Cannot resend a payment link: no price is configured for this request's credential type");
+  }
+  if (ensured === "paid") {
+    throw new Error(
+      "Cannot resend a payment link: Stripe shows a payment already received or processing for this request. Check the Stripe dashboard and the webhook log."
+    );
+  }
+
+  let recipientEmail: string | null = null;
+  let memberName = "Member";
+  if (request.requesterId) {
+    const [user] = await tx
+      .select({ email: users.email, firstName: users.firstName, lastName: users.lastName })
+      .from(users)
+      .where(eq(users.id, request.requesterId))
+      .limit(1);
+    if (user) {
+      recipientEmail = user.email;
+      memberName = `${user.firstName} ${user.lastName}`.trim() || "Member";
+    }
+  } else if (request.orphanEmail) {
+    recipientEmail = request.orphanEmail;
+    memberName = [request.orphanFirstName, request.orphanLastName].filter(Boolean).join(" ") || "Member";
+  }
+  if (!recipientEmail) {
+    throw new Error("Cannot resend a payment link: no email address on this request");
+  }
+
+  const [tenant] = await tx
+    .select({ name: tenants.name, slug: tenants.slug, settings: tenants.settings, logoUrl: tenants.logoUrl })
+    .from(tenants)
+    .where(eq(tenants.id, params.tenantId))
+    .limit(1);
+  if (!tenant) throw new Error("Organisation not found");
+
+  const [fresh] = await tx
+    .select({ paymentAmountCents: fobRequests.paymentAmountCents })
+    .from(fobRequests)
+    .where(eq(fobRequests.id, request.id))
+    .limit(1);
+  const amount = formatAmountCents(fresh?.paymentAmountCents ?? request.paymentAmountCents);
+  const { paymentUrl, cancelUrl } = buildPaymentLinks({
+    tenantSlug: tenant.slug,
+    tenantId: params.tenantId,
+    requestId: request.id,
+  });
+
+  await sendTemplatedEmail(
+    recipientEmail,
+    "paymentRequired",
+    { memberName, amount, paymentUrl, cancelUrl },
+    buildEmailConfig(tenant),
+    undefined,
+    {
+      tx,
+      tenantId: params.tenantId,
+      entityType: AuditEntityType.FOB_REQUEST,
+      entityId: request.id,
+      actorId: params.actorId,
+    }
+  );
+
+  await createAuditEntry(tx, {
+    tenantId: params.tenantId,
+    entityType: AuditEntityType.FOB_REQUEST,
+    entityId: request.id,
+    action: AuditAction.UPDATE,
+    actorId: params.actorId,
+    metadata: { action: "payment_link_resent", sentTo: recipientEmail },
+  });
+
+  return { sentTo: recipientEmail };
+}
+
+/**
+ * Resolve the new status given the current status and event.
+ */
+function resolveNewStatus(currentStatus: string, event: string): string {
+  const stateMap: Record<string, Record<string, string>> = {
+    [RequestStatus.SUBMITTED]: {
+      PAYMENT_REQUIRED: RequestStatus.AWAITING_PAYMENT,
+      PAYMENT_EXEMPT: RequestStatus.AWAITING_APPROVAL,
+      PAYMENT_RECEIVED: RequestStatus.AWAITING_APPROVAL,
+      REQUEST_EXEMPTION: RequestStatus.AWAITING_EXEMPTION_REVIEW,
+      HOLD: RequestStatus.ON_HOLD,
+      CANCEL: RequestStatus.CANCELLED,
+    },
+    [RequestStatus.AWAITING_PAYMENT]: {
+      PAYMENT_RECEIVED: RequestStatus.AWAITING_APPROVAL,
+      PAYMENT_EXEMPT: RequestStatus.AWAITING_APPROVAL,
+      REQUEST_EXEMPTION: RequestStatus.AWAITING_EXEMPTION_REVIEW,
+      HOLD: RequestStatus.ON_HOLD,
+      CANCEL: RequestStatus.CANCELLED,
+    },
+    [RequestStatus.AWAITING_EXEMPTION_REVIEW]: {
+      APPROVE_EXEMPTION: RequestStatus.AWAITING_APPROVAL,
+      REJECT_EXEMPTION: RequestStatus.AWAITING_PAYMENT,
+      HOLD: RequestStatus.ON_HOLD,
+      CANCEL: RequestStatus.CANCELLED,
+    },
+    [RequestStatus.AWAITING_APPROVAL]: {
+      APPROVE: RequestStatus.AWAITING_PROGRAMMING,
+      REJECT: RequestStatus.REJECTED,
+      PAYMENT_REQUIRED: RequestStatus.AWAITING_PAYMENT,
+      HOLD: RequestStatus.ON_HOLD,
+      CANCEL: RequestStatus.CANCELLED,
+    },
+    [RequestStatus.AWAITING_PROGRAMMING]: {
+      PROGRAM: RequestStatus.PROGRAMMED,
+      HOLD: RequestStatus.ON_HOLD,
+      CANCEL: RequestStatus.CANCELLED,
+    },
+    [RequestStatus.PROGRAMMED]: {
+      SET_PICKUP: RequestStatus.AWAITING_PICKUP,
+      HOLD: RequestStatus.ON_HOLD,
+      CANCEL: RequestStatus.CANCELLED,
+    },
+    [RequestStatus.AWAITING_PICKUP]: {
+      ISSUE: RequestStatus.ISSUED,
+      HOLD: RequestStatus.ON_HOLD,
+      CANCEL: RequestStatus.CANCELLED,
+    },
+    [RequestStatus.ON_HOLD]: {
+      RESUME: RequestStatus.SUBMITTED, // Overridden by holdPreviousStatus in transitionRequest
+      CANCEL: RequestStatus.CANCELLED,
+    },
+    [RequestStatus.REJECTED]: {
+      REOPEN: RequestStatus.AWAITING_APPROVAL,
+    },
+    [RequestStatus.CANCELLED]: {
+      REOPEN: RequestStatus.AWAITING_APPROVAL, // Default; overridden for lost/damaged below
+    },
+  };
+
+  const transitions = stateMap[currentStatus];
+  if (!transitions || !transitions[event]) {
+    throw new Error(`No transition for "${event}" from "${currentStatus}"`);
+  }
+
+  return transitions[event];
+}

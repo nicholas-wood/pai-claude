@@ -1,0 +1,362 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+type Member = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  membershipCategory: string | null;
+};
+
+type Props = {
+  tenantSlug: string;
+  credentialId: string;
+  currentStatus: string;
+  currentExpiresAt: string | null;
+  currentOwner: {
+    id: string | null;
+    firstName: string | null;
+    lastName: string | null;
+    email: string | null;
+  };
+};
+
+const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "active", label: "Active" },
+  { value: "pending_programming", label: "Pending Programming" },
+  { value: "lost", label: "Reported Lost" },
+  { value: "damaged", label: "Reported Damaged" },
+  { value: "deactivated", label: "Deactivated" },
+  { value: "inactive_lost", label: "Inactive - Lost" },
+  { value: "inactive_damaged", label: "Inactive - Damaged" },
+  { value: "inactive_stolen", label: "Inactive - Stolen" },
+  { value: "expired", label: "Inactive - Expired" },
+  { value: "returned", label: "Inactive - Returned" },
+];
+
+function toDateInputValue(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export function EditCredentialForm({
+  tenantSlug,
+  credentialId,
+  currentStatus,
+  currentExpiresAt,
+  currentOwner,
+}: Props) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+
+  // Form state
+  const [status, setStatus] = useState(currentStatus);
+  const [expiresAt, setExpiresAt] = useState(toDateInputValue(currentExpiresAt));
+  const [clearExpiry, setClearExpiry] = useState(false);
+
+  // Owner state
+  const [selectedOwner, setSelectedOwner] = useState<Member | null>(
+    currentOwner.id && currentOwner.firstName && currentOwner.lastName && currentOwner.email
+      ? {
+          id: currentOwner.id,
+          firstName: currentOwner.firstName,
+          lastName: currentOwner.lastName,
+          email: currentOwner.email,
+          membershipCategory: null,
+        }
+      : null
+  );
+  const [memberQuery, setMemberQuery] = useState("");
+  const [memberResults, setMemberResults] = useState<Member[]>([]);
+  const [memberDropdownOpen, setMemberDropdownOpen] = useState(false);
+  const [unallocate, setUnallocate] = useState(false);
+
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Debounced member search
+  useEffect(() => {
+    const term = memberQuery.trim();
+    if (term.length < 2) {
+      setMemberResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/v1/t/${tenantSlug}/members?q=${encodeURIComponent(term)}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          // The API returns rows keyed by userId, but this form works in
+          // terms of a normalised Member shape with `id`. Map here so the
+          // rest of the form (submit, comparison against currentOwner) can
+          // rely on selectedOwner.id being a real UUID.
+          const members: Member[] = (data.members ?? []).map((m: any) => ({
+            id: m.userId,
+            firstName: m.firstName,
+            lastName: m.lastName,
+            email: m.email,
+            membershipCategory: m.membershipCategory ?? null,
+          }));
+          setMemberResults(members);
+          setMemberDropdownOpen(true);
+        }
+      } catch {}
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [memberQuery, tenantSlug]);
+
+  function reset() {
+    setStatus(currentStatus);
+    setExpiresAt(toDateInputValue(currentExpiresAt));
+    setClearExpiry(false);
+    setUnallocate(false);
+    setMemberQuery("");
+    setMemberResults([]);
+    setError(null);
+  }
+
+  async function submit() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const body: Record<string, unknown> = {};
+
+      if (status !== currentStatus) body.status = status;
+
+      if (clearExpiry) {
+        body.expiresAt = null;
+      } else if (expiresAt && expiresAt !== toDateInputValue(currentExpiresAt)) {
+        body.expiresAt = expiresAt;
+      }
+
+      if (unallocate) {
+        body.ownerId = null;
+      } else if (selectedOwner && selectedOwner.id !== currentOwner.id) {
+        body.ownerId = selectedOwner.id;
+      }
+
+      if (Object.keys(body).length === 0) {
+        setError("Nothing to change");
+        setSubmitting(false);
+        return;
+      }
+
+      const res = await fetch(
+        `/api/v1/t/${tenantSlug}/credentials/${credentialId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Failed to save");
+      }
+      setOpen(false);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        Edit credential
+      </Button>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border bg-card p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold">Edit credential</h3>
+        <button
+          type="button"
+          onClick={() => {
+            reset();
+            setOpen(false);
+          }}
+          className="text-xs text-muted-foreground hover:text-foreground"
+        >
+          Cancel
+        </button>
+      </div>
+
+      {/* Status */}
+      <div className="space-y-1.5">
+        <Label className="text-xs">Status</Label>
+        <Select value={status} onValueChange={(v) => setStatus(v ?? currentStatus)}>
+          <SelectTrigger>
+            <SelectValue>
+              {STATUS_OPTIONS.find((s) => s.value === status)?.label ?? status}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {STATUS_OPTIONS.map((s) => (
+              <SelectItem key={s.value} value={s.value} label={s.label}>
+                {s.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Owner */}
+      <div className="space-y-1.5">
+        <Label className="text-xs">Member</Label>
+        {unallocate ? (
+          <div className="flex items-center gap-2 rounded border px-3 py-2 text-sm text-muted-foreground">
+            <span>Will be unallocated (no owner)</span>
+            <button
+              type="button"
+              onClick={() => setUnallocate(false)}
+              className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+            >
+              Undo
+            </button>
+          </div>
+        ) : selectedOwner ? (
+          <div className="flex items-center gap-2 rounded border px-3 py-2 text-sm">
+            <span className="font-medium">
+              {selectedOwner.firstName} {selectedOwner.lastName}
+            </span>
+            <span className="text-muted-foreground">{selectedOwner.email}</span>
+            <div className="ml-auto flex items-center gap-3 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedOwner(null);
+                  setMemberQuery("");
+                }}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                Change
+              </button>
+              {currentOwner.id && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedOwner(null);
+                    setUnallocate(true);
+                  }}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Unallocate
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="relative">
+            <Input
+              value={memberQuery}
+              onChange={(e) => setMemberQuery(e.target.value)}
+              onFocus={() => setMemberDropdownOpen(true)}
+              placeholder="Search by name or email..."
+            />
+            {memberDropdownOpen && memberResults.length > 0 && (
+              <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border bg-background shadow-lg">
+                {memberResults.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedOwner(m);
+                      setMemberDropdownOpen(false);
+                    }}
+                    className="flex w-full flex-col gap-0.5 px-3 py-2 text-left text-sm hover:bg-accent"
+                  >
+                    <span className="font-medium">
+                      {m.firstName} {m.lastName}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{m.email}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Expiry */}
+      <div className="space-y-1.5">
+        <Label className="text-xs">Expiry date</Label>
+        {clearExpiry ? (
+          <div className="flex items-center gap-2 rounded border px-3 py-2 text-sm text-muted-foreground">
+            <span>Will be cleared (no expiry)</span>
+            <button
+              type="button"
+              onClick={() => setClearExpiry(false)}
+              className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+            >
+              Undo
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Input
+              type="date"
+              value={expiresAt}
+              onChange={(e) => setExpiresAt(e.target.value)}
+            />
+            {currentExpiresAt && (
+              <button
+                type="button"
+                onClick={() => {
+                  setClearExpiry(true);
+                  setExpiresAt("");
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap"
+              >
+                Clear expiry
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      <div className="flex items-center gap-2">
+        <Button size="sm" onClick={submit} disabled={submitting}>
+          {submitting ? "Saving..." : "Save changes"}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            reset();
+            setOpen(false);
+          }}
+          disabled={submitting}
+        >
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}

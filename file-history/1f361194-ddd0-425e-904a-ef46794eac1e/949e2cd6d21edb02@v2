@@ -1,0 +1,317 @@
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { and, eq } from "drizzle-orm";
+import { NextRequest } from "next/server";
+
+/**
+ * Admin edit of a credential's type (PATCH /credentials/[id] with
+ * credentialTypeId).
+ *
+ * The admin PATCH endpoint historically let an admin change owner, status,
+ * expiry and access start but not the credential type, so a fob recorded
+ * under the wrong type (e.g. "Key" instead of "Fob") could only be fixed by
+ * deleting and re-adding it, losing its history. This suite proves:
+ *   (a) a valid same-tenant active type is applied and audited by name,
+ *   (b) the audit entry is a change-only diff that also carries the ids,
+ *   (c) another tenant's type, an inactive type and an unknown id all 400
+ *       and leave the row untouched,
+ *   (d) a retype that would collide with the (tenant, type, serial) unique
+ *       constraint is refused with a 409 rather than a 500,
+ *   (e) sending the current type is a no-op with no audit row,
+ *   (f) a type change never touches status, owner, expiry or the
+ *       programming flag.
+ *
+ * Auth, tenant resolution and permission checks are mocked so the handler
+ * can be called directly; everything below them runs against the real
+ * database. Gated on DATABASE_URL; runs in CI against the migrated
+ * Postgres, skips on a laptop with no database.
+ */
+
+const hasDb = !!process.env.DATABASE_URL;
+
+// Mutable holders the mocks read from, filled in beforeAll.
+const ctx: {
+  tenant: { id: string; slug: string } | null;
+  actorId: string | null;
+} = { tenant: null, actorId: null };
+
+vi.mock("@/lib/auth", () => ({
+  getAuthUser: async () => ({
+    user: {
+      id: ctx.actorId,
+      firebaseUid: "type-edit-fb",
+      email: "type-edit@example.com",
+      firstName: "Type",
+      lastName: "Editor",
+      phone: null,
+    },
+    memberships: [],
+    isGlobalAdmin: false,
+  }),
+}));
+
+vi.mock("@/lib/tenant", () => ({
+  resolveTenant: async (slug: string) =>
+    ctx.tenant && slug === ctx.tenant.slug
+      ? {
+          id: ctx.tenant.id,
+          name: "Type Edit Club",
+          slug: ctx.tenant.slug,
+          settings: {},
+          timezone: "Australia/Melbourne",
+          logoUrl: null,
+          stripeAccountId: null,
+        }
+      : null,
+}));
+
+vi.mock("@/lib/permissions", () => ({
+  checkPermission: () => ({ granted: true }),
+}));
+
+describe.skipIf(!hasDb)("admin PATCH changes a credential's type", () => {
+  let db: typeof import("@accessbuddy/db").db;
+  let tenants: typeof import("@accessbuddy/db").tenants;
+  let users: typeof import("@accessbuddy/db").users;
+  let credentialTypes: typeof import("@accessbuddy/db").credentialTypes;
+  let credentials: typeof import("@accessbuddy/db").credentials;
+  let auditLog: typeof import("@accessbuddy/db").auditLog;
+  let PATCH: typeof import("@/app/api/v1/t/[slug]/credentials/[id]/route").PATCH;
+  let CredentialStatus: typeof import("@accessbuddy/shared").CredentialStatus;
+
+  let tenant: { id: string; slug: string };
+  let otherTenant: { id: string };
+  let admin: { id: string };
+  let fobType: { id: string };
+  let keyType: { id: string };
+  let retiredType: { id: string };
+  let foreignType: { id: string };
+  let credential: { id: string };
+  let clashingCredential: { id: string };
+
+  async function patch(credentialId: string, body: unknown) {
+    const request = new NextRequest(
+      `http://localhost/api/v1/t/${tenant.slug}/credentials/${credentialId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }
+    );
+    const res = await PATCH(request, {
+      params: Promise.resolve({ slug: tenant.slug, id: credentialId }),
+    });
+    return { status: res.status, json: await res.json() };
+  }
+
+  async function load(credentialId: string) {
+    const [row] = await db
+      .select({
+        credentialTypeId: credentials.credentialTypeId,
+        status: credentials.status,
+        ownerId: credentials.ownerId,
+        expiresAt: credentials.expiresAt,
+        programmingRequired: credentials.programmingRequired,
+        updatedAt: credentials.updatedAt,
+      })
+      .from(credentials)
+      .where(eq(credentials.id, credentialId))
+      .limit(1);
+    return row;
+  }
+
+  async function auditRows(credentialId: string) {
+    return db
+      .select({
+        action: auditLog.action,
+        metadata: auditLog.metadata,
+      })
+      .from(auditLog)
+      .where(
+        and(eq(auditLog.entityType, "credential"), eq(auditLog.entityId, credentialId))
+      );
+  }
+
+  beforeAll(async () => {
+    const dbPackage = await import("@accessbuddy/db");
+    const shared = await import("@accessbuddy/shared");
+    db = dbPackage.db;
+    tenants = dbPackage.tenants;
+    users = dbPackage.users;
+    credentialTypes = dbPackage.credentialTypes;
+    credentials = dbPackage.credentials;
+    auditLog = dbPackage.auditLog;
+    CredentialStatus = shared.CredentialStatus;
+
+    const suffix = `${Date.now()}`;
+    const [t] = await db
+      .insert(tenants)
+      .values({ name: `Type Edit Club ${suffix}`, slug: `type-edit-${suffix}` })
+      .returning({ id: tenants.id, slug: tenants.slug });
+    tenant = t;
+    [otherTenant] = await db
+      .insert(tenants)
+      .values({ name: `Other Club ${suffix}`, slug: `type-edit-other-${suffix}` })
+      .returning({ id: tenants.id });
+    [admin] = await db
+      .insert(users)
+      .values({
+        firebaseUid: `type-edit-fb-${suffix}`,
+        email: `type-edit-${suffix}@example.com`,
+        firstName: "Type",
+        lastName: "Editor",
+      })
+      .returning({ id: users.id });
+    ctx.tenant = tenant;
+    ctx.actorId = admin.id;
+
+    [fobType] = await db
+      .insert(credentialTypes)
+      .values({ tenantId: tenant.id, name: "Fob", priceCents: 0 })
+      .returning({ id: credentialTypes.id });
+    [keyType] = await db
+      .insert(credentialTypes)
+      .values({ tenantId: tenant.id, name: "Key", priceCents: 0 })
+      .returning({ id: credentialTypes.id });
+    [retiredType] = await db
+      .insert(credentialTypes)
+      .values({ tenantId: tenant.id, name: "Old Fob", priceCents: 0, isActive: false })
+      .returning({ id: credentialTypes.id });
+    [foreignType] = await db
+      .insert(credentialTypes)
+      .values({ tenantId: otherTenant.id, name: "Fob", priceCents: 0 })
+      .returning({ id: credentialTypes.id });
+
+    const expires = new Date("2027-06-30T00:00:00.000Z");
+    [credential] = await db
+      .insert(credentials)
+      .values({
+        tenantId: tenant.id,
+        ownerId: admin.id,
+        credentialTypeId: fobType.id,
+        serialNumber: `SN-${suffix}`,
+        status: CredentialStatus.ACTIVE,
+        issuedAt: new Date(),
+        expiresAt: expires,
+      })
+      .returning({ id: credentials.id });
+    // Same serial already exists under the Key type: a retype of the
+    // credential above to Key would violate credentials_tenant_type_serial_unique.
+    [clashingCredential] = await db
+      .insert(credentials)
+      .values({
+        tenantId: tenant.id,
+        ownerId: null,
+        credentialTypeId: keyType.id,
+        serialNumber: `SN-${suffix}`,
+        status: CredentialStatus.ACTIVE,
+        issuedAt: new Date(),
+      })
+      .returning({ id: credentials.id });
+
+    ({ PATCH } = await import("@/app/api/v1/t/[slug]/credentials/[id]/route"));
+  });
+
+  afterAll(async () => {
+    for (const tid of [tenant.id, otherTenant.id]) {
+      await db.delete(auditLog).where(eq(auditLog.tenantId, tid));
+      await db.delete(credentials).where(eq(credentials.tenantId, tid));
+      await db.delete(credentialTypes).where(eq(credentialTypes.tenantId, tid));
+      await db.delete(tenants).where(eq(tenants.id, tid));
+    }
+    await db.delete(users).where(eq(users.id, admin.id));
+  });
+
+  it("refuses another tenant's type and leaves the row unchanged", async () => {
+    const before = await load(credential.id);
+    const { status, json } = await patch(credential.id, { credentialTypeId: foreignType.id });
+    expect(status).toBe(400);
+    expect(json.error).toMatch(/not an active credential type/);
+    expect((await load(credential.id)).credentialTypeId).toBe(before.credentialTypeId);
+  });
+
+  it("refuses an inactive type", async () => {
+    const { status } = await patch(credential.id, { credentialTypeId: retiredType.id });
+    expect(status).toBe(400);
+    expect((await load(credential.id)).credentialTypeId).toBe(fobType.id);
+  });
+
+  it("refuses an unknown type id with the same message as a foreign one", async () => {
+    const { status, json } = await patch(credential.id, {
+      credentialTypeId: "00000000-0000-4000-8000-000000000000",
+    });
+    expect(status).toBe(400);
+    expect(json.error).toMatch(/not an active credential type/);
+  });
+
+  it("refuses a retype that would collide on (tenant, type, serial) with a 409", async () => {
+    const { status, json } = await patch(credential.id, { credentialTypeId: keyType.id });
+    expect(status).toBe(409);
+    expect(json.error).toMatch(/already exists under Key/);
+    expect((await load(credential.id)).credentialTypeId).toBe(fobType.id);
+  });
+
+  it("treats the current type as a no-op and writes no audit row", async () => {
+    const auditBefore = (await auditRows(credential.id)).length;
+    const { status } = await patch(credential.id, { credentialTypeId: fobType.id });
+    expect(status).toBe(200);
+    expect((await auditRows(credential.id)).length).toBe(auditBefore);
+  });
+
+  it("still lets an unrelated field be edited when the current type has been retired", async () => {
+    // The active-type check must only fire when the type actually changes,
+    // otherwise a credential sitting on a retired type becomes uneditable.
+    const [onRetired] = await db
+      .insert(credentials)
+      .values({
+        tenantId: tenant.id,
+        ownerId: null,
+        credentialTypeId: retiredType.id,
+        status: CredentialStatus.ACTIVE,
+        issuedAt: new Date(),
+        expiresAt: new Date("2027-01-01T00:00:00.000Z"),
+      })
+      .returning({ id: credentials.id });
+
+    const { status } = await patch(onRetired.id, {
+      credentialTypeId: retiredType.id,
+      expiresAt: null,
+    });
+    expect(status).toBe(200);
+    const after = await load(onRetired.id);
+    expect(after.credentialTypeId).toBe(retiredType.id);
+    expect(after.expiresAt).toBeNull();
+  });
+
+  it("applies a valid type, audits it by name with ids alongside, and touches nothing else", async () => {
+    // Free the serial under Key so the retype is legal.
+    await db.delete(credentials).where(eq(credentials.id, clashingCredential.id));
+
+    const before = await load(credential.id);
+    const { status, json } = await patch(credential.id, { credentialTypeId: keyType.id });
+    expect(status).toBe(200);
+    expect(json.credential.credentialTypeId).toBe(keyType.id);
+
+    const after = await load(credential.id);
+    expect(after.credentialTypeId).toBe(keyType.id);
+    expect(after.updatedAt.getTime()).toBeGreaterThan(before.updatedAt.getTime());
+    // Pure record correction: nothing else moves.
+    expect(after.status).toBe(before.status);
+    expect(after.ownerId).toBe(before.ownerId);
+    expect(after.expiresAt?.toISOString()).toBe(before.expiresAt?.toISOString());
+    expect(after.programmingRequired).toBe(before.programmingRequired);
+
+    const rows = await auditRows(credential.id);
+    expect(rows).toHaveLength(1);
+    const [entry] = rows;
+    expect(entry.action).toBe("update");
+    const meta = entry.metadata as {
+      action: string;
+      changes: Record<string, { from: unknown; to: unknown }>;
+      credentialTypeIds: { from: string; to: string };
+    };
+    expect(meta.action).toBe("admin_edit");
+    expect(Object.keys(meta.changes)).toEqual(["credentialType"]);
+    expect(meta.changes.credentialType).toEqual({ from: "Fob", to: "Key" });
+    expect(meta.credentialTypeIds).toEqual({ from: fobType.id, to: keyType.id });
+  });
+});

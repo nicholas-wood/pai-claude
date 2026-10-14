@@ -1,0 +1,42 @@
+## Summary
+
+Retires the old fob on `return` and `change_type` requests. Until now the issuer was never prompted about the original fob and the code never touched it: a change-of-type left the member holding two `active` credentials indefinitely, and a return stored no link to the fobs being returned (the `selectedFobIds` the form sent were discarded). `docs/FLOWS.md` 3.5 and 3.6 described an exchange and a collection that were not implemented. Lost/damaged is unchanged.
+
+Spec: AccessBuddy project ISA, ISC-46..86 (`~/Documents/workspace/projects/accessbuddy/ISA.md`).
+
+## What changes
+
+**Return**
+- One `return` request per selected fob, each carrying `replacesCredentialId`, `serialNumber`, `credentialTypeId`. Submit validates the fobs are the verified member's own, tenant-scoped, `active`/`expired`, and not already under an open return. Orphaned/unmatched returns are rejected.
+- `return` joins `NON_CREDENTIAL_REQUEST_TYPES` (previously a return with a serial could allocate a credential at PROGRAM).
+- PROGRAM sets the credential `deactivated` ("Return in progress - awaiting collection") and the request goes to `AWAITING_PICKUP` ("Awaiting Collection"). Pickup/reminder emails are suppressed for returns.
+- ISSUE is a collection confirm ("Collected <type> #<serial> from <member>?"). On confirm the credential becomes `returned`, audit `collected`, and `credentialReturnConfirmation` fires per fob naming type and serial. The service refuses ISSUE on a return without `collected: true`.
+- Cancel after PROGRAM reverts the credential (`active`, or `expired` past expiry) and flags `programmingRequired` because the fob was removed from the access system. Cancel before PROGRAM no longer unallocates the member's live fob via the cancel-by-serial lookup.
+- Stepper: Submitted → Deactivation → Collection → Done. Badge on an issued return: "Returned".
+
+**Change type**
+- Old credential is untouched through SUBMIT, APPROVE and PROGRAM (member keeps access until the exchange). `replacesCredentialId` is now ownership-validated at submit.
+- ISSUE is the same collection confirm. On confirm the old credential becomes `returned` with reason "Exchanged for <new type> #<new serial>", audit `exchanged`, and is flagged `programmingRequired` ("Returned in exchange for … - remove from access system") so it appears in the dashboard credential-updates list and the daily summary for the programmer. `confirm-programming` leaves a `returned` credential `returned` (unit tested).
+- `credentialChangeConfirmation` names the returned and issued serials. No `credentialDeactivated` email for the old fob.
+- Request detail shows "Replacing <type> #<serial>" at every stage. Final stepper step reads "Exchanged".
+
+**Return auto-close**
+- Tenant setting `returnAutoCloseDays` (default 30, 1..365) on the admin settings page.
+- Daily cron step: a `return` at `AWAITING_PICKUP` whose `programmedAt` is older than the window, and whose linked credential is `deactivated` with the return-in-progress reason, is closed: request ISSUED with `auto_closed_at` set (new nullable column, migration 0017), `issuedBy` null, metadata `{ autoClosed, collected: false, autoCloseDays }`; credential stays `deactivated` with reason "Return auto-closed after N days - fob not received"; one `returnAutoClosed` member email (own notification type); badge/stepper "Closed - not collected"; daily summary section for issue-permission admins. One transaction per request; idempotent; legacy returns with no credential link are never selected.
+
+**Also**
+- `packages/db/src/report-unretired-exchange-fobs.ts`: read-only report of SMLSC credentials still `active` but referenced by an ISSUED `change_type`, and ISSUED returns with no linked credential. Not yet run against prod.
+- `docs/FLOWS.md` 3.5, 3.6, 5.4 rewritten to match.
+
+## Not changed
+- Lost/damaged flow (ISC-66): no behaviour change, existing tests unmodified bar one classification assertion. Known pre-existing gap left alone: lost/damaged submit does not ownership-check the credential.
+- `change_type` stays payment-exempt.
+
+## Verification
+- `bun run typecheck` 5/5; `bun run lint` 0 errors; `bun run test` with DATABASE_URL: shared 19, db 16, web 271 passed, 0 skipped (DB-backed suites ran against an embedded Postgres).
+- Independent QA pass (read-only agent): MERGE-READY, no critical/high findings; its four low/medium findings are fixed in the last commit.
+- Rebased onto main after #104.
+
+## After merge
+- Interceptor probes once deployed: collection confirm on a return and a change_type (ISC-53), "Replacing …" on a change_type detail page (ISC-58), old fob in the dashboard credential-updates list after an exchange (ISC-61), settings field (ISC-77), "Closed - not collected" badge (ISC-82), version footer (ISC-76).
+- Run `report-unretired-exchange-fobs.ts` against prod in a DB window and remediate by admin credential edit.

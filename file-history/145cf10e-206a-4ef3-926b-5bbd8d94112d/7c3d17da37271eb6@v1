@@ -1,0 +1,102 @@
+import { NextRequest, NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+import { z } from "zod";
+import { Permission, RequestStatus } from "@accessbuddy/shared";
+import { fobRequests } from "@accessbuddy/db";
+import { getAuthUser } from "@/lib/auth";
+import { resolveTenant } from "@/lib/tenant";
+import { checkPermission } from "@/lib/permissions";
+import { withTenant } from "@/lib/with-tenant";
+import { transitionRequest } from "@/lib/services/requests";
+
+const bodySchema = z.object({
+  reason: z.string().min(1, "Reason is required").max(500),
+});
+
+/**
+ * Admin-initiated payment exemption grant. Transitions an awaiting_payment
+ * request straight to awaiting_approval, recording the exemption reason.
+ * Distinct from APPROVE_EXEMPTION, which is used after a member has
+ * requested the exemption themselves.
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string; id: string }> }
+) {
+  try {
+    const auth = await getAuthUser();
+    if (!auth) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    const { slug, id: requestId } = await params;
+    const tenant = await resolveTenant(slug);
+    if (!tenant) {
+      return NextResponse.json(
+        { error: "Organisation not found" },
+        { status: 404 }
+      );
+    }
+
+    // Granting an exemption is an approver-level action.
+    const permResult = checkPermission(auth, tenant.id, Permission.APPROVE_EXEMPTION);
+    if (!permResult.granted) {
+      return NextResponse.json({ error: permResult.reason }, { status: 403 });
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const parsed = bodySchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.errors[0]?.message ?? "Invalid input" },
+        { status: 400 }
+      );
+    }
+
+    const { reason } = parsed.data;
+
+    const updated = await withTenant(tenant.id, async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(fobRequests)
+        .where(eq(fobRequests.id, requestId))
+        .limit(1);
+
+      if (!current) {
+        throw new Error("Request not found");
+      }
+      if (current.status !== RequestStatus.AWAITING_PAYMENT) {
+        throw new Error(
+          `Cannot grant exemption when status is "${current.status}". Must be "awaiting_payment".`
+        );
+      }
+
+      return transitionRequest(tx, {
+        requestId,
+        tenantId: tenant.id,
+        event: "PAYMENT_EXEMPT",
+        actorId: auth.user.id,
+        updates: {
+          paymentExempt: true,
+          exemptionReason: reason,
+          exemptionRequested: true,
+        },
+        metadata: {
+          reason,
+          action: "admin_grant_exemption",
+        },
+      });
+    });
+
+    return NextResponse.json({ request: updated });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal server error";
+    const status =
+      message.includes("Cannot") || message.includes("not found") ? 400 : 500;
+    if (status === 500) console.error("Grant exemption error:", err);
+    return NextResponse.json({ error: message }, { status });
+  }
+}

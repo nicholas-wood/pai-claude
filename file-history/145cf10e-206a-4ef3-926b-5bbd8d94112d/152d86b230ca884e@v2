@@ -1,0 +1,322 @@
+"use client";
+
+import { useState, useMemo } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { QueueItem } from "@/components/queue-item";
+import { CredentialUpdateRow } from "@/components/credential-update-row";
+import { AttestationPendingRow } from "@/components/attestation-pending-row";
+import { RequestStatus } from "@accessbuddy/shared";
+
+// Synthetic section keys used only by the client-side filter. They do not
+// correspond to any RequestStatus — they let us surface things like pending
+// attestations alongside the real queue sections.
+const ATTESTATION_PENDING = "attestation_pending" as const;
+
+const QUEUE_SECTIONS = [
+  { status: RequestStatus.AWAITING_EXEMPTION_REVIEW, title: "Exemption Review", colour: "bg-orange-500", ring: "ring-orange-500" },
+  { status: RequestStatus.AWAITING_APPROVAL, title: "Awaiting Approval", colour: "bg-amber-500", ring: "ring-amber-500" },
+  { status: RequestStatus.AWAITING_PROGRAMMING, title: "Awaiting Programming", colour: "bg-blue-500", ring: "ring-blue-500" },
+  { status: RequestStatus.PROGRAMMED, title: "Set Pickup", colour: "bg-indigo-500", ring: "ring-indigo-500" },
+  { status: RequestStatus.AWAITING_PICKUP, title: "Awaiting Pickup", colour: "bg-green-500", ring: "ring-green-500" },
+  { status: ATTESTATION_PENDING, title: "Attestation Pending", colour: "bg-sky-500", ring: "ring-sky-500" },
+  { status: RequestStatus.ON_HOLD, title: "On Hold", colour: "bg-red-500", ring: "ring-red-500" },
+  { status: RequestStatus.AWAITING_PAYMENT, title: "Awaiting Payment", colour: "bg-gray-500", ring: "ring-gray-500" },
+  // Priced requests rest in SUBMITTED until the member pays or asks for an
+  // exemption. Without this section a member who closed the Stripe step left
+  // a request no queue column rendered. The nightly sweep moves these to
+  // Awaiting Payment; this covers the same-day window.
+  { status: RequestStatus.SUBMITTED, title: "Submitted (unpaid)", colour: "bg-zinc-400", ring: "ring-zinc-400" },
+  { status: RequestStatus.ISSUED, title: "Issued", colour: "bg-emerald-500", ring: "ring-emerald-500" },
+  { status: RequestStatus.CANCELLED, title: "Cancelled", colour: "bg-slate-400", ring: "ring-slate-400" },
+  { status: RequestStatus.REJECTED, title: "Rejected", colour: "bg-rose-400", ring: "ring-rose-400" },
+] as const;
+
+const PERMISSION_ACTIONABLE: Record<string, string[]> = {
+  approve: [RequestStatus.AWAITING_APPROVAL, RequestStatus.ON_HOLD],
+  approve_exemption: [RequestStatus.AWAITING_EXEMPTION_REVIEW],
+  program: [RequestStatus.AWAITING_PROGRAMMING],
+  issue: [RequestStatus.PROGRAMMED, RequestStatus.AWAITING_PICKUP],
+  reopen: [RequestStatus.CANCELLED, RequestStatus.REJECTED],
+  renew: [ATTESTATION_PENDING],
+};
+
+type RequestData = {
+  id: string;
+  status: string;
+  requestType: string;
+  submittedAt: string;
+  holdReason: string | null;
+  serialNumber: string | null;
+  requesterId: string | null;
+  requesterFirstName: string;
+  requesterLastName: string;
+  requesterEmail: string;
+  credentialTypeName: string | null;
+  relatedRequestId?: string | null;
+  replacesCredentialSerial?: string | null;
+  accessLevelName?: string | null;
+  accessUpdateReason?: string | null;
+  exemptionReason?: string | null;
+  pickupLocationName?: string | null;
+  paidAt?: string | null;
+};
+
+type CredentialUpdate = {
+  id: string;
+  serialNumber: string | null;
+  credentialTypeName: string | null;
+  programmingReason: string | null;
+  ownerFirstName: string | null;
+  ownerLastName: string | null;
+  ownerEmail: string | null;
+};
+
+type PendingAttestation = {
+  id: string;
+  userId: string;
+  season: string;
+  tokenExpiresAt: string | null;
+  memberFirstName: string | null;
+  memberLastName: string | null;
+  memberEmail: string | null;
+};
+
+type Props = {
+  slug: string;
+  requests: RequestData[];
+  credentialUpdates?: CredentialUpdate[];
+  pendingAttestations?: PendingAttestation[];
+  permissions: string[];
+  canApprove: boolean;
+  canApproveExemption: boolean;
+  canProgram: boolean;
+  canIssue: boolean;
+  splitPickupFromProgramming: boolean;
+};
+
+// Terminal states — always off by default so the queue doesn't come
+// pre-loaded with closed requests the admin has already actioned.
+const NEVER_DEFAULT_ON = new Set<string>([
+  RequestStatus.CANCELLED,
+  RequestStatus.REJECTED,
+]);
+
+export function QueueFilter({ slug, requests, credentialUpdates = [], pendingAttestations = [], permissions, canApprove, canApproveExemption, canProgram, canIssue, splitPickupFromProgramming }: Props) {
+  const defaultStatuses = new Set<string>();
+  for (const perm of permissions) {
+    const actionable = PERMISSION_ACTIONABLE[perm];
+    if (actionable) {
+      for (const s of actionable) {
+        if (!NEVER_DEFAULT_ON.has(s)) defaultStatuses.add(s);
+      }
+    }
+  }
+  if (defaultStatuses.size === 0) {
+    for (const s of QUEUE_SECTIONS) {
+      if (!NEVER_DEFAULT_ON.has(s.status)) defaultStatuses.add(s.status);
+    }
+  }
+
+  const [activeStatuses, setActiveStatuses] = useState<Set<string>>(defaultStatuses);
+  const [search, setSearch] = useState("");
+
+  function toggle(status: string) {
+    setActiveStatuses((prev) => {
+      const next = new Set(prev);
+      if (next.has(status)) {
+        next.delete(status);
+      } else {
+        next.add(status);
+      }
+      return next;
+    });
+  }
+
+  function showAll() {
+    setActiveStatuses(new Set(QUEUE_SECTIONS.map((s) => s.status)));
+  }
+
+  function showNone() {
+    setActiveStatuses(new Set());
+  }
+
+  const statusCounts: Record<string, number> = {};
+  for (const req of requests) {
+    statusCounts[req.status] = (statusCounts[req.status] ?? 0) + 1;
+  }
+  // Credential updates live alongside the awaiting_programming section so the
+  // count bubble reflects everything a programmer has to action.
+  if (credentialUpdates.length > 0) {
+    statusCounts[RequestStatus.AWAITING_PROGRAMMING] =
+      (statusCounts[RequestStatus.AWAITING_PROGRAMMING] ?? 0) + credentialUpdates.length;
+  }
+  // Synthetic Attestation Pending section
+  statusCounts[ATTESTATION_PENDING] = pendingAttestations.length;
+
+  const allSelected = activeStatuses.size === QUEUE_SECTIONS.length;
+
+  const searchTerm = search.trim().toLowerCase();
+  const searchResults = useMemo(() => {
+    if (!searchTerm) return null;
+    return requests.filter((r) => {
+      const haystack = [
+        r.requesterFirstName,
+        r.requesterLastName,
+        r.requesterEmail,
+        r.serialNumber,
+        r.id,
+        r.credentialTypeName,
+        r.requestType,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(searchTerm);
+    });
+  }, [searchTerm, requests]);
+
+  return (
+    <>
+      <Input
+        placeholder="Search requests by name, email, serial, ID..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="max-w-md"
+      />
+
+      {searchResults ? (
+        <>
+          <p className="text-sm text-muted-foreground">
+            {searchResults.length} result{searchResults.length !== 1 ? "s" : ""} for "{search.trim()}"
+            <button type="button" onClick={() => setSearch("")} className="ml-2 text-primary hover:underline">Clear</button>
+          </p>
+          {searchResults.length > 0 ? (
+            <div className="space-y-2">
+              {searchResults.map((req) => (
+                <QueueItem
+                  key={req.id}
+                  slug={slug}
+                  request={req}
+                  permissions={permissions}
+                  splitPickupFromProgramming={splitPickupFromProgramming}
+                />
+              ))}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">
+                No requests match your search.
+              </CardContent>
+            </Card>
+          )}
+        </>
+      ) : (
+      <>
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-11">
+        {QUEUE_SECTIONS.map((section) => {
+          const count = statusCounts[section.status] ?? 0;
+          const isActive = activeStatuses.has(section.status);
+          return (
+            <button
+              key={section.status}
+              type="button"
+              onClick={() => toggle(section.status)}
+              className={`rounded-lg border p-2 text-center transition-all ${
+                isActive
+                  ? `border-transparent ring-2 ${section.ring} bg-background`
+                  : "border-border bg-background/50 opacity-50"
+              }`}
+            >
+              <div className={`mx-auto mb-1 h-1 w-6 rounded-full ${section.colour}`} />
+              <p className="text-xl font-bold">{count}</p>
+              <p className="text-[10px] leading-tight text-muted-foreground">{section.title}</p>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex items-center gap-3 text-xs">
+        {!allSelected && (
+          <button
+            type="button"
+            onClick={showAll}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            Show all queues
+          </button>
+        )}
+        {activeStatuses.size > 0 && (
+          <button
+            type="button"
+            onClick={showNone}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            Show no queues
+          </button>
+        )}
+      </div>
+
+      {QUEUE_SECTIONS.filter((s) => activeStatuses.has(s.status)).map((section) => {
+        if (section.status === ATTESTATION_PENDING) {
+          if (pendingAttestations.length === 0) return null;
+          return (
+            <div key={section.status} className="mt-4">
+              <h2 className="mb-2 text-lg font-semibold">{section.title}</h2>
+              <div className="space-y-2">
+                {pendingAttestations.map((att) => (
+                  <AttestationPendingRow
+                    key={`att-${att.id}`}
+                    tenantSlug={slug}
+                    attestation={att}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        }
+        const items = requests.filter((r) => r.status === section.status);
+        const isProgramming = section.status === RequestStatus.AWAITING_PROGRAMMING;
+        const updates = isProgramming ? credentialUpdates : [];
+        if (items.length === 0 && updates.length === 0) return null;
+        return (
+          <div key={section.status} className="mt-4">
+            <h2 className="mb-2 text-lg font-semibold">{section.title}</h2>
+            <div className="space-y-2">
+              {items.map((req) => (
+                <QueueItem
+                  key={req.id}
+                  slug={slug}
+                  request={req}
+                  permissions={permissions}
+                  splitPickupFromProgramming={splitPickupFromProgramming}
+                />
+              ))}
+              {updates.map((cred) => (
+                <CredentialUpdateRow
+                  key={`cred-${cred.id}`}
+                  tenantSlug={slug}
+                  credential={cred}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      {requests.filter((r) => activeStatuses.has(r.status)).length === 0 &&
+        !(activeStatuses.has(RequestStatus.AWAITING_PROGRAMMING) && credentialUpdates.length > 0) &&
+        !(activeStatuses.has(ATTESTATION_PENDING) && pendingAttestations.length > 0) && (
+        <Card className="mt-4">
+          <CardContent className="py-8 text-center text-muted-foreground">
+            No open requests in selected queues.
+          </CardContent>
+        </Card>
+      )}
+      </>
+      )}
+    </>
+  );
+}
+
+export { QUEUE_SECTIONS };

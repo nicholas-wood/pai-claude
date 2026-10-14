@@ -1,0 +1,109 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
+import Link from "next/link";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PaymentStep } from "@/app/t/[slug]/request/payment-step";
+
+type PaymentInfo = {
+  clientSecret: string;
+  amount: number;
+  clubName: string;
+  memberName: string;
+  stripeAccountId: string | null;
+};
+
+export default function PayPage() {
+  const params = useParams<{ slug: string; id: string }>();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [alreadyPaid, setAlreadyPaid] = useState(false);
+  const [paymentInfo, setPaymentInfo] = useState<PaymentInfo | null>(null);
+  const [clubName, setClubName] = useState("AccessBuddy");
+
+  useEffect(() => {
+    fetch(`/api/v1/t/${params.slug}/requests/${params.id}/payment-info`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (data.alreadyPaid) {
+          setAlreadyPaid(true);
+          setClubName(data.clubName);
+        } else if (res.ok) {
+          setPaymentInfo(data);
+          setClubName(data.clubName);
+        } else {
+          setError(data.error ?? "Unable to load payment details");
+        }
+      })
+      .catch(() => setError("Unable to load payment details"))
+      .finally(() => setLoading(false));
+  }, [params.slug, params.id]);
+
+  if (loading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="py-8 text-center text-muted-foreground">
+            Loading payment details...
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
+
+  if (alreadyPaid) {
+    return (
+      <main className="flex min-h-screen items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle>{clubName}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-center py-4">
+            <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-2xl text-primary">
+              {"\u2713"}
+            </div>
+            <p className="text-sm font-medium">Payment Already Received</p>
+            <p className="text-sm text-muted-foreground">
+              This request has already been paid. No further action is needed.
+            </p>
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
+
+  if (error || !paymentInfo) {
+    return (
+      <main className="flex min-h-screen items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="py-8 text-center">
+            <p className="text-sm text-destructive">{error ?? "Unable to load payment"}</p>
+            <Link href={`/t/${params.slug}`} className="text-sm text-primary hover:underline mt-4 block">
+              Return to {clubName}
+            </Link>
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
+
+  return (
+    <main className="flex min-h-screen items-center justify-center p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <CardTitle>{clubName}</CardTitle>
+          <p className="text-sm text-muted-foreground">Complete your payment</p>
+        </CardHeader>
+        <CardContent>
+          <PaymentStep
+            clientSecret={paymentInfo.clientSecret}
+            amount={paymentInfo.amount}
+            tenantSlug={params.slug}
+            stripeAccountId={paymentInfo.stripeAccountId}
+          />
+        </CardContent>
+      </Card>
+    </main>
+  );
+}
