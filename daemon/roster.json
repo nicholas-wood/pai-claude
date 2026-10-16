@@ -1,7 +1,7 @@
 {
   "proto": 1,
-  "supervisorPid": 398061,
-  "updatedAt": 1792003134849,
+  "supervisorPid": 2732451,
+  "updatedAt": 1792096975976,
   "workers": {
     "a8dd5d82": {
       "pid": 3107864,
@@ -70,6 +70,78 @@
       "ptyAuth": "c1da1a6e306417159c9f05f7c8e21b6c",
       "replPid": 3107870,
       "replProcStart": "503835612"
+    },
+    "145cf10e": {
+      "pid": 398206,
+      "procStart": "509415674",
+      "sessionId": "145cf10e-206a-4ef3-926b-5bbd8d94112d",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/145cf10e.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/e2028da6.pty.sock",
+      "cliVersion": "2.1.300",
+      "startedAt": 1792096963462,
+      "attempt": 1,
+      "cwd": "/home/nicholas-wood/.claude",
+      "dispatch": {
+        "proto": 1,
+        "short": "145cf10e",
+        "nonce": "aa3563e8",
+        "sessionId": "145cf10e-206a-4ef3-926b-5bbd8d94112d",
+        "createdAt": 1792096963453,
+        "source": "fleet",
+        "cwd": "/home/nicholas-wood/.claude",
+        "launch": {
+          "mode": "resume",
+          "sessionId": "145cf10e-206a-4ef3-926b-5bbd8d94112d",
+          "transcriptPath": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/145cf10e-206a-4ef3-926b-5bbd8d94112d.jsonl",
+          "fork": false,
+          "flagArgs": [
+            "--agent",
+            "claude",
+            "--model",
+            "fable[1m]"
+          ],
+          "restoresTranscript": true
+        },
+        "env": {},
+        "isolation": "none",
+        "respawnFlags": [
+          "--agent",
+          "claude",
+          "--model",
+          "fable[1m]"
+        ],
+        "agent": "claude",
+        "seed": {
+          "intent": "",
+          "name": "payment link request status"
+        },
+        "cols": 214,
+        "rows": 52
+      },
+      "decModes": [
+        2004,
+        2031,
+        1004,
+        1000,
+        1002,
+        1003,
+        1006
+      ],
+      "firedInteractiveMarks": [
+        {
+          "kind": "content_paint",
+          "msgsLoaded": 950,
+          "msgsInJsonl": 950,
+          "msgsRenderedAtFirstPaint": 950
+        },
+        {
+          "kind": "prompt_idle"
+        }
+      ],
+      "rvAuth": "f12351a2d1ba6571c327d57b86fe1456",
+      "ptyAuth": "44fd4bdce3e6b49c86afa46c42c6c2e0",
+      "replPid": 398212,
+      "replProcStart": "509415684"
     }
   }
 }
