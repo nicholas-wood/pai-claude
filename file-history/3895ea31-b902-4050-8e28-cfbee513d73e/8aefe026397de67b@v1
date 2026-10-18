@@ -1,0 +1,153 @@
+"use client";
+
+import { useState, useMemo, useRef } from "react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+export type AvailableFob = {
+  id: string;
+  serialNumber: string;
+  credentialTypeId: string;
+  credentialTypeName: string | null;
+  previousOwnerName: string | null;
+};
+
+type Props = {
+  availableFobs: AvailableFob[];
+  allowFobCreationAtProgramming: boolean;
+  /** Selected fob id when a fob from the list is picked, or an empty string. */
+  selectedFobId: string;
+  /** Free-text serial number used when creating a new fob at programming time. */
+  manualSerialNumber: string;
+  onSelect: (fob: AvailableFob | null) => void;
+  onManualSerialChange: (value: string) => void;
+  label?: string;
+};
+
+export function FobPicker({
+  availableFobs,
+  allowFobCreationAtProgramming,
+  selectedFobId,
+  manualSerialNumber,
+  onSelect,
+  onManualSerialChange,
+  label = "Fob *",
+}: Props) {
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const filtered = useMemo(() => {
+    let fobs = availableFobs;
+    if (search) {
+      const term = search.toLowerCase();
+      fobs = fobs.filter(
+        (f) =>
+          f.serialNumber.toLowerCase().includes(term) ||
+          (f.credentialTypeName?.toLowerCase().includes(term) ?? false) ||
+          (f.previousOwnerName?.toLowerCase().includes(term) ?? false)
+      );
+    }
+    // Sort: unallocated first, previously assigned last
+    return [...fobs].sort((a, b) => {
+      const aHasOwner = a.previousOwnerName ? 1 : 0;
+      const bHasOwner = b.previousOwnerName ? 1 : 0;
+      return aHasOwner - bHasOwner;
+    });
+  }, [search, availableFobs]);
+
+  const selectedFob = selectedFobId
+    ? availableFobs.find((f) => f.id === selectedFobId) ?? null
+    : null;
+
+  if (allowFobCreationAtProgramming) {
+    return (
+      <div className="space-y-2">
+        <Label className="text-xs">{label}</Label>
+        <Input
+          value={manualSerialNumber}
+          onChange={(e) => onManualSerialChange(e.target.value)}
+          placeholder="Enter or scan serial number..."
+        />
+      </div>
+    );
+  }
+
+  const unallocated = filtered.filter((f) => !f.previousOwnerName);
+  const previouslyAssigned = filtered.filter((f) => !!f.previousOwnerName);
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs">{label}</Label>
+      {selectedFob ? (
+        <div className="flex items-center gap-2 rounded border px-3 py-2 text-sm">
+          <span className="font-medium">#{selectedFob.serialNumber}</span>
+          <span className="text-muted-foreground">{selectedFob.credentialTypeName}</span>
+          {selectedFob.previousOwnerName && (
+            <span className="text-xs text-muted-foreground">(prev: {selectedFob.previousOwnerName})</span>
+          )}
+          <button
+            type="button"
+            onClick={() => { onSelect(null); setSearch(""); }}
+            className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+          >
+            Change
+          </button>
+        </div>
+      ) : (
+        <div className="relative">
+          <Input
+            ref={inputRef}
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setOpen(true); }}
+            onFocus={() => setOpen(true)}
+            placeholder="Search by serial, type, or previous owner..."
+          />
+          {open && filtered.length > 0 && (
+            <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border bg-background shadow-lg">
+              {unallocated.length > 0 && (
+                <>
+                  <p className="px-3 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider bg-muted/50">Available</p>
+                  {unallocated.map((fob) => (
+                    <button
+                      key={fob.id}
+                      type="button"
+                      onClick={() => { onSelect(fob); setOpen(false); setSearch(""); }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent text-left"
+                    >
+                      <span className="font-medium">#{fob.serialNumber}</span>
+                      <span className="text-muted-foreground">{fob.credentialTypeName}</span>
+                    </button>
+                  ))}
+                </>
+              )}
+              {previouslyAssigned.length > 0 && (
+                <>
+                  <p className="px-3 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider bg-muted/50">Previously Assigned</p>
+                  {previouslyAssigned.map((fob) => (
+                    <button
+                      key={fob.id}
+                      type="button"
+                      onClick={() => { onSelect(fob); setOpen(false); setSearch(""); }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent text-left"
+                    >
+                      <span className="font-medium">#{fob.serialNumber}</span>
+                      <span className="text-muted-foreground">{fob.credentialTypeName}</span>
+                      <span className="text-xs text-muted-foreground ml-auto">{fob.previousOwnerName}</span>
+                    </button>
+                  ))}
+                </>
+              )}
+              {filtered.length === 0 && (
+                <p className="px-3 py-2 text-xs text-muted-foreground">No fobs match</p>
+              )}
+            </div>
+          )}
+          {open && (
+            <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

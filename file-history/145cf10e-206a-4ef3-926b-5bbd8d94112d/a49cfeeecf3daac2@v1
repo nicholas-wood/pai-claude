@@ -1,0 +1,221 @@
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { eq, desc, or, sql } from "drizzle-orm";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { RequestStatusBadge, CredentialStatusBadge } from "@/components/status-badge";
+import { getAuthUser } from "@/lib/auth";
+import { resolveTenant } from "@/lib/tenant";
+import { withTenant } from "@/lib/with-tenant";
+import {
+  fobRequests,
+  credentials,
+  credentialTypes,
+  accessLevels,
+} from "@accessbuddy/db";
+import { formatFobLabel, isAutoClosedReturn } from "@/lib/request-display";
+import { CredentialActions } from "./credentials/credential-actions";
+import { ProfileForm } from "./profile/profile-form";
+
+const REQUEST_TYPE_LABELS: Record<string, string> = {
+  new: "New Fob or Key",
+  replacement_lost: "Replacement (Lost)",
+  replacement_damaged: "Replacement (Damaged)",
+  additional: "Additional Fob or Key",
+  return: "Return",
+  change_type: "Change Type",
+  access_update: "Access Update",
+};
+
+export default async function DashboardPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const [auth, tenant] = await Promise.all([
+    getAuthUser(),
+    resolveTenant(slug),
+  ]);
+  if (!auth) redirect("/sign-in");
+  if (!tenant) notFound();
+
+  const { requests, creds } = await withTenant(tenant.id, async (tx) => {
+    const [requests, creds] = await Promise.all([
+      tx
+        .select({
+          id: fobRequests.id,
+          status: fobRequests.status,
+          requestType: fobRequests.requestType,
+          credentialTypeName: credentialTypes.name,
+          serialNumber: fobRequests.serialNumber,
+          // For a change_type: the fob being swapped out.
+          replacesCredentialSerial: sql<string | null>`(SELECT c.serial_number FROM credentials c WHERE c.id = ${fobRequests.replacesCredentialId})`,
+          replacesCredentialTypeName: sql<string | null>`(SELECT ct.name FROM credentials c JOIN credential_types ct ON ct.id = c.credential_type_id WHERE c.id = ${fobRequests.replacesCredentialId})`,
+          submittedAt: fobRequests.submittedAt,
+          issuedAt: fobRequests.issuedAt,
+          autoClosedAt: fobRequests.autoClosedAt,
+        })
+        .from(fobRequests)
+        .leftJoin(
+          credentialTypes,
+          eq(fobRequests.credentialTypeId, credentialTypes.id)
+        )
+        .where(
+          or(
+            eq(fobRequests.requesterId, auth.user.id),
+            eq(fobRequests.orphanEmail, auth.user.email)
+          )
+        )
+        .orderBy(desc(fobRequests.createdAt))
+        .limit(50),
+      tx
+        .select({
+          id: credentials.id,
+          serialNumber: credentials.serialNumber,
+          status: credentials.status,
+          issuedAt: credentials.issuedAt,
+          expiresAt: credentials.expiresAt,
+          credentialTypeName: credentialTypes.name,
+          credentialCategory: credentialTypes.category,
+          accessLevelName: accessLevels.name,
+        })
+        .from(credentials)
+        .leftJoin(
+          credentialTypes,
+          eq(credentials.credentialTypeId, credentialTypes.id)
+        )
+        .leftJoin(accessLevels, eq(credentials.accessLevelId, accessLevels.id))
+        .where(eq(credentials.ownerId, auth.user.id))
+        .orderBy(desc(credentials.issuedAt)),
+    ]);
+    return { requests, creds };
+  });
+
+  return (
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <Link
+          href={`/t/${slug}/request`}
+          className="inline-flex h-8 items-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80"
+        >
+          New Request
+        </Link>
+      </div>
+
+      {/* Requests Section */}
+      <section>
+        <h2 className="mb-3 text-lg font-semibold">My Requests</h2>
+        {requests.length === 0 ? (
+          <Card>
+            <CardContent className="py-6 text-center text-sm text-muted-foreground">
+              No requests yet. Submit your first request to get started.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {requests.map((req) => (
+              <Link
+                key={req.id}
+                href={`/t/${slug}/dashboard/requests/${req.id}`}
+              >
+                <Card className="transition-colors hover:bg-accent/50">
+                  <CardContent className="flex items-center justify-between py-3">
+                    <div>
+                      <p className="font-medium">
+                        {REQUEST_TYPE_LABELS[req.requestType] ??
+                          req.requestType}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {req.requestType === "return"
+                          ? formatFobLabel(req.credentialTypeName, req.serialNumber)
+                          : req.requestType === "change_type" && req.replacesCredentialSerial
+                            ? `${formatFobLabel(req.replacesCredentialTypeName, req.replacesCredentialSerial)} \u2192 ${req.credentialTypeName ?? "new type"}`
+                            : req.credentialTypeName}{" "}
+                        &middot;{" "}
+                        {new Date(req.submittedAt).toLocaleDateString("en-AU", { timeZone: "Australia/Melbourne" })}
+                      </p>
+                    </div>
+                    <RequestStatusBadge status={req.status} requestType={req.requestType} autoClosed={isAutoClosedReturn(req)} />
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Credentials Section */}
+      <section>
+        <h2 className="mb-3 text-lg font-semibold">My Fobs &amp; Keys</h2>
+        {creds.length === 0 ? (
+          <Card>
+            <CardContent className="py-6 text-center text-sm text-muted-foreground">
+              No fobs or keys issued yet.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {creds.map((cred) => (
+              <Card key={cred.id}>
+                <CardContent className="py-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-medium">
+                        {cred.credentialTypeName}
+                        {cred.serialNumber && (
+                          <span className="ml-2 text-sm text-muted-foreground">
+                            #{cred.serialNumber}
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {cred.accessLevelName ?? "No access level"}
+                      </p>
+                      <div className="mt-1 flex gap-4 text-xs text-muted-foreground">
+                        <span>
+                          Issued:{" "}
+                          {new Date(cred.issuedAt).toLocaleDateString("en-AU", { timeZone: "Australia/Melbourne" })}
+                        </span>
+                        {cred.expiresAt && (
+                          <span>
+                            Expires:{" "}
+                            {new Date(cred.expiresAt).toLocaleDateString(
+                              "en-AU", { timeZone: "Australia/Melbourne" }
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <CredentialStatusBadge status={cred.status} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Profile Section */}
+      <section>
+        <h2 className="mb-3 text-lg font-semibold">Profile</h2>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Contact Details</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ProfileForm
+              tenantSlug={slug}
+              initialEmail={auth.user.email}
+              initialPhone={auth.user.phone ?? ""}
+              firstName={auth.user.firstName}
+              lastName={auth.user.lastName}
+            />
+          </CardContent>
+        </Card>
+      </section>
+    </div>
+  );
+}

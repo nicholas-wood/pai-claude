@@ -1,0 +1,188 @@
+import Stripe from "stripe";
+import { getServerEnv } from "@/env";
+
+let _stripe: Stripe | null = null;
+
+export function getStripe(): Stripe {
+  if (_stripe) return _stripe;
+  const env = getServerEnv();
+  if (!env.STRIPE_SECRET_KEY) {
+    throw new Error("STRIPE_SECRET_KEY is not configured");
+  }
+  _stripe = new Stripe(env.STRIPE_SECRET_KEY, {
+    apiVersion: "2026-03-25.dahlia",
+    typescript: true,
+  });
+  return _stripe;
+}
+
+/**
+ * Create a Stripe payment intent for a request.
+ * Uses Stripe Connect so payment goes to the club's connected account.
+ */
+export async function createPaymentIntent(params: {
+  amountCents: number;
+  stripeAccountId: string | null;
+  metadata: Record<string, string>;
+}): Promise<{ clientSecret: string; paymentIntentId: string }> {
+  const stripe = getStripe();
+
+  const intentParams: Stripe.PaymentIntentCreateParams = {
+    amount: params.amountCents,
+    currency: "aud",
+    metadata: params.metadata,
+    automatic_payment_methods: { enabled: true },
+  };
+
+  // If club has a Stripe Connect account, route payment there
+  const intent = params.stripeAccountId
+    ? await stripe.paymentIntents.create(intentParams, { stripeAccount: params.stripeAccountId })
+    : await stripe.paymentIntents.create(intentParams);
+
+  return {
+    clientSecret: intent.client_secret!,
+    paymentIntentId: intent.id,
+  };
+}
+
+export type PaymentIntentSnapshot = {
+  status: Stripe.PaymentIntent.Status;
+  amountCents: number;
+};
+
+/**
+ * Read the live status of a payment intent. Used before any action that
+ * assumes "unpaid" (require payment, resend link, abandoned sweep, cancel by
+ * link): a late or failed webhook can leave paidAt null after the member has
+ * in fact paid, and Stripe is the source of truth for that.
+ */
+export async function retrievePaymentIntent(params: {
+  paymentIntentId: string;
+  stripeAccountId: string | null;
+}): Promise<PaymentIntentSnapshot> {
+  const stripe = getStripe();
+  const options: Stripe.RequestOptions = {};
+  if (params.stripeAccountId) {
+    options.stripeAccount = params.stripeAccountId;
+  }
+  const intent = await stripe.paymentIntents.retrieve(params.paymentIntentId, options);
+  return { status: intent.status, amountCents: intent.amount };
+}
+
+/** True when money has been, or is being, taken on this intent. */
+export function intentIsPaidOrProcessing(status: Stripe.PaymentIntent.Status): boolean {
+  return status === "succeeded" || status === "processing";
+}
+
+/**
+ * Cancel an unpaid payment intent, for example when the member cancels the
+ * request from the emailed link. Stops a stale pay link from taking money
+ * for a request that no longer exists. Idempotent: an intent that is already
+ * cancelled or succeeded is left alone.
+ */
+export async function cancelPaymentIntent(params: {
+  paymentIntentId: string;
+  stripeAccountId: string | null;
+}): Promise<void> {
+  const stripe = getStripe();
+  const options: Stripe.RequestOptions = {};
+  if (params.stripeAccountId) {
+    options.stripeAccount = params.stripeAccountId;
+  }
+  const intent = await stripe.paymentIntents.retrieve(params.paymentIntentId, options);
+  if (intent.status === "canceled" || intent.status === "succeeded") return;
+  await stripe.paymentIntents.cancel(params.paymentIntentId, { cancellation_reason: "abandoned" }, options);
+}
+
+/**
+ * Create an Express Connect account for a tenant.
+ *
+ * Express is the right fit for AccessBuddy because the connected account
+ * "user" is a volunteer club treasurer, not a payments specialist. Express
+ * gives them a trimmed Stripe dashboard, lets the platform handle disputes
+ * and tax reporting by default, and supports embedded financial UI inside
+ * AccessBuddy itself.
+ *
+ * NOTE: connected account types cannot be migrated. If a tenant is already
+ * onboarded as a different type, they must re-onboard from scratch.
+ */
+export async function createConnectAccount(params: {
+  tenantName: string;
+  tenantEmail?: string;
+}): Promise<string> {
+  const stripe = getStripe();
+  const account = await stripe.accounts.create({
+    type: 'express',
+    country: 'AU',
+    capabilities: {
+      card_payments: { requested: true },
+      transfers: { requested: true },
+    },
+    business_profile: {
+      name: params.tenantName,
+      // MCC 8641 = civic, social, fraternal associations. Matches the
+      // lifesaving / community-club use case and avoids a manual review
+      // step on Stripe's side.
+      mcc: '8641',
+      product_description:
+        'Membership credential and access management for community clubs',
+    },
+    ...(params.tenantEmail ? { email: params.tenantEmail } : {}),
+  });
+  return account.id;
+}
+
+/**
+ * Create an Account Link for Stripe hosted onboarding.
+ */
+export async function createAccountLink(params: {
+  stripeAccountId: string;
+  refreshUrl: string;
+  returnUrl: string;
+}): Promise<string> {
+  const stripe = getStripe();
+  const link = await stripe.accountLinks.create({
+    account: params.stripeAccountId,
+    refresh_url: params.refreshUrl,
+    return_url: params.returnUrl,
+    type: 'account_onboarding',
+  });
+  return link.url;
+}
+
+/**
+ * Get the status of a connected Stripe account.
+ */
+export async function getConnectAccountStatus(stripeAccountId: string): Promise<{
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
+  detailsSubmitted: boolean;
+}> {
+  const stripe = getStripe();
+  const account = await stripe.accounts.retrieve(stripeAccountId);
+  return {
+    chargesEnabled: account.charges_enabled,
+    payoutsEnabled: account.payouts_enabled,
+    detailsSubmitted: account.details_submitted,
+  };
+}
+
+/**
+ * Create a Stripe refund for a payment intent.
+ */
+export async function createRefund(params: {
+  paymentIntentId: string;
+  stripeAccountId: string | null;
+  reason?: string;
+}): Promise<{ refundId: string }> {
+  const stripe = getStripe();
+  const options: Stripe.RequestOptions = {};
+  if (params.stripeAccountId) {
+    options.stripeAccount = params.stripeAccountId;
+  }
+  const refund = await stripe.refunds.create({
+    payment_intent: params.paymentIntentId,
+    ...(params.reason ? { reason: 'requested_by_customer' as const } : {}),
+  }, options);
+  return { refundId: refund.id };
+}

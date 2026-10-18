@@ -1,0 +1,56 @@
+import { Badge } from "@/components/ui/badge";
+import {
+  RequestStatus,
+  CredentialStatus,
+  credentialStatusLabel,
+  credentialStatusTone,
+} from "@accessbuddy/shared";
+
+const REQUEST_STATUS_CONFIG: Record<
+  string,
+  { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
+> = {
+  [RequestStatus.SUBMITTED]: { label: "Submitted", variant: "secondary" },
+  [RequestStatus.AWAITING_PAYMENT]: { label: "Awaiting Payment", variant: "outline" },
+  [RequestStatus.AWAITING_EXEMPTION_REVIEW]: { label: "Exemption Review", variant: "outline" },
+  [RequestStatus.AWAITING_APPROVAL]: { label: "Awaiting Approval", variant: "outline" },
+  [RequestStatus.APPROVED]: { label: "Approved", variant: "default" },
+  [RequestStatus.REJECTED]: { label: "Rejected", variant: "destructive" },
+  [RequestStatus.AWAITING_PROGRAMMING]: { label: "Awaiting Programming", variant: "outline" },
+  [RequestStatus.PROGRAMMED]: { label: "Programmed", variant: "default" },
+  [RequestStatus.AWAITING_PICKUP]: { label: "Ready for Pickup", variant: "default" },
+  [RequestStatus.ISSUED]: { label: "Issued", variant: "default" },
+  [RequestStatus.ON_HOLD]: { label: "On Hold", variant: "destructive" },
+  [RequestStatus.CANCELLED]: { label: "Cancelled", variant: "destructive" },
+};
+
+const TONE_TO_VARIANT: Record<
+  string,
+  "default" | "secondary" | "destructive" | "outline"
+> = {
+  success: "default",
+  info: "outline",
+  warning: "destructive",
+  danger: "destructive",
+  neutral: "secondary",
+};
+
+export function RequestStatusBadge({ status }: { status: string }) {
+  const config = REQUEST_STATUS_CONFIG[status] ?? {
+    label: status,
+    variant: "outline" as const,
+  };
+  return <Badge variant={config.variant}>{config.label}</Badge>;
+}
+
+export function CredentialStatusBadge({
+  status,
+  expiresAt,
+}: {
+  status: string;
+  expiresAt?: Date | string | null;
+}) {
+  const label = credentialStatusLabel(status, { expiresAt });
+  const variant = TONE_TO_VARIANT[credentialStatusTone(status)] ?? "outline";
+  return <Badge variant={variant}>{label}</Badge>;
+}

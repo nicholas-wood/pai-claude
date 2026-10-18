@@ -1,0 +1,175 @@
+import { and, eq } from "drizzle-orm";
+import { fobRequests, pickupLocations, tenants, users } from "@accessbuddy/db";
+import {
+  AuditEntityType,
+  Permission,
+  RequestStatus,
+  RequestType,
+  type confirmReceiptSchema,
+} from "@accessbuddy/shared";
+import type { z } from "zod";
+import type { TransactionClient } from "@/lib/with-tenant";
+import { transitionRequest } from "./requests";
+import { buildEmailConfig, sendAdminNotification } from "./email";
+import { adminMemberConfirmedReceiptEmail } from "@/lib/email-templates";
+
+export const MEMBER_CONFIRMED_RECEIPT_ACTION = "member_confirmed_receipt";
+
+export class ConfirmReceiptError extends Error {
+  constructor(message: string, public readonly status: 400 | 403 | 404 = 400) {
+    super(message);
+    this.name = "ConfirmReceiptError";
+  }
+}
+
+/**
+ * Member reports that a fob recorded as awaiting pickup was already handed
+ * to them. Only valid when the request's pickup location has
+ * confirmReceiptEnabled (SMLSC's "Missing" location: the fob is marked ready
+ * but is no longer at the clubhouse).
+ *
+ * Effects, all inside the caller's transaction:
+ *   1. ISSUE transition with the member as actor and the report in metadata
+ *      (so the audit trail reads "Member confirmed ... issued by X at Y" and
+ *      every ISSUE side effect — credential activation, issuedAt, member
+ *      "credential issued" email — runs unchanged).
+ *   2. Issuers (club/global admins plus permission admins holding ISSUE) are
+ *      emailed who handed it over and where, sent immediately rather than
+ *      via the daily summary because the record was wrong until now.
+ */
+export async function confirmReceiptByMember(
+  tx: TransactionClient,
+  params: {
+    tenantId: string;
+    requestId: string;
+    actor: { id: string; email: string | null };
+    report: z.infer<typeof confirmReceiptSchema>;
+    now?: Date;
+  }
+) {
+  const { tenantId, requestId, actor, report } = params;
+  const now = params.now ?? new Date();
+
+  // Row lock: two submits (double click, two tabs) must not both pass the
+  // status check and each fire the issuer email. The second waits, then sees
+  // ISSUED and is refused.
+  const [request] = await tx
+    .select()
+    .from(fobRequests)
+    .where(and(eq(fobRequests.id, requestId), eq(fobRequests.tenantId, tenantId)))
+    .limit(1)
+    .for("update");
+  if (!request) throw new ConfirmReceiptError("Request not found", 404);
+
+  const isOwner =
+    request.requesterId === actor.id ||
+    (!!request.orphanEmail && request.orphanEmail === actor.email);
+  if (!isOwner) throw new ConfirmReceiptError("You can only confirm your own requests", 403);
+
+  if (request.status !== RequestStatus.AWAITING_PICKUP) {
+    throw new ConfirmReceiptError("This request is not awaiting collection");
+  }
+  // A return at awaiting_pickup means the fob is coming IN, not going out.
+  if (request.requestType === RequestType.RETURN) {
+    throw new ConfirmReceiptError("Returns cannot be confirmed this way");
+  }
+  // A type change is an exchange: ISSUE retires the old fob on the
+  // assumption the issuer took it back. The member's word that they hold
+  // the new one says nothing about the old one, so this stays an in-person
+  // step.
+  if (request.requestType === RequestType.CHANGE_TYPE) {
+    throw new ConfirmReceiptError("Fob exchanges need to be completed in person so the old fob can be handed in");
+  }
+
+  if (!request.pickupLocationId) {
+    throw new ConfirmReceiptError("This request does not ask for a collection confirmation");
+  }
+  const [location] = await tx
+    .select({ confirmReceiptEnabled: pickupLocations.confirmReceiptEnabled })
+    .from(pickupLocations)
+    .where(and(eq(pickupLocations.id, request.pickupLocationId), eq(pickupLocations.tenantId, tenantId)))
+    .limit(1);
+  if (!location?.confirmReceiptEnabled) {
+    throw new ConfirmReceiptError("This request does not ask for a collection confirmation");
+  }
+
+  const issuedWhen =
+    report.issuedWhen?.trim() ||
+    `reported ${now.toLocaleString("en-AU", {
+      timeZone: "Australia/Melbourne",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })}`;
+
+  const updated = await transitionRequest(tx, {
+    requestId,
+    tenantId,
+    event: "ISSUE",
+    actorId: actor.id,
+    metadata: {
+      action: MEMBER_CONFIRMED_RECEIPT_ACTION,
+      issuedByName: report.issuedByName.trim(),
+      issuedWhere: report.issuedWhere.trim(),
+      issuedWhen,
+      reportedAt: now.toISOString(),
+    },
+  });
+
+  // Tell the issuers. Resolve the member's display name the same way the
+  // transition emails do.
+  let memberName = "Member";
+  if (request.requesterId) {
+    const [u] = await tx
+      .select({ firstName: users.firstName, lastName: users.lastName })
+      .from(users)
+      .where(eq(users.id, request.requesterId))
+      .limit(1);
+    if (u) memberName = `${u.firstName} ${u.lastName}`.trim() || memberName;
+  } else {
+    memberName = [request.orphanFirstName, request.orphanLastName].filter(Boolean).join(" ") || memberName;
+  }
+
+  const [tenant] = await tx
+    .select({ name: tenants.name, slug: tenants.slug, settings: tenants.settings, logoUrl: tenants.logoUrl })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+
+  if (tenant) {
+    const emailConfig = buildEmailConfig(tenant);
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const requestUrl = `${appUrl}/t/${tenant.slug}/admin/requests/${requestId}`;
+    try {
+      await sendAdminNotification(tx, {
+        tenantId,
+        requiredPermission: Permission.ISSUE,
+        subject: `${memberName} reports their fob was already issued - record updated`,
+        html: adminMemberConfirmedReceiptEmail(
+          emailConfig.clubName,
+          memberName,
+          request.serialNumber ?? "N/A",
+          report.issuedByName.trim(),
+          report.issuedWhere.trim(),
+          issuedWhen,
+          requestUrl
+        ),
+        tenantEmailConfig: emailConfig,
+        audit: {
+          tenantId,
+          entityType: AuditEntityType.FOB_REQUEST,
+          entityId: requestId,
+          actorId: actor.id,
+        },
+      });
+    } catch (err) {
+      // The status change is the record of truth; a failed admin email must
+      // not roll it back.
+      console.error("Failed to notify admins of member-confirmed receipt:", err);
+    }
+  }
+
+  return updated;
+}

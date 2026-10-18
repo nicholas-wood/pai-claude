@@ -1,0 +1,1161 @@
+/**
+ * Email templates for AccessBuddy notifications.
+ * Each function returns an HTML string for the corresponding email type.
+ */
+
+const DEFAULT_PRIMARY_COLOUR = "#0d9488"; // teal-600
+const DEFAULT_SECONDARY_COLOUR = "#f0fdfa"; // teal-50
+
+// Getter so templates always use the tenant's colour if set
+function getPrimaryColour(): string {
+  return _branding.primaryColour || DEFAULT_PRIMARY_COLOUR;
+}
+function getSecondaryColour(): string {
+  return _branding.secondaryColour || DEFAULT_SECONDARY_COLOUR;
+}
+
+export type EmailBrandingConfig = {
+  logoUrl?: string;
+  primaryColour?: string;
+  secondaryColour?: string;
+  replyToEmail?: string;
+};
+
+// Module-level branding that templates can read. Set before rendering.
+let _branding: EmailBrandingConfig = {};
+
+export function setEmailBranding(branding: EmailBrandingConfig) {
+  _branding = branding;
+}
+
+export function layout(clubName: string, body: string): string {
+  const primary = _branding.primaryColour || DEFAULT_PRIMARY_COLOUR;
+  const secondary = _branding.secondaryColour || DEFAULT_SECONDARY_COLOUR;
+  const replyTo = _branding.replyToEmail;
+  const logoHtml = _branding.logoUrl
+    ? `<table cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto 12px; background-color: #ffffff; border-radius: 50%; width: 120px; height: 120px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+        <tr><td style="text-align: center; vertical-align: middle;">
+          <img src="${_branding.logoUrl}" alt="${clubName}" style="max-width: 90px; max-height: 90px; display: block; margin: 0 auto;" />
+        </td></tr>
+      </table>`
+    : "";
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${clubName}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; background-color: #f4f4f4;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f4f4f4; padding: 20px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" border="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+
+          <!-- Header with Logo -->
+          <tr>
+            <td align="center" style="background: linear-gradient(135deg, ${primary} 0%, ${lightenColour(primary, 15)} 100%); padding: 30px 20px;">
+              ${logoHtml}
+            </td>
+          </tr>
+
+          <!-- Accent Bar -->
+          <tr>
+            <td style="background-color: ${secondary}; height: 8px;"></td>
+          </tr>
+
+          <!-- Main Content -->
+          <tr>
+            <td style="padding: 40px 40px 20px 40px;">
+              ${body}
+
+              <p style="color: #333333; font-size: 16px; line-height: 24px; margin: 24px 0 0 0;">
+                Kind Regards,<br />
+                <strong style="color: ${primary};">${clubName}</strong>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: ${primary}; padding: 20px 40px; text-align: center;">
+              <p style="color: #ffffff; font-size: 14px; line-height: 20px; margin: 0 0 8px 0;">
+                <strong>${clubName}</strong>
+              </p>
+              ${replyTo ? `<p style="color: #ffffff; font-size: 12px; line-height: 18px; margin: 0;">
+                <a href="mailto:${replyTo}" style="color: #ffffff; text-decoration: none;">${replyTo}</a>
+              </p>` : ""}
+              <p style="color: rgba(255,255,255,0.6); font-size: 10px; margin: 8px 0 0;">Powered by AccessBuddy</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+// Shared inline style fragments matching the original SMLSC email format
+export function heading(): string {
+  return `color: #18181b; font-size: 24px; margin: 0 0 20px 0; font-weight: bold;`;
+}
+export function bodyText(): string {
+  return `color: #333333; font-size: 16px; line-height: 24px; margin: 0 0 16px 0;`;
+}
+export function mutedText(): string {
+  return `color: #333333; font-size: 14px; line-height: 22px; margin: 0 0 16px 0;`;
+}
+export function calloutBox(borderColour?: string): string {
+  const border = borderColour ?? getPrimaryColour();
+  return `background-color: #f8f9fa; border-left: 4px solid ${border}; margin: 20px 0; border-radius: 4px; padding: 20px;`;
+}
+function warningBox(): string {
+  return `background-color: #fff5f5; border-left: 4px solid ${getSecondaryColour()}; margin: 20px 0; border-radius: 4px; padding: 20px;`;
+}
+function linkStyle(): string {
+  return `color: ${getSecondaryColour()}; text-decoration: none;`;
+}
+export function buttonStyle(): string {
+  return `display: inline-block; background-color: ${getPrimaryColour()}; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-size: 16px; font-weight: bold;`;
+}
+
+/**
+ * Lighten a hex colour by a percentage for gradient effects.
+ */
+function lightenColour(hex: string, percent: number): string {
+  const num = parseInt(hex.replace("#", ""), 16);
+  const r = Math.min(255, (num >> 16) + Math.round(((255 - (num >> 16)) * percent) / 100));
+  const g = Math.min(255, ((num >> 8) & 0x00FF) + Math.round(((255 - ((num >> 8) & 0x00FF)) * percent) / 100));
+  const b = Math.min(255, (num & 0x0000FF) + Math.round(((255 - (num & 0x0000FF)) * percent) / 100));
+  return `#${(r << 16 | g << 8 | b).toString(16).padStart(6, "0")}`;
+}
+
+export function requestSubmittedEmail(
+  clubName: string,
+  memberName: string,
+  requestType: string,
+  options?: { paymentReceived?: boolean; exemptionRequested?: boolean }
+): string {
+  const paymentNote = options?.paymentReceived
+    ? `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="${calloutBox()}">
+        <tr><td><p style="margin: 0; color: ${getPrimaryColour()}; font-size: 16px; font-weight: bold;">Payment received.</p><p style="${mutedText()}">Thank you.</p></td></tr>
+      </table>`
+    : "";
+  const exemptionNote = options?.exemptionRequested
+    ? `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #fefce8; border-left: 4px solid #eab308; margin: 20px 0; border-radius: 4px;">
+        <tr><td style="padding: 20px;"><p style="margin: 0; color: #854d0e; font-size: 16px; font-weight: bold;">Payment exemption requested.</p><p style="${mutedText()}">You will be notified once your exemption has been reviewed.</p></td></tr>
+      </table>`
+    : "";
+  const body = `
+    <h1 style="${heading()}">Request Received</h1>
+    <p style="${bodyText()}">Dear ${memberName.split(" ")[0]},</p>
+    <p style="${bodyText()}">We have received your <strong>${formatRequestType(requestType)}</strong> request. An administrator will review it shortly.</p>
+    ${paymentNote}
+    ${exemptionNote}
+    <p style="${bodyText()}">You will receive further updates by email as your request progresses.</p>`;
+  return layout(clubName, body);
+}
+
+export function damagedFobReportedEmail(
+  clubName: string,
+  memberName: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Damaged Fob Report Received</h1>
+    <p style="${bodyText()}">Dear ${memberName.split(" ")[0]},</p>
+    <p style="${bodyText()}">We have received your report of a damaged fob. An administrator will review your report shortly.</p>
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #eff6ff; border-left: 4px solid #3b82f6; margin: 20px 0; border-radius: 4px;">
+      <tr><td style="padding: 20px;">
+        <p style="margin: 0 0 8px 0; color: #1e40af; font-size: 14px; font-weight: bold;">What happens next?</p>
+        <p style="${mutedText()}; margin: 0;">If the fob is found to be faulty, it will be replaced at no cost to you. If not, you may need to pay for a replacement. If this is the case, we will be in touch before proceeding.</p>
+      </td></tr>
+    </table>
+    <p style="${bodyText()}">You will receive further updates by email as your report progresses.</p>`;
+  return layout(clubName, body);
+}
+
+export function requestApprovedEmail(
+  clubName: string,
+  memberName: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Request Approved</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Your request has been <strong style="color: #16a34a;">approved</strong>. Your fob or key is now being prepared.
+    </p>
+    <p style="${mutedText()}">
+      We will let you know when it is ready for collection.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function requestRejectedEmail(
+  clubName: string,
+  memberName: string,
+  reason: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Request Not Approved</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Unfortunately, your request was not approved.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #fef2f2; border-left: 3px solid #ef4444; border-radius: 4px;">
+      <p style="margin: 0; color: #991b1b; font-size: 13px;"><strong>Reason:</strong> ${reason}</p>
+    </div>
+    <p style="${mutedText()}">
+      If you believe this was a mistake, please contact an administrator.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function readyForPickupEmail(
+  clubName: string,
+  memberName: string,
+  pickupLocation: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Ready for Collection</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Your fob or key is ready to be collected.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #f0fdfa; border-left: 3px solid ${getPrimaryColour()}; border-radius: 4px;">
+      <p style="margin: 0; color: #134e4a; font-size: 13px;"><strong>Pickup location:</strong> ${pickupLocation}</p>
+    </div>
+    <p style="${mutedText()}">
+      Please bring valid identification when collecting it.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function pickupReminderEmail(
+  clubName: string,
+  memberName: string,
+  pickupLocation: string,
+  requestUrl: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Your fob or key is still waiting</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Just a reminder that your fob or key is ready to be collected.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #f0fdfa; border-left: 3px solid ${getPrimaryColour()}; border-radius: 4px;">
+      <p style="margin: 0; color: #134e4a; font-size: 13px;"><strong>Pickup location:</strong> ${pickupLocation}</p>
+    </div>
+    <p style="${bodyText()}">
+      Please bring valid identification when collecting it.
+    </p>
+    <p style="${mutedText()}">
+      If you no longer need it, you can cancel your request from the link below.
+    </p>
+    <div style="margin: 16px 0 0; text-align: center;">
+      <a href="${requestUrl}" style="${buttonStyle()}">View Your Request</a>
+    </div>`;
+  return layout(clubName, body);
+}
+
+export function credentialIssuedEmail(
+  clubName: string,
+  memberName: string,
+  credentialType: string,
+  serialNumber: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Fob Collected</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Thanks for collecting your fob! If you have any issues with your fob, please contact us.
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="${calloutBox()}">
+      <tr>
+        <td>
+          <p style="margin: 0 0 4px; color: #333333; font-size: 14px;"><strong>Type:</strong> ${credentialType}</p>
+          <p style="margin: 0; color: #333333; font-size: 14px;"><strong>Serial:</strong> #${serialNumber}</p>
+        </td>
+      </tr>
+    </table>
+    <p style="${bodyText()}">
+      Please be aware that all access must be in line with the club's access policy. Any attached documents outline the rules and expectations for fob and key holders. Access may be revoked at any time at the discretion of the club.
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="${calloutBox()}">
+      <tr>
+        <td>
+          <p style="color: ${getPrimaryColour()}; font-size: 16px; font-weight: bold; margin: 0 0 12px 0;">Important Reminders</p>
+          <ul style="color: #333333; font-size: 14px; line-height: 22px; margin: 0; padding-left: 20px;">
+            <li style="margin-bottom: 8px;">Please ensure that all doors are closed behind you.</li>
+            <li style="margin-bottom: 8px;">If you find doors open, please let us know.</li>
+            <li style="margin-bottom: 8px;">If you lose your fob, report it immediately through AccessBuddy.</li>
+          </ul>
+        </td>
+      </tr>
+    </table>
+    <p style="${mutedText()}">
+      Do not share your fob or key with others. You are responsible for all access recorded under it.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function accessRevokedEmail(
+  clubName: string,
+  memberName: string,
+  reason: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Access Revoked</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Your access has been revoked.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #fef2f2; border-left: 3px solid #ef4444; border-radius: 4px;">
+      <p style="margin: 0; color: #991b1b; font-size: 13px;"><strong>Reason:</strong> ${reason}</p>
+    </div>
+    <p style="${mutedText()}">
+      If you have questions, please contact an administrator.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function requestCancelledEmail(
+  clubName: string,
+  memberName: string,
+  reason: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Request Cancelled</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Your request has been cancelled.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #fefce8; border-left: 3px solid #eab308; border-radius: 4px;">
+      <p style="margin: 0; color: #854d0e; font-size: 13px;"><strong>Reason:</strong> ${reason}</p>
+    </div>
+    <p style="${mutedText()}">
+      If you need to, you can submit a new request at any time.
+    </p>`;
+  return layout(clubName, body);
+}
+
+// ---- Phase 1: Additional member-facing templates ----
+
+export function paymentReceivedEmail(
+  clubName: string,
+  memberName: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Payment Received</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Your payment has been received. Your request is now being reviewed.
+    </p>
+    <p style="${mutedText()}">
+      You will receive further updates by email as your request progresses.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function requestOnHoldEmail(
+  clubName: string,
+  memberName: string,
+  reason: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Request On Hold</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Your request has been placed on hold.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #fefce8; border-left: 3px solid #eab308; border-radius: 4px;">
+      <p style="margin: 0; color: #854d0e; font-size: 13px;"><strong>Reason:</strong> ${reason}</p>
+    </div>
+    <p style="${mutedText()}">
+      If you have questions, please contact an administrator.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function exemptionRequestedEmail(
+  clubName: string,
+  memberName: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Exemption Request Submitted</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Your payment exemption request has been submitted and is under review.
+    </p>
+    <p style="${mutedText()}">
+      You will be notified once a decision has been made.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function exemptionApprovedEmail(
+  clubName: string,
+  memberName: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Exemption Approved</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Your payment exemption has been <strong style="color: #16a34a;">approved</strong>. Your request will now be reviewed.
+    </p>
+    <p style="${mutedText()}">
+      You will receive further updates by email as your request progresses.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function exemptionRejectedEmail(
+  clubName: string,
+  memberName: string,
+  reason: string,
+  paymentUrl?: string
+): string {
+  const paymentButton = paymentUrl
+    ? `<div style="margin: 16px 0; text-align: center;">
+        <a href="${paymentUrl}" style="${buttonStyle()}">
+          Complete Payment
+        </a>
+      </div>`
+    : "";
+  const body = `
+    <h1 style="${heading()}">Exemption Not Approved</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Your payment exemption was not approved. Please complete payment to continue your request.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #fef2f2; border-left: 3px solid #ef4444; border-radius: 4px;">
+      <p style="margin: 0; color: #991b1b; font-size: 13px;"><strong>Reason:</strong> ${reason}</p>
+    </div>
+    ${paymentButton}
+    <p style="${mutedText()}">
+      If you believe this was a mistake, please contact an administrator.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function paymentRefundedEmail(
+  clubName: string,
+  memberName: string,
+  reason: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Payment Refunded</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      A refund has been processed for your request.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #f0fdfa; border-left: 3px solid ${getPrimaryColour()}; border-radius: 4px;">
+      <p style="margin: 0; color: #134e4a; font-size: 13px;"><strong>Reason:</strong> ${reason}</p>
+    </div>
+    <p style="${mutedText()}">
+      The refund may take a few business days to appear in your account.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function attestationRequestedEmail(
+  clubName: string,
+  memberName: string,
+  attestUrl: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Please confirm your fobs and keys</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      As part of your membership renewal, please confirm you still have the fobs and keys issued to you. It only takes a minute - click the button below to complete it.
+    </p>
+    <div style="margin: 0 0 16px; text-align: center;">
+      <a href="${attestUrl}" style="${buttonStyle()}">Confirm now</a>
+    </div>
+    <p style="${mutedText()}">
+      If the button does not work, copy and paste this link into your browser: ${attestUrl}
+    </p>`;
+  return layout(clubName, body);
+}
+
+// ---- Phase 2: Admin-facing templates ----
+
+export function adminApprovalNeededEmail(
+  clubName: string,
+  memberName: string,
+  requestType: string
+): string {
+  const body = `
+    <h1 style="${heading()}">New Request Awaiting Approval</h1>
+    <p style="${bodyText()}">
+      A new <strong>${formatRequestType(requestType)}</strong> request from <strong>${memberName}</strong> is awaiting your approval.
+    </p>
+    <p style="${mutedText()}">
+      Log in to AccessBuddy to review and approve or reject this request.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function adminProgrammingNeededEmail(
+  clubName: string,
+  memberName: string,
+  serialNumber?: string
+): string {
+  const serialLine = serialNumber
+    ? `<p style="margin: 0 0 4px; color: #134e4a; font-size: 13px;"><strong>Serial:</strong> ${serialNumber}</p>`
+    : "";
+  const body = `
+    <h1 style="${heading()}">Request Ready for Programming</h1>
+    <p style="${bodyText()}">
+      A request from <strong>${memberName}</strong> is ready for programming.
+    </p>
+    ${serialLine ? `<div style="margin: 0 0 16px; padding: 12px 16px; background-color: #f0fdfa; border-left: 3px solid ${getPrimaryColour()}; border-radius: 4px;">${serialLine}</div>` : ""}
+    <p style="${mutedText()}">
+      Log in to AccessBuddy to program this credential.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function adminExemptionReviewEmail(
+  clubName: string,
+  memberName: string,
+  reason: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Payment Exemption Request</h1>
+    <p style="${bodyText()}">
+      A payment exemption request from <strong>${memberName}</strong> needs your review.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #fefce8; border-left: 3px solid #eab308; border-radius: 4px;">
+      <p style="margin: 0; color: #854d0e; font-size: 13px;"><strong>Reason:</strong> ${reason}</p>
+    </div>
+    <p style="${mutedText()}">
+      Log in to AccessBuddy to approve or reject this exemption.
+    </p>`;
+  return layout(clubName, body);
+}
+
+// ---- Phase 3: Missing notification templates ----
+
+/**
+ * Shared pay / cancel call-to-action block. The pay button is only rendered
+ * when a URL is supplied so older call sites keep their behaviour; the cancel
+ * line gives the member a no-sign-in way out so an unwanted request does not
+ * sit in awaiting payment forever.
+ */
+function paymentActions(paymentUrl?: string, cancelUrl?: string): string {
+  const payButton = paymentUrl
+    ? `<div style="margin: 16px 0; text-align: center;">
+        <a href="${paymentUrl}" style="${buttonStyle()}">Pay Now</a>
+      </div>`
+    : "";
+  const cancelLine = cancelUrl
+    ? `<p style="${mutedText()}">
+        No longer need this? <a href="${cancelUrl}" style="color: ${getPrimaryColour()};">Cancel this request</a> and no payment will be taken.
+      </p>`
+    : "";
+  return `${payButton}${cancelLine}`;
+}
+
+export function paymentReminderEmail(
+  clubName: string,
+  memberName: string,
+  amount: string,
+  paymentUrl?: string,
+  cancelUrl?: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Payment Reminder</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Reminder: Your request requires payment of <strong>${amount}</strong> to proceed.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #f0fdfa; border-left: 3px solid ${getPrimaryColour()}; border-radius: 4px;">
+      <p style="margin: 0; color: #134e4a; font-size: 13px;"><strong>Amount due:</strong> ${amount}</p>
+    </div>
+    ${paymentActions(paymentUrl, cancelUrl)}
+    <p style="${mutedText()}">
+      Please complete your payment so your request can be reviewed. If you have already paid, please disregard this message.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function paymentRequiredEmail(
+  clubName: string,
+  memberName: string,
+  amount: string,
+  paymentUrl: string,
+  cancelUrl: string,
+  reason?: string
+): string {
+  const reasonBlock = reason
+    ? `<div style="margin: 0 0 16px; padding: 12px 16px; background-color: #fffbeb; border-left: 3px solid #f59e0b; border-radius: 4px;">
+        <p style="margin: 0; color: #92400e; font-size: 13px;"><strong>Note from the club:</strong> ${reason}</p>
+      </div>`
+    : "";
+  const body = `
+    <h1 style="${heading()}">Payment Required</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      A payment of <strong>${amount}</strong> is required before your request can proceed.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #f0fdfa; border-left: 3px solid ${getPrimaryColour()}; border-radius: 4px;">
+      <p style="margin: 0; color: #134e4a; font-size: 13px;"><strong>Amount due:</strong> ${amount}</p>
+    </div>
+    ${reasonBlock}
+    ${paymentActions(paymentUrl, cancelUrl)}
+    <p style="${mutedText()}">
+      Once your payment is received your request will move to review automatically. If you have already paid, please disregard this message.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function credentialExpiredEmail(
+  clubName: string,
+  memberName: string,
+  serialNumber: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Your fob has expired</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Your fob (serial ${serialNumber}) has expired and no longer grants access. This happens when a club membership renewal has not been completed, because fob access is tied to your club membership.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #fef2f2; border-left: 3px solid #ef4444; border-radius: 4px;">
+      <p style="margin: 0; color: #991b1b; font-size: 13px;"><strong>Serial:</strong> ${serialNumber}</p>
+    </div>
+    <p style="${bodyText()}">
+      Renewing your membership now will reinstate your fob. Once your renewal is processed, your fob will be reactivated automatically, and there is nothing you need to do with the fob itself.
+    </p>
+    <p style="${bodyText()}">
+      <strong>If you have already renewed your membership, you can ignore this email.</strong> Your fob will be reactivated once your renewal is processed.
+    </p>
+    <p style="${mutedText()}">
+      If you have any questions, just reply to this email.
+    </p>`;
+  return layout(clubName, body);
+}
+
+/**
+ * Prose noun for a credential type name: "Wristband - Large" -> "wristband",
+ * "Key Fob" -> "key fob". The full type name still appears in the callout.
+ */
+export function credentialNoun(credentialType: string): string {
+  return credentialType.split(" - ")[0].trim().toLowerCase() || "credential";
+}
+
+export function credentialReactivatedEmail(
+  clubName: string,
+  memberName: string,
+  credentialType: string,
+  serialNumber: string,
+  expiryDate: string | null,
+  season: string | null
+): string {
+  const typeLower = credentialNoun(credentialType);
+  const thanks = season
+    ? `Thanks for updating your membership for the ${season} Season.`
+    : "Thanks for updating your membership.";
+  const contact = _branding.replyToEmail
+    ? `If you have any questions or issues, please email <a href="mailto:${_branding.replyToEmail}" style="color: ${getPrimaryColour()};">${_branding.replyToEmail}</a>.`
+    : "If you have any questions or issues, just reply to this email.";
+  const expiryLine = expiryDate
+    ? `<p style="margin: 0; color: #166534; font-size: 13px;"><strong>Expires:</strong> ${expiryDate}</p>`
+    : "";
+  const body = `
+    <h1 style="${heading()}">Your ${typeLower} is active again</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      ${thanks} Your ${typeLower} has been updated and can now be used to access ${clubName}.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #f0fdf4; border-left: 3px solid #22c55e; border-radius: 4px;">
+      <p style="margin: 0 0 4px; color: #166534; font-size: 13px;"><strong>Type:</strong> ${credentialType}</p>
+      <p style="margin: 0 0 4px; color: #166534; font-size: 13px;"><strong>Serial:</strong> ${serialNumber}</p>
+      ${expiryLine}
+    </div>
+    <p style="${bodyText()}">
+      There is nothing you need to do with the ${typeLower} itself. It will work as before.
+    </p>
+    <p style="${mutedText()}">
+      ${contact}
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function credentialExpiryWarningEmail(
+  clubName: string,
+  memberName: string,
+  serialNumber: string,
+  expiresAt: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Your fob will expire on ${expiresAt}</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Your fob (serial ${serialNumber}) is due to expire on <strong>${expiresAt}</strong>.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #fefce8; border-left: 3px solid #eab308; border-radius: 4px;">
+      <p style="margin: 0 0 4px; color: #854d0e; font-size: 13px;"><strong>Serial:</strong> ${serialNumber}</p>
+      <p style="margin: 0; color: #854d0e; font-size: 13px;"><strong>Expires:</strong> ${expiresAt}</p>
+    </div>
+    <p style="${bodyText()}">
+      Fob access is tied to your club membership. Renewing your membership keeps your fob active, and its expiry will be extended automatically once your renewal is processed. There is nothing you need to do with the fob itself.
+    </p>
+    <p style="${bodyText()}">
+      <strong>If you have already renewed your membership, you can ignore this email.</strong>
+    </p>
+    <p style="${bodyText()}">
+      If you have not yet renewed, please renew your membership before ${expiresAt} to keep your access.
+    </p>
+    <p style="${mutedText()}">
+      If you have any questions, just reply to this email.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function credentialDeactivatedEmail(
+  clubName: string,
+  memberName: string,
+  credentialType: string,
+  serialNumber: string,
+  reason: "lost" | "damaged"
+): string {
+  const reasonText = reason === "lost"
+    ? "has been reported as lost and deactivated"
+    : "has been reported as damaged and deactivated";
+  const body = `
+    <h1 style="${heading()}">Fob or Key Deactivated</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Your ${credentialType} #${serialNumber} ${reasonText} in our access system.
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="${calloutBox()}">
+      <tr>
+        <td>
+          <p style="margin: 0 0 4px; color: #333333; font-size: 14px;"><strong>Type:</strong> ${credentialType}</p>
+          <p style="margin: 0 0 4px; color: #333333; font-size: 14px;"><strong>Serial:</strong> #${serialNumber}</p>
+          <p style="margin: 0; color: #333333; font-size: 14px;"><strong>Status:</strong> Deactivated</p>
+        </td>
+      </tr>
+    </table>
+    <p style="${bodyText()}">
+      It will no longer grant access. If you have requested a replacement, you will receive a separate notification when it is ready.
+    </p>
+    <p style="${mutedText()}">
+      If you did not request this deactivation, please contact us immediately.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function credentialAccessUpdatedEmail(
+  clubName: string,
+  memberName: string,
+  serialNumber: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Access Level Updated</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Your fob's access level has been updated.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #f0fdfa; border-left: 3px solid ${getPrimaryColour()}; border-radius: 4px;">
+      <p style="margin: 0; color: #134e4a; font-size: 13px;"><strong>Serial:</strong> ${serialNumber}</p>
+    </div>
+    <p style="${mutedText()}">
+      If you have questions about your new access level, please contact an administrator.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function memberArchivedEmail(
+  clubName: string,
+  memberName: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Membership Archived</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Your membership has been archived. Your fobs and keys have been deactivated.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #fef2f2; border-left: 3px solid #ef4444; border-radius: 4px;">
+      <p style="margin: 0; color: #991b1b; font-size: 13px;">All active fobs and keys associated with your membership have been deactivated.</p>
+    </div>
+    <p style="${mutedText()}">
+      If you believe this was a mistake, please contact an administrator.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function credentialReturnConfirmationEmail(
+  clubName: string,
+  memberName: string,
+  credentialType?: string,
+  serialNumber?: string
+): string {
+  const fobLabel = credentialType && serialNumber
+    ? `${credentialType} #${serialNumber}`
+    : serialNumber
+      ? `#${serialNumber}`
+      : credentialType;
+  const body = `
+    <h1 style="${heading()}">Fob or Key Return Processed</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Your fob or key return has been processed.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #f0fdfa; border-left: 3px solid ${getPrimaryColour()}; border-radius: 4px;">
+      <p style="margin: 0; color: #134e4a; font-size: 13px;">${fobLabel ? `Your ${fobLabel} has` : "Your fob or key has"} been received and deactivated.</p>
+    </div>
+    <p style="${mutedText()}">
+      If you need a new fob or key in the future, please submit a new request through AccessBuddy.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function returnAutoClosedEmail(
+  clubName: string,
+  memberName: string,
+  credentialType?: string,
+  serialNumber?: string
+): string {
+  const fobLabel = credentialType && serialNumber
+    ? `${credentialType} #${serialNumber}`
+    : serialNumber
+      ? `#${serialNumber}`
+      : credentialType ?? "fob or key";
+  const body = `
+    <h1 style="${heading()}">Fob or Key Return Closed</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      We asked you to hand in your ${fobLabel} but did not receive it, so we have closed the return.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #f0fdfa; border-left: 3px solid ${getPrimaryColour()}; border-radius: 4px;">
+      <p style="margin: 0; color: #134e4a; font-size: 13px;">Your ${fobLabel} is deactivated and will no longer open any doors. You do not need to bring it in.</p>
+    </div>
+    <p style="${mutedText()}">
+      If you need a new fob or key in the future, please submit a new request through AccessBuddy.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function credentialChangeConfirmationEmail(
+  clubName: string,
+  memberName: string,
+  oldType: string,
+  newType: string,
+  oldSerial?: string,
+  newSerial?: string
+): string {
+  const oldLabel = oldSerial ? `${oldType} #${oldSerial}` : oldType;
+  const newLabel = newSerial ? `${newType} #${newSerial}` : newType;
+  const body = `
+    <h1 style="${heading()}">Fob or Key Type Changed</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Your fob or key type change has been processed.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #f0fdfa; border-left: 3px solid ${getPrimaryColour()}; border-radius: 4px;">
+      <p style="margin: 0 0 4px; color: #134e4a; font-size: 13px;"><strong>Returned:</strong> ${oldLabel}</p>
+      <p style="margin: 0; color: #134e4a; font-size: 13px;"><strong>Issued:</strong> ${newLabel}</p>
+    </div>
+    <p style="${bodyText()}">
+      Your previous fob or key has been received and will be removed from the access system. Please use your new one from now on.
+    </p>
+    <p style="${mutedText()}">
+      If you have questions about your new fob or key, please contact an administrator.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function adminReadyForCollectionEmail(
+  clubName: string,
+  memberName: string,
+  serialNumber: string,
+  pickupLocation: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Credential Ready for Collection</h1>
+    <p style="${bodyText()}">
+      A credential is ready to be collected by a member.
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 16px; border: 1px solid #e4e4e7; border-radius: 6px; overflow: hidden;">
+      <tr style="background-color: #f4f4f5;">
+        <td style="padding: 8px 12px; font-size: 12px; font-weight: 600; color: #71717a; border-bottom: 1px solid #e4e4e7;">Field</td>
+        <td style="padding: 8px 12px; font-size: 12px; font-weight: 600; color: #71717a; border-bottom: 1px solid #e4e4e7;">Value</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px 12px; font-size: 13px; color: #3f3f46; border-bottom: 1px solid #f4f4f5;"><strong>Member</strong></td>
+        <td style="padding: 8px 12px; font-size: 13px; color: #3f3f46; border-bottom: 1px solid #f4f4f5;">${memberName}</td>
+      </tr>
+      <tr style="background-color: #fafafa;">
+        <td style="padding: 8px 12px; font-size: 13px; color: #3f3f46; border-bottom: 1px solid #f4f4f5;"><strong>Serial</strong></td>
+        <td style="padding: 8px 12px; font-size: 13px; color: #3f3f46; border-bottom: 1px solid #f4f4f5;">${serialNumber}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px 12px; font-size: 13px; color: #3f3f46;"><strong>Pickup Location</strong></td>
+        <td style="padding: 8px 12px; font-size: 13px; color: #3f3f46;">${pickupLocation}</td>
+      </tr>
+    </table>
+    <p style="${mutedText()}">
+      Log in to AccessBuddy to manage this collection.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function adminFobLostEmail(
+  clubName: string,
+  memberName: string,
+  serialNumber: string
+): string {
+  const body = `
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #fef2f2; border-left: 4px solid #ef4444; border-radius: 4px;">
+      <h2 style="margin: 0 0 8px; font-size: 18px; color: #991b1b;">URGENT: Credential Reported Lost</h1>
+    </div>
+    <p style="${bodyText()}">
+      A member has reported a lost credential. <strong>Immediate deactivation may be required.</strong>
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 16px; border: 1px solid #e4e4e7; border-radius: 6px; overflow: hidden;">
+      <tr style="background-color: #fef2f2;">
+        <td style="padding: 8px 12px; font-size: 12px; font-weight: 600; color: #991b1b; border-bottom: 1px solid #e4e4e7;">Field</td>
+        <td style="padding: 8px 12px; font-size: 12px; font-weight: 600; color: #991b1b; border-bottom: 1px solid #e4e4e7;">Value</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px 12px; font-size: 13px; color: #3f3f46; border-bottom: 1px solid #f4f4f5;"><strong>Member</strong></td>
+        <td style="padding: 8px 12px; font-size: 13px; color: #3f3f46; border-bottom: 1px solid #f4f4f5;">${memberName}</td>
+      </tr>
+      <tr style="background-color: #fafafa;">
+        <td style="padding: 8px 12px; font-size: 13px; color: #3f3f46;"><strong>Serial</strong></td>
+        <td style="padding: 8px 12px; font-size: 13px; color: #3f3f46;">${serialNumber}</td>
+      </tr>
+    </table>
+    <p style="${mutedText()}">
+      Log in to AccessBuddy immediately to deactivate this credential in the access control system.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function adminAccessUpdateEmail(
+  clubName: string,
+  memberName: string,
+  accessLevel: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Access Level Update Required</h1>
+    <p style="${bodyText()}">
+      A credential needs its access level updated.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #f0fdfa; border-left: 3px solid ${getPrimaryColour()}; border-radius: 4px;">
+      <p style="margin: 0 0 4px; color: #134e4a; font-size: 13px;"><strong>Member:</strong> ${memberName}</p>
+      <p style="margin: 0; color: #134e4a; font-size: 13px;"><strong>Access level:</strong> ${accessLevel}</p>
+    </div>
+    <p style="${mutedText()}">
+      Log in to AccessBuddy to program this credential with the updated access level.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function adminDeactivationEmail(
+  clubName: string,
+  memberName: string,
+  serialNumber: string,
+  reason: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Credential Deactivation Required</h1>
+    <p style="${bodyText()}">
+      A credential requires deactivation in the access control system.
+    </p>
+    <div style="margin: 0 0 16px; padding: 12px 16px; background-color: #fef2f2; border-left: 3px solid #ef4444; border-radius: 4px;">
+      <p style="margin: 0 0 4px; color: #991b1b; font-size: 13px;"><strong>Member:</strong> ${memberName}</p>
+      <p style="margin: 0 0 4px; color: #991b1b; font-size: 13px;"><strong>Serial:</strong> ${serialNumber}</p>
+      <p style="margin: 0; color: #991b1b; font-size: 13px;"><strong>Reason:</strong> ${reason}</p>
+    </div>
+    <p style="${mutedText()}">
+      Log in to AccessBuddy and deactivate this credential in the access control system.
+    </p>`;
+  return layout(clubName, body);
+}
+
+// ---- Daily Summary template ----
+
+export type SummarySection = {
+  title: string; // e.g., "New Requests Awaiting Approval"
+  count: number;
+  items: { label: string; detail: string }[];
+};
+
+export type SummaryEmailOps = {
+  /** Emails waiting in the outbound queue for this tenant. */
+  queueDepth: number;
+  /** Total emails sent across the platform so far today. */
+  sentToday: number;
+};
+
+export function dailySummaryEmail(
+  clubName: string,
+  adminName: string,
+  sections: SummarySection[],
+  dashboardUrl: string,
+  ops?: SummaryEmailOps
+): string {
+  const sectionRows = sections
+    .map(
+      (section) => `
+      <tr>
+        <td style="padding: 0 0 24px;">
+          <h3 style="margin: 0 0 8px; font-size: 15px; color: #18181b;">${section.title} <span style="color: ${getPrimaryColour()}; font-weight: 600;">(${section.count})</span></h3>
+          <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid #e4e4e7; border-radius: 6px; overflow: hidden;">
+            <tr style="background-color: #f4f4f5;">
+              <td style="padding: 8px 12px; font-size: 12px; font-weight: 600; color: #71717a; border-bottom: 1px solid #e4e4e7;">Item</td>
+              <td style="padding: 8px 12px; font-size: 12px; font-weight: 600; color: #71717a; border-bottom: 1px solid #e4e4e7;">Detail</td>
+            </tr>
+            ${section.items
+              .map(
+                (item, idx) => `
+            <tr${idx % 2 === 1 ? ' style="background-color: #fafafa;"' : ""}>
+              <td style="padding: 8px 12px; font-size: 13px; color: #3f3f46; border-bottom: 1px solid #f4f4f5;">${item.label}</td>
+              <td style="padding: 8px 12px; font-size: 13px; color: #3f3f46; border-bottom: 1px solid #f4f4f5;">${item.detail}</td>
+            </tr>`
+              )
+              .join("")}
+          </table>
+        </td>
+      </tr>`
+    )
+    .join("");
+
+  const totalCount = sections.reduce((sum, s) => sum + s.count, 0);
+
+  const queueNote =
+    ops && ops.queueDepth > 0
+      ? " (bulk mail is spread across days to stay within the daily sending limit)"
+      : "";
+  const opsLine = ops
+    ? `
+    <p style="margin: 8px 0 0; color: #71717a; font-size: 12px;">
+      Email delivery: ${ops.queueDepth} queued${queueNote} &middot; ${ops.sentToday} sent today.
+    </p>`
+    : "";
+
+  const body = `
+    <h2 style="margin: 0 0 8px; font-size: 18px; color: #18181b;">Daily Summary</h2>
+    <p style="margin: 0 0 20px; color: #3f3f46; font-size: 14px; line-height: 1.6;">
+      Hi ${adminName}, there ${totalCount === 1 ? "is" : "are"} ${totalCount} outstanding request${totalCount !== 1 ? "s" : ""} requiring action.
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0">
+      ${sectionRows}
+    </table>${opsLine}
+    <div style="margin: 16px 0 0; text-align: center;">
+      <a href="${dashboardUrl}" style="${buttonStyle()}">View in AccessBuddy</a>
+    </div>`;
+  return layout(clubName, body);
+}
+
+export function magicLinkEmail(
+  clubName: string,
+  memberName: string,
+  magicLinkUrl: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Sign In</h1>
+    <p style="${bodyText()}">
+      Dear ${memberName.split(" ")[0]},
+    </p>
+    <p style="${bodyText()}">
+      Click the button below to sign in to your account.
+    </p>
+    <div style="margin: 0 0 24px; text-align: center;">
+      <a href="${magicLinkUrl}" style="${buttonStyle()}">Sign In</a>
+    </div>
+    <p style="${mutedText()}">
+      This link expires in 1 hour. If you didn't request this, you can safely ignore this email.
+    </p>`;
+  return layout(clubName, body);
+}
+
+export function verificationCodeEmail(
+  clubName: string,
+  code: string
+): string {
+  const body = `
+    <h1 style="${heading()}">Verification Code</h1>
+    <p style="${bodyText()}">
+      Your verification code is:
+    </p>
+    <div style="text-align: center; margin: 24px 0;">
+      <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; padding: 16px 32px; background-color: #f3f4f6; border-radius: 8px; display: inline-block;">${code}</span>
+    </div>
+    <p style="${mutedText()}">
+      This code expires in 5 minutes. If you didn't request this, you can safely ignore this email.
+    </p>`;
+  return layout(clubName, body);
+}
+
+const REQUEST_TYPE_LABELS: Record<string, string> = {
+  new: "new fob or key",
+  replacement_lost: "lost fob or key replacement",
+  replacement_damaged: "damaged fob or key replacement",
+  additional: "additional fob or key",
+  return: "fob or key return",
+  change_type: "fob or key type change",
+  access_update: "access update",
+};
+
+function formatRequestType(requestType: string): string {
+  return REQUEST_TYPE_LABELS[requestType] ?? requestType
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/^\w/, (c) => c.toUpperCase());
+}

@@ -1,0 +1,43 @@
+import { NextResponse } from "next/server";
+import { withTenantAuth, type TenantApiContext } from "@/lib/api";
+import { withTenant } from "@/lib/with-tenant";
+import { credentialTypes, accessLevels, pickupLocations } from "@accessbuddy/db";
+
+export const GET = withTenantAuth(async ({ tenant }: TenantApiContext) => {
+  const config = await withTenant(tenant.id, async (tx) => {
+    const [types, levels, locations] = await Promise.all([
+      tx.select().from(credentialTypes),
+      tx.select().from(accessLevels),
+      // Any tenant member can call this route. `instructions` is admin-only
+      // (SMLSC keeps a safe code in it), so list the columns rather than
+      // returning the row.
+      tx
+        .select({
+          id: pickupLocations.id,
+          tenantId: pickupLocations.tenantId,
+          name: pickupLocations.name,
+          address: pickupLocations.address,
+          memberMessage: pickupLocations.memberMessage,
+          confirmReceiptEnabled: pickupLocations.confirmReceiptEnabled,
+          isActive: pickupLocations.isActive,
+          createdAt: pickupLocations.createdAt,
+        })
+        .from(pickupLocations),
+    ]);
+
+    return {
+      tenant: {
+        id: tenant.id,
+        name: tenant.name,
+        slug: tenant.slug,
+        settings: tenant.settings,
+        timezone: tenant.timezone,
+      },
+      credentialTypes: types,
+      accessLevels: levels,
+      pickupLocations: locations,
+    };
+  });
+
+  return NextResponse.json(config);
+});

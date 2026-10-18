@@ -1,0 +1,65 @@
+import { NextRequest, NextResponse } from "next/server";
+import { confirmReceiptSchema } from "@accessbuddy/shared";
+import { getAuthUser } from "@/lib/auth";
+import { resolveTenant } from "@/lib/tenant";
+import { withTenant } from "@/lib/with-tenant";
+import { confirmReceiptByMember, ConfirmReceiptError } from "@/lib/services/confirm-receipt";
+
+/**
+ * Member self-service: "I already have my fob". Ownership is checked by
+ * requester id or orphan email, not admin permissions. The pickup location
+ * must have confirmReceiptEnabled; everything else is rejected server-side
+ * regardless of what the page showed.
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string; id: string }> }
+) {
+  try {
+    const auth = await getAuthUser();
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    const { slug, id: requestId } = await params;
+    const tenant = await resolveTenant(slug);
+    if (!tenant) {
+      return NextResponse.json({ error: "Organisation not found" }, { status: 404 });
+    }
+
+    let raw: unknown = {};
+    try {
+      raw = await request.json();
+    } catch {
+      // fall through to validation
+    }
+    const parsed = confirmReceiptSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Please tell us who gave you the fob and where", details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+
+    const updated = await withTenant(tenant.id, (tx) =>
+      confirmReceiptByMember(tx, {
+        tenantId: tenant.id,
+        requestId,
+        actor: { id: auth.user.id, email: auth.user.email ?? null },
+        report: parsed.data,
+      })
+    );
+
+    return NextResponse.json({ request: updated });
+  } catch (err: unknown) {
+    if (err instanceof ConfirmReceiptError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    const message = err instanceof Error ? err.message : "Internal server error";
+    if (message.includes("Cannot") || message.includes("not found")) {
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+    console.error("Confirm receipt error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}

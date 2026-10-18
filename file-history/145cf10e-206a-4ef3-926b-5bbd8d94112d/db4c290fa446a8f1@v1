@@ -1,0 +1,474 @@
+import { describe, it, expect } from "vitest";
+import {
+  getValidEvents,
+  RequestStatus,
+  RequestType,
+  CredentialStatus,
+  Permission,
+  PAYMENT_REQUIRED_REQUEST_TYPES,
+  AUTO_APPROVED_REQUEST_TYPES,
+  requestProducesCredential,
+  approveRequestSchema,
+  programRequestSchema,
+} from "@accessbuddy/shared";
+import { determinePayment, shouldAutoApprove } from "../lib/services/payment";
+
+// ============================================================
+// Payment Determination
+// ============================================================
+describe("Payment Determination", () => {
+  const baseSettings = {
+    credentialExpiryMonths: 12,
+    membershipRolloverMonth: 7,
+    credentialRolloverMonth: 9,
+    paymentExemptMembershipCategories: ["Life Member", "Junior"],
+    paymentExemptRequestTypes: [RequestType.RETURN, RequestType.CHANGE_TYPE, RequestType.ACCESS_UPDATE] as RequestType[],
+    allowSelfServiceLostReport: true,
+    allowFobCreationAtProgramming: false,
+    splitPickupFromProgramming: false,
+    maxActiveCredentialsPerMember: 3,
+    membershipCategories: [],
+    issuedEmailAttachmentUrls: [],
+    seasons: [],
+    attestationTokenExpiryDays: 7,
+    attestationAutoResend: true,
+    sendEmails: true,
+  };
+
+  it("requires payment for new fob from regular member", () => {
+    const result = determinePayment({
+      requestType: RequestType.NEW,
+      membershipCategory: "Active",
+      tenantSettings: baseSettings,
+      credentialPriceCents: 5000,
+    });
+    expect(result.required).toBe(true);
+    expect(result.amountCents).toBe(5000);
+  });
+
+  it("exempts payment for exempt membership category", () => {
+    const result = determinePayment({
+      requestType: RequestType.NEW,
+      membershipCategory: "Life Member",
+      tenantSettings: baseSettings,
+      credentialPriceCents: 5000,
+    });
+    expect(result.required).toBe(false);
+  });
+
+  it("exempts payment for exempt request type", () => {
+    const result = determinePayment({
+      requestType: RequestType.RETURN,
+      membershipCategory: "Active",
+      tenantSettings: baseSettings,
+      credentialPriceCents: 5000,
+    });
+    expect(result.required).toBe(false);
+  });
+
+  it("exempts payment for access_update", () => {
+    const result = determinePayment({
+      requestType: RequestType.ACCESS_UPDATE,
+      membershipCategory: "Active",
+      tenantSettings: baseSettings,
+      credentialPriceCents: 5000,
+    });
+    expect(result.required).toBe(false);
+  });
+
+  it("requires payment for replacement_lost from regular member", () => {
+    const result = determinePayment({
+      requestType: RequestType.REPLACEMENT_LOST,
+      membershipCategory: "Active",
+      tenantSettings: baseSettings,
+      credentialPriceCents: 5000,
+    });
+    expect(result.required).toBe(true);
+  });
+
+  it("requires payment for additional fob", () => {
+    const result = determinePayment({
+      requestType: RequestType.ADDITIONAL,
+      membershipCategory: "Active",
+      tenantSettings: baseSettings,
+      credentialPriceCents: 5000,
+    });
+    expect(result.required).toBe(true);
+  });
+
+  it("no payment when credential price is 0", () => {
+    const result = determinePayment({
+      requestType: RequestType.NEW,
+      membershipCategory: "Active",
+      tenantSettings: baseSettings,
+      credentialPriceCents: 0,
+    });
+    expect(result.required).toBe(true);
+    expect(result.amountCents).toBe(0);
+  });
+
+  it("no payment with null membership category but category-exempt config", () => {
+    const result = determinePayment({
+      requestType: RequestType.NEW,
+      membershipCategory: null,
+      tenantSettings: baseSettings,
+      credentialPriceCents: 5000,
+    });
+    expect(result.required).toBe(true);
+  });
+});
+
+// ============================================================
+// Auto-approval
+// ============================================================
+describe("Auto-approval", () => {
+  it("auto-approves return requests", () => {
+    expect(shouldAutoApprove(RequestType.RETURN)).toBe(true);
+  });
+
+  it("does not auto-approve new requests", () => {
+    expect(shouldAutoApprove(RequestType.NEW)).toBe(false);
+  });
+
+  it("does not auto-approve replacement_lost", () => {
+    expect(shouldAutoApprove(RequestType.REPLACEMENT_LOST)).toBe(false);
+  });
+
+  it("does not auto-approve additional", () => {
+    expect(shouldAutoApprove(RequestType.ADDITIONAL)).toBe(false);
+  });
+});
+
+// ============================================================
+// Request type constants
+// ============================================================
+describe("Request Type Constants", () => {
+  it("payment required types include new, lost, damaged, additional", () => {
+    expect(PAYMENT_REQUIRED_REQUEST_TYPES).toContain(RequestType.NEW);
+    expect(PAYMENT_REQUIRED_REQUEST_TYPES).toContain(RequestType.REPLACEMENT_LOST);
+    expect(PAYMENT_REQUIRED_REQUEST_TYPES).toContain(RequestType.REPLACEMENT_DAMAGED);
+    expect(PAYMENT_REQUIRED_REQUEST_TYPES).toContain(RequestType.ADDITIONAL);
+  });
+
+  it("payment required types exclude return, change_type, access_update", () => {
+    expect(PAYMENT_REQUIRED_REQUEST_TYPES).not.toContain(RequestType.RETURN);
+    expect(PAYMENT_REQUIRED_REQUEST_TYPES).not.toContain(RequestType.CHANGE_TYPE);
+    expect(PAYMENT_REQUIRED_REQUEST_TYPES).not.toContain(RequestType.ACCESS_UPDATE);
+  });
+
+  it("auto-approved types only include return", () => {
+    expect(AUTO_APPROVED_REQUEST_TYPES).toEqual([RequestType.RETURN]);
+  });
+});
+
+// ============================================================
+// State Machine Flow Validation
+// ============================================================
+describe("State Machine Flow Validation", () => {
+  describe("new fob request happy path", () => {
+    it("SUBMITTED -> PAYMENT_REQUIRED -> AWAITING_PAYMENT", () => {
+      const events = getValidEvents(RequestStatus.SUBMITTED);
+      expect(events).toContain("PAYMENT_REQUIRED");
+    });
+
+    it("SUBMITTED -> PAYMENT_RECEIVED -> AWAITING_APPROVAL (direct pay)", () => {
+      const events = getValidEvents(RequestStatus.SUBMITTED);
+      expect(events).toContain("PAYMENT_RECEIVED");
+    });
+
+    it("AWAITING_APPROVAL -> APPROVE -> AWAITING_PROGRAMMING", () => {
+      const events = getValidEvents(RequestStatus.AWAITING_APPROVAL);
+      expect(events).toContain("APPROVE");
+    });
+
+    it("AWAITING_PROGRAMMING -> PROGRAM -> PROGRAMMED", () => {
+      const events = getValidEvents(RequestStatus.AWAITING_PROGRAMMING);
+      expect(events).toContain("PROGRAM");
+    });
+
+    it("PROGRAMMED -> SET_PICKUP -> AWAITING_PICKUP", () => {
+      const events = getValidEvents(RequestStatus.PROGRAMMED);
+      expect(events).toContain("SET_PICKUP");
+    });
+
+    it("AWAITING_PICKUP -> ISSUE -> ISSUED", () => {
+      const events = getValidEvents(RequestStatus.AWAITING_PICKUP);
+      expect(events).toContain("ISSUE");
+    });
+
+    it("ISSUED is final", () => {
+      expect(getValidEvents(RequestStatus.ISSUED)).toEqual([]);
+    });
+  });
+
+  describe("exemption flow", () => {
+    it("SUBMITTED -> REQUEST_EXEMPTION -> AWAITING_EXEMPTION_REVIEW", () => {
+      const events = getValidEvents(RequestStatus.SUBMITTED);
+      expect(events).toContain("REQUEST_EXEMPTION");
+    });
+
+    it("AWAITING_PAYMENT -> REQUEST_EXEMPTION -> AWAITING_EXEMPTION_REVIEW", () => {
+      const events = getValidEvents(RequestStatus.AWAITING_PAYMENT);
+      expect(events).toContain("REQUEST_EXEMPTION");
+    });
+
+    it("AWAITING_EXEMPTION_REVIEW -> APPROVE_EXEMPTION -> AWAITING_APPROVAL", () => {
+      const events = getValidEvents(RequestStatus.AWAITING_EXEMPTION_REVIEW);
+      expect(events).toContain("APPROVE_EXEMPTION");
+    });
+
+    it("AWAITING_EXEMPTION_REVIEW -> REJECT_EXEMPTION -> AWAITING_PAYMENT", () => {
+      const events = getValidEvents(RequestStatus.AWAITING_EXEMPTION_REVIEW);
+      expect(events).toContain("REJECT_EXEMPTION");
+    });
+  });
+
+  describe("hold/resume", () => {
+    const holdableStates = [
+      RequestStatus.SUBMITTED,
+      RequestStatus.AWAITING_PAYMENT,
+      RequestStatus.AWAITING_EXEMPTION_REVIEW,
+      RequestStatus.AWAITING_APPROVAL,
+      RequestStatus.AWAITING_PROGRAMMING,
+      RequestStatus.PROGRAMMED,
+      RequestStatus.AWAITING_PICKUP,
+    ];
+
+    for (const state of holdableStates) {
+      it(`${state} can be held`, () => {
+        expect(getValidEvents(state)).toContain("HOLD");
+      });
+    }
+
+    it("ON_HOLD can resume", () => {
+      expect(getValidEvents(RequestStatus.ON_HOLD)).toContain("RESUME");
+    });
+
+    it("ON_HOLD can cancel", () => {
+      expect(getValidEvents(RequestStatus.ON_HOLD)).toContain("CANCEL");
+    });
+  });
+
+  describe("cancellation", () => {
+    const cancellableStates = [
+      RequestStatus.SUBMITTED,
+      RequestStatus.AWAITING_PAYMENT,
+      RequestStatus.AWAITING_EXEMPTION_REVIEW,
+      RequestStatus.AWAITING_APPROVAL,
+      RequestStatus.AWAITING_PROGRAMMING,
+      RequestStatus.PROGRAMMED,
+      RequestStatus.AWAITING_PICKUP,
+      RequestStatus.ON_HOLD,
+    ];
+
+    for (const state of cancellableStates) {
+      it(`${state} can be cancelled`, () => {
+        expect(getValidEvents(state)).toContain("CANCEL");
+      });
+    }
+
+    it("final states cannot be cancelled", () => {
+      expect(getValidEvents(RequestStatus.ISSUED)).not.toContain("CANCEL");
+      expect(getValidEvents(RequestStatus.REJECTED)).not.toContain("CANCEL");
+      expect(getValidEvents(RequestStatus.CANCELLED)).not.toContain("CANCEL");
+    });
+  });
+});
+
+// ============================================================
+// Credential Status Validation
+// ============================================================
+describe("Credential Status Values", () => {
+  it("all expected statuses exist", () => {
+    expect(CredentialStatus.ACTIVE).toBe("active");
+    expect(CredentialStatus.PENDING_PROGRAMMING).toBe("pending_programming");
+    expect(CredentialStatus.LOST).toBe("lost");
+    expect(CredentialStatus.DAMAGED).toBe("damaged");
+    expect(CredentialStatus.DEACTIVATED).toBe("deactivated");
+    expect(CredentialStatus.EXPIRED).toBe("expired");
+    expect(CredentialStatus.RETURNED).toBe("returned");
+  });
+});
+
+// ============================================================
+// Permission Validation
+// ============================================================
+describe("Permission Values", () => {
+  it("hold/resume permissions include approve, program, and issue", () => {
+    // These are the permissions that allow hold/resume actions
+    const holdResumePermissions = [Permission.APPROVE, Permission.PROGRAM, Permission.ISSUE];
+    expect(holdResumePermissions).toContain("approve");
+    expect(holdResumePermissions).toContain("program");
+    expect(holdResumePermissions).toContain("issue");
+  });
+
+  it("refund permission exists", () => {
+    expect(Permission.REFUND).toBe("refund");
+  });
+
+  it("approve_exemption permission exists", () => {
+    expect(Permission.APPROVE_EXEMPTION).toBe("approve_exemption");
+  });
+});
+
+// ============================================================
+// Flow Rule Validation (documenting expected behaviour)
+// ============================================================
+describe("Flow Rules", () => {
+  describe("credential uniqueness", () => {
+    it("a fob serial number should not create duplicate active credentials", () => {
+      // This test documents the rule. Implementation enforced by:
+      // 1. ISSUE for access_update skips credential creation
+      // 2. Attestation uses programmingRequired instead of new requests
+      // 3. Permission expiry updates credentials directly
+      expect(true).toBe(true); // Rule documented
+    });
+  });
+
+  describe("access level location", () => {
+    it("access level is on the membership, not the credential", () => {
+      // Access level changes update tenantMemberships.accessLevelId
+      // The programmer updates the member in the access control system
+      // Credentials do not need to be modified for access level changes
+      expect(true).toBe(true); // Rule documented
+    });
+  });
+
+  describe("credential data model", () => {
+    it("credential tracks: status and expiry", () => {
+      // On the credential: status (active/lost/damaged/etc) and expiresAt
+      // On the membership: accessLevelId
+      expect(true).toBe(true); // Rule documented
+    });
+  });
+
+  describe("lost/damaged submit marks credential immediately", () => {
+    it("replacement_lost sets credential status to LOST on submit", () => {
+      // The submit route marks the credential as LOST before creating requests
+      // The deactivation request still goes to programming queue for Integriti
+      expect(CredentialStatus.LOST).toBe("lost");
+    });
+
+    it("replacement_damaged sets credential status to DAMAGED on submit", () => {
+      expect(CredentialStatus.DAMAGED).toBe("damaged");
+    });
+  });
+
+  describe("attestation renewal", () => {
+    it("confirmed fobs set programmingRequired, not new request", () => {
+      // Attestation updates credential.expiresAt directly
+      // Sets programmingRequired = true for the programmer to reprogram in Integriti
+      // Does NOT create a fobRequest (which would create duplicate credentials)
+      expect(true).toBe(true); // Rule documented
+    });
+
+    it("denied fobs create REPLACEMENT_LOST request", () => {
+      expect(RequestType.REPLACEMENT_LOST).toBe("replacement_lost");
+    });
+  });
+
+  describe("permission expiry", () => {
+    it("updates membership accessLevelId directly", () => {
+      // The cron updates the membership, not the credential
+      // Credentials are flagged with programmingRequired for Integriti update
+      expect(true).toBe(true); // Rule documented
+    });
+
+    it("flags credentials with programmingRequired for reprogramming", () => {
+      // Instead of creating access_update requests, the cron flags credentials
+      // These appear in the programming queue as credential updates
+      expect(true).toBe(true); // Rule documented
+    });
+  });
+
+  describe("access_update ISSUE behaviour", () => {
+    it("ISSUE for access_update does NOT create new credential", () => {
+      // access_update requests track workflow (member Integriti update)
+      // No new credential is needed - the fob stays the same
+      expect(RequestType.ACCESS_UPDATE).toBe("access_update");
+    });
+  });
+
+  describe("access_update cannot alter credential expiry", () => {
+    it("classifies every request type: access_update never carries a credential expiry", () => {
+      // transitionRequest only stamps credentialExpiresAt on APPROVE, and only
+      // for types where requestProducesCredential() is true. On PROGRAM,
+      // issueCredential (the only pipeline write of credentials.expiresAt) is
+      // gated on the same predicate. Expiry is driven solely by the membership
+      // year (renewal attestation / confirm-programming).
+      //
+      // Exhaustive on purpose: a new request type must be classified here
+      // consciously, so "carries an expiry" is never inherited by accident.
+      const producesCredential: Record<RequestType, boolean> = {
+        [RequestType.NEW]: true,
+        [RequestType.ADDITIONAL]: true,
+        [RequestType.CHANGE_TYPE]: true,
+        [RequestType.RETURN]: false, // retires an existing fob, never allocates one
+        [RequestType.ACCESS_UPDATE]: false,
+        [RequestType.REPLACEMENT_LOST]: false,
+        [RequestType.REPLACEMENT_DAMAGED]: false,
+      };
+      for (const type of Object.values(RequestType)) {
+        expect({ type, produces: requestProducesCredential(type) }).toEqual({
+          type,
+          produces: producesCredential[type],
+        });
+      }
+    });
+
+    it("approve and program schemas accept no expiry input", () => {
+      // The only admin endpoints an access_update passes through accept no
+      // credential expiry field; injected keys are stripped, so a crafted
+      // payload cannot smuggle an expiry into the request pipeline.
+      const approved = approveRequestSchema.parse({
+        accessLevelId: "5d67c48e-3f6a-4c93-9f2e-1a2b3c4d5e6f",
+        expiresAt: "2030-09-01T00:00:00Z",
+        credentialExpiresAt: "2030-09-01T00:00:00Z",
+      } as Record<string, unknown>);
+      const programmed = programRequestSchema.parse({
+        serialNumber: "12345",
+        expiresAt: "2030-09-01T00:00:00Z",
+        credentialExpiresAt: "2030-09-01T00:00:00Z",
+      } as Record<string, unknown>);
+      for (const parsed of [approved, programmed]) {
+        expect("expiresAt" in parsed).toBe(false);
+        expect("credentialExpiresAt" in parsed).toBe(false);
+      }
+    });
+  });
+
+  describe("swap creates two requests", () => {
+    it("swap creates deactivation request + activation request", () => {
+      // Deactivation: ACCESS_UPDATE at AWAITING_PROGRAMMING with replacesCredentialId
+      // Activation: NEW at AWAITING_PROGRAMMING with new serial number
+      // New credential created as PENDING_PROGRAMMING linked to activation request
+      expect(true).toBe(true); // Rule documented
+    });
+  });
+
+  describe("auto-refund on cancel/reject", () => {
+    it("cancel of a paid request should trigger auto-refund", () => {
+      // transitionRequest checks: event is CANCEL, paidAt is set, refundedAt is null
+      // Fires createRefund, records stripeRefundId, sends notification email
+      // Failure does not block the state transition
+      const events = getValidEvents(RequestStatus.AWAITING_APPROVAL);
+      expect(events).toContain("CANCEL");
+    });
+
+    it("reject of a paid request should trigger auto-refund", () => {
+      // transitionRequest checks: event is REJECT, paidAt is set, refundedAt is null
+      const events = getValidEvents(RequestStatus.AWAITING_APPROVAL);
+      expect(events).toContain("REJECT");
+    });
+
+    it("cancel without payment should not attempt refund", () => {
+      // If paidAt is null, no refund is attempted
+      expect(true).toBe(true); // Rule documented - conditional check in transitionRequest
+    });
+
+    it("already-refunded request should not be double-refunded", () => {
+      // If refundedAt is already set, the refund block is skipped
+      expect(true).toBe(true); // Rule documented - conditional check in transitionRequest
+    });
+  });
+});

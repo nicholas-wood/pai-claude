@@ -1,0 +1,9 @@
+-- Set when an admin requires payment on a request that was already issued
+-- (for example a credential issued free under an exemption granted in error).
+-- payment_return_status holds the status to return to ("issued") once payment
+-- is received, an exemption is granted, or the payment request is withdrawn,
+-- so the request does not re-enter the approval queue. payment_return_exempt
+-- snapshots payment_exempt at the time of the demand so a withdrawal restores
+-- the prior flag. Both NULL for every ordinary request.
+ALTER TABLE "fob_requests" ADD COLUMN IF NOT EXISTS "payment_return_status" text;
+ALTER TABLE "fob_requests" ADD COLUMN IF NOT EXISTS "payment_return_exempt" boolean;

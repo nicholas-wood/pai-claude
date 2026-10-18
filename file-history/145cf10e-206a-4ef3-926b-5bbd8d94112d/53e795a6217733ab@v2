@@ -1,0 +1,230 @@
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { eq, and, desc, sql } from "drizzle-orm";
+import { Card, CardContent } from "@/components/ui/card";
+import { QueueFilter } from "@/components/queue-filter";
+import { OrphanLinker } from "@/components/orphan-linker";
+import { getAuthUser } from "@/lib/auth";
+import { getEffectivePermissions } from "@/lib/permissions";
+import { Permission, type TenantSettings } from "@accessbuddy/shared";
+import { resolveTenant } from "@/lib/tenant";
+import { withTenant } from "@/lib/with-tenant";
+import { fobRequests, users, credentialTypes, credentials, attestationRequests } from "@accessbuddy/db";
+import { RequestStatus, CredentialStatus } from "@accessbuddy/shared";
+
+// QUEUE_SECTIONS imported from queue-filter component
+
+export const dynamic = "force-dynamic";
+
+export default async function AdminQueuePage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const [auth, tenant] = await Promise.all([
+    getAuthUser(),
+    resolveTenant(slug),
+  ]);
+  if (!auth) redirect("/sign-in");
+  if (!tenant) notFound();
+
+  const permissions = getEffectivePermissions(auth, tenant.id);
+  const canApprove = permissions.includes(Permission.APPROVE);
+  const canApproveExemption = permissions.includes(Permission.APPROVE_EXEMPTION);
+  const canProgram = permissions.includes(Permission.PROGRAM);
+  const canIssue = permissions.includes(Permission.ISSUE);
+
+  const [allRequests, orphanedRequests, credentialUpdates, pendingAttestations] = await withTenant(tenant.id, async (tx) => {
+    const requests = await tx
+      .select({
+        id: fobRequests.id,
+        status: fobRequests.status,
+        requestType: fobRequests.requestType,
+        submittedAt: fobRequests.submittedAt,
+        holdReason: fobRequests.holdReason,
+        serialNumber: fobRequests.serialNumber,
+        requesterId: fobRequests.requesterId,
+        isOrphaned: fobRequests.isOrphaned,
+        orphanEmail: fobRequests.orphanEmail,
+        orphanFirstName: fobRequests.orphanFirstName,
+        orphanLastName: fobRequests.orphanLastName,
+        requesterFirstName: users.firstName,
+        requesterLastName: users.lastName,
+        requesterEmail: users.email,
+        credentialTypeName: credentialTypes.name,
+        relatedRequestId: fobRequests.relatedRequestId,
+        replacesCredentialSerial: sql<string | null>`(SELECT c.serial_number FROM credentials c WHERE c.id = ${fobRequests.replacesCredentialId})`,
+        accessLevelName: sql<string | null>`(SELECT al.name FROM access_levels al WHERE al.id = ${fobRequests.accessLevelId})`,
+        accessUpdateReason: fobRequests.accessUpdateReason,
+        exemptionReason: fobRequests.exemptionReason,
+        pickupLocationName: sql<string | null>`(SELECT pl.name FROM pickup_locations pl WHERE pl.id = ${fobRequests.pickupLocationId})`,
+        paidAt: fobRequests.paidAt,
+      })
+      .from(fobRequests)
+      .leftJoin(users, eq(fobRequests.requesterId, users.id))
+      .leftJoin(credentialTypes, eq(fobRequests.credentialTypeId, credentialTypes.id))
+      .where(eq(fobRequests.isOrphaned, false))
+      .orderBy(desc(fobRequests.submittedAt))
+      .limit(200);
+
+    const orphaned = await tx
+      .select({
+        id: fobRequests.id,
+        status: fobRequests.status,
+        requestType: fobRequests.requestType,
+        submittedAt: fobRequests.submittedAt,
+        orphanEmail: fobRequests.orphanEmail,
+        orphanFirstName: fobRequests.orphanFirstName,
+        orphanLastName: fobRequests.orphanLastName,
+        credentialTypeName: credentialTypes.name,
+      })
+      .from(fobRequests)
+      .leftJoin(credentialTypes, eq(fobRequests.credentialTypeId, credentialTypes.id))
+      .where(eq(fobRequests.isOrphaned, true))
+      .orderBy(desc(fobRequests.submittedAt));
+
+    // Credentials flagged for reprogramming (expiry updates, permission changes)
+    let pendingCredentials: {
+      id: string;
+      serialNumber: string | null;
+      programmingReason: string | null;
+      programmingRequestedAt: Date | null;
+      expiresAt: Date | null;
+      ownerFirstName: string | null;
+      ownerLastName: string | null;
+      ownerEmail: string | null;
+      credentialTypeName: string | null;
+    }[] = [];
+    try {
+      pendingCredentials = await tx
+        .select({
+          id: credentials.id,
+          serialNumber: credentials.serialNumber,
+          programmingReason: credentials.programmingReason,
+          programmingRequestedAt: credentials.programmingRequestedAt,
+          expiresAt: credentials.expiresAt,
+          ownerFirstName: users.firstName,
+          ownerLastName: users.lastName,
+          ownerEmail: users.email,
+          credentialTypeName: credentialTypes.name,
+        })
+        .from(credentials)
+        .leftJoin(users, eq(credentials.ownerId, users.id))
+        .leftJoin(credentialTypes, eq(credentials.credentialTypeId, credentialTypes.id))
+        .where(
+          and(
+            eq(credentials.tenantId, tenant.id),
+            eq(credentials.programmingRequired, true)
+          )
+        );
+    } catch (err) {
+      console.error("Failed to query credential updates:", err);
+    }
+
+    // Pending attestations (membership renewals awaiting member confirmation)
+    const pendingAtts = await tx
+      .select({
+        id: attestationRequests.id,
+        userId: attestationRequests.userId,
+        season: attestationRequests.season,
+        tokenExpiresAt: attestationRequests.tokenExpiresAt,
+        createdAt: attestationRequests.createdAt,
+        memberFirstName: users.firstName,
+        memberLastName: users.lastName,
+        memberEmail: users.email,
+      })
+      .from(attestationRequests)
+      .leftJoin(users, eq(attestationRequests.userId, users.id))
+      // Explicit tenant predicate as well as RLS: until the accessbuddy_app
+      // role cutover, the app role can bypass row-level security, so the
+      // app-layer tenant_id filter is the only reliable control.
+      .where(
+        and(
+          eq(attestationRequests.tenantId, tenant.id),
+          eq(attestationRequests.status, "pending")
+        )
+      )
+      .orderBy(desc(attestationRequests.createdAt));
+
+    return [requests, orphaned, pendingCredentials, pendingAtts] as const;
+  });
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Requests</h1>
+
+      {/* Orphaned requests - inline member linking */}
+      {orphanedRequests.length > 0 && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 space-y-3">
+          <h2 className="text-sm font-semibold text-destructive">
+            Orphaned Requests ({orphanedRequests.length}) - link to existing member
+          </h2>
+          <div className="space-y-2">
+            {orphanedRequests.map((req) => (
+              <OrphanLinker
+                key={req.id}
+                tenantSlug={slug}
+                requestId={req.id}
+                orphanName={`${req.orphanFirstName ?? "Unknown"} ${req.orphanLastName ?? ""}`}
+                orphanEmail={req.orphanEmail ?? ""}
+                requestType={req.requestType}
+                submittedAt={req.submittedAt.toISOString()}
+                credentialType={req.credentialTypeName}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Filterable queue */}
+      <QueueFilter
+        slug={slug}
+        credentialUpdates={canProgram ? credentialUpdates.map((c) => ({
+          id: c.id,
+          serialNumber: c.serialNumber,
+          credentialTypeName: c.credentialTypeName,
+          programmingReason: c.programmingReason,
+          ownerFirstName: c.ownerFirstName,
+          ownerLastName: c.ownerLastName,
+          ownerEmail: c.ownerEmail,
+        })) : []}
+        pendingAttestations={pendingAttestations.map((att) => ({
+          id: att.id,
+          userId: att.userId,
+          season: att.season,
+          tokenExpiresAt: att.tokenExpiresAt?.toISOString() ?? null,
+          memberFirstName: att.memberFirstName,
+          memberLastName: att.memberLastName,
+          memberEmail: att.memberEmail,
+        }))}
+        requests={allRequests.map((req) => ({
+          id: req.id,
+          status: req.status,
+          requestType: req.requestType,
+          submittedAt: req.submittedAt.toISOString(),
+          holdReason: req.holdReason,
+          serialNumber: req.serialNumber,
+          requesterId: req.requesterId,
+          requesterFirstName: req.requesterFirstName ?? req.orphanFirstName ?? "",
+          requesterLastName: req.requesterLastName ?? req.orphanLastName ?? "",
+          requesterEmail: req.requesterEmail ?? req.orphanEmail ?? "",
+          credentialTypeName: req.credentialTypeName,
+          relatedRequestId: req.relatedRequestId,
+          replacesCredentialSerial: req.replacesCredentialSerial,
+          accessLevelName: req.accessLevelName,
+          accessUpdateReason: req.accessUpdateReason,
+          exemptionReason: req.exemptionReason,
+          pickupLocationName: req.pickupLocationName,
+          paidAt: req.paidAt?.toISOString() ?? null,
+        }))}
+        permissions={permissions}
+        canApprove={canApprove}
+        canApproveExemption={canApproveExemption}
+        canProgram={canProgram}
+        canIssue={canIssue}
+        splitPickupFromProgramming={(tenant.settings as TenantSettings)?.splitPickupFromProgramming ?? false}
+      />
+    </div>
+  );
+}

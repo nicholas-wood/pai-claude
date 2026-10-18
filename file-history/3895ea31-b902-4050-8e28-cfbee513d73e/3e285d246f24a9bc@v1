@@ -1,0 +1,378 @@
+import { NextResponse } from "next/server";
+import { eq, and, isNull, or } from "drizzle-orm";
+import {
+  Permission,
+  CredentialStatus,
+  manualAddCredentialSchema,
+  AuditEntityType,
+  AuditAction,
+  RequestType,
+  RequestStatus,
+  type TenantSettings,
+} from "@accessbuddy/shared";
+import {
+  tenantMemberships,
+  credentials,
+  credentialTypes,
+  accessLevels,
+  fobRequests,
+} from "@accessbuddy/db";
+import { withTenantAuth, type TenantApiContext } from "@/lib/api";
+import { withTenant } from "@/lib/with-tenant";
+import { createAuditEntry } from "@/lib/services/audit";
+import { membershipYearExpiry, parseDateWithTimezone } from "@/lib/timezone";
+
+export const POST = withTenantAuth(
+  async ({ auth, tenant, request }: TenantApiContext) => {
+    // Check manual_add permission
+    const { checkPermission } = await import("@/lib/permissions");
+    const permResult = checkPermission(auth, tenant.id, Permission.MANUAL_ADD);
+    if (!permResult.granted) {
+      return NextResponse.json({ error: permResult.reason }, { status: 403 });
+    }
+    const body = await request.json();
+    const parsed = manualAddCredentialSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+
+    const {
+      ownerId,
+      credentialTypeId: explicitCredentialTypeId,
+      accessLevelId: explicitAccessLevelId,
+      serialNumber,
+      accessStartsAt,
+      expiresAt,
+      stage,
+    } = parsed.data;
+
+    const settings = tenant.settings as TenantSettings;
+    const allowFobCreationAtProgramming =
+      settings.allowFobCreationAtProgramming ?? false;
+
+    const result = await withTenant(tenant.id, async (tx) => {
+      const [membership] = await tx
+        .select()
+        .from(tenantMemberships)
+        .where(
+          and(
+            eq(tenantMemberships.userId, ownerId),
+            eq(tenantMemberships.tenantId, tenant.id)
+          )
+        )
+        .limit(1);
+
+      if (!membership) {
+        throw new Error("Owner is not a member of this organisation");
+      }
+
+      // Resolve accessLevelId: use explicit if provided, otherwise inherit from membership
+      const accessLevelId = explicitAccessLevelId ?? membership.accessLevelId;
+
+      // If assigning from an existing unallocated fob, infer credentialTypeId from the fob
+      let credentialTypeId = explicitCredentialTypeId;
+      if (!credentialTypeId) {
+        const [existingFob] = await tx
+          .select({ credentialTypeId: credentials.credentialTypeId })
+          .from(credentials)
+          .where(eq(credentials.serialNumber, serialNumber))
+          .limit(1);
+        credentialTypeId = existingFob?.credentialTypeId;
+      }
+
+      if (!credentialTypeId) {
+        throw new Error(
+          "Credential type is required when not assigning an existing fob"
+        );
+      }
+
+      const [ct] = await tx
+        .select()
+        .from(credentialTypes)
+        .where(
+          and(
+            eq(credentialTypes.id, credentialTypeId),
+            eq(credentialTypes.isActive, true)
+          )
+        )
+        .limit(1);
+
+      if (!ct) {
+        throw new Error("Credential type not found or inactive");
+      }
+
+      // Look up access level name for the response
+      let accessLevelName: string | null = null;
+      if (accessLevelId) {
+        const [al] = await tx
+          .select()
+          .from(accessLevels)
+          .where(
+            and(
+              eq(accessLevels.id, accessLevelId),
+              eq(accessLevels.isActive, true)
+            )
+          )
+          .limit(1);
+
+        if (!al) {
+          throw new Error("Access level not found or inactive");
+        }
+        accessLevelName = al.name;
+      }
+
+      const now = new Date();
+
+      let parsedAccessStartsAt: Date | undefined;
+      if (accessStartsAt) {
+        parsedAccessStartsAt = parseDateWithTimezone(
+          accessStartsAt,
+          tenant.timezone
+        );
+      }
+
+      let parsedExpiresAt: Date | undefined;
+      if (expiresAt) {
+        parsedExpiresAt = parseDateWithTimezone(expiresAt, tenant.timezone);
+      }
+
+      // --- Calculate expiry for pickup/issued stages ---
+      let calculatedExpiresAt: Date | null = parsedExpiresAt ?? null;
+
+      if (
+        (stage === "pickup" || stage === "issued") &&
+        !parsedExpiresAt
+      ) {
+        // Check if staff or board member
+        const isStaffOrBoard =
+          membership.isStaff || membership.isBoardMember;
+
+        if (!isStaffOrBoard) {
+          // Membership-year expiry (Sep 1 rollover) in the tenant's timezone
+          calculatedExpiresAt = membershipYearExpiry(
+            tenant.timezone ?? "Australia/Melbourne"
+          );
+        }
+        // Staff/board: calculatedExpiresAt stays null
+      }
+
+      // --- Determine request and credential status based on stage ---
+      const requestStatusMap: Record<string, string> = {
+        programming: RequestStatus.AWAITING_PROGRAMMING,
+        pickup: RequestStatus.AWAITING_PICKUP,
+        issued: RequestStatus.ISSUED,
+      };
+      const credStatusMap: Record<string, string> = {
+        programming: CredentialStatus.PENDING_PROGRAMMING,
+        pickup: CredentialStatus.ACTIVE,
+        issued: CredentialStatus.ACTIVE,
+      };
+      const requestStatus = requestStatusMap[stage];
+      const credStatus = credStatusMap[stage];
+
+      // Create the tracking request
+      const [fobRequest] = await tx
+        .insert(fobRequests)
+        .values({
+          tenantId: tenant.id,
+          requesterId: ownerId,
+          credentialTypeId,
+          accessLevelId: accessLevelId ?? null,
+          requestType: RequestType.NEW,
+          status: requestStatus,
+          serialNumber,
+          submittedAt: now,
+          credentialExpiresAt: calculatedExpiresAt,
+          ...(stage === "pickup" || stage === "issued"
+            ? { programmedAt: now, programmedBy: auth.user.id }
+            : {}),
+          ...(stage === "issued"
+            ? { issuedAt: now, issuedBy: auth.user.id }
+            : {}),
+        })
+        .returning();
+
+      // Check if a credential with this serial + type already exists (unallocated or deactivated)
+      const [existingFob] = await tx
+        .select({
+          id: credentials.id,
+          ownerId: credentials.ownerId,
+          status: credentials.status,
+        })
+        .from(credentials)
+        .where(
+          and(
+            eq(credentials.credentialTypeId, credentialTypeId),
+            eq(credentials.serialNumber, serialNumber),
+            or(
+              isNull(credentials.ownerId),
+              eq(credentials.status, "deactivated")
+            )
+          )
+        )
+        .limit(1);
+
+      // Guard: if no existing fob and creation not allowed, error out
+      if (!existingFob && !allowFobCreationAtProgramming) {
+        throw new Error(
+          "No existing fob found with this serial number. Fob creation is not enabled for this organisation."
+        );
+      }
+
+      let credential;
+      let wasReassignment = false;
+      const previousOwnerId = existingFob?.ownerId ?? null;
+
+      const credValues = {
+        ownerId,
+        credentialTypeId,
+        accessLevelId: accessLevelId ?? null,
+        requestId: fobRequest.id,
+        status: credStatus,
+        issuedAt: now,
+        accessStartsAt: parsedAccessStartsAt ?? null,
+        expiresAt: calculatedExpiresAt,
+        updatedAt: now,
+        deactivatedAt: null,
+        deactivatedBy: null,
+        deactivationReason: null,
+      };
+
+      if (existingFob) {
+        wasReassignment =
+          previousOwnerId !== null && previousOwnerId !== ownerId;
+
+        const [updated] = await tx
+          .update(credentials)
+          .set(credValues)
+          .where(eq(credentials.id, existingFob.id))
+          .returning();
+        credential = updated;
+      } else {
+        const [created] = await tx
+          .insert(credentials)
+          .values({
+            tenantId: tenant.id,
+            serialNumber,
+            ...credValues,
+          })
+          .returning();
+        credential = created;
+      }
+
+      // Update membership access level if one was set (either from rules or manual)
+      if (accessLevelId) {
+        await tx
+          .update(tenantMemberships)
+          .set({ accessLevelId, updatedAt: now })
+          .where(
+            and(
+              eq(tenantMemberships.userId, ownerId),
+              eq(tenantMemberships.tenantId, tenant.id)
+            )
+          );
+      }
+
+      // --- Audit entries ---
+
+      // 1. Reassignment audit (existing fob with different previous owner)
+      if (wasReassignment) {
+        await createAuditEntry(tx, {
+          tenantId: tenant.id,
+          entityType: AuditEntityType.CREDENTIAL,
+          entityId: credential.id,
+          action: AuditAction.STATUS_CHANGE,
+          fromState: "deactivated",
+          toState: credStatus,
+          actorId: auth.user.id,
+          actorType: "user",
+          metadata: {
+            description: "Credential reassigned",
+            previousOwnerId,
+            newOwnerId: ownerId,
+            reason: "manual_add",
+          },
+        });
+      }
+
+      // 2. Activation audit (pickup or issued)
+      if (stage === "pickup" || stage === "issued") {
+        await createAuditEntry(tx, {
+          tenantId: tenant.id,
+          entityType: AuditEntityType.CREDENTIAL,
+          entityId: credential.id,
+          action: wasReassignment
+            ? AuditAction.UPDATE
+            : AuditAction.STATUS_CHANGE,
+          toState: CredentialStatus.ACTIVE,
+          actorId: auth.user.id,
+          actorType: "user",
+          metadata: {
+            description: "Credential activated",
+            expiresAt: calculatedExpiresAt?.toISOString() ?? null,
+            stage,
+          },
+        });
+      }
+
+      // 3. New allocation audit (no existing fob - brand new credential)
+      if (!existingFob) {
+        await createAuditEntry(tx, {
+          tenantId: tenant.id,
+          entityType: AuditEntityType.CREDENTIAL,
+          entityId: credential.id,
+          action: AuditAction.CREATE,
+          toState: credStatus,
+          actorId: auth.user.id,
+          actorType: "user",
+          metadata: {
+            description: "Credential assigned",
+            ownerId,
+            stage,
+            serialNumber,
+            credentialTypeId,
+            accessLevelId: accessLevelId ?? null,
+          },
+        });
+      }
+
+      // 4. Request audit entry
+      const stageLabels: Record<string, string> = {
+        programming: "Needs programming",
+        pickup: "Programmed, awaiting pickup",
+        issued: "Issued directly",
+      };
+      await createAuditEntry(tx, {
+        tenantId: tenant.id,
+        entityType: AuditEntityType.FOB_REQUEST,
+        entityId: fobRequest.id,
+        action: AuditAction.CREATE,
+        toState: requestStatus,
+        actorId: auth.user.id,
+        actorType: "user",
+        metadata: {
+          action: "manual_add",
+          credentialId: credential.id,
+          serialNumber,
+          credentialTypeName: ct.name,
+          accessLevelName: accessLevelName ?? null,
+          stage,
+          stageDescription: stageLabels[stage] ?? stage,
+        },
+      });
+
+      return {
+        credential,
+        expiresAt: calculatedExpiresAt?.toISOString() ?? null,
+        accessLevelName,
+        wasReassignment,
+      };
+    });
+
+    return NextResponse.json(result, { status: 201 });
+  },
+  {}
+);

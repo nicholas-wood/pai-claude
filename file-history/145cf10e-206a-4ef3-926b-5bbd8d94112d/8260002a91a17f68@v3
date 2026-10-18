@@ -1,0 +1,454 @@
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { eq, and, desc, isNull, inArray } from "drizzle-orm";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { BackButton } from "@/components/back-button";
+import { AuditTrail } from "@/components/audit-trail";
+import { CredentialStatusBadge } from "@/components/status-badge";
+import { EditCredentialForm } from "@/components/edit-credential-form";
+import { getAuthUser } from "@/lib/auth";
+import { resolveTenant } from "@/lib/tenant";
+import { withTenant } from "@/lib/with-tenant";
+import { getEffectivePermissions } from "@/lib/permissions";
+import {
+  credentials,
+  credentialTypes,
+  accessLevels,
+  users,
+  fobRequests,
+  auditLog,
+  pickupLocations,
+} from "@accessbuddy/db";
+import { Permission, type TenantSettings } from "@accessbuddy/shared";
+import { SwapCredential } from "./swap-credential";
+import { CancelLinkedRequest } from "./cancel-linked-request";
+import { PendingUpdateActions } from "./pending-update-actions";
+
+// Statuses from which a request can still be cancelled. Matches the set of
+// non-terminal states in the state machine (packages/shared/src/state-machine.ts).
+const CANCELLABLE_REQUEST_STATUSES = new Set([
+  "submitted",
+  "awaiting_payment",
+  "awaiting_exemption_review",
+  "awaiting_approval",
+  "awaiting_programming",
+  "programmed",
+  "awaiting_pickup",
+  "on_hold",
+]);
+
+export const dynamic = "force-dynamic";
+
+export default async function AdminFobDetailPage({
+  params,
+}: {
+  params: Promise<{ slug: string; id: string }>;
+}) {
+  const { slug, id } = await params;
+  const [auth, tenant] = await Promise.all([
+    getAuthUser(),
+    resolveTenant(slug),
+  ]);
+  if (!auth) redirect("/sign-in");
+  if (!tenant) notFound();
+
+  const data = await withTenant(tenant.id, async (tx) => {
+    const [cred] = await tx
+      .select({
+        id: credentials.id,
+        serialNumber: credentials.serialNumber,
+        status: credentials.status,
+        issuedAt: credentials.issuedAt,
+        expiresAt: credentials.expiresAt,
+        deactivatedAt: credentials.deactivatedAt,
+        lostReportedAt: credentials.lostReportedAt,
+        externalCardId: credentials.externalCardId,
+        requestId: credentials.requestId,
+        programmingRequired: credentials.programmingRequired,
+        programmingReason: credentials.programmingReason,
+        programmingRequestedAt: credentials.programmingRequestedAt,
+        pendingExpiresAt: credentials.pendingExpiresAt,
+        credentialTypeId: credentials.credentialTypeId,
+        credentialTypeName: credentialTypes.name,
+        credentialCategory: credentialTypes.category,
+        accessLevelName: accessLevels.name,
+        ownerFirstName: users.firstName,
+        ownerLastName: users.lastName,
+        ownerEmail: users.email,
+        ownerId: users.id,
+      })
+      .from(credentials)
+      .leftJoin(users, eq(credentials.ownerId, users.id))
+      .leftJoin(credentialTypes, eq(credentials.credentialTypeId, credentialTypes.id))
+      .leftJoin(accessLevels, eq(credentials.accessLevelId, accessLevels.id))
+      .where(eq(credentials.id, id))
+      .limit(1);
+
+    if (!cred) return null;
+
+    // Get the originating request if linked
+    let request = null;
+    if (cred.requestId) {
+      const [req] = await tx
+        .select({
+          id: fobRequests.id,
+          status: fobRequests.status,
+          requestType: fobRequests.requestType,
+          submittedAt: fobRequests.submittedAt,
+        })
+        .from(fobRequests)
+        .where(eq(fobRequests.id, cred.requestId))
+        .limit(1);
+      request = req ?? null;
+    }
+
+    // In-flight requests that reference this credential but are NOT the
+    // originating request. This covers access_update / replacement flows
+    // where a follow-up request is created to update or replace this
+    // credential (e.g. via the Revoke action on a member page). Without
+    // this, admins have no way to cancel a pending update from the fob
+    // page because `credentials.request_id` only stores the original
+    // creating request.
+    const relatedCancellableStatuses = [
+      "submitted",
+      "awaiting_payment",
+      "awaiting_exemption_review",
+      "awaiting_approval",
+      "awaiting_programming",
+      "programmed",
+      "awaiting_pickup",
+      "on_hold",
+    ];
+    const relatedRequestsRaw = await tx
+      .select({
+        id: fobRequests.id,
+        status: fobRequests.status,
+        requestType: fobRequests.requestType,
+        submittedAt: fobRequests.submittedAt,
+        accessUpdateReason: fobRequests.accessUpdateReason,
+      })
+      .from(fobRequests)
+      .where(
+        and(
+          eq(fobRequests.replacesCredentialId, id),
+          inArray(fobRequests.status, relatedCancellableStatuses)
+        )
+      )
+      .orderBy(desc(fobRequests.submittedAt));
+    // Filter out the originating request (in case it's somehow included)
+    const relatedRequests = relatedRequestsRaw.filter((r) => r.id !== cred.requestId);
+
+    // Audit trail for this credential only (not the full request history)
+    const trail = await tx
+      .select({
+        id: auditLog.id,
+        action: auditLog.action,
+        fromState: auditLog.fromState,
+        toState: auditLog.toState,
+        actorType: auditLog.actorType,
+        actorFirstName: users.firstName,
+        actorLastName: users.lastName,
+        metadata: auditLog.metadata,
+        createdAt: auditLog.createdAt,
+        entityType: auditLog.entityType,
+        entityId: auditLog.entityId,
+      })
+      .from(auditLog)
+      .leftJoin(users, eq(auditLog.actorId, users.id))
+      .where(
+        and(
+          eq(auditLog.entityType, "credential"),
+          eq(auditLog.entityId, id)
+        )
+      )
+      .orderBy(desc(auditLog.createdAt));
+
+    // Feeds the edit form's type Select. Inactive types are included so a
+    // credential on a retired type still displays and keeps its real type;
+    // the form hides the rest of the inactive ones.
+    const allCredentialTypes = await tx
+      .select({
+        id: credentialTypes.id,
+        name: credentialTypes.name,
+        isActive: credentialTypes.isActive,
+      })
+      .from(credentialTypes)
+      .where(eq(credentialTypes.tenantId, tenant.id))
+      .orderBy(credentialTypes.name);
+
+    const allAccessLevels = await tx
+      .select({ id: accessLevels.id, name: accessLevels.name })
+      .from(accessLevels);
+
+    const unallocatedFobs = await tx
+      .select({
+        id: credentials.id,
+        serialNumber: credentials.serialNumber,
+        credentialTypeId: credentials.credentialTypeId,
+        credentialTypeName: credentialTypes.name,
+      })
+      .from(credentials)
+      .leftJoin(credentialTypes, eq(credentials.credentialTypeId, credentialTypes.id))
+      .where(isNull(credentials.ownerId));
+
+    return { credential: cred, request, relatedRequests, auditTrail: trail, allCredentialTypes, allAccessLevels, unallocatedFobs };
+  });
+
+  if (!data) notFound();
+  const { credential, request, relatedRequests, auditTrail } = data;
+
+  function formatDate(date: Date | string | null) {
+    if (!date) return "-";
+    return new Date(date).toLocaleDateString("en-AU", {
+      timeZone: "Australia/Melbourne",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  const permissions = getEffectivePermissions(auth, tenant.id);
+  const canEdit = permissions.includes(Permission.MANUAL_ADD);
+
+  return (
+    <div className="space-y-6">
+      <BackButton fallback={`/t/${slug}/admin/fobs`} />
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">
+            {credential.credentialTypeName}
+            {credential.serialNumber && (
+              <span className="ml-2 font-normal text-muted-foreground">
+                #{credential.serialNumber}
+              </span>
+            )}
+          </h1>
+          {credential.ownerId ? (
+            <Link
+              href={`/t/${slug}/admin/members/${credential.ownerId}`}
+              className="text-sm text-primary hover:underline"
+            >
+              {credential.ownerFirstName} {credential.ownerLastName} ({credential.ownerEmail})
+            </Link>
+          ) : (
+            <span className="text-sm text-muted-foreground">Unallocated</span>
+          )}
+        </div>
+        <CredentialStatusBadge status={credential.status} expiresAt={credential.expiresAt} />
+      </div>
+
+      <Card>
+        <CardContent className="space-y-3 pt-6 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Type</span>
+            <span>{credential.credentialTypeName} ({credential.credentialCategory})</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Access Level</span>
+            <span>{credential.accessLevelName ?? "-"}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Serial Number</span>
+            <span>{credential.serialNumber ?? "-"}</span>
+          </div>
+          <Separator />
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Issued</span>
+            <span>{formatDate(credential.issuedAt)}</span>
+          </div>
+          {credential.expiresAt && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Expires</span>
+              <span>{formatDate(credential.expiresAt)}</span>
+            </div>
+          )}
+          {credential.deactivatedAt && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Deactivated</span>
+              <span>{formatDate(credential.deactivatedAt)}</span>
+            </div>
+          )}
+          {credential.lostReportedAt && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Reported Lost</span>
+              <span>{formatDate(credential.lostReportedAt)}</span>
+            </div>
+          )}
+          {credential.externalCardId && (
+            <>
+              <Separator />
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">External Card ID</span>
+                <span className="font-mono text-xs">{credential.externalCardId}</span>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {canEdit && (
+        <EditCredentialForm
+          tenantSlug={slug}
+          credentialId={credential.id}
+          currentStatus={credential.status}
+          currentExpiresAt={credential.expiresAt ? new Date(credential.expiresAt).toISOString() : null}
+          currentOwner={{
+            id: credential.ownerId,
+            firstName: credential.ownerFirstName,
+            lastName: credential.ownerLastName,
+            email: credential.ownerEmail,
+          }}
+          currentCredentialTypeId={credential.credentialTypeId}
+          credentialTypes={data.allCredentialTypes}
+        />
+      )}
+
+      {credential.status === "active" && (
+        <SwapCredential
+          tenantSlug={slug}
+          credentialId={credential.id}
+          availableFobs={data.unallocatedFobs.filter((f: any) => f.serialNumber).map((f: any) => ({
+            id: f.id,
+            serialNumber: f.serialNumber!,
+            credentialTypeId: f.credentialTypeId ?? "",
+            credentialTypeName: f.credentialTypeName,
+            previousOwnerName: f.previousOwnerName ?? null,
+          }))}
+          allowFobCreationAtProgramming={(tenant.settings as TenantSettings)?.allowFobCreationAtProgramming ?? false}
+        />
+      )}
+
+      {/* Pending programming update flagged directly on the credential
+          (no fob_request exists — this comes from the season attestation
+          flow, access-level change on approval, or legacy imports). */}
+      {credential.programmingRequired && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Pending Update</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              {credential.programmingReason && (
+                <p className="font-medium">{credential.programmingReason}</p>
+              )}
+              {credential.pendingExpiresAt && (
+                <p className="text-xs mt-1">
+                  Staged new expiry:{" "}
+                  {new Date(credential.pendingExpiresAt).toLocaleDateString("en-AU", {
+                    timeZone: "Australia/Melbourne",
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </p>
+              )}
+              {credential.programmingRequestedAt && (
+                <p className="text-xs text-amber-800/80 mt-1">
+                  Requested {formatDate(credential.programmingRequestedAt)}
+                </p>
+              )}
+            </div>
+            <PendingUpdateActions
+              tenantSlug={slug}
+              credentialId={credential.id}
+              canConfirm={permissions.includes(Permission.PROGRAM)}
+              canCancel={permissions.includes(Permission.CANCEL)}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* In-flight updates / replacements that reference this credential.
+          Shown above the originating request card because these are the
+          actionable items an admin usually wants to see first. */}
+      {relatedRequests.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">In-flight Updates</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {relatedRequests.map((r) => (
+              <div key={r.id} className="space-y-2 rounded border p-2">
+                <Link
+                  href={`/t/${slug}/admin/requests/${r.id}`}
+                  className="flex items-center justify-between text-sm transition-colors hover:text-primary"
+                >
+                  <div>
+                    <span className="capitalize">{r.requestType.replace(/_/g, " ")}</span>
+                    {r.accessUpdateReason && (
+                      <p className="text-xs text-muted-foreground">{r.accessUpdateReason}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(r.submittedAt).toLocaleDateString("en-AU", { timeZone: "Australia/Melbourne" })}
+                    </p>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{r.status}</span>
+                </Link>
+                {permissions.includes(Permission.CANCEL) && (
+                  <CancelLinkedRequest
+                    tenantSlug={slug}
+                    requestId={r.id}
+                    requestType={r.requestType}
+                  />
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Linked request */}
+      {request && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Originating Request</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Link
+              href={`/t/${slug}/admin/requests/${request.id}`}
+              className="flex items-center justify-between rounded border p-2 text-sm transition-colors hover:bg-accent/50"
+            >
+              <div>
+                <span className="capitalize">{request.requestType.replace(/_/g, " ")}</span>
+                <p className="text-xs text-muted-foreground">
+                  {new Date(request.submittedAt).toLocaleDateString("en-AU", { timeZone: "Australia/Melbourne" })}
+                </p>
+              </div>
+              <span className="text-xs text-muted-foreground">{request.status}</span>
+            </Link>
+            {permissions.includes(Permission.CANCEL) &&
+              CANCELLABLE_REQUEST_STATUSES.has(request.status) && (
+                <CancelLinkedRequest
+                  tenantSlug={slug}
+                  requestId={request.id}
+                  requestType={request.requestType}
+                />
+              )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Credential history */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Credential History</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AuditTrail
+            entries={auditTrail.map((e) => ({
+              ...e,
+              actorName: e.actorFirstName ? `${e.actorFirstName} ${e.actorLastName ?? ""}`.trim() : null,
+              createdAt: typeof e.createdAt === "string" ? e.createdAt : (e.createdAt as Date).toISOString(),
+              metadata: e.metadata as Record<string, unknown> | null,
+            }))}
+            slug={slug}
+            enableEmailPreview
+          />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

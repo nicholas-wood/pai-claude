@@ -1,0 +1,275 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+
+type ConfigItem = { id: string; name: string; [key: string]: unknown };
+
+// "text" (default) and "number" render an Input; "textarea" a multi-line
+// field; "checkbox" a boolean stored in the form as "true"/"false".
+type ConfigField = { key: string; label: string; type?: "text" | "number" | "textarea" | "checkbox"; hint?: string };
+
+function ConfigSection({
+  title,
+  endpoint,
+  fields,
+}: {
+  title: string;
+  endpoint: string;
+  fields: ConfigField[];
+}) {
+  const params = useParams<{ slug: string }>();
+  const [items, setItems] = useState<ConfigItem[]>([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/v1/t/${params.slug}/config/${endpoint}`)
+      .then((r) => r.json())
+      .then((d) => setItems(d.items ?? []));
+  }, [params.slug, endpoint]);
+
+  function resetForm() {
+    setForm({});
+    setShowAdd(false);
+    setEditingId(null);
+  }
+
+  function startEdit(item: ConfigItem) {
+    setShowAdd(false);
+    setEditingId(item.id);
+    const values: Record<string, string> = {};
+    for (const f of fields) {
+      values[f.key] = String(item[f.key] ?? "");
+    }
+    setForm(values);
+  }
+
+  function buildBody() {
+    const body: Record<string, unknown> = {};
+    for (const f of fields) {
+      const val = form[f.key] ?? "";
+      if (f.type === "number") body[f.key] = Number(val);
+      else if (f.type === "checkbox") body[f.key] = val === "true";
+      else body[f.key] = val;
+    }
+    return body;
+  }
+
+  async function handleAdd() {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/v1/t/${params.slug}/config/${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildBody()),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setItems((prev) => [...prev, data.item]);
+        resetForm();
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleUpdate() {
+    if (!editingId) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/v1/t/${params.slug}/config/${endpoint}/${editingId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildBody()),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setItems((prev) => prev.map((i) => (i.id === editingId ? data.item : i)));
+        resetForm();
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Are you sure you want to delete this item?")) return;
+    const res = await fetch(`/api/v1/t/${params.slug}/config/${endpoint}/${id}`, {
+      method: "DELETE",
+    });
+    if (res.ok) {
+      setItems((prev) => prev.filter((i) => i.id !== id));
+    }
+  }
+
+  const isEditing = editingId !== null;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-base">{title}</CardTitle>
+        {!isEditing && (
+          <Button size="sm" variant="outline" onClick={() => { setShowAdd(!showAdd); setForm({}); }}>
+            {showAdd ? "Cancel" : "Add"}
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Add / Edit form */}
+        {(showAdd || isEditing) && (
+          <div className="space-y-3 rounded border p-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              {isEditing ? "Edit item" : "Add new item"}
+            </p>
+            {fields.map((f) => (
+              <div key={f.key} className="space-y-1">
+                {f.type === "checkbox" ? (
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={form[f.key] === "true"}
+                      onChange={(e) => setForm((prev) => ({ ...prev, [f.key]: e.target.checked ? "true" : "false" }))}
+                    />
+                    {f.label}
+                  </label>
+                ) : f.type === "textarea" ? (
+                  <>
+                    <Label className="text-xs">{f.label}</Label>
+                    <Textarea
+                      rows={3}
+                      value={form[f.key] ?? ""}
+                      onChange={(e) => setForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Label className="text-xs">{f.label}</Label>
+                    <Input
+                      type={f.type ?? "text"}
+                      value={form[f.key] ?? ""}
+                      onChange={(e) => setForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                    />
+                  </>
+                )}
+                {f.hint && <p className="text-xs text-muted-foreground">{f.hint}</p>}
+              </div>
+            ))}
+            <div className="flex gap-2">
+              <Button size="sm" onClick={isEditing ? handleUpdate : handleAdd} disabled={saving}>
+                {saving ? "Saving..." : isEditing ? "Update" : "Save"}
+              </Button>
+              <Button size="sm" variant="outline" onClick={resetForm}>Cancel</Button>
+            </div>
+          </div>
+        )}
+
+        {/* Item list */}
+        {items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No items configured.</p>
+        ) : (
+          <div className="space-y-1">
+            {items.map((item) => (
+              <div key={item.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
+                <div>
+                  <span className="font-medium">{item.name}</span>
+                  {item.description != null && (
+                    <span className="ml-2 text-muted-foreground">{String(item.description)}</span>
+                  )}
+                  {item.priceCents !== undefined && Number(item.priceCents) > 0 && (
+                    <span className="ml-2 text-muted-foreground">
+                      ${(Number(item.priceCents) / 100).toFixed(2)}
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-1">
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => startEdit(item)}>
+                    Edit
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive" onClick={() => handleDelete(item.id)}>
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function ConfigPage() {
+  const params = useParams<{ slug: string }>();
+  const slug = params?.slug as string;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Configuration</h1>
+        <Link
+          href={`/t/${slug}/admin/config/reconciliation`}
+          className="inline-flex items-center justify-center rounded-md border border-input bg-background h-9 px-4 text-sm font-medium hover:bg-accent"
+        >
+          Integriti reconciliation
+        </Link>
+      </div>
+
+      <ConfigSection
+        title="Credential Types"
+        endpoint="credential-types"
+        fields={[
+          { key: "name", label: "Name" },
+          { key: "description", label: "Description" },
+          { key: "category", label: "Category (physical_fob, access_code, key)" },
+          { key: "priceCents", label: "Price (cents)", type: "number" },
+        ]}
+      />
+
+      <ConfigSection
+        title="Access Levels"
+        endpoint="access-levels"
+        fields={[
+          { key: "name", label: "Name" },
+          { key: "description", label: "Description" },
+        ]}
+      />
+
+      <ConfigSection
+        title="Pickup Locations"
+        endpoint="pickup-locations"
+        fields={[
+          { key: "name", label: "Name" },
+          { key: "address", label: "Address" },
+          {
+            key: "instructions",
+            label: "Admin instructions",
+            type: "textarea",
+            hint: "Shown to admins only (safe codes, where the key lives). Never emailed to members.",
+          },
+          {
+            key: "memberMessage",
+            label: "Message to member",
+            type: "textarea",
+            hint: "Included in the ready-for-collection email and reminders: when to come, who to ask.",
+          },
+          {
+            key: "confirmReceiptEnabled",
+            label: "Ask the member to confirm if they already have their fob",
+            type: "checkbox",
+            hint: "Adds an \"I already have my fob\" link to the emails. The member reports who gave it to them, admins are emailed, and the request is marked issued.",
+          },
+        ]}
+      />
+    </div>
+  );
+}

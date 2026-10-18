@@ -1,0 +1,63 @@
+import { Badge } from "@/components/ui/badge";
+import {
+  RequestStatus,
+  CredentialStatus,
+  credentialStatusLabel,
+  credentialStatusTone,
+} from "@accessbuddy/shared";
+import { requestStatusLabel } from "@/lib/request-display";
+
+const REQUEST_STATUS_CONFIG: Record<
+  string,
+  { variant: "default" | "secondary" | "destructive" | "outline" }
+> = {
+  [RequestStatus.SUBMITTED]: { variant: "secondary" },
+  [RequestStatus.AWAITING_PAYMENT]: { variant: "outline" },
+  [RequestStatus.AWAITING_EXEMPTION_REVIEW]: { variant: "outline" },
+  [RequestStatus.AWAITING_APPROVAL]: { variant: "outline" },
+  [RequestStatus.APPROVED]: { variant: "default" },
+  [RequestStatus.REJECTED]: { variant: "destructive" },
+  [RequestStatus.AWAITING_PROGRAMMING]: { variant: "outline" },
+  [RequestStatus.PROGRAMMED]: { variant: "default" },
+  [RequestStatus.AWAITING_PICKUP]: { variant: "default" },
+  [RequestStatus.ISSUED]: { variant: "default" },
+  [RequestStatus.ON_HOLD]: { variant: "destructive" },
+  [RequestStatus.CANCELLED]: { variant: "destructive" },
+};
+
+const TONE_TO_VARIANT: Record<
+  string,
+  "default" | "secondary" | "destructive" | "outline"
+> = {
+  success: "default",
+  info: "outline",
+  warning: "destructive",
+  danger: "destructive",
+  neutral: "secondary",
+};
+
+export function RequestStatusBadge({
+  status,
+  requestType,
+  autoClosed,
+}: {
+  status: string;
+  requestType?: string | null;
+  /** True for a return the cron closed without collecting the fob. */
+  autoClosed?: boolean;
+}) {
+  const config = REQUEST_STATUS_CONFIG[status] ?? { variant: "outline" as const };
+  return <Badge variant={config.variant}>{requestStatusLabel(status, requestType, autoClosed)}</Badge>;
+}
+
+export function CredentialStatusBadge({
+  status,
+  expiresAt,
+}: {
+  status: string;
+  expiresAt?: Date | string | null;
+}) {
+  const label = credentialStatusLabel(status, { expiresAt });
+  const variant = TONE_TO_VARIANT[credentialStatusTone(status)] ?? "outline";
+  return <Badge variant={variant}>{label}</Badge>;
+}

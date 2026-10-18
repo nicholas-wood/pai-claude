@@ -1,0 +1,245 @@
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { and, eq } from "drizzle-orm";
+
+/**
+ * Member "I already have my fob" report (pickup locations with
+ * confirmReceiptEnabled, e.g. SMLSC's "Missing" placeholder).
+ *
+ * Proves: (a) a report on a flagged location moves the request to ISSUED via
+ * the normal ISSUE transition with the member as actor, and the audit trail
+ * carries the real issuer; (b) a location without the flag is refused and the
+ * request is untouched, whatever the page showed; (c) only the owner can
+ * report; (d) returns at awaiting_pickup (fob coming in) are refused.
+ *
+ * Gated on DATABASE_URL; runs in CI against the migrated Postgres.
+ */
+
+const hasDb = !!process.env.DATABASE_URL;
+
+describe.skipIf(!hasDb)("confirmReceiptByMember", () => {
+  let db: typeof import("@accessbuddy/db").db;
+  let tenants: typeof import("@accessbuddy/db").tenants;
+  let users: typeof import("@accessbuddy/db").users;
+  let credentialTypes: typeof import("@accessbuddy/db").credentialTypes;
+  let fobRequests: typeof import("@accessbuddy/db").fobRequests;
+  let pickupLocations: typeof import("@accessbuddy/db").pickupLocations;
+  let auditLog: typeof import("@accessbuddy/db").auditLog;
+  let confirmReceiptByMember: typeof import("@/lib/services/confirm-receipt").confirmReceiptByMember;
+  let ConfirmReceiptError: typeof import("@/lib/services/confirm-receipt").ConfirmReceiptError;
+  let withTenant: typeof import("@/lib/with-tenant").withTenant;
+  let RequestType: typeof import("@accessbuddy/shared").RequestType;
+  let RequestStatus: typeof import("@accessbuddy/shared").RequestStatus;
+
+  let tenant: { id: string };
+  let member: { id: string; email: string };
+  let stranger: { id: string; email: string };
+  let credType: { id: string };
+  let missing: { id: string };
+  let reception: { id: string };
+
+  async function newRequest(opts: { locationId: string; requestType?: string; status?: string }) {
+    const [request] = await db
+      .insert(fobRequests)
+      .values({
+        tenantId: tenant.id,
+        requesterId: member.id,
+        credentialTypeId: credType.id,
+        requestType: (opts.requestType ?? RequestType.NEW) as typeof RequestType.NEW,
+        status: (opts.status ?? RequestStatus.AWAITING_PICKUP) as typeof RequestStatus.AWAITING_PICKUP,
+        pickupLocationId: opts.locationId,
+        serialNumber: "SN-4242",
+      })
+      .returning({ id: fobRequests.id });
+    return request;
+  }
+
+  async function confirm(
+    requestId: string,
+    actor = member,
+    report: { issuedByName: string; issuedWhere: string; issuedWhen?: string } = {
+      issuedByName: "the patrol captain",
+      issuedWhere: "Patrol Tower",
+    }
+  ) {
+    return withTenant(tenant.id, (tx) =>
+      confirmReceiptByMember(tx, {
+        tenantId: tenant.id,
+        requestId,
+        actor: { id: actor.id, email: actor.email },
+        report,
+      })
+    );
+  }
+
+  async function loadRequest(requestId: string) {
+    const [row] = await db
+      .select({ status: fobRequests.status, issuedBy: fobRequests.issuedBy, issuedAt: fobRequests.issuedAt })
+      .from(fobRequests)
+      .where(eq(fobRequests.id, requestId))
+      .limit(1);
+    return row;
+  }
+
+  beforeAll(async () => {
+    const dbPackage = await import("@accessbuddy/db");
+    const shared = await import("@accessbuddy/shared");
+    db = dbPackage.db;
+    tenants = dbPackage.tenants;
+    users = dbPackage.users;
+    credentialTypes = dbPackage.credentialTypes;
+    fobRequests = dbPackage.fobRequests;
+    pickupLocations = dbPackage.pickupLocations;
+    auditLog = dbPackage.auditLog;
+    RequestType = shared.RequestType;
+    RequestStatus = shared.RequestStatus;
+    ({ confirmReceiptByMember, ConfirmReceiptError } = await import("@/lib/services/confirm-receipt"));
+    ({ withTenant } = await import("@/lib/with-tenant"));
+
+    const suffix = `${Date.now()}`;
+    [tenant] = await db
+      .insert(tenants)
+      .values({ name: `Confirm Club ${suffix}`, slug: `confirm-${suffix}` })
+      .returning({ id: tenants.id });
+    [member] = await db
+      .insert(users)
+      .values({
+        firebaseUid: `confirm-fb-${suffix}`,
+        email: `confirm-${suffix}@example.com`,
+        firstName: "Confirm",
+        lastName: "Member",
+      })
+      .returning({ id: users.id, email: users.email });
+    [stranger] = await db
+      .insert(users)
+      .values({
+        firebaseUid: `confirm-stranger-${suffix}`,
+        email: `confirm-stranger-${suffix}@example.com`,
+        firstName: "Some",
+        lastName: "Stranger",
+      })
+      .returning({ id: users.id, email: users.email });
+    [credType] = await db
+      .insert(credentialTypes)
+      .values({ tenantId: tenant.id, name: "Fob", priceCents: 0 })
+      .returning({ id: credentialTypes.id });
+    [missing] = await db
+      .insert(pickupLocations)
+      .values({
+        tenantId: tenant.id,
+        name: "Missing",
+        instructions: "1968",
+        memberMessage: "Your fob is marked as ready in our system but is no longer at the clubhouse.",
+        confirmReceiptEnabled: true,
+      })
+      .returning({ id: pickupLocations.id });
+    [reception] = await db
+      .insert(pickupLocations)
+      .values({ tenantId: tenant.id, name: "Club Reception", memberMessage: "During opening hours" })
+      .returning({ id: pickupLocations.id });
+  });
+
+  afterAll(async () => {
+    const { credentials } = await import("@accessbuddy/db");
+    await db.delete(auditLog).where(eq(auditLog.tenantId, tenant.id));
+    await db.delete(credentials).where(eq(credentials.tenantId, tenant.id));
+    await db.delete(fobRequests).where(eq(fobRequests.tenantId, tenant.id));
+    await db.delete(pickupLocations).where(eq(pickupLocations.tenantId, tenant.id));
+    await db.delete(credentialTypes).where(eq(credentialTypes.tenantId, tenant.id));
+    await db.delete(users).where(eq(users.id, member.id));
+    await db.delete(users).where(eq(users.id, stranger.id));
+    await db.delete(tenants).where(eq(tenants.id, tenant.id));
+  });
+
+  it("marks the request issued and records the real issuer in the audit trail", async () => {
+    const request = await newRequest({ locationId: missing.id });
+    const result = await confirm(request.id, member, {
+      issuedByName: "Sue",
+      issuedWhere: "Patrol Tower",
+    });
+    expect(result.status).toBe(RequestStatus.ISSUED);
+
+    const row = await loadRequest(request.id);
+    expect(row.status).toBe(RequestStatus.ISSUED);
+    // The member recorded it but did not issue it: issuer stays unknown on
+    // the row (same shape as migrated data); the reported issuer is in the
+    // audit metadata below.
+    expect(row.issuedBy).toBeNull();
+    expect(row.issuedAt).not.toBeNull();
+
+    const entries = await withTenant(tenant.id, (tx) =>
+      tx
+        .select({ fromState: auditLog.fromState, toState: auditLog.toState, metadata: auditLog.metadata, actorId: auditLog.actorId })
+        .from(auditLog)
+        .where(and(eq(auditLog.tenantId, tenant.id), eq(auditLog.entityId, request.id)))
+    );
+    const transition = entries.find((e) => e.toState === RequestStatus.ISSUED);
+    expect(transition).toBeDefined();
+    expect(transition!.fromState).toBe(RequestStatus.AWAITING_PICKUP);
+    expect(transition!.actorId).toBe(member.id);
+    const meta = transition!.metadata as Record<string, unknown>;
+    expect(meta.action).toBe("member_confirmed_receipt");
+    expect(meta.issuedByName).toBe("Sue");
+    expect(meta.issuedWhere).toBe("Patrol Tower");
+    // No "when" supplied: falls back to the report time so admins always get one.
+    expect(String(meta.issuedWhen)).toMatch(/^reported /);
+  });
+
+  it("keeps the member's own 'when' when supplied", async () => {
+    const request = await newRequest({ locationId: missing.id });
+    await confirm(request.id, member, {
+      issuedByName: "Sue",
+      issuedWhere: "Patrol Tower",
+      issuedWhen: "Sunday morning",
+    });
+    const entries = await withTenant(tenant.id, (tx) =>
+      tx
+        .select({ toState: auditLog.toState, metadata: auditLog.metadata })
+        .from(auditLog)
+        .where(and(eq(auditLog.tenantId, tenant.id), eq(auditLog.entityId, request.id)))
+    );
+    const meta = entries.find((e) => e.toState === RequestStatus.ISSUED)!.metadata as Record<string, unknown>;
+    expect(meta.issuedWhen).toBe("Sunday morning");
+  });
+
+  it("refuses a location that does not ask for confirmation and leaves the request untouched", async () => {
+    const request = await newRequest({ locationId: reception.id });
+    await expect(confirm(request.id)).rejects.toBeInstanceOf(ConfirmReceiptError);
+    const row = await loadRequest(request.id);
+    expect(row.status).toBe(RequestStatus.AWAITING_PICKUP);
+    expect(row.issuedBy).toBeNull();
+  });
+
+  it("refuses anyone but the requester", async () => {
+    const request = await newRequest({ locationId: missing.id });
+    await expect(confirm(request.id, stranger)).rejects.toMatchObject({ status: 403 });
+    const row = await loadRequest(request.id);
+    expect(row.status).toBe(RequestStatus.AWAITING_PICKUP);
+  });
+
+  it("refuses a return (the fob is coming in, not going out)", async () => {
+    const request = await newRequest({ locationId: missing.id, requestType: RequestType.RETURN });
+    await expect(confirm(request.id)).rejects.toBeInstanceOf(ConfirmReceiptError);
+    const row = await loadRequest(request.id);
+    expect(row.status).toBe(RequestStatus.AWAITING_PICKUP);
+  });
+
+  it("refuses a type change (the old fob has to be handed in)", async () => {
+    const request = await newRequest({ locationId: missing.id, requestType: RequestType.CHANGE_TYPE });
+    await expect(confirm(request.id)).rejects.toMatchObject({ status: 400 });
+    const row = await loadRequest(request.id);
+    expect(row.status).toBe(RequestStatus.AWAITING_PICKUP);
+  });
+
+  it("refuses a second report once the request is issued", async () => {
+    const request = await newRequest({ locationId: missing.id });
+    await confirm(request.id);
+    await expect(confirm(request.id)).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("refuses a request that is not awaiting collection", async () => {
+    const request = await newRequest({ locationId: missing.id, status: RequestStatus.PROGRAMMED });
+    await expect(confirm(request.id)).rejects.toBeInstanceOf(ConfirmReceiptError);
+    const row = await loadRequest(request.id);
+    expect(row.status).toBe(RequestStatus.PROGRAMMED);
+  });
+});

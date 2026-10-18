@@ -1,0 +1,22 @@
+---
+name: project-accessbuddy-pr112-pickup-member-message
+description: "AccessBuddy PR #112 (18 Oct 2026) — per-location member_message in pickup emails + \"I already have my fob\" member report flow; open awaiting Nick's merge; SMLSC SQL to apply post-deploy"
+metadata:
+  node_type: memory
+  type: project
+  originSessionId: fabe4def-95b8-4b84-b6cc-5e08afbf5958
+  modified: 2026-10-18T09:22:21.522Z
+---
+
+PR #112 `feat/pickup-member-message-confirm-receipt` opened 2026-10-18, two commits rebased onto main after PR #109 (11041eb feature, e57b93b hardening). Awaiting Nick's merge. Gates on the final tree: typecheck 5/5, lint 0 errors, drift PASS, tests 26/16/338 against the embedded Postgres (scratch DB `accessbuddy_pickup` on port 54329).
+
+What it does: `pickup_locations.member_message` (member-facing copy in both pickup emails and the member request page) and `confirm_receipt_enabled` (adds an "I already have my fob" button; member reports who/where/when on their request page; service runs the ISSUE transition with the member as actor, `issued_by` null, metadata `action: member_confirmed_receipt`; issuers with `Permission.ISSUE` emailed immediately). `instructions` stays admin-only (SMLSC's Patrol Tower row holds the safe code 1968). Migration 0019 (renumbered on rebase after PR #109).
+
+**Why:** Nick asked whether the pickup email tells members when to collect; it carried the location name only. He supplied the three SMLSC messages verbatim and the Missing-fob flow.
+
+**How to apply:**
+- After deploy, run `accessbuddy/artifacts/sql/2026-10-18-smlsc-pickup-member-messages.sql` in a prod DB window (Mac script pattern `~/pai-tmp/dinah-prod-query.sh`; verify `ipv4Enabled` False after). Then Interceptor-probe ISC-169 (ISA).
+- Open design call for Nick: no admin "revert to awaiting pickup" for a false report; correction today is editing the credential on the member page.
+- Refuse `change_type` on any member self-service that closes a request: ISSUE on collection types throws unless `collected: true`.
+- PR #111 also edits `schemas.ts` and `audit-trail.tsx`; whichever merges second re-runs CI.
+- Related: [[project-accessbuddy-pr106-old-fob-retirement]], [[gotcha-accessbuddy-prod-access]].

@@ -1,0 +1,126 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+/**
+ * "I already have my fob" report. Shown only when the request's pickup
+ * location has confirmReceiptEnabled. `autoOpen` is set when the member
+ * arrived from the email link (?confirm=1) so the form is open on landing.
+ */
+export function ConfirmReceiptForm({
+  tenantSlug,
+  requestId,
+  autoOpen = false,
+}: {
+  tenantSlug: string;
+  requestId: string;
+  autoOpen?: boolean;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(autoOpen);
+  const [issuedByName, setIssuedByName] = useState("");
+  const [issuedWhere, setIssuedWhere] = useState("");
+  const [issuedWhen, setIssuedWhen] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const canSubmit = issuedByName.trim().length > 0 && issuedWhere.trim().length > 0;
+
+  async function handleSubmit() {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/t/${tenantSlug}/requests/${requestId}/confirm-receipt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          issuedByName: issuedByName.trim(),
+          issuedWhere: issuedWhere.trim(),
+          issuedWhen: issuedWhen.trim() || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Something went wrong");
+      }
+      setDone(true);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (done) {
+    return (
+      <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-900">
+        Thanks, we have updated our records and let the club know.
+      </div>
+    );
+  }
+
+  if (!open) {
+    return (
+      <div className="space-y-2 rounded-lg border p-4">
+        <p className="text-sm">
+          Already have your fob or key? If someone has handed it to you, let us know so we can update our records.
+        </p>
+        <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+          I already have my fob
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border p-4">
+      <p className="text-sm font-medium">Tell us how you received it</p>
+      <div className="space-y-1">
+        <Label htmlFor="issued-by">Who gave it to you?</Label>
+        <Input
+          id="issued-by"
+          value={issuedByName}
+          onChange={(e) => setIssuedByName(e.target.value)}
+          placeholder="e.g. the patrol captain, Sue"
+          maxLength={200}
+        />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="issued-where">Where?</Label>
+        <Input
+          id="issued-where"
+          value={issuedWhere}
+          onChange={(e) => setIssuedWhere(e.target.value)}
+          placeholder="e.g. Patrol Tower"
+          maxLength={300}
+        />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="issued-when">When? (optional)</Label>
+        <Input
+          id="issued-when"
+          value={issuedWhen}
+          onChange={(e) => setIssuedWhen(e.target.value)}
+          placeholder="e.g. Sunday morning, 12 Oct"
+          maxLength={200}
+        />
+      </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <div className="flex gap-2">
+        <Button size="sm" onClick={handleSubmit} disabled={submitting || !canSubmit}>
+          {submitting ? "Sending..." : "Confirm I have it"}
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
+          Not yet
+        </Button>
+      </div>
+    </div>
+  );
+}

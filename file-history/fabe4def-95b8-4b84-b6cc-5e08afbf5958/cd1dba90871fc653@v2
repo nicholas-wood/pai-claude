@@ -1,0 +1,83 @@
+import {
+  pgTable,
+  uuid,
+  text,
+  integer,
+  boolean,
+  timestamp,
+  jsonb,
+} from "drizzle-orm/pg-core";
+import { CredentialCategory } from "@accessbuddy/shared";
+import type { UserGroupRuleConditions } from "@accessbuddy/shared";
+import { tenants } from "./tenants";
+import { users } from "./users";
+
+export const credentialTypes = pgTable("credential_types", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id")
+    .notNull()
+    .references(() => tenants.id),
+  name: text("name").notNull(),
+  description: text("description"),
+  category: text("category").notNull().default(CredentialCategory.PHYSICAL_FOB),
+  priceCents: integer("price_cents").notNull().default(0),
+  depositCents: integer("deposit_cents").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const accessLevels = pgTable("access_levels", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id")
+    .notNull()
+    .references(() => tenants.id),
+  name: text("name").notNull(),
+  description: text("description"),
+  externalGroupId: text("external_group_id"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const userGroupRules = pgTable("user_group_rules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id")
+    .notNull()
+    .references(() => tenants.id),
+  name: text("name").notNull(),
+  priority: integer("priority").notNull().default(0),
+  conditions: jsonb("conditions").$type<UserGroupRuleConditions>().notNull().default({}),
+  accessLevelId: uuid("access_level_id")
+    .notNull()
+    .references(() => accessLevels.id),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const pickupLocations = pgTable("pickup_locations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id")
+    .notNull()
+    .references(() => tenants.id),
+  name: text("name").notNull(),
+  address: text("address"),
+  // Admin-only guidance (may hold safe codes). Shown on the admin request
+  // page, never sent to members.
+  instructions: text("instructions"),
+  // Member-facing copy rendered in the ready-for-collection and reminder
+  // emails and on the member's request page (opening hours, who to ask).
+  memberMessage: text("member_message"),
+  // When true the pickup emails carry an "I already have my fob" link so a
+  // member can report a hand-over that was never recorded (the "Missing"
+  // location pattern). The report emails issuers and marks the request issued.
+  confirmReceiptEnabled: boolean("confirm_receipt_enabled").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});

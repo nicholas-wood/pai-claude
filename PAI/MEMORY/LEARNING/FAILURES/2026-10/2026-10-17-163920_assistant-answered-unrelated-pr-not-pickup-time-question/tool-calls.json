@@ -1,0 +1,10 @@
+[
+  {
+    "name": "Bash",
+    "input": {
+      "command": "fd -t d -d 3 accessbuddy ~/Documents/workspace/projects 2>/dev/null | head; rg -il \"pickup\" ~/Documents/workspace/projects/accessbuddy --glob '*email*' --glob '!node_modules' 2>/dev/null | head -20",
+      "description": "Locate the AccessBuddy repo and pickup email files"
+    },
+    "timestamp": "2026-10-17T23:39:11.057Z"
+  }
+]

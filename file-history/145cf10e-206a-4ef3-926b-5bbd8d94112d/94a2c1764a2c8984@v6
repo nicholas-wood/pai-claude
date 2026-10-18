@@ -1,0 +1,171 @@
+import { describe, it, expect } from "vitest";
+import { createActor } from "xstate";
+import { requestMachine, getValidEvents } from "../state-machine";
+import { RequestStatus } from "../enums";
+
+function createRequest(initialState?: string) {
+  const actor = createActor(requestMachine, {
+    ...(initialState && {
+      snapshot: requestMachine.resolveState({
+        value: initialState,
+        context: { requestId: "test-123", previousState: null },
+      }),
+    }),
+  });
+  actor.start();
+  return actor;
+}
+
+describe("Request State Machine", () => {
+  describe("happy path: new fob with payment", () => {
+    it("follows submitted -> awaiting_payment -> awaiting_approval -> programming -> pickup -> issued", () => {
+      const actor = createRequest();
+      expect(actor.getSnapshot().value).toBe(RequestStatus.SUBMITTED);
+
+      actor.send({ type: "PAYMENT_REQUIRED" });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.AWAITING_PAYMENT);
+
+      actor.send({ type: "PAYMENT_RECEIVED" });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.AWAITING_APPROVAL);
+
+      actor.send({
+        type: "APPROVE",
+        approvedBy: "admin-1",
+        accessLevelId: "level-1",
+      });
+      expect(actor.getSnapshot().value).toBe(
+        RequestStatus.AWAITING_PROGRAMMING
+      );
+
+      actor.send({
+        type: "PROGRAM",
+        programmedBy: "programmer-1",
+        serialNumber: "FOB-001",
+      });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.PROGRAMMED);
+
+      actor.send({ type: "SET_PICKUP", pickupLocationId: "loc-1" });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.AWAITING_PICKUP);
+
+      actor.send({ type: "ISSUE", issuedBy: "issuer-1" });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.ISSUED);
+
+      // Issued is a final state
+      expect(actor.getSnapshot().status).toBe("done");
+    });
+  });
+
+  describe("happy path: payment exempt", () => {
+    it("follows submitted -> awaiting_approval directly", () => {
+      const actor = createRequest();
+      actor.send({ type: "PAYMENT_EXEMPT" });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.AWAITING_APPROVAL);
+    });
+  });
+
+  describe("rejection", () => {
+    it("can reject from awaiting_approval", () => {
+      const actor = createRequest(RequestStatus.AWAITING_APPROVAL);
+      actor.send({
+        type: "REJECT",
+        rejectedBy: "admin-1",
+        reason: "Incomplete",
+      });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.REJECTED);
+      // REJECTED is no longer final - can be reopened
+    });
+  });
+
+  describe("cancellation", () => {
+    it("can cancel from submitted", () => {
+      const actor = createRequest();
+      actor.send({
+        type: "CANCEL",
+        cancelledBy: "admin-1",
+        reason: "Duplicate",
+      });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.CANCELLED);
+    });
+
+    it("can cancel from awaiting_payment", () => {
+      const actor = createRequest(RequestStatus.AWAITING_PAYMENT);
+      actor.send({
+        type: "CANCEL",
+        cancelledBy: "admin-1",
+        reason: "No payment",
+      });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.CANCELLED);
+    });
+
+    it("can cancel from awaiting_pickup", () => {
+      const actor = createRequest(RequestStatus.AWAITING_PICKUP);
+      actor.send({
+        type: "CANCEL",
+        cancelledBy: "admin-1",
+        reason: "Member left",
+      });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.CANCELLED);
+    });
+
+    it("cannot transition from issued (final state)", () => {
+      const actor = createRequest(RequestStatus.ISSUED);
+      // Final states ignore events
+      actor.send({
+        type: "CANCEL",
+        cancelledBy: "admin-1",
+        reason: "Test",
+      });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.ISSUED);
+    });
+  });
+
+  describe("hold mechanism", () => {
+    it("can hold from awaiting_approval", () => {
+      const actor = createRequest(RequestStatus.AWAITING_APPROVAL);
+      actor.send({
+        type: "HOLD",
+        heldBy: "admin-1",
+        reason: "Need more info",
+      });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.ON_HOLD);
+    });
+
+    it("can cancel from on_hold", () => {
+      const actor = createRequest(RequestStatus.ON_HOLD);
+      actor.send({
+        type: "CANCEL",
+        cancelledBy: "admin-1",
+        reason: "No longer needed",
+      });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.CANCELLED);
+    });
+  });
+
+  describe("getValidEvents", () => {
+    it("returns correct events for submitted state", () => {
+      const events = getValidEvents(RequestStatus.SUBMITTED);
+      expect(events).toContain("PAYMENT_REQUIRED");
+      expect(events).toContain("PAYMENT_EXEMPT");
+      expect(events).toContain("HOLD");
+      expect(events).toContain("CANCEL");
+      expect(events).not.toContain("APPROVE");
+    });
+
+    it("returns correct events for awaiting_approval", () => {
+      const events = getValidEvents(RequestStatus.AWAITING_APPROVAL);
+      expect(events).toContain("APPROVE");
+      expect(events).toContain("REJECT");
+      expect(events).toContain("HOLD");
+      expect(events).toContain("CANCEL");
+    });
+
+    it("returns empty for issued (true final state)", () => {
+      expect(getValidEvents(RequestStatus.ISSUED)).toEqual([]);
+    });
+
+    it("cancelled and rejected allow reopen only", () => {
+      expect(getValidEvents(RequestStatus.CANCELLED)).toEqual(["REOPEN"]);
+      expect(getValidEvents(RequestStatus.REJECTED)).toEqual(["REOPEN"]);
+    });
+  });
+});

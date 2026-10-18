@@ -1,0 +1,464 @@
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { eq, and, desc, isNull } from "drizzle-orm";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { RequestStatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
+import { ProgressStepper } from "@/components/progress-stepper";
+import { BackButton } from "@/components/back-button";
+import { AuditTrail } from "@/components/audit-trail";
+import { getAuthUser } from "@/lib/auth";
+import { resolveTenant } from "@/lib/tenant";
+import { withTenant } from "@/lib/with-tenant";
+import { getEffectivePermissions } from "@/lib/permissions";
+import {
+  fobRequests,
+  credentials,
+  credentialTypes,
+  accessLevels,
+  pickupLocations,
+  auditLog,
+  users,
+  tenantMemberships,
+  userGroupRules,
+} from "@accessbuddy/db";
+import { RequestStatus, RequestType, Permission, getValidEvents } from "@accessbuddy/shared";
+import type { TenantSettings } from "@accessbuddy/shared";
+import { formatExpiryDate } from "@/lib/format-date";
+import { formatFobLabel, isAutoClosedReturn } from "@/lib/request-display";
+import { RequestDetailsCard } from "./request-info-card";
+import { MemberActionsWrapper } from "./member-actions-wrapper";
+
+export const dynamic = "force-dynamic";
+
+export default async function AdminRequestDetailPage({
+  params,
+}: {
+  params: Promise<{ slug: string; id: string }>;
+}) {
+  const { slug, id } = await params;
+  const [auth, tenant] = await Promise.all([
+    getAuthUser(),
+    resolveTenant(slug),
+  ]);
+  if (!auth) redirect("/sign-in");
+  if (!tenant) notFound();
+
+  const data = await withTenant(tenant.id, async (tx) => {
+    const [request] = await tx
+      .select()
+      .from(fobRequests)
+      .where(eq(fobRequests.id, id))
+      .limit(1);
+    if (!request) return null;
+
+    let requester: { firstName: string; lastName: string; email: string; dateOfBirth: string | null } | null = null;
+    if (request.requesterId) {
+      const [r] = await tx
+        .select({ firstName: users.firstName, lastName: users.lastName, email: users.email, dateOfBirth: users.dateOfBirth })
+        .from(users)
+        .where(eq(users.id, request.requesterId))
+        .limit(1);
+      requester = r ? { ...r, dateOfBirth: r.dateOfBirth ?? null } : null;
+    }
+    if (!requester && (request.orphanFirstName || request.orphanEmail)) {
+      requester = {
+        firstName: request.orphanFirstName ?? "",
+        lastName: request.orphanLastName ?? "",
+        email: request.orphanEmail ?? "",
+        dateOfBirth: null,
+      };
+    }
+
+    let credType = null;
+    if (request.credentialTypeId) {
+      const [ct] = await tx
+        .select()
+        .from(credentialTypes)
+        .where(eq(credentialTypes.id, request.credentialTypeId))
+        .limit(1);
+      credType = ct ?? null;
+    }
+
+    // The fob this request retires: the old fob on a change_type, the
+    // returned fob on a return. Lost/damaged read it from the request itself.
+    let replacesCred: { id: string; serialNumber: string | null; typeName: string | null; status: string } | null = null;
+    if (request.replacesCredentialId) {
+      const [rc] = await tx
+        .select({
+          id: credentials.id,
+          serialNumber: credentials.serialNumber,
+          typeName: credentialTypes.name,
+          status: credentials.status,
+        })
+        .from(credentials)
+        .leftJoin(credentialTypes, eq(credentials.credentialTypeId, credentialTypes.id))
+        .where(eq(credentials.id, request.replacesCredentialId))
+        .limit(1);
+      replacesCred = rc ?? null;
+    }
+
+    const levels = await tx.select().from(accessLevels);
+    const locations = await tx.select().from(pickupLocations);
+
+    // Unallocated fobs (no owner) for the programming step
+    const unallocatedFobs = await tx
+      .select({
+        id: credentials.id,
+        serialNumber: credentials.serialNumber,
+        credentialTypeName: credentialTypes.name,
+      })
+      .from(credentials)
+      .leftJoin(credentialTypes, eq(credentials.credentialTypeId, credentialTypes.id))
+      .where(isNull(credentials.ownerId));
+
+    // Determine the suggested access level.
+    //
+    // Precedence:
+    //   1. If the member already has an access_level_id on their tenant
+    //      membership, use it directly. This respects any explicit admin
+    //      override and avoids rule eval producing a different result.
+    //   2. Otherwise, evaluate the user group rules against the member
+    //      context to find a match.
+    let suggestedAccessLevel: { id: string; name: string; ruleName: string } | null = null;
+    let ruleContext = {
+        membershipCategory: request.membershipCategory,
+        isOfficer: false,
+        isBoardMember: false,
+        isStaff: false,
+        age: null as number | null,
+      };
+
+      // If user exists and has a membership, use that for richer context
+      let hasMembership = false;
+      let memberAccessLevelId: string | null = null;
+      if (request.requesterId) {
+        const [membershipForRules] = await tx
+          .select()
+          .from(tenantMemberships)
+          .where(and(eq(tenantMemberships.userId, request.requesterId), eq(tenantMemberships.tenantId, tenant.id)))
+          .limit(1);
+
+        if (membershipForRules) {
+          hasMembership = true;
+          ruleContext.membershipCategory = membershipForRules.membershipCategory ?? request.membershipCategory;
+          ruleContext.isOfficer = membershipForRules.isOfficer;
+          ruleContext.isBoardMember = membershipForRules.isBoardMember;
+          ruleContext.isStaff = membershipForRules.isStaff;
+          memberAccessLevelId = membershipForRules.accessLevelId;
+        }
+
+        const [userRecord] = await tx.select({ dateOfBirth: users.dateOfBirth }).from(users).where(eq(users.id, request.requesterId)).limit(1);
+        if (userRecord?.dateOfBirth) {
+          const dob = new Date(userRecord.dateOfBirth);
+          const now = new Date();
+          ruleContext.age = now.getFullYear() - dob.getFullYear();
+          if (now.getMonth() < dob.getMonth() || (now.getMonth() === dob.getMonth() && now.getDate() < dob.getDate())) {
+            ruleContext.age--;
+          }
+        }
+      }
+
+      if (memberAccessLevelId) {
+        // Member has an access level already set — use it directly and
+        // skip rule evaluation.
+        const [al] = await tx
+          .select({ id: accessLevels.id, name: accessLevels.name })
+          .from(accessLevels)
+          .where(eq(accessLevels.id, memberAccessLevelId))
+          .limit(1);
+        if (al) {
+          suggestedAccessLevel = { id: al.id, name: al.name, ruleName: "Member's current access level" };
+        }
+      } else {
+        const { evaluateRules } = await import("@/lib/services/rules");
+        const match = await evaluateRules(tx, tenant.id, ruleContext);
+        if (match) {
+          suggestedAccessLevel = { id: match.accessLevelId, name: match.accessLevelName, ruleName: match.ruleName };
+        }
+      }
+
+    const trail = await tx
+      .select({
+        id: auditLog.id,
+        action: auditLog.action,
+        fromState: auditLog.fromState,
+        toState: auditLog.toState,
+        actorType: auditLog.actorType,
+        actorFirstName: users.firstName,
+        actorLastName: users.lastName,
+        metadata: auditLog.metadata,
+        createdAt: auditLog.createdAt,
+      })
+      .from(auditLog)
+      .leftJoin(users, eq(auditLog.actorId, users.id))
+      .where(eq(auditLog.entityId, id))
+      .orderBy(desc(auditLog.createdAt));
+
+    const allCredentialTypes = await tx.select({ id: credentialTypes.id, name: credentialTypes.name }).from(credentialTypes);
+
+    const allRules = await tx
+      .select({
+        name: userGroupRules.name,
+        priority: userGroupRules.priority,
+        conditions: userGroupRules.conditions,
+        accessLevelId: userGroupRules.accessLevelId,
+        accessLevelName: accessLevels.name,
+      })
+      .from(userGroupRules)
+      .innerJoin(accessLevels, eq(userGroupRules.accessLevelId, accessLevels.id))
+      .where(eq(userGroupRules.isActive, true))
+      .orderBy(userGroupRules.priority);
+
+    // Get distinct membership categories for the dropdown
+    const membershipRows = await tx
+      .selectDistinct({ category: tenantMemberships.membershipCategory })
+      .from(tenantMemberships);
+    const membershipCategories = membershipRows
+      .map((r) => r.category)
+      .filter((c): c is string => !!c)
+      .sort();
+
+    return { request, requester, credentialType: credType, replacesCred, accessLevels: levels, pickupLocations: locations, unallocatedFobs, auditTrail: trail, allCredentialTypes, suggestedAccessLevel, allRules, membershipCategories, ruleContext, hasMembership };
+  });
+
+  if (!data) notFound();
+  const { request, requester, credentialType, auditTrail, replacesCred } = data;
+  const isReturn = request.requestType === RequestType.RETURN;
+  const isChangeType = request.requestType === RequestType.CHANGE_TYPE;
+  // The fob an issuer collects: on a return it is the request's own fob, on an
+  // exchange it is the old fob being replaced.
+  const collectLabel = isReturn
+    ? formatFobLabel(credentialType?.name, request.serialNumber ?? replacesCred?.serialNumber)
+    : isChangeType && replacesCred
+      ? formatFobLabel(replacesCred.typeName, replacesCred.serialNumber)
+      : null;
+  const pickupLocation = request.pickupLocationId
+    ? data.pickupLocations.find((l: any) => l.id === request.pickupLocationId)
+    : null;
+
+  const permissions = getEffectivePermissions(auth, tenant.id);
+  const validEvents = getValidEvents(request.status);
+  // Trail is newest-first: the first move to ISSUED is the latest one. If the
+  // member's "I already have my fob" report put it there, it can be reverted.
+  const latestIssueEntry = auditTrail.find(
+    (e) => e.action === "status_change" && e.toState === RequestStatus.ISSUED
+  );
+  const memberConfirmedReceipt =
+    (latestIssueEntry?.metadata as Record<string, unknown> | null)?.action === "member_confirmed_receipt";
+
+  const requesterName = `${requester?.firstName} ${requester?.lastName}`;
+  const accessLevelName = request.accessLevelId
+    ? data.accessLevels.find((al: any) => al.id === request.accessLevelId)?.name ?? null
+    : null;
+
+  function formatDate(date: Date | string | null) {
+    if (!date) return "-";
+    return new Date(date).toLocaleDateString("en-AU", {
+      timeZone: "Australia/Melbourne",
+      day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+    });
+  }
+
+  return (
+    <div className="space-y-6">
+      <BackButton fallback={`/t/${slug}/admin`} />
+
+      {/* Progress stepper + instruction */}
+      <Card>
+        <CardContent className="pt-4 pb-2 space-y-2">
+          <ProgressStepper status={request.status} paymentExempt={request.paymentExempt} requestType={request.requestType} autoClosed={isAutoClosedReturn(request)} />
+          {request.status === "awaiting_programming" && (
+            <p className="text-sm font-medium rounded bg-blue-50 text-blue-800 px-3 py-2">
+              {isReturn
+                ? `Deactivate ${collectLabel} in the access control system. The member is returning it and still has the fob until you collect it.`
+                : request.requestType === RequestType.REPLACEMENT_LOST
+                ? `Update ${credentialType?.name ?? "fob"} #${request.serialNumber ?? "?"} to Inactive - Lost`
+                : request.requestType === RequestType.REPLACEMENT_DAMAGED
+                  ? `Update ${credentialType?.name ?? "fob"} #${request.serialNumber ?? "?"} to Inactive - Damaged`
+                  : request.requestType === RequestType.ACCESS_UPDATE
+                    ? `Update the access level for ${requesterName}${accessLevelName ? ` to ${accessLevelName}` : ""} on the member record. Do not change the credential expiry - expiry follows the membership year.`
+                    : `Program a new ${credentialType?.name ?? "credential"} for ${requesterName}${accessLevelName ? ` with access level ${accessLevelName}` : ""}${request.credentialExpiresAt ? ` with expiry ${formatExpiryDate(request.credentialExpiresAt, tenant.timezone)}` : " with no expiry"}`}
+            </p>
+          )}
+          {isChangeType && replacesCred && (
+            <p className="text-sm rounded bg-muted px-3 py-2">
+              {request.status === "issued" ? "Replaced " : "Replacing "}
+              <Link
+                href={`/t/${slug}/admin/fobs/${replacesCred.id}`}
+                className="font-medium text-primary hover:underline"
+              >
+                {formatFobLabel(replacesCred.typeName, replacesCred.serialNumber)}
+              </Link>
+              {" "}
+              <span className="text-xs text-muted-foreground">({replacesCred.status.replace(/_/g, " ")})</span>
+            </p>
+          )}
+          {request.status === "programmed" && !isReturn && (
+            <p className="text-sm font-medium rounded bg-indigo-50 text-indigo-800 px-3 py-2">
+              Set pickup location for #{request.serialNumber ?? "?"} - {requester?.firstName} {requester?.lastName}
+            </p>
+          )}
+          {request.status === "awaiting_pickup" && isReturn && (
+            <p className="text-sm font-medium rounded bg-green-50 text-green-800 px-3 py-2">
+              Collect {collectLabel} from {requester?.firstName} {requester?.lastName}
+            </p>
+          )}
+          {request.status === "awaiting_pickup" && !isReturn && (
+            <div className="rounded bg-green-50 text-green-800 px-3 py-2 space-y-1">
+              <p className="text-sm font-medium">
+                #{request.serialNumber ?? "?"} ready for {requester?.firstName} {requester?.lastName}
+                {pickupLocation ? ` at ${pickupLocation.name}` : ""}
+              </p>
+              {isChangeType && collectLabel && (
+                <p className="text-sm font-medium">Collect the old {collectLabel} when handing over the new fob.</p>
+              )}
+              {pickupLocation?.instructions && (
+                <p className="text-xs whitespace-pre-wrap">
+                  <span className="font-semibold">Pickup instructions: </span>
+                  {pickupLocation.instructions}
+                </p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h2 className="text-2xl font-bold">
+            {requester?.firstName} {requester?.lastName}
+          </h2>
+          {request.requesterId && data.hasMembership && (
+            <Link
+              href={`/t/${slug}/admin/members/${request.requesterId}`}
+              className="text-xs text-muted-foreground hover:text-primary hover:underline"
+            >
+              View Member
+            </Link>
+          )}
+        </div>
+        {request.status === "issued" && (request.requestType === "replacement_lost" || request.requestType === "replacement_damaged")
+          ? <Badge variant="default">Deactivated</Badge>
+          : <RequestStatusBadge status={request.status} requestType={request.requestType} autoClosed={isAutoClosedReturn(request)} />}
+      </div>
+
+      {/* Request details */}
+      <RequestDetailsCard
+        tenantSlug={slug}
+        requestId={request.id}
+        isEditable={!["issued", "rejected", "cancelled"].includes(request.status) && !request.paymentReturnStatus && permissions.includes(Permission.APPROVE)}
+        requestType={request.requestType}
+        credentialTypeName={credentialType?.name ?? null}
+        credentialTypeId={request.credentialTypeId}
+        accessLevelName={request.accessLevelId ? (data.accessLevels.find((al: any) => al.id === request.accessLevelId)?.name ?? null) : null}
+        accessLevelId={request.accessLevelId}
+        membershipCategory={request.membershipCategory}
+        submittedAt={request.submittedAt.toISOString()}
+        serialNumber={request.serialNumber}
+        pickupLocationName={pickupLocation?.name ?? null}
+        pickupLocationInstructions={pickupLocation?.instructions ?? null}
+        exemptionReason={request.exemptionReason}
+        holdReason={request.holdReason}
+        cancelReason={request.cancelReason}
+        credentialTypes={data.allCredentialTypes}
+        accessLevels={data.accessLevels.map((al: any) => ({ id: al.id, name: al.name }))}
+        membershipCategories={data.membershipCategories}
+        paymentAmountCents={request.paymentAmountCents}
+        paymentExempt={request.paymentExempt}
+        paymentExemptReason={
+          request.paymentExempt
+            ? request.exemptionReason
+              ?? (request.requestType === "replacement_damaged" ? "Damaged fob (pending review)" : null)
+              ?? ((tenant.settings as TenantSettings)?.paymentExemptRequestTypes?.includes(request.requestType as any) ? `Request type "${request.requestType.replace(/_/g, " ")}" is configured as payment exempt` : null)
+              ?? ((tenant.settings as TenantSettings)?.paymentExemptMembershipCategories?.includes(request.membershipCategory ?? "") ? `Membership category "${request.membershipCategory}" is payment exempt` : null)
+              ?? "Auto-exempt"
+            : null
+        }
+        paidAt={request.paidAt?.toISOString() ?? null}
+        refundedAt={request.refundedAt?.toISOString() ?? null}
+        refundReason={request.refundReason}
+        requestStatus={request.status}
+      />
+
+      {/* Member details + Actions (wrapped for flag coordination) */}
+      <MemberActionsWrapper
+        rules={data.allRules.map((r: any) => ({ name: r.name, priority: r.priority, conditions: r.conditions as Record<string, unknown>, accessLevelId: r.accessLevelId, accessLevelName: r.accessLevelName }))}
+        initialMembershipCategory={data.ruleContext.membershipCategory}
+        memberAge={data.ruleContext.age}
+        memberAccessLevelId={data.suggestedAccessLevel?.ruleName === "Member's current access level" ? data.suggestedAccessLevel.id : null}
+        memberAccessLevelName={data.suggestedAccessLevel?.ruleName === "Member's current access level" ? data.suggestedAccessLevel.name : null}
+        memberDetailsProps={{
+          tenantSlug: slug,
+          memberId: request.requesterId,
+          firstName: requester?.firstName ?? request.orphanFirstName ?? "",
+          lastName: requester?.lastName ?? request.orphanLastName ?? "",
+          email: requester?.email ?? request.orphanEmail ?? "",
+          dateOfBirth: requester?.dateOfBirth ?? request.orphanDateOfBirth ?? null,
+          accessLevelName: request.accessLevelId ? (data.accessLevels.find((al: any) => al.id === request.accessLevelId)?.name ?? null) : (data.suggestedAccessLevel?.name ?? null),
+          matchedRuleName: data.suggestedAccessLevel?.ruleName ?? null,
+          canOverrideAccessLevel: permissions.includes(Permission.MANAGE_ADMINS),
+          isOfficer: data.ruleContext.isOfficer,
+          isBoardMember: data.ruleContext.isBoardMember,
+          isStaff: data.ruleContext.isStaff,
+          officerExpiresAt: null,
+          boardExpiresAt: null,
+          canEditFlags: permissions.includes(Permission.APPROVE) && !["issued", "rejected", "cancelled"].includes(request.status) && !request.paymentReturnStatus,
+        }}
+        adminActionsProps={{
+          tenantSlug: slug,
+          requestId: request.id,
+          requestType: request.requestType,
+          currentStatus: request.status,
+          validEvents,
+          permissions,
+          accessLevels: data.accessLevels.map((l: any) => ({ id: l.id, name: l.name })),
+          pickupLocations: data.pickupLocations.map((l: any) => ({ id: l.id, name: l.name, instructions: l.instructions ?? null })),
+          currentPickupLocationId: request.pickupLocationId,
+          allowFobCreationAtProgramming: (tenant.settings as TenantSettings)?.allowFobCreationAtProgramming ?? false,
+          availableFobs: data.unallocatedFobs
+            .filter((f: any): f is typeof f & { serialNumber: string } => !!f.serialNumber)
+            .map((f: any) => ({ id: f.id, serialNumber: f.serialNumber, credentialTypeName: f.credentialTypeName })),
+          requestCredentialTypeName: credentialType?.name,
+          credentialTypes: data.allCredentialTypes.map((ct: any) => ({ id: ct.id, name: ct.name })),
+          suggestedAccessLevelId: data.suggestedAccessLevel?.id,
+          suggestedAccessLevelName: data.suggestedAccessLevel?.name,
+          suggestedRuleName: data.suggestedAccessLevel?.ruleName,
+          canOverrideAccessLevel: permissions.includes(Permission.MANAGE_ADMINS),
+          membershipCategory: request.membershipCategory,
+          rules: data.allRules.map((r: any) => ({ name: r.name, priority: r.priority, conditions: r.conditions as Record<string, unknown>, accessLevelId: r.accessLevelId, accessLevelName: r.accessLevelName })),
+          splitPickupFromProgramming: (tenant.settings as TenantSettings)?.splitPickupFromProgramming ?? false,
+          exemptionReason: request.exemptionReason,
+          paidAt: request.paidAt?.toISOString() ?? null,
+          refundedAt: request.refundedAt?.toISOString() ?? null,
+          paymentExempt: request.paymentExempt,
+          isOrphaned: request.isOrphaned,
+          paymentReturnStatus: request.paymentReturnStatus,
+          memberConfirmedReceipt,
+          memberName: requesterName,
+          collectLabel,
+        }}
+      />
+
+      {/* Audit Trail */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Audit Trail</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AuditTrail
+            entries={auditTrail.map((e) => ({
+              ...e,
+              actorName: e.actorFirstName ? `${e.actorFirstName} ${e.actorLastName ?? ""}`.trim() : null,
+              createdAt: typeof e.createdAt === "string" ? e.createdAt : (e.createdAt as Date).toISOString(),
+              metadata: e.metadata as Record<string, unknown> | null,
+            }))}
+            slug={slug}
+            enableEmailPreview
+          />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

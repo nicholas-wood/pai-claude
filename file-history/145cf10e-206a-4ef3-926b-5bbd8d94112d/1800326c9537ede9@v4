@@ -1,0 +1,219 @@
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
+
+/**
+ * Post-issue payment demand round trips through transitionRequest.
+ *
+ * A credential issued free (exempt) can later have payment required. The
+ * request moves ISSUED -> AWAITING_PAYMENT, remembers where it came from in
+ * payment_return_status, and every exit (payment received, exemption, or an
+ * admin withdrawal) lands back on ISSUED rather than AWAITING_APPROVAL. The
+ * credential itself is never touched. Stripe is stubbed so the intent
+ * creation / retrieval / cancel calls inside transitionRequest do not need a
+ * key. Gated on DATABASE_URL like the other service-layer tests: runs in CI
+ * against the migrated Postgres, skips on a laptop with no database.
+ */
+
+const stripeMock = vi.hoisted(() => ({
+  createPaymentIntent: vi.fn(async () => ({ clientSecret: "cs_test", paymentIntentId: "pi_test_post_issue" })),
+  retrievePaymentIntent: vi.fn(async (): Promise<{ status: string; amountCents: number }> => ({
+    status: "requires_payment_method",
+    amountCents: 2500,
+  })),
+  cancelPaymentIntent: vi.fn(async () => {}),
+  createRefund: vi.fn(async () => ({ refundId: "re_test" })),
+}));
+
+vi.mock("@/lib/stripe", () => ({
+  ...stripeMock,
+  intentIsPaidOrProcessing: (status: string) => status === "succeeded" || status === "processing",
+  getStripe: () => {
+    throw new Error("getStripe should not be called in this test");
+  },
+}));
+
+const hasDb = !!process.env.DATABASE_URL;
+
+describe.skipIf(!hasDb)("post-issue payment demand", () => {
+  let db: typeof import("@accessbuddy/db").db;
+  let tenants: typeof import("@accessbuddy/db").tenants;
+  let users: typeof import("@accessbuddy/db").users;
+  let credentialTypes: typeof import("@accessbuddy/db").credentialTypes;
+  let accessLevels: typeof import("@accessbuddy/db").accessLevels;
+  let fobRequests: typeof import("@accessbuddy/db").fobRequests;
+  let credentials: typeof import("@accessbuddy/db").credentials;
+  let transitionRequest: typeof import("@/lib/services/requests").transitionRequest;
+  let withTenant: typeof import("@/lib/with-tenant").withTenant;
+  let CredentialStatus: typeof import("@accessbuddy/shared").CredentialStatus;
+  let RequestType: typeof import("@accessbuddy/shared").RequestType;
+  let RequestStatus: typeof import("@accessbuddy/shared").RequestStatus;
+
+  let tenant: { id: string };
+  let user: { id: string };
+  let credType: { id: string };
+  let accessLevel: { id: string };
+  let issuedRequest: { id: string };
+  let plainUnpaidRequest: { id: string };
+  let credential: { id: string };
+
+  async function row(id: string) {
+    const [r] = await db.select().from(fobRequests).where(eq(fobRequests.id, id));
+    return r;
+  }
+
+  function transition(requestId: string, event: string, extra: Record<string, unknown> = {}) {
+    return withTenant(tenant.id, (tx) =>
+      transitionRequest(tx, { requestId, tenantId: tenant.id, event, actorId: null, ...extra })
+    );
+  }
+
+  beforeAll(async () => {
+    const dbPackage = await import("@accessbuddy/db");
+    const shared = await import("@accessbuddy/shared");
+    db = dbPackage.db;
+    tenants = dbPackage.tenants;
+    users = dbPackage.users;
+    credentialTypes = dbPackage.credentialTypes;
+    accessLevels = dbPackage.accessLevels;
+    fobRequests = dbPackage.fobRequests;
+    credentials = dbPackage.credentials;
+    CredentialStatus = shared.CredentialStatus;
+    RequestType = shared.RequestType;
+    RequestStatus = shared.RequestStatus;
+    ({ transitionRequest } = await import("@/lib/services/requests"));
+    ({ withTenant } = await import("@/lib/with-tenant"));
+
+    const suffix = `${Date.now()}`;
+    [tenant] = await db
+      .insert(tenants)
+      .values({ name: `Post Issue Club ${suffix}`, slug: `post-issue-${suffix}` })
+      .returning({ id: tenants.id });
+    [user] = await db
+      .insert(users)
+      .values({
+        firebaseUid: `post-issue-fb-${suffix}`,
+        email: `post-issue-${suffix}@example.com`,
+        firstName: "Post",
+        lastName: "Issue",
+      })
+      .returning({ id: users.id });
+    [credType] = await db
+      .insert(credentialTypes)
+      .values({ tenantId: tenant.id, name: "Fob", priceCents: 2500 })
+      .returning({ id: credentialTypes.id });
+    [accessLevel] = await db
+      .insert(accessLevels)
+      .values({ tenantId: tenant.id, name: "Standard" })
+      .returning({ id: accessLevels.id });
+    // Issued free under an exemption.
+    [issuedRequest] = await db
+      .insert(fobRequests)
+      .values({
+        tenantId: tenant.id,
+        requesterId: user.id,
+        credentialTypeId: credType.id,
+        requestType: RequestType.NEW,
+        status: RequestStatus.ISSUED,
+        paymentExempt: true,
+        issuedAt: new Date(),
+      })
+      .returning({ id: fobRequests.id });
+    [credential] = await db
+      .insert(credentials)
+      .values({
+        tenantId: tenant.id,
+        ownerId: user.id,
+        credentialTypeId: credType.id,
+        accessLevelId: accessLevel.id,
+        requestId: issuedRequest.id,
+        status: CredentialStatus.ACTIVE,
+        issuedAt: new Date(),
+      })
+      .returning({ id: credentials.id });
+    // An ordinary pre-approval unpaid request, to prove withdraw is refused there.
+    [plainUnpaidRequest] = await db
+      .insert(fobRequests)
+      .values({
+        tenantId: tenant.id,
+        requesterId: user.id,
+        credentialTypeId: credType.id,
+        requestType: RequestType.NEW,
+        status: RequestStatus.AWAITING_PAYMENT,
+        paymentExempt: false,
+        paymentAmountCents: 2500,
+      })
+      .returning({ id: fobRequests.id });
+  });
+
+  afterAll(async () => {
+    const { auditLog } = await import("@accessbuddy/db");
+    await db.delete(auditLog).where(eq(auditLog.tenantId, tenant.id));
+    await db.delete(credentials).where(eq(credentials.tenantId, tenant.id));
+    await db.delete(fobRequests).where(eq(fobRequests.tenantId, tenant.id));
+    await db.delete(accessLevels).where(eq(accessLevels.tenantId, tenant.id));
+    await db.delete(credentialTypes).where(eq(credentialTypes.tenantId, tenant.id));
+    await db.delete(users).where(eq(users.id, user.id));
+    await db.delete(tenants).where(eq(tenants.id, tenant.id));
+  });
+
+  it("require payment on an issued request moves it to awaiting_payment and remembers the way back", async () => {
+    await transition(issuedRequest.id, "PAYMENT_REQUIRED", {
+      updates: { paymentExempt: false },
+      metadata: { reason: "Exemption granted in error", action: "admin_require_payment" },
+    });
+    const r = await row(issuedRequest.id);
+    expect(r.status).toBe(RequestStatus.AWAITING_PAYMENT);
+    expect(r.paymentReturnStatus).toBe(RequestStatus.ISSUED);
+    expect(r.paymentReturnExempt).toBe(true);
+    expect(r.paymentExempt).toBe(false);
+    expect(r.paymentAmountCents).toBe(2500);
+    expect(r.stripePaymentIntentId).toBe("pi_test_post_issue");
+    expect(stripeMock.createPaymentIntent).toHaveBeenCalledTimes(1);
+
+    const [cred] = await db.select({ status: credentials.status }).from(credentials).where(eq(credentials.id, credential.id));
+    expect(cred.status).toBe(CredentialStatus.ACTIVE);
+  });
+
+  it("refuses to cancel while the post-issue demand is outstanding", async () => {
+    await expect(transition(issuedRequest.id, "CANCEL", { metadata: { reason: "x" } })).rejects.toThrow(/Withdraw the payment request/);
+    const r = await row(issuedRequest.id);
+    expect(r.status).toBe(RequestStatus.AWAITING_PAYMENT);
+  });
+
+  it("withdrawing the demand returns to issued, restores the exemption and voids the intent", async () => {
+    await transition(issuedRequest.id, "WITHDRAW_PAYMENT_REQUEST", {
+      metadata: { reason: "Raised in error", action: "payment_request_withdrawn" },
+    });
+    const r = await row(issuedRequest.id);
+    expect(r.status).toBe(RequestStatus.ISSUED);
+    expect(r.paymentReturnStatus).toBeNull();
+    expect(r.paymentReturnExempt).toBeNull();
+    expect(r.paymentExempt).toBe(true);
+    expect(r.paidAt).toBeNull();
+    expect(stripeMock.cancelPaymentIntent).toHaveBeenCalled();
+  });
+
+  it("a second demand settled by payment also returns to issued, with paidAt stamped", async () => {
+    // The first intent was voided; the stub reports it cancelled so a fresh one is created.
+    stripeMock.retrievePaymentIntent.mockResolvedValueOnce({ status: "canceled", amountCents: 2500 });
+    await transition(issuedRequest.id, "PAYMENT_REQUIRED", {
+      updates: { paymentExempt: false },
+      metadata: { action: "admin_require_payment" },
+    });
+    expect((await row(issuedRequest.id)).status).toBe(RequestStatus.AWAITING_PAYMENT);
+
+    await transition(issuedRequest.id, "PAYMENT_RECEIVED", {
+      metadata: { paymentIntentId: "pi_test_post_issue", amountReceived: 2500 },
+    });
+    const r = await row(issuedRequest.id);
+    expect(r.status).toBe(RequestStatus.ISSUED);
+    expect(r.paymentReturnStatus).toBeNull();
+    expect(r.paidAt).not.toBeNull();
+    expect(r.paymentExempt).toBe(false);
+  });
+
+  it("refuses to withdraw on an ordinary awaiting_payment request", async () => {
+    await expect(transition(plainUnpaidRequest.id, "WITHDRAW_PAYMENT_REQUEST")).rejects.toThrow(/never issued/);
+    expect((await row(plainUnpaidRequest.id)).status).toBe(RequestStatus.AWAITING_PAYMENT);
+  });
+});

@@ -1,0 +1,122 @@
+import { NextRequest, NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+import { z } from "zod";
+import { Permission, RequestStatus, RequestType } from "@accessbuddy/shared";
+import { fobRequests } from "@accessbuddy/db";
+import { getAuthUser } from "@/lib/auth";
+import { resolveTenant } from "@/lib/tenant";
+import { checkPermission } from "@/lib/permissions";
+import { withTenant } from "@/lib/with-tenant";
+import { transitionRequest } from "@/lib/services/requests";
+
+const bodySchema = z.object({
+  reason: z.string().min(1, "Reason is required").max(500),
+});
+
+const REQUIRABLE_STATUSES: string[] = [
+  RequestStatus.SUBMITTED,
+  RequestStatus.AWAITING_APPROVAL,
+  RequestStatus.ISSUED,
+];
+
+// Request types whose issue put a priced credential in the member's hand.
+// Mirrors POST_ISSUE_BILLABLE_TYPES in admin-actions.tsx.
+const POST_ISSUE_BILLABLE_TYPES: string[] = [RequestType.NEW, RequestType.ADDITIONAL];
+
+/**
+ * Admin "require payment". Moves an unpaid request to awaiting_payment,
+ * creates the Stripe payment intent if the request never got one, and emails
+ * the member a payment link plus a signed cancel link. Valid from SUBMITTED
+ * (member abandoned the payment step), AWAITING_APPROVAL (exemption granted
+ * in error, or a free request that should have been charged) and ISSUED (a
+ * credential issued free that must now be paid for; returns to ISSUED once
+ * settled, and the email carries no cancel link).
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string; id: string }> }
+) {
+  try {
+    const auth = await getAuthUser();
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    const { slug, id: requestId } = await params;
+    const tenant = await resolveTenant(slug);
+    if (!tenant) {
+      return NextResponse.json({ error: "Organisation not found" }, { status: 404 });
+    }
+
+    // Requiring payment is the mirror of granting an exemption, so it sits
+    // behind the same approver-level permission.
+    const permResult = checkPermission(auth, tenant.id, Permission.APPROVE_EXEMPTION);
+    if (!permResult.granted) {
+      return NextResponse.json({ error: permResult.reason }, { status: 403 });
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const parsed = bodySchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.errors[0]?.message ?? "Invalid input" },
+        { status: 400 }
+      );
+    }
+    const { reason } = parsed.data;
+
+    const updated = await withTenant(tenant.id, async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(fobRequests)
+        .where(eq(fobRequests.id, requestId))
+        .limit(1);
+
+      if (!current) throw new Error("Request not found");
+      if (current.paidAt) {
+        throw new Error("Cannot require payment: this request has already been paid");
+      }
+      if (current.isOrphaned) {
+        throw new Error("Cannot require payment on an orphaned request. Link it to a member first.");
+      }
+      if (!REQUIRABLE_STATUSES.includes(current.status)) {
+        throw new Error(
+          `Cannot require payment when status is "${current.status}". Must be submitted, awaiting approval, or issued.`
+        );
+      }
+      // After issue, only a request that put a priced credential in the
+      // member's hand can be billed. A return, access update, change of type
+      // or a lost/damaged deactivation record has nothing to charge for.
+      if (
+        current.status === RequestStatus.ISSUED &&
+        !POST_ISSUE_BILLABLE_TYPES.includes(current.requestType)
+      ) {
+        throw new Error(
+          `Cannot require payment on an issued "${current.requestType.replace(/_/g, " ")}" request. Only new or additional credentials can be billed after issue.`
+        );
+      }
+
+      return transitionRequest(tx, {
+        requestId,
+        tenantId: tenant.id,
+        event: "PAYMENT_REQUIRED",
+        actorId: auth.user.id,
+        updates: {
+          paymentExempt: false,
+        },
+        metadata: {
+          reason,
+          action: "admin_require_payment",
+        },
+      });
+    });
+
+    return NextResponse.json({ request: updated });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal server error";
+    const status =
+      message.includes("Cannot") || message.includes("not found") ? 400 : 500;
+    if (status === 500) console.error("Require payment error:", err);
+    return NextResponse.json({ error: message }, { status });
+  }
+}

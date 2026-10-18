@@ -1,0 +1,29 @@
+import { NextResponse } from "next/server";
+import { withTenantAuth, type TenantApiContext } from "@/lib/api";
+import { withTenant } from "@/lib/with-tenant";
+import { credentialTypes, accessLevels, pickupLocations } from "@accessbuddy/db";
+
+export const GET = withTenantAuth(async ({ tenant }: TenantApiContext) => {
+  const config = await withTenant(tenant.id, async (tx) => {
+    const [types, levels, locations] = await Promise.all([
+      tx.select().from(credentialTypes),
+      tx.select().from(accessLevels),
+      tx.select().from(pickupLocations),
+    ]);
+
+    return {
+      tenant: {
+        id: tenant.id,
+        name: tenant.name,
+        slug: tenant.slug,
+        settings: tenant.settings,
+        timezone: tenant.timezone,
+      },
+      credentialTypes: types,
+      accessLevels: levels,
+      pickupLocations: locations,
+    };
+  });
+
+  return NextResponse.json(config);
+});

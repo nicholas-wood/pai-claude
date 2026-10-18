@@ -1,0 +1,264 @@
+import { describe, it, expect } from "vitest";
+import { createActor } from "xstate";
+import {
+  requestMachine,
+  getValidEvents,
+  requestProducesCredential,
+  requestRequiresCollection,
+} from "../state-machine";
+import { RequestStatus, RequestType } from "../enums";
+
+function createRequest(initialState?: string) {
+  const actor = createActor(requestMachine, {
+    ...(initialState && {
+      snapshot: requestMachine.resolveState({
+        value: initialState,
+        context: { requestId: "test-123", previousState: null },
+      }),
+    }),
+  });
+  actor.start();
+  return actor;
+}
+
+describe("Request State Machine", () => {
+  describe("happy path: new fob with payment", () => {
+    it("follows submitted -> awaiting_payment -> awaiting_approval -> programming -> pickup -> issued", () => {
+      const actor = createRequest();
+      expect(actor.getSnapshot().value).toBe(RequestStatus.SUBMITTED);
+
+      actor.send({ type: "PAYMENT_REQUIRED" });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.AWAITING_PAYMENT);
+
+      actor.send({ type: "PAYMENT_RECEIVED" });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.AWAITING_APPROVAL);
+
+      actor.send({
+        type: "APPROVE",
+        approvedBy: "admin-1",
+        accessLevelId: "level-1",
+      });
+      expect(actor.getSnapshot().value).toBe(
+        RequestStatus.AWAITING_PROGRAMMING
+      );
+
+      actor.send({
+        type: "PROGRAM",
+        programmedBy: "programmer-1",
+        serialNumber: "FOB-001",
+      });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.PROGRAMMED);
+
+      actor.send({ type: "SET_PICKUP", pickupLocationId: "loc-1" });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.AWAITING_PICKUP);
+
+      actor.send({ type: "ISSUE", issuedBy: "issuer-1" });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.ISSUED);
+
+      // Issued is the end of the normal lifecycle. It is no longer an xstate
+      // final state because a post-issue payment demand (PAYMENT_REQUIRED)
+      // can leave it; nothing else can.
+      expect(actor.getSnapshot().status).toBe("active");
+      expect(getValidEvents(RequestStatus.ISSUED)).toEqual(["PAYMENT_REQUIRED"]);
+    });
+  });
+
+  describe("happy path: payment exempt", () => {
+    it("follows submitted -> awaiting_approval directly", () => {
+      const actor = createRequest();
+      actor.send({ type: "PAYMENT_EXEMPT" });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.AWAITING_APPROVAL);
+    });
+  });
+
+  describe("rejection", () => {
+    it("can reject from awaiting_approval", () => {
+      const actor = createRequest(RequestStatus.AWAITING_APPROVAL);
+      actor.send({
+        type: "REJECT",
+        rejectedBy: "admin-1",
+        reason: "Incomplete",
+      });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.REJECTED);
+      // REJECTED is no longer final - can be reopened
+    });
+  });
+
+  describe("cancellation", () => {
+    it("can cancel from submitted", () => {
+      const actor = createRequest();
+      actor.send({
+        type: "CANCEL",
+        cancelledBy: "admin-1",
+        reason: "Duplicate",
+      });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.CANCELLED);
+    });
+
+    it("can cancel from awaiting_payment", () => {
+      const actor = createRequest(RequestStatus.AWAITING_PAYMENT);
+      actor.send({
+        type: "CANCEL",
+        cancelledBy: "admin-1",
+        reason: "No payment",
+      });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.CANCELLED);
+    });
+
+    it("can cancel from awaiting_pickup", () => {
+      const actor = createRequest(RequestStatus.AWAITING_PICKUP);
+      actor.send({
+        type: "CANCEL",
+        cancelledBy: "admin-1",
+        reason: "Member left",
+      });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.CANCELLED);
+    });
+
+    it("cannot transition from issued (final state)", () => {
+      const actor = createRequest(RequestStatus.ISSUED);
+      // Final states ignore events
+      actor.send({
+        type: "CANCEL",
+        cancelledBy: "admin-1",
+        reason: "Test",
+      });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.ISSUED);
+    });
+  });
+
+  describe("hold mechanism", () => {
+    it("can hold from awaiting_approval", () => {
+      const actor = createRequest(RequestStatus.AWAITING_APPROVAL);
+      actor.send({
+        type: "HOLD",
+        heldBy: "admin-1",
+        reason: "Need more info",
+      });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.ON_HOLD);
+    });
+
+    it("can cancel from on_hold", () => {
+      const actor = createRequest(RequestStatus.ON_HOLD);
+      actor.send({
+        type: "CANCEL",
+        cancelledBy: "admin-1",
+        reason: "No longer needed",
+      });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.CANCELLED);
+    });
+  });
+
+  describe("getValidEvents", () => {
+    it("returns correct events for submitted state", () => {
+      const events = getValidEvents(RequestStatus.SUBMITTED);
+      expect(events).toContain("PAYMENT_REQUIRED");
+      expect(events).toContain("PAYMENT_EXEMPT");
+      expect(events).toContain("HOLD");
+      expect(events).toContain("CANCEL");
+      expect(events).not.toContain("APPROVE");
+    });
+
+    it("returns correct events for awaiting_approval", () => {
+      const events = getValidEvents(RequestStatus.AWAITING_APPROVAL);
+      expect(events).toContain("APPROVE");
+      expect(events).toContain("REJECT");
+      expect(events).toContain("HOLD");
+      expect(events).toContain("CANCEL");
+      expect(events).toContain("PAYMENT_REQUIRED");
+    });
+
+    it("PAYMENT_REQUIRED is only valid before programming starts", () => {
+      expect(getValidEvents(RequestStatus.SUBMITTED)).toContain("PAYMENT_REQUIRED");
+      expect(getValidEvents(RequestStatus.AWAITING_APPROVAL)).toContain("PAYMENT_REQUIRED");
+      expect(getValidEvents(RequestStatus.AWAITING_PAYMENT)).not.toContain("PAYMENT_REQUIRED");
+      expect(getValidEvents(RequestStatus.AWAITING_PROGRAMMING)).not.toContain("PAYMENT_REQUIRED");
+      expect(getValidEvents(RequestStatus.PROGRAMMED)).not.toContain("PAYMENT_REQUIRED");
+      expect(getValidEvents(RequestStatus.AWAITING_PICKUP)).not.toContain("PAYMENT_REQUIRED");
+    });
+  });
+
+  describe("post-issue payment demand", () => {
+    it("issued -> awaiting_payment, and withdrawing returns to issued", () => {
+      const actor = createRequest(RequestStatus.ISSUED);
+      actor.send({ type: "PAYMENT_REQUIRED" });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.AWAITING_PAYMENT);
+
+      actor.send({ type: "WITHDRAW_PAYMENT_REQUEST", withdrawnBy: "admin" });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.ISSUED);
+    });
+
+    it("issued -> awaiting_payment -> payment received (service layer returns it to issued)", () => {
+      const actor = createRequest(RequestStatus.ISSUED);
+      actor.send({ type: "PAYMENT_REQUIRED" });
+      actor.send({ type: "PAYMENT_RECEIVED" });
+      // The machine itself targets awaiting_approval; transitionRequest
+      // overrides to the stored payment_return_status. Assert the machine
+      // at least accepted the event.
+      expect(actor.getSnapshot().value).toBe(RequestStatus.AWAITING_APPROVAL);
+    });
+
+    it("issued cannot be cancelled or held", () => {
+      const events = getValidEvents(RequestStatus.ISSUED);
+      expect(events).not.toContain("CANCEL");
+      expect(events).not.toContain("HOLD");
+    });
+  });
+
+  describe("admin require payment", () => {
+    it("moves an awaiting_approval request back to awaiting_payment, then payment completes it", () => {
+      const actor = createRequest(RequestStatus.AWAITING_APPROVAL);
+      actor.send({ type: "PAYMENT_REQUIRED" });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.AWAITING_PAYMENT);
+
+      actor.send({ type: "PAYMENT_RECEIVED" });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.AWAITING_APPROVAL);
+    });
+
+    it("an abandoned submitted request can be moved to awaiting_payment and then cancelled by the member", () => {
+      const actor = createRequest(RequestStatus.SUBMITTED);
+      actor.send({ type: "PAYMENT_REQUIRED" });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.AWAITING_PAYMENT);
+
+      actor.send({ type: "CANCEL", cancelledBy: "member", reason: "No longer needed" });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.CANCELLED);
+    });
+
+    it("issued only allows a post-issue payment demand", () => {
+      expect(getValidEvents(RequestStatus.ISSUED)).toEqual(["PAYMENT_REQUIRED"]);
+    });
+
+    it("awaiting_payment allows withdrawing a payment request", () => {
+      expect(getValidEvents(RequestStatus.AWAITING_PAYMENT)).toContain("WITHDRAW_PAYMENT_REQUEST");
+    });
+
+    it("cancelled and rejected allow reopen only", () => {
+      expect(getValidEvents(RequestStatus.CANCELLED)).toEqual(["REOPEN"]);
+      expect(getValidEvents(RequestStatus.REJECTED)).toEqual(["REOPEN"]);
+    });
+  });
+
+  describe("return and change_type retire the old fob", () => {
+    it("return joins the non-credential types: it never allocates a credential", () => {
+      expect(requestProducesCredential(RequestType.RETURN)).toBe(false);
+      expect(requestProducesCredential(RequestType.CHANGE_TYPE)).toBe(true);
+    });
+
+    it("only return and change_type require a collection confirm at ISSUE", () => {
+      const needing = Object.values(RequestType).filter(requestRequiresCollection);
+      expect(needing).toHaveLength(2);
+      expect(needing).toContain(RequestType.RETURN);
+      expect(needing).toContain(RequestType.CHANGE_TYPE);
+    });
+
+    it("a return runs awaiting_programming -> programmed -> awaiting_pickup -> issued", () => {
+      const actor = createRequest(RequestStatus.AWAITING_PROGRAMMING);
+      actor.send({ type: "PROGRAM", programmedBy: "admin-1", serialNumber: "1" });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.PROGRAMMED);
+      actor.send({ type: "SET_PICKUP", pickupLocationId: "loc" });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.AWAITING_PICKUP);
+      actor.send({ type: "ISSUE", issuedBy: "admin-1" });
+      expect(actor.getSnapshot().value).toBe(RequestStatus.ISSUED);
+    });
+  });
+});

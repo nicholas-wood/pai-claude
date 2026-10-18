@@ -1,0 +1,49 @@
+import { describe, it, expect } from "vitest";
+import {
+  paymentRequiredEmail,
+  paymentReceivedEmail,
+  paymentRequestWithdrawnEmail,
+} from "../lib/email-templates";
+import { EMAIL_EVENTS, getValidEvents, RequestStatus } from "@accessbuddy/shared";
+
+const PAY = "https://accessbuddy.example/t/smlsc/pay/abc";
+const CANCEL = `${PAY}?cancel=123.sig`;
+
+describe("post-issue payment demand emails", () => {
+  it("paymentRequired omits the cancel link and explains the credential stays active", () => {
+    const html = paymentRequiredEmail("SMLSC", "Sarah Johnson", "$25.00", PAY, undefined, undefined, true);
+    expect(html).toContain(`href="${PAY}"`);
+    expect(html).not.toContain("Cancel this request");
+    expect(html).toContain("already been issued");
+    expect(html).toContain("stays active");
+  });
+
+  it("paymentRequired for a pre-approval demand still carries the cancel link", () => {
+    const html = paymentRequiredEmail("SMLSC", "Sarah Johnson", "$25.00", PAY, CANCEL);
+    expect(html).toContain(`href="${CANCEL}"`);
+    expect(html).not.toContain("already been issued");
+  });
+
+  it("paymentReceived after issue does not promise a review", () => {
+    const html = paymentReceivedEmail("SMLSC", "Sarah Johnson", true);
+    expect(html).toContain("remains active");
+    expect(html).not.toContain("now being reviewed");
+  });
+
+  it("paymentRequestWithdrawn renders with and without a reason", () => {
+    expect(paymentRequestWithdrawnEmail("SMLSC", "Sarah Johnson")).toContain("No payment is required");
+    const withReason = paymentRequestWithdrawnEmail("SMLSC", "Sarah Johnson", "Raised in error");
+    expect(withReason).toContain("Raised in error");
+  });
+
+  it("registers the payment_request_withdrawn event", () => {
+    expect(EMAIL_EVENTS.find((e) => e.id === "payment_request_withdrawn")).toBeDefined();
+  });
+});
+
+describe("post-issue payment demand transitions", () => {
+  it("issued allows PAYMENT_REQUIRED and awaiting_payment allows WITHDRAW_PAYMENT_REQUEST", () => {
+    expect(getValidEvents(RequestStatus.ISSUED)).toEqual(["PAYMENT_REQUIRED"]);
+    expect(getValidEvents(RequestStatus.AWAITING_PAYMENT)).toContain("WITHDRAW_PAYMENT_REQUEST");
+  });
+});

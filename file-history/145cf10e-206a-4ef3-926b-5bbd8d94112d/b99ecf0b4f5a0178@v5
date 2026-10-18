@@ -1,0 +1,832 @@
+"use client";
+
+import { useState, useRef, useEffect, useCallback } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { RequestStatus, Permission, RequestType, requestRequiresCollection, requestIsDeactivation } from "@accessbuddy/shared";
+import { formatFobLabel } from "@/lib/request-display";
+
+function formatRequestLabel(requestType: string, relatedRequestId?: string | null): string {
+  const labels: Record<string, string> = {
+    new: "New",
+    replacement_lost: "Lost - Deactivate",
+    replacement_damaged: "Damaged - Deactivate",
+    additional: "Additional",
+    return: "Return",
+    change_type: "Change Type",
+    access_update: "Access Update",
+  };
+  if (requestType === "new" && relatedRequestId) return "Lost - Replacement";
+  return labels[requestType] ?? requestType.replace(/_/g, " ");
+}
+
+// Context text shown per status
+function getContextText(req: QueueItemProps["request"]): string | null {
+  switch (req.status) {
+    case RequestStatus.AWAITING_EXEMPTION_REVIEW:
+      return req.exemptionReason ? `Reason: ${req.exemptionReason}` : null;
+    case RequestStatus.AWAITING_APPROVAL:
+      return req.accessLevelName ? `Access: ${req.accessLevelName}` : null;
+    case RequestStatus.AWAITING_PROGRAMMING:
+      if (requestIsDeactivation(req.requestType)) return `Deactivate ${req.credentialTypeName ?? "fob"} #${req.serialNumber ?? req.replacesCredentialSerial ?? "?"}`;
+      if (req.requestType === "access_update") return req.accessUpdateReason ?? "Update access";
+      return req.accessLevelName ? `Level: ${req.accessLevelName}` : null;
+    case RequestStatus.PROGRAMMED:
+      return req.serialNumber ? `#${req.serialNumber} - set pickup` : null;
+    case RequestStatus.AWAITING_PICKUP:
+      // A return is the member handing a fob in: say which fob to collect.
+      if (req.requestType === "return") return `Collect ${formatFobLabel(req.credentialTypeName, req.serialNumber ?? req.replacesCredentialSerial)}`;
+      // An exchange issues the new fob and collects the old one.
+      if (req.requestType === "change_type" && req.replacesCredentialSerial) {
+        return [
+          req.serialNumber ? `#${req.serialNumber}` : null,
+          req.pickupLocationName ?? null,
+          `Collect ${formatFobLabel(req.replacesCredentialTypeName, req.replacesCredentialSerial)}`,
+        ].filter(Boolean).join(" - ");
+      }
+      return [
+        req.serialNumber ? `#${req.serialNumber}` : null,
+        req.pickupLocationName ?? null,
+      ].filter(Boolean).join(" - ") || null;
+    case RequestStatus.ON_HOLD:
+      return req.holdReason ?? null;
+    default:
+      return null;
+  }
+}
+
+// Primary action config per status
+type ActionConfig = {
+  label: string;
+  event: string;
+  needsInput: boolean;
+  permission: string;
+};
+
+function getPrimaryAction(status: string, requestType: string): ActionConfig | null {
+  switch (status) {
+    case RequestStatus.AWAITING_EXEMPTION_REVIEW:
+      return { label: "Review", event: "APPROVE_EXEMPTION", needsInput: true, permission: Permission.APPROVE_EXEMPTION };
+    case RequestStatus.AWAITING_PAYMENT:
+    case RequestStatus.SUBMITTED:
+      return { label: "Grant Exemption", event: "PAYMENT_EXEMPT", needsInput: true, permission: Permission.APPROVE_EXEMPTION };
+    case RequestStatus.AWAITING_APPROVAL:
+      return { label: "Approve", event: "APPROVE", needsInput: true, permission: Permission.APPROVE };
+    case RequestStatus.AWAITING_PROGRAMMING:
+      return { label: "Program", event: "PROGRAM", needsInput: true, permission: Permission.PROGRAM };
+    case RequestStatus.PROGRAMMED:
+      return { label: "Set Pickup", event: "SET_PICKUP", needsInput: true, permission: Permission.ISSUE };
+    case RequestStatus.AWAITING_PICKUP:
+      // Return and change_type hand a fob back: the issuer confirms collection
+      // in a popover instead of a one-click Issue.
+      if (requestRequiresCollection(requestType)) {
+        return { label: "Collect", event: "ISSUE", needsInput: true, permission: Permission.ISSUE };
+      }
+      return { label: "Issue", event: "ISSUE", needsInput: false, permission: Permission.ISSUE };
+    case RequestStatus.ON_HOLD:
+      return { label: "Resume", event: "RESUME", needsInput: false, permission: "__any_hold_resume__" };
+    case RequestStatus.CANCELLED:
+    case RequestStatus.REJECTED:
+      return { label: "Reopen", event: "REOPEN", needsInput: true, permission: Permission.REOPEN };
+    default:
+      return null;
+  }
+}
+
+type Rule = {
+  name: string;
+  priority: number;
+  conditions: Record<string, unknown>;
+  accessLevelId: string;
+  accessLevelName: string;
+};
+
+function evaluateRulesClient(
+  rules: Rule[],
+  membershipCategory: string | null,
+  isOfficer: boolean,
+  isBoardMember: boolean,
+  isStaff: boolean,
+  age: number | null,
+): { accessLevelId: string; accessLevelName: string; ruleName: string } | null {
+  for (const rule of rules) {
+    const c = rule.conditions;
+    const hasCondition =
+      (Array.isArray(c.membershipCategory) && c.membershipCategory.length > 0) ||
+      c.isOfficer !== undefined || c.isBoardMember !== undefined ||
+      c.isStaff !== undefined || c.minAge !== undefined || c.maxAge !== undefined;
+    if (!hasCondition) continue;
+    let match = true;
+    if (Array.isArray(c.membershipCategory) && c.membershipCategory.length > 0) {
+      if (!membershipCategory || !c.membershipCategory.includes(membershipCategory as string)) match = false;
+    }
+    if (match && c.isOfficer !== undefined && c.isOfficer !== isOfficer) match = false;
+    if (match && c.isBoardMember !== undefined && c.isBoardMember !== isBoardMember) match = false;
+    if (match && c.isStaff !== undefined && c.isStaff !== isStaff) match = false;
+    // Age-gated rules require a plausible age. Unknown (null) or
+    // nonsensical (negative, or over 150) ages should NOT satisfy any
+    // age constraint.
+    const ageValid =
+      age !== null && age !== undefined && age >= 0 && age <= 150;
+    if (match && typeof c.minAge === "number") {
+      if (!ageValid || (age as number) < c.minAge) match = false;
+    }
+    if (match && typeof c.maxAge === "number") {
+      if (!ageValid || (age as number) > c.maxAge) match = false;
+    }
+    if (match) {
+      return { accessLevelId: rule.accessLevelId, accessLevelName: rule.accessLevelName, ruleName: rule.name };
+    }
+  }
+  return null;
+}
+
+export type QueueItemProps = {
+  slug: string;
+  request: {
+    id: string;
+    status: string;
+    requestType: string;
+    submittedAt: string | Date;
+    holdReason: string | null;
+    serialNumber: string | null;
+    requesterId: string | null;
+    requesterFirstName: string;
+    requesterLastName: string;
+    requesterEmail: string;
+    credentialTypeName: string | null;
+    relatedRequestId?: string | null;
+    replacesCredentialSerial?: string | null;
+    replacesCredentialTypeName?: string | null;
+    accessLevelName?: string | null;
+    accessUpdateReason?: string | null;
+    exemptionReason?: string | null;
+    pickupLocationName?: string | null;
+    paidAt?: string | null;
+    /** Set while a payment demand on an already-issued request is outstanding. */
+    paymentReturnStatus?: string | null;
+  };
+  permissions: string[];
+  splitPickupFromProgramming: boolean;
+};
+
+export function QueueItem({ slug, request: req, permissions, splitPickupFromProgramming }: QueueItemProps) {
+  const router = useRouter();
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const [submitting, setSubmitting] = useState(false);
+  const [completed, setCompleted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hidden, setHidden] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Form state for popovers
+  const [reason, setReason] = useState("");
+  const [showRejectForm, setShowRejectForm] = useState(false);
+  const [accessLevelId, setAccessLevelId] = useState("");
+  const [serialNumber, setSerialNumber] = useState("");
+  const [selectedFobId, setSelectedFobId] = useState("");
+  const [pickupLocationId, setPickupLocationId] = useState("");
+  const [isOfficer, setIsOfficer] = useState(false);
+  const [isBoardMember, setIsBoardMember] = useState(false);
+  const [isStaff, setIsStaff] = useState(false);
+
+  // Data loaded on demand
+  const [accessLevels, setAccessLevels] = useState<{ id: string; name: string }[]>([]);
+  const [pickupLocations, setPickupLocations] = useState<{ id: string; name: string }[]>([]);
+  const [suggestedAccessLevel, setSuggestedAccessLevel] = useState<{ id: string; name: string } | null>(null);
+  const [canOverrideAccessLevel, setCanOverrideAccessLevel] = useState(false);
+  const [availableFobs, setAvailableFobs] = useState<{ id: string; serialNumber: string; credentialTypeId: string; credentialTypeName: string | null; previousOwnerName: string | null }[]>([]);
+  const [allowFobCreation, setAllowFobCreation] = useState(false);
+  const [rules, setRules] = useState<{ name: string; priority: number; conditions: Record<string, unknown>; accessLevelId: string; accessLevelName: string }[]>([]);
+  const [membershipCategory, setMembershipCategory] = useState<string | null>(null);
+  const [memberAge, setMemberAge] = useState<number | null>(null);
+  const [dataLoading, setDataLoading] = useState(false);
+
+  // A post-issue payment demand has no quick action: Grant Exemption's copy
+  // ("send this request to approval") is wrong for it, and Withdraw lives on
+  // the detail page where the admin can give a reason.
+  const action = req.paymentReturnStatus ? null : getPrimaryAction(req.status, req.requestType);
+
+  // Clear form state when the request status changes (e.g. after reopen)
+  const prevStatusRef = useRef(req.status);
+  useEffect(() => {
+    if (prevStatusRef.current !== req.status) {
+      prevStatusRef.current = req.status;
+      setReason("");
+      setShowRejectForm(false);
+      setPopoverOpen(false);
+      setCompleted(false);
+      setError(null);
+      setSerialNumber("");
+      setSelectedFobId("");
+    }
+  }, [req.status]);
+
+  const HOLD_RESUME_PERMISSIONS = [Permission.APPROVE, Permission.PROGRAM, Permission.ISSUE];
+  const hasPermission = action
+    ? action.permission === "__any_hold_resume__"
+      ? HOLD_RESUME_PERMISSIONS.some((p) => permissions.includes(p))
+      : permissions.includes(action.permission)
+    : false;
+  const context = getContextText(req);
+
+  // Close popover on outside click or Escape. Ignore clicks that land inside
+  // portalled popups (base-ui Select items render in their own portal, so a
+  // naive contains() check thinks they are "outside" and closes the popover).
+  useEffect(() => {
+    if (!popoverOpen) return;
+    function handleClick(e: MouseEvent) {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (popoverRef.current?.contains(target)) return;
+      if (buttonRef.current?.contains(target)) return;
+      // Any portalled popup / listbox item belongs to a control inside the popover
+      if (
+        target.closest(
+          '[data-slot="select-content"], [role="listbox"], [role="option"]'
+        )
+      ) {
+        return;
+      }
+      setPopoverOpen(false);
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setPopoverOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [popoverOpen]);
+
+  const loadRequestData = useCallback(async () => {
+    setDataLoading(true);
+    try {
+      const res = await fetch(`/api/v1/t/${slug}/requests/${req.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.accessLevels) setAccessLevels(data.accessLevels);
+        if (data.pickupLocations) setPickupLocations(data.pickupLocations);
+        if (data.permissions) {
+          setCanOverrideAccessLevel(data.permissions.includes("manage_admins"));
+        }
+        if (data.suggestedAccessLevel) {
+          setSuggestedAccessLevel(data.suggestedAccessLevel);
+          if (!accessLevelId) setAccessLevelId(data.suggestedAccessLevel.id);
+        }
+        if (data.rules) setRules(data.rules);
+        // Prefer the effective membership category from the server ruleContext
+        // (which merges the tenant_memberships row) over the request's
+        // stored value, which may be stale or null for swap-generated requests.
+        if (data.ruleContext?.membershipCategory) {
+          setMembershipCategory(data.ruleContext.membershipCategory);
+        } else if (data.request?.membershipCategory) {
+          setMembershipCategory(data.request.membershipCategory);
+        }
+        if (data.ruleContext) {
+          if (data.ruleContext.age !== undefined) setMemberAge(data.ruleContext.age);
+          if (data.ruleContext.isOfficer !== undefined) setIsOfficer(data.ruleContext.isOfficer);
+          if (data.ruleContext.isBoardMember !== undefined) setIsBoardMember(data.ruleContext.isBoardMember);
+          if (data.ruleContext.isStaff !== undefined) setIsStaff(data.ruleContext.isStaff);
+        }
+        if (data.settings) {
+          setAllowFobCreation(!!data.settings.allowFobCreationAtProgramming);
+        }
+        if (data.unallocatedFobs) {
+          setAvailableFobs(
+            data.unallocatedFobs
+              .filter((f: { serialNumber: string | null }) => !!f.serialNumber)
+              .map((f: { id: string; serialNumber: string; credentialTypeId: string; credentialTypeName: string | null; previousOwnerName?: string | null }) => ({
+                id: f.id,
+                serialNumber: f.serialNumber,
+                credentialTypeId: f.credentialTypeId,
+                credentialTypeName: f.credentialTypeName,
+                previousOwnerName: f.previousOwnerName ?? null,
+              }))
+          );
+        }
+      }
+    } catch { /* non-critical */ } finally { setDataLoading(false); }
+  }, [slug, req.id, accessLevelId]);
+
+  function openPopover(e: React.MouseEvent) {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const popoverHeight = 320; // approximate max height
+    const popoverWidth = 300;
+
+    // Prefer below the button, but flip above if not enough space
+    let top = rect.bottom + 4;
+    if (top + popoverHeight > window.innerHeight) {
+      top = Math.max(8, rect.top - popoverHeight - 4);
+    }
+
+    // Clamp left to stay within viewport
+    let left = Math.min(rect.right - popoverWidth, window.innerWidth - popoverWidth - 8);
+    left = Math.max(8, left);
+
+    setPopoverPos({ top, left });
+    setPopoverOpen(true);
+    setShowRejectForm(false);
+    setReason("");
+    setError(null);
+
+    // Load data for popovers that need it
+    if (action?.event === "APPROVE" || action?.event === "SET_PICKUP" || action?.event === "PROGRAM") {
+      loadRequestData();
+    }
+  }
+
+  async function executeAction(event: string, body?: Record<string, unknown>) {
+    setSubmitting(true);
+    setError(null);
+
+    const endpoint = event.toLowerCase().replace(/_/g, "-");
+    try {
+      const res = await fetch(`/api/v1/t/${slug}/requests/${req.id}/${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error ?? `Failed to ${event}`);
+      }
+
+      // Success - show tick, then hide row
+      setPopoverOpen(false);
+      setCompleted(true);
+      setTimeout(() => {
+        setHidden(true);
+        // Refresh server data in background so counts update
+        router.refresh();
+      }, 1200);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function handlePrimaryAction(e: React.MouseEvent) {
+    if (!action) return;
+    if (action.needsInput) {
+      openPopover(e);
+    } else {
+      executeAction(action.event);
+    }
+  }
+
+  // Handle combined program + set-pickup
+  async function handleProgramAndPickup() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      // The chosen pickup location travels WITH the program call. In
+      // non-split mode the backend auto-chains SET_PICKUP and emails the
+      // member inside that transaction, so a follow-up set-pickup call
+      // would land after the email had already named a different location.
+      const res1 = await fetch(`/api/v1/t/${slug}/requests/${req.id}/program`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(selectedFobId ? { serialNumber, credentialId: selectedFobId } : { serialNumber }),
+          ...(pickupLocationId ? { pickupLocationId } : {}),
+        }),
+      });
+      const d1 = await res1.json();
+      if (!res1.ok) {
+        throw new Error(d1.error ?? "Failed to program");
+      }
+
+      // Split mode leaves the request at PROGRAMMED; the explicit SET_PICKUP
+      // transition below is then the one that emails the member. In non-split
+      // mode the request is already AWAITING_PICKUP with the chosen location.
+      if (pickupLocationId && d1.request?.status !== RequestStatus.AWAITING_PICKUP) {
+        const res2 = await fetch(`/api/v1/t/${slug}/requests/${req.id}/set-pickup`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pickupLocationId }),
+        });
+        if (!res2.ok) {
+          const d = await res2.json();
+          throw new Error(d.error ?? "Failed to set pickup");
+        }
+      }
+
+      setPopoverOpen(false);
+      setCompleted(true);
+      setTimeout(() => { setHidden(true); router.refresh(); }, 1200);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (hidden) return null;
+
+  return (
+    <>
+      {/* Row \u2014 wraps to a two-row layout on mobile so actions stay onscreen */}
+      <div className={`relative rounded-lg border px-3 py-2 text-sm transition-all ${
+        completed ? "opacity-50 scale-[0.98]" : "hover:bg-accent/50"
+      }`}>
+        {/* Make the whole card a tap target on mobile that goes to the
+            detail page. Actions and links above sit in a higher stacking
+            context so the popover button still works. */}
+        <Link
+          href={`/t/${slug}/admin/requests/${req.id}`}
+          className="absolute inset-0 sm:hidden"
+          aria-label={`View request for ${req.requesterFirstName} ${req.requesterLastName}`}
+        />
+
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          {/* Identity + type \u2014 stacked on mobile, columns on sm+ */}
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 min-w-0 sm:w-[140px] sm:shrink-0">
+            <Link
+              href={`/t/${slug}/admin/requests/${req.id}`}
+              className="font-medium hover:text-primary hover:underline relative z-10"
+            >
+              {req.requesterFirstName} {req.requesterLastName}
+            </Link>
+            <span className="sm:hidden text-xs text-muted-foreground">
+              {formatRequestLabel(req.requestType, req.relatedRequestId)}
+            </span>
+          </div>
+
+          <div className="hidden sm:block sm:w-[120px] sm:shrink-0 truncate text-muted-foreground">
+            {formatRequestLabel(req.requestType, req.relatedRequestId)}
+          </div>
+
+          <div className="hidden sm:block sm:w-[100px] sm:shrink-0 truncate text-muted-foreground">
+            {req.credentialTypeName ?? "-"}
+          </div>
+
+          {context && (
+            <div className="sm:flex-1 sm:min-w-0 sm:truncate text-xs text-muted-foreground">
+              {context}
+            </div>
+          )}
+
+          {/* Actions \u2014 pushed to the right on sm+, stays in flow on mobile
+              with full visibility */}
+          <div className="flex items-center gap-2 sm:shrink-0 sm:ml-auto relative z-10">
+            {action && hasPermission && !completed && (
+              <Button
+                ref={buttonRef}
+                size="sm"
+                className="h-8 text-xs"
+                onClick={(e) => { e.stopPropagation(); handlePrimaryAction(e); }}
+                disabled={submitting}
+              >
+                {submitting ? "..." : (
+                  action.event === "PROGRAM" && requestIsDeactivation(req.requestType)
+                    ? "Deactivate"
+                    : action.label
+                )}
+              </Button>
+            )}
+            {completed && (
+              <span className="flex h-7 w-7 items-center justify-center rounded-md bg-green-100 text-green-600 text-sm">
+                {"\u2713"}
+              </span>
+            )}
+            <Link
+              href={`/t/${slug}/admin/requests/${req.id}`}
+              className="text-xs text-muted-foreground hover:text-primary hover:underline ml-auto sm:ml-0"
+              onClick={(e) => e.stopPropagation()}
+            >
+              View
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Popover */}
+      {popoverOpen && (
+        <div
+          ref={popoverRef}
+          className="fixed z-50 w-[300px] max-h-[calc(100vh-16px)] overflow-y-auto rounded-lg border bg-background p-3 shadow-lg space-y-3"
+          style={{ top: popoverPos.top, left: popoverPos.left }}
+        >
+          {/* Approve form */}
+          {action?.event === "APPROVE" && (
+            <>
+              <p className="text-xs font-medium">Approve Request</p>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span>Officer</span>
+                  <button type="button" onClick={() => {
+                    const next = !isOfficer;
+                    setIsOfficer(next);
+                    const m = evaluateRulesClient(rules, membershipCategory, next, isBoardMember, isStaff, memberAge);
+                    if (m) setAccessLevelId(m.accessLevelId);
+                  }}
+                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${isOfficer ? "bg-primary" : "bg-muted"}`}>
+                    <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${isOfficer ? "translate-x-3.5" : "translate-x-0.5"}`} />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span>Board</span>
+                  <button type="button" onClick={() => {
+                    const next = !isBoardMember;
+                    setIsBoardMember(next);
+                    const m = evaluateRulesClient(rules, membershipCategory, isOfficer, next, isStaff, memberAge);
+                    if (m) setAccessLevelId(m.accessLevelId);
+                  }}
+                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${isBoardMember ? "bg-primary" : "bg-muted"}`}>
+                    <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${isBoardMember ? "translate-x-3.5" : "translate-x-0.5"}`} />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span>Staff</span>
+                  <button type="button" onClick={() => {
+                    const next = !isStaff;
+                    setIsStaff(next);
+                    const m = evaluateRulesClient(rules, membershipCategory, isOfficer, isBoardMember, next, memberAge);
+                    if (m) setAccessLevelId(m.accessLevelId);
+                  }}
+                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${isStaff ? "bg-primary" : "bg-muted"}`}>
+                    <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${isStaff ? "translate-x-3.5" : "translate-x-0.5"}`} />
+                  </button>
+                </div>
+              </div>
+              {suggestedAccessLevel && (
+                <p className="text-xs text-blue-700 bg-blue-50 rounded px-2 py-1">
+                  Suggested: {suggestedAccessLevel.name}
+                </p>
+              )}
+              <div className="space-y-1">
+                <Label className="text-xs">Access Level *</Label>
+                {!canOverrideAccessLevel && accessLevelId ? (
+                  <p className="text-sm font-medium py-1">
+                    {accessLevels.find((l) => l.id === accessLevelId)?.name ?? accessLevelId}
+                  </p>
+                ) : (
+                  <Select value={accessLevelId} onValueChange={(v) => setAccessLevelId(v ?? "")}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue>
+                        {accessLevelId ? accessLevels.find((l) => l.id === accessLevelId)?.name ?? "Select..." : "Select..."}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {accessLevels.map((l) => (
+                        <SelectItem key={l.id} value={l.id} label={l.name}>{l.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {!canOverrideAccessLevel && suggestedAccessLevel && (
+                  <p className="text-[10px] text-muted-foreground">Only club or global admins can override</p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" className="h-7 text-xs flex-1" disabled={!accessLevelId || submitting}
+                  onClick={() => executeAction("APPROVE", {
+                    accessLevelId,
+                    isOfficer,
+                    isBoardMember,
+                    isStaff,
+                  })}>
+                  {submitting ? "..." : "Approve"}
+                </Button>
+                <Button size="sm" variant="destructive" className="h-7 text-xs"
+                  onClick={() => {
+                    setShowRejectForm(true);
+                    setError(null);
+                  }}>
+                  Reject
+                </Button>
+              </div>
+            </>
+          )}
+
+          {/* Exemption review */}
+          {action?.event === "APPROVE_EXEMPTION" && (
+            <>
+              <p className="text-xs font-medium">Exemption Review</p>
+              {req.exemptionReason && (
+                <p className="text-xs bg-amber-50 rounded px-2 py-1 text-amber-800">{req.exemptionReason}</p>
+              )}
+              <div className="flex gap-2">
+                <Button size="sm" className="h-7 text-xs flex-1" disabled={submitting}
+                  onClick={() => executeAction("APPROVE_EXEMPTION")}>
+                  {submitting ? "..." : "Approve"}
+                </Button>
+                <Button size="sm" variant="destructive" className="h-7 text-xs flex-1" disabled={submitting}
+                  onClick={() => executeAction("REJECT_EXEMPTION", { reason: "Exemption rejected" })}>
+                  Reject
+                </Button>
+              </div>
+            </>
+          )}
+
+          {/* Admin grant exemption on awaiting_payment */}
+          {action?.event === "PAYMENT_EXEMPT" && (
+            <>
+              <p className="text-xs font-medium">Grant payment exemption</p>
+              <p className="text-xs text-muted-foreground">
+                Skip the payment requirement and send this request to approval.
+              </p>
+              <Label className="text-xs">Reason *</Label>
+              <Textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={3}
+                placeholder="Why are you exempting this member from payment?"
+                className="text-xs"
+              />
+              <Button
+                size="sm"
+                className="h-7 text-xs w-full"
+                disabled={submitting || !reason.trim()}
+                onClick={() => executeAction("PAYMENT_EXEMPT", { reason: reason.trim() })}
+              >
+                {submitting ? "..." : "Grant exemption"}
+              </Button>
+            </>
+          )}
+
+          {/* Program form */}
+          {action?.event === "PROGRAM" && requestIsDeactivation(req.requestType) && (
+            <>
+              <p className="text-xs font-medium">Confirm Deactivation</p>
+              <p className="text-xs text-muted-foreground">
+                Confirm that {req.credentialTypeName ?? "fob"} #{req.serialNumber ?? "?"} has been deactivated in the access control system.
+                {req.requestType === "return" && " The member still has the fob; you will confirm collection next."}
+              </p>
+              <Button size="sm" className="h-7 text-xs w-full" disabled={submitting}
+                onClick={() => executeAction("PROGRAM", {})}>
+                {submitting ? "..." : "Confirm Deactivated"}
+              </Button>
+            </>
+          )}
+
+          {/* Program form - new fobs */}
+          {action?.event === "PROGRAM" && !requestIsDeactivation(req.requestType) && (
+            <>
+              <p className="text-xs font-medium">
+                {pickupLocations.length > 0 ? "Program & Set Pickup" : "Program"}
+              </p>
+              <div className="space-y-1">
+                <Label className="text-xs">Serial Number *</Label>
+                {allowFobCreation ? (
+                  <Input
+                    className="h-8 text-xs"
+                    value={serialNumber}
+                    onChange={(e) => setSerialNumber(e.target.value)}
+                    placeholder="Enter fob serial..."
+                    autoFocus
+                  />
+                ) : availableFobs.length > 0 ? (
+                  <Select
+                    value={selectedFobId}
+                    onValueChange={(v) => {
+                      const id = v ?? "";
+                      setSelectedFobId(id);
+                      const fob = availableFobs.find((f) => f.id === id);
+                      setSerialNumber(fob?.serialNumber ?? "");
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue>
+                        {selectedFobId
+                          ? (() => {
+                              const fob = availableFobs.find((f) => f.id === selectedFobId);
+                              return fob ? `#${fob.serialNumber}${fob.credentialTypeName ? ` (${fob.credentialTypeName})` : ""}` : "Select a fob...";
+                            })()
+                          : "Select a fob..."}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableFobs.map((fob) => {
+                        const fobLabel = `#${fob.serialNumber}${fob.credentialTypeName ? ` (${fob.credentialTypeName})` : ""}`;
+                        return (
+                          <SelectItem key={fob.id} value={fob.id} label={fobLabel}>{fobLabel}</SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                ) : dataLoading ? (
+                  <p className="text-xs text-muted-foreground py-1">Loading...</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground py-1">No fobs available. Add fobs to inventory first.</p>
+                )}
+              </div>
+              {pickupLocations.length > 0 && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Pickup Location</Label>
+                  <Select value={pickupLocationId} onValueChange={(v) => setPickupLocationId(v ?? "")}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue>
+                        {pickupLocationId ? pickupLocations.find((l) => l.id === pickupLocationId)?.name ?? "Select..." : "Select..."}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pickupLocations.map((l) => (
+                        <SelectItem key={l.id} value={l.id} label={l.name}>{l.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <Button size="sm" className="h-7 text-xs w-full" disabled={!serialNumber || submitting}
+                onClick={handleProgramAndPickup}>
+                {submitting ? "..." : "Confirm"}
+              </Button>
+            </>
+          )}
+
+          {/* Set Pickup form */}
+          {action?.event === "SET_PICKUP" && (
+            <>
+              <p className="text-xs font-medium">Set Pickup Location</p>
+              <div className="space-y-1">
+                <Label className="text-xs">Location *</Label>
+                <Select value={pickupLocationId} onValueChange={(v) => setPickupLocationId(v ?? "")}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Select..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pickupLocations.map((l) => (
+                      <SelectItem key={l.id} value={l.id} label={l.name}>{l.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button size="sm" className="h-7 text-xs w-full" disabled={!pickupLocationId || submitting}
+                onClick={() => executeAction("SET_PICKUP", { pickupLocationId })}>
+                {submitting ? "..." : "Confirm"}
+              </Button>
+            </>
+          )}
+
+          {/* Collection confirm (return and change_type) */}
+          {action?.event === "ISSUE" && requestRequiresCollection(req.requestType) && (
+            <>
+              <p className="text-xs font-medium">Confirm Collection</p>
+              <p className="text-xs text-muted-foreground">
+                Collected{" "}
+                {req.requestType === "return"
+                  ? formatFobLabel(req.credentialTypeName, req.serialNumber ?? req.replacesCredentialSerial)
+                  : formatFobLabel(req.replacesCredentialTypeName, req.replacesCredentialSerial)}{" "}
+                from {req.requesterFirstName} {req.requesterLastName}?
+              </p>
+              <Button size="sm" className="h-7 text-xs w-full" disabled={submitting}
+                onClick={() => executeAction("ISSUE", { collected: true })}>
+                {submitting ? "..." : "Confirm Collected"}
+              </Button>
+            </>
+          )}
+
+          {/* Reject form (shown when reject button clicked) */}
+          {action?.event === "APPROVE" && showRejectForm && (
+            <div className="border-t pt-2 space-y-2">
+              <Label className="text-xs">Rejection Reason *</Label>
+              <Textarea className="text-xs" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason..." autoFocus />
+              <Button size="sm" variant="destructive" className="h-7 text-xs w-full" disabled={!reason || submitting}
+                onClick={() => executeAction("REJECT", { reason })}>
+                {submitting ? "..." : "Reject"}
+              </Button>
+            </div>
+          )}
+
+          {/* Reopen form */}
+          {action?.event === "REOPEN" && (
+            <>
+              <p className="text-xs font-medium">Reopen Request</p>
+              <div className="space-y-1">
+                <Label className="text-xs">Reason *</Label>
+                <Textarea className="text-xs" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for reopening..." autoFocus />
+              </div>
+              <Button size="sm" className="h-7 text-xs w-full" disabled={!reason || submitting}
+                onClick={() => executeAction("REOPEN", { reason })}>
+                {submitting ? "..." : "Reopen"}
+              </Button>
+            </>
+          )}
+
+          {error && (
+            <p className="text-xs text-destructive">{error}</p>
+          )}
+        </div>
+      )}
+    </>
+  );
+}

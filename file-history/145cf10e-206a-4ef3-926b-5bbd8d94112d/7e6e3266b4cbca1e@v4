@@ -1,0 +1,240 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
+import Link from "next/link";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { PaymentStep } from "@/app/t/[slug]/request/payment-step";
+
+type PaymentInfo = {
+  clientSecret: string;
+  amount: number;
+  clubName: string;
+  memberName: string;
+  stripeAccountId: string | null;
+};
+
+function CentredCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <main className="flex min-h-screen items-center justify-center p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <CardTitle>{title}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 text-center py-4">{children}</CardContent>
+      </Card>
+    </main>
+  );
+}
+
+export default function PayPage() {
+  const params = useParams<{ slug: string; id: string }>();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [alreadyPaid, setAlreadyPaid] = useState(false);
+  const [cancelledStatus, setCancelledStatus] = useState<string | null>(null);
+  const [paymentInfo, setPaymentInfo] = useState<PaymentInfo | null>(null);
+  const [clubName, setClubName] = useState("AccessBuddy");
+
+  // The emailed cancel link carries a signed token in ?cancel=. Read it from
+  // the URL in an effect (rather than useSearchParams) so this client page
+  // needs no Suspense boundary.
+  const [cancelToken, setCancelToken] = useState<string | null>(null);
+  const [showCancelForm, setShowCancelForm] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      const token = url.searchParams.get("cancel");
+      if (token) {
+        setCancelToken(token);
+        // Keep the token out of the address bar, Referer headers to Stripe,
+        // and browser history once it has been captured in state.
+        url.searchParams.delete("cancel");
+        window.history.replaceState(null, "", url.toString());
+      }
+    } catch {
+      // No window (should not happen in a client component) or malformed URL.
+    }
+  }, []);
+
+  useEffect(() => {
+    fetch(`/api/v1/t/${params.slug}/requests/${params.id}/payment-info`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (data.alreadyPaid) {
+          setAlreadyPaid(true);
+          setClubName(data.clubName);
+        } else if (data.cancelled) {
+          setCancelledStatus(data.status ?? "cancelled");
+          setClubName(data.clubName);
+        } else if (res.ok) {
+          setPaymentInfo(data);
+          setClubName(data.clubName);
+        } else {
+          setError(data.error ?? "Unable to load payment details");
+        }
+      })
+      .catch(() => setError("Unable to load payment details"))
+      .finally(() => setLoading(false));
+  }, [params.slug, params.id]);
+
+  async function submitCancel() {
+    if (!cancelToken || !cancelReason.trim()) return;
+    setCancelling(true);
+    setCancelError(null);
+    try {
+      const res = await fetch(
+        `/api/v1/t/${params.slug}/requests/${params.id}/cancel-by-token`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: cancelToken, reason: cancelReason }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Unable to cancel this request");
+      setCancelledStatus("cancelled");
+    } catch (err) {
+      setCancelError(err instanceof Error ? err.message : "Unable to cancel this request");
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="py-8 text-center text-muted-foreground">
+            Loading payment details...
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
+
+  if (cancelledStatus) {
+    const rejected = cancelledStatus === "rejected";
+    return (
+      <CentredCard title={clubName}>
+        <div className="mx-auto h-12 w-12 rounded-full bg-muted flex items-center justify-center text-2xl text-muted-foreground">
+          {"✕"}
+        </div>
+        <p className="text-sm font-medium">{rejected ? "Request Not Approved" : "Request Cancelled"}</p>
+        <p className="text-sm text-muted-foreground">
+          {rejected
+            ? "This request was not approved, so no payment is required."
+            : "This request has been cancelled. No payment has been taken and nothing further is needed."}
+        </p>
+        <Link href={`/t/${params.slug}`} className="text-sm text-primary hover:underline block">
+          Return to {clubName}
+        </Link>
+      </CentredCard>
+    );
+  }
+
+  if (alreadyPaid) {
+    return (
+      <CentredCard title={clubName}>
+        <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-2xl text-primary">
+          {"✓"}
+        </div>
+        <p className="text-sm font-medium">Payment Already Received</p>
+        <p className="text-sm text-muted-foreground">
+          This request has already been paid. No further action is needed.
+        </p>
+      </CentredCard>
+    );
+  }
+
+  if (error || !paymentInfo) {
+    return (
+      <main className="flex min-h-screen items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="py-8 text-center">
+            <p className="text-sm text-destructive">{error ?? "Unable to load payment"}</p>
+            <Link href={`/t/${params.slug}`} className="text-sm text-primary hover:underline mt-4 block">
+              Return to {clubName}
+            </Link>
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
+
+  return (
+    <main className="flex min-h-screen items-center justify-center p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <CardTitle>{clubName}</CardTitle>
+          <p className="text-sm text-muted-foreground">Complete your payment</p>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <PaymentStep
+            clientSecret={paymentInfo.clientSecret}
+            amount={paymentInfo.amount}
+            tenantSlug={params.slug}
+            stripeAccountId={paymentInfo.stripeAccountId}
+          />
+
+          {cancelToken && (
+            <div className="border-t pt-4 space-y-3">
+              {!showCancelForm ? (
+                <p className="text-sm text-muted-foreground text-center">
+                  No longer need this?{" "}
+                  <button
+                    type="button"
+                    className="text-primary hover:underline"
+                    onClick={() => setShowCancelForm(true)}
+                  >
+                    Cancel this request
+                  </button>{" "}
+                  and no payment will be taken.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm font-medium">Cancel this request</p>
+                  <div className="space-y-2">
+                    <Label htmlFor="cancel-reason">Reason *</Label>
+                    <Textarea
+                      id="cancel-reason"
+                      value={cancelReason}
+                      onChange={(e) => setCancelReason(e.target.value)}
+                      placeholder="Let the club know why you no longer need this"
+                    />
+                  </div>
+                  {cancelError && <p className="text-sm text-destructive">{cancelError}</p>}
+                  <div className="flex gap-2">
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={cancelling || !cancelReason.trim()}
+                      onClick={submitCancel}
+                    >
+                      {cancelling ? "Cancelling..." : "Confirm Cancellation"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={cancelling}
+                      onClick={() => setShowCancelForm(false)}
+                    >
+                      Keep Request
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </main>
+  );
+}

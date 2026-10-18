@@ -1,0 +1,23 @@
+import { z } from "zod";
+import { Permission } from "@accessbuddy/shared";
+import { createWorkflowAction } from "@/lib/workflow-action";
+
+const bodySchema = z.object({
+  reason: z.string().trim().max(500).optional(),
+});
+
+/**
+ * Admin withdraws a payment demand that was raised on an already-issued
+ * request. The request returns to ISSUED, the exemption is restored, the
+ * Stripe intent is voided and the member is told no payment is due.
+ * transitionRequest refuses this on requests with no stored return status.
+ */
+export const POST = createWorkflowAction({
+  event: "WITHDRAW_PAYMENT_REQUEST",
+  requiredPermission: Permission.APPROVE_EXEMPTION,
+  bodySchema,
+  buildMetadata: (body) => ({
+    ...(body.reason ? { reason: body.reason } : {}),
+    action: "payment_request_withdrawn",
+  }),
+});

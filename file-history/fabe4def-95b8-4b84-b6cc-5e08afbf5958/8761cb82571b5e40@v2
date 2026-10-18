@@ -1,0 +1,134 @@
+import { describe, it, expect } from "vitest";
+import {
+  readyForPickupEmail,
+  pickupReminderEmail,
+  adminMemberConfirmedReceiptEmail,
+} from "../lib/email-templates";
+import { EMAIL_EVENTS, confirmReceiptSchema, pickupLocationSchema } from "@accessbuddy/shared";
+
+/**
+ * The pickup emails used to carry the location NAME only. SMLSC members were
+ * told "Patrol Tower" with no idea when to come or whom to ask, while the
+ * admin-only `instructions` column (which holds a safe code) was never meant
+ * for them. These tests pin the member-facing copy and the "I already have my
+ * fob" link that the Missing location adds.
+ */
+
+const CONFIRM = "https://accessbuddy.example/t/smlsc/dashboard/requests/abc?confirm=1";
+const REQUEST = "https://accessbuddy.example/t/smlsc/dashboard/requests/abc";
+
+describe("readyForPickupEmail", () => {
+  it("keeps the legacy call shape: location name only, no message, no confirm link", () => {
+    const html = readyForPickupEmail("SMLSC", "Sarah Johnson", "Patrol Tower");
+    expect(html).toContain("Dear Sarah,");
+    expect(html).toContain("<strong>Pickup location:</strong> Patrol Tower");
+    expect(html).not.toContain("I already have my fob");
+  });
+
+  it("renders the location's member message under the location", () => {
+    const html = readyForPickupEmail("SMLSC", "Sarah Johnson", "Patrol Tower", {
+      memberMessage:
+        "These can be collected during patrol hours. Please ask to speak to the patrol captain who will be able to assist you with your fob.",
+    });
+    expect(html).toContain("collected during patrol hours");
+    expect(html).toContain("speak to the patrol captain");
+    expect(html).not.toContain("I already have my fob");
+  });
+
+  it("escapes HTML in the member message and location name", () => {
+    const html = readyForPickupEmail("SMLSC", "Sarah Johnson", "Tower <b>", {
+      memberMessage: "Email <sue@example.com> & ask",
+    });
+    expect(html).toContain("Tower &lt;b&gt;");
+    expect(html).toContain("Email &lt;sue@example.com&gt; &amp; ask");
+    expect(html).not.toContain("<sue@example.com>");
+  });
+
+  it("adds the confirm-receipt button when the location asks for it", () => {
+    const html = readyForPickupEmail("SMLSC", "Sarah Johnson", "Missing", {
+      memberMessage: "Your fob is marked as ready in our system but is no longer at the clubhouse.",
+      confirmUrl: CONFIRM,
+    });
+    expect(html).toContain("no longer at the clubhouse");
+    expect(html).toContain(`href="${CONFIRM}"`);
+    expect(html).toContain("I already have my fob");
+  });
+
+  it("treats a blank message as absent", () => {
+    const html = readyForPickupEmail("SMLSC", "Sarah Johnson", "Patrol Tower", { memberMessage: "   " });
+    expect(html).not.toContain("white-space: pre-line");
+  });
+});
+
+describe("pickupReminderEmail", () => {
+  it("keeps the legacy call shape", () => {
+    const html = pickupReminderEmail("SMLSC", "Sarah Johnson", "Patrol Tower", REQUEST);
+    expect(html).toContain("<strong>Pickup location:</strong> Patrol Tower");
+    expect(html).toContain(`href="${REQUEST}"`);
+    expect(html).not.toContain("I already have my fob");
+  });
+
+  it("renders the member message and the confirm link", () => {
+    const html = pickupReminderEmail("SMLSC", "Sarah Johnson", "Merchandise Cupboard", REQUEST, {
+      memberMessage: "This can be collected during Nipper sessions. Please see the team at the merchandise stand.",
+      confirmUrl: CONFIRM,
+    });
+    expect(html).toContain("during Nipper sessions");
+    expect(html).toContain(`href="${CONFIRM}"`);
+    expect(html).toContain(`href="${REQUEST}"`);
+  });
+});
+
+describe("adminMemberConfirmedReceiptEmail", () => {
+  it("tells admins who was issued, by whom, where and when, and that the record is updated", () => {
+    const html = adminMemberConfirmedReceiptEmail(
+      "SMLSC",
+      "Sarah Johnson",
+      "1234",
+      "the patrol captain",
+      "Patrol Tower",
+      "Sunday 12 Oct, morning",
+      "https://accessbuddy.example/t/smlsc/admin/requests/abc"
+    );
+    expect(html).toContain("Sarah Johnson has been issued their fob but it was not updated in AccessBuddy.");
+    expect(html).toContain("issued by <strong>the patrol captain</strong> at <strong>Patrol Tower</strong>");
+    expect(html).toContain("Sunday 12 Oct, morning");
+    expect(html).toContain("<strong>Serial</strong>");
+    expect(html).toContain("1234");
+    expect(html).toContain("marked as issued");
+    expect(html).toContain('href="https://accessbuddy.example/t/smlsc/admin/requests/abc"');
+  });
+});
+
+describe("registry and schemas", () => {
+  it("exposes memberMessage on both pickup events so the template editor can place it", () => {
+    for (const id of ["ready_for_pickup", "pickup_reminder"]) {
+      const event = EMAIL_EVENTS.find((e) => e.id === id);
+      expect(event, id).toBeDefined();
+      expect(event!.variables.map((v) => v.key)).toContain("memberMessage");
+    }
+  });
+
+  it("pickupLocationSchema accepts the new member fields and still accepts the old shape", () => {
+    expect(pickupLocationSchema.safeParse({ name: "Tower" }).success).toBe(true);
+    const full = pickupLocationSchema.safeParse({
+      name: "Missing",
+      instructions: "1968",
+      memberMessage: "Not at the clubhouse",
+      confirmReceiptEnabled: true,
+    });
+    expect(full.success).toBe(true);
+  });
+
+  it("confirmReceiptSchema requires who and where, trims, and makes when optional", () => {
+    expect(confirmReceiptSchema.safeParse({ issuedByName: "", issuedWhere: "Tower" }).success).toBe(false);
+    expect(confirmReceiptSchema.safeParse({ issuedByName: "Sue", issuedWhere: "" }).success).toBe(false);
+    const ok = confirmReceiptSchema.safeParse({ issuedByName: "  Sue  ", issuedWhere: " Tower " });
+    expect(ok.success).toBe(true);
+    if (ok.success) {
+      expect(ok.data.issuedByName).toBe("Sue");
+      expect(ok.data.issuedWhere).toBe("Tower");
+      expect(ok.data.issuedWhen).toBeUndefined();
+    }
+  });
+});

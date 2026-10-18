@@ -1,0 +1,1268 @@
+import { createHash } from "node:crypto";
+import * as Sentry from "@sentry/nextjs";
+import { Resend } from "resend";
+import { getServerEnv } from "@/env";
+import { clientEnv } from "@/env";
+import { eq, and, or, isNull, inArray, desc, gte } from "drizzle-orm";
+import {
+  db,
+  adminAssignments,
+  users,
+  tenants,
+  notifications,
+  notificationPreferences,
+  fobRequests,
+  credentialTypes,
+  pickupLocations,
+  auditLog,
+  credentials,
+} from "@accessbuddy/db";
+import {
+  AdminRoleType,
+  AuditAction,
+  AuditEntityType,
+  NotificationFrequency,
+  NotificationChannel,
+  TIME_CRITICAL_NOTIFICATIONS,
+  type NotificationType,
+} from "@accessbuddy/shared";
+import { createAuditEntry } from "@/lib/services/audit";
+import { withTenant } from "@/lib/with-tenant";
+import {
+  requestSubmittedEmail,
+  requestApprovedEmail,
+  requestRejectedEmail,
+  readyForPickupEmail,
+  pickupReminderEmail,
+  credentialIssuedEmail,
+  accessRevokedEmail,
+  requestCancelledEmail,
+  paymentReceivedEmail,
+  requestOnHoldEmail,
+  exemptionRequestedEmail,
+  exemptionApprovedEmail,
+  exemptionRejectedEmail,
+  paymentRefundedEmail,
+  attestationRequestedEmail,
+  paymentReminderEmail,
+  paymentRequiredEmail,
+  credentialExpiredEmail,
+  credentialReactivatedEmail,
+  credentialNoun,
+  credentialExpiryWarningEmail,
+  credentialAccessUpdatedEmail,
+  memberArchivedEmail,
+  credentialReturnConfirmationEmail,
+  credentialChangeConfirmationEmail,
+  returnAutoClosedEmail,
+  credentialDeactivatedEmail,
+  damagedFobReportedEmail,
+  verificationCodeEmail,
+  magicLinkEmail,
+  dailySummaryEmail,
+  setEmailBranding,
+  type SummarySection,
+} from "@/lib/email-templates";
+
+let _resend: Resend | null = null;
+
+function getResend(): Resend | null {
+  if (_resend) return _resend;
+  const env = getServerEnv();
+  if (!env.RESEND_API_KEY) return null;
+  _resend = new Resend(env.RESEND_API_KEY);
+  return _resend;
+}
+
+type TransactionClient = Parameters<
+  Parameters<typeof import("@accessbuddy/db").db.transaction>[0]
+>[0];
+
+const EMAIL_DOMAIN = "accessbuddy.com.au";
+const DEFAULT_FROM_PREFIX = "noreply";
+
+export type TenantEmailConfig = {
+  clubName: string;
+  fromEmailPrefix?: string;
+  replyToEmail?: string;
+  logoUrl?: string;
+  primaryColour?: string;
+  secondaryColour?: string;
+  /**
+   * Master send switch. When false, sendEmail no-ops (but still writes an
+   * audit entry with `suppressed: true`). Defaults to true when unset so
+   * existing tenants keep receiving mail.
+   */
+  sendEmails?: boolean;
+};
+
+/**
+ * Audit context attached to an email send. When provided, sendEmail writes an
+ * `email_sent` or `email_failed` entry to audit_log against the triggering
+ * entity (a fob request, credential, or member). The caller must ensure the
+ * transaction already has tenant RLS context set — either by being inside a
+ * withTenant(...) block, or by passing the tx that is.
+ */
+export type EmailAuditContext = {
+  tx: TransactionClient;
+  tenantId: string;
+  entityType: AuditEntityType;
+  entityId: string;
+  actorId?: string | null;
+  /** Extra fields merged into the audit metadata */
+  extraMetadata?: Record<string, unknown>;
+};
+
+/**
+ * Build a TenantEmailConfig from a tenant row with settings.
+ * Centralised so branding fields are always included.
+ */
+export function buildEmailConfig(tenant: {
+  name: string;
+  logoUrl?: string | null;
+  settings?: Record<string, unknown> | null;
+}): TenantEmailConfig {
+  const s = (tenant.settings ?? {}) as Record<string, unknown>;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+  // Logo URL must be absolute for emails
+  let logoUrl: string | undefined;
+  if (tenant.logoUrl) {
+    logoUrl = tenant.logoUrl.startsWith("http") ? tenant.logoUrl : `${appUrl}${tenant.logoUrl}`;
+  }
+
+  // sendEmails defaults to true when unset so existing tenants keep
+  // receiving mail. Set to false on a tenant to silence all outbound sends.
+  const sendEmails = s.sendEmails === undefined ? true : !!s.sendEmails;
+
+  return {
+    clubName: tenant.name,
+    fromEmailPrefix: s.fromEmailPrefix as string | undefined,
+    replyToEmail: s.replyToEmail as string | undefined,
+    logoUrl,
+    primaryColour: s.emailPrimaryColour as string | undefined,
+    secondaryColour: s.emailSecondaryColour as string | undefined,
+    sendEmails,
+  };
+}
+
+/**
+ * Fetch documents from URLs and return as email attachments.
+ * Skips any that fail to download.
+ */
+export async function fetchAttachments(
+  urls: { name: string; url: string }[]
+): Promise<{ filename: string; content: Buffer }[]> {
+  const results: { filename: string; content: Buffer }[] = [];
+  for (const { name, url } of urls) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const buffer = Buffer.from(await res.arrayBuffer());
+      results.push({ filename: name, content: buffer });
+    } catch (err) {
+      console.error(`[email] Failed to fetch attachment "${name}" from ${url}:`, err);
+    }
+  }
+  return results;
+}
+
+function resolveFrom(config: TenantEmailConfig): string {
+  const prefix = config.fromEmailPrefix || DEFAULT_FROM_PREFIX;
+  return `${config.clubName} <${prefix}@${EMAIL_DOMAIN}>`;
+}
+
+function resolveReplyTo(config: TenantEmailConfig): string | undefined {
+  return config.replyToEmail || undefined;
+}
+
+/**
+ * Outcome of a sendEmail call.
+ *
+ * `sent` is true only when Resend accepted the message. `suppressed` marks an
+ * intentional skip (tenant sendEmails=false); `noop` marks a missing
+ * RESEND_API_KEY. `error` carries the failure reason when the send failed.
+ * Existing fire-and-forget callers can keep ignoring the result; callers for
+ * whom delivery matters (auth emails) must check `sent`.
+ */
+export type EmailSendResult = {
+  sent: boolean;
+  suppressed?: boolean;
+  noop?: boolean;
+  error?: string;
+};
+
+/**
+ * Send a raw HTML email. No-ops if RESEND_API_KEY is not configured.
+ *
+ * When an `audit` context is supplied, an `email_sent` (or `email_failed`)
+ * entry is written to audit_log against the triggering entity. The audit
+ * insert runs through the caller's `tx`, which must already have tenant RLS
+ * context set.
+ *
+ * Never throws: failures are reported via the returned EmailSendResult (and
+ * captured in Sentry) so existing call sites keep their behaviour.
+ */
+export async function sendEmail(
+  to: string,
+  subject: string,
+  html: string,
+  config: TenantEmailConfig,
+  attachments?: { filename: string; content: Buffer }[],
+  audit?: EmailAuditContext,
+  templateType?: string
+): Promise<EmailSendResult> {
+  // Tenant-level master switch. When a tenant has opted out of emails we
+  // still write an audit entry marked suppressed:true so the attempted send
+  // is traceable, but we never hit Resend.
+  if (config.sendEmails === false) {
+    if (audit) {
+      await writeEmailAudit(audit, {
+        success: true,
+        to,
+        subject,
+        html,
+        templateType,
+        suppressed: true,
+      });
+    }
+    return { sent: false, suppressed: true };
+  }
+
+  const resend = getResend();
+  if (!resend) {
+    if (audit) {
+      await writeEmailAudit(audit, {
+        success: true,
+        to,
+        subject,
+        html,
+        templateType,
+        noop: true,
+      });
+    }
+    return { sent: false, noop: true };
+  }
+
+  const from = resolveFrom(config);
+
+  try {
+    const result = await resend.emails.send({
+      from,
+      replyTo: resolveReplyTo(config),
+      to,
+      subject,
+      html,
+      ...(attachments?.length ? { attachments } : {}),
+    });
+
+    if (result.error) {
+      const errorMessage = String(result.error.message ?? result.error);
+      console.error(
+        `[email] Failed to send "${subject}" to ${to}:`,
+        result.error
+      );
+      Sentry.captureException(new Error(`Resend send failed: ${errorMessage}`), {
+        extra: { to, subject, templateType },
+      });
+      if (audit) {
+        await writeEmailAudit(audit, {
+          success: false,
+          to,
+          subject,
+          html,
+          templateType,
+          error: errorMessage,
+        });
+      }
+      return { sent: false, error: errorMessage };
+    }
+
+    if (audit) {
+      await writeEmailAudit(audit, {
+        success: true,
+        to,
+        subject,
+        html,
+        templateType,
+        resendId: result.data?.id ?? null,
+      });
+    }
+    return { sent: true };
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error(`[email] Failed to send "${subject}" to ${to}:`, err);
+    Sentry.captureException(err, { extra: { to, subject, templateType } });
+    if (audit) {
+      await writeEmailAudit(audit, {
+        success: false,
+        to,
+        subject,
+        html,
+        templateType,
+        error: errorMessage,
+      });
+    }
+    return { sent: false, error: errorMessage };
+  }
+}
+
+async function writeEmailAudit(
+  audit: EmailAuditContext,
+  details: {
+    success: boolean;
+    to: string;
+    subject: string;
+    html?: string;
+    templateType?: string;
+    resendId?: string | null;
+    error?: string;
+    noop?: boolean;
+    suppressed?: boolean;
+  }
+): Promise<void> {
+  try {
+    await createAuditEntry(audit.tx, {
+      tenantId: audit.tenantId,
+      entityType: audit.entityType,
+      entityId: audit.entityId,
+      action: details.success ? AuditAction.EMAIL_SENT : AuditAction.EMAIL_FAILED,
+      actorId: audit.actorId ?? null,
+      actorType: "system",
+      metadata: {
+        to: details.to,
+        subject: details.subject,
+        ...(details.templateType ? { templateType: details.templateType } : {}),
+        ...(details.resendId ? { resendId: details.resendId } : {}),
+        ...(details.error ? { error: details.error } : {}),
+        ...(details.noop ? { noop: true } : {}),
+        ...(details.suppressed ? { suppressed: true } : {}),
+        ...(details.html ? { html: details.html } : {}),
+        ...(audit.extraMetadata ?? {}),
+      },
+    });
+  } catch (err) {
+    // Never throw from audit failures — email delivery succeeded or already
+    // failed, and we don't want to rollback callers because of audit trouble.
+    console.error("[email] Failed to write audit entry:", err);
+  }
+}
+
+// ---- Notification preference check ----
+
+/**
+ * Check whether a notification should be sent based on user preferences.
+ *
+ * Rules:
+ * - Time-critical notifications always return true (cannot be disabled)
+ * - If no preference record exists, return true (default: enabled)
+ * - If emailEnabled is false, return false
+ * - If frequency is "off", return false
+ * - Otherwise return true
+ *
+ * The tx must already have tenant RLS context set.
+ */
+export async function shouldSendNotification(
+  tx: TransactionClient,
+  params: {
+    tenantId: string;
+    userId: string;
+    notificationType: string;
+  }
+): Promise<boolean> {
+  // Time-critical notifications always send
+  if (
+    TIME_CRITICAL_NOTIFICATIONS.includes(
+      params.notificationType as NotificationType
+    )
+  ) {
+    return true;
+  }
+
+  // Look up the user's preference for this notification type
+  const [pref] = await tx
+    .select({
+      emailEnabled: notificationPreferences.emailEnabled,
+      frequency: notificationPreferences.frequency,
+    })
+    .from(notificationPreferences)
+    .where(
+      and(
+        eq(notificationPreferences.tenantId, params.tenantId),
+        eq(notificationPreferences.userId, params.userId),
+        eq(notificationPreferences.notificationType, params.notificationType)
+      )
+    )
+    .limit(1);
+
+  // No preference record = default to daily summary (not realtime)
+  // The actual send/queue decision is handled by getNotificationFrequency
+  if (!pref) {
+    return true;
+  }
+
+  // Respect the user's preference
+  if (!pref.emailEnabled) {
+    return false;
+  }
+
+  if (pref.frequency === NotificationFrequency.OFF) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Get the notification frequency for a user/type combo.
+ * Returns "realtime" when no preference record exists (default).
+ * Time-critical notifications always return "realtime".
+ */
+async function getNotificationFrequency(
+  tx: TransactionClient,
+  params: {
+    tenantId: string;
+    userId: string;
+    notificationType: string;
+  }
+): Promise<NotificationFrequency> {
+  // Time-critical notifications are always realtime
+  if (
+    TIME_CRITICAL_NOTIFICATIONS.includes(
+      params.notificationType as NotificationType
+    )
+  ) {
+    return NotificationFrequency.REALTIME;
+  }
+
+  const [pref] = await tx
+    .select({
+      emailEnabled: notificationPreferences.emailEnabled,
+      frequency: notificationPreferences.frequency,
+    })
+    .from(notificationPreferences)
+    .where(
+      and(
+        eq(notificationPreferences.tenantId, params.tenantId),
+        eq(notificationPreferences.userId, params.userId),
+        eq(notificationPreferences.notificationType, params.notificationType)
+      )
+    )
+    .limit(1);
+
+  if (!pref) {
+    return NotificationFrequency.DAILY_SUMMARY;
+  }
+
+  if (!pref.emailEnabled) {
+    return NotificationFrequency.OFF;
+  }
+
+  return pref.frequency as NotificationFrequency;
+}
+
+// ---- Templated emails ----
+
+export type TemplateVariables = {
+  requestSubmitted: { memberName: string; requestType: string; paymentReceived?: boolean; exemptionRequested?: boolean };
+  requestApproved: { memberName: string };
+  requestRejected: { memberName: string; reason: string };
+  readyForPickup: { memberName: string; pickupLocation: string };
+  pickupReminder: { memberName: string; pickupLocation: string; requestUrl: string };
+  credentialIssued: { memberName: string; credentialType: string; serialNumber: string };
+  accessRevoked: { memberName: string; reason: string };
+  requestCancelled: { memberName: string; reason: string };
+  paymentReceived: { memberName: string };
+  requestOnHold: { memberName: string; reason: string };
+  exemptionRequested: { memberName: string };
+  exemptionApproved: { memberName: string };
+  exemptionRejected: { memberName: string; reason: string; paymentUrl?: string };
+  paymentRefunded: { memberName: string; reason: string };
+  attestationRequested: { memberName: string; attestUrl: string };
+  paymentReminder: { memberName: string; amount: string; paymentUrl?: string; cancelUrl?: string };
+  paymentRequired: { memberName: string; amount: string; paymentUrl: string; cancelUrl: string; reason?: string };
+  credentialExpired: { memberName: string; serialNumber: string };
+  credentialReactivated: { memberName: string; credentialType: string; serialNumber: string; expiryDate: string | null; season: string | null };
+  credentialExpiryWarning: { memberName: string; serialNumber: string; expiresAt: string };
+  credentialAccessUpdated: { memberName: string; serialNumber: string };
+  memberArchived: { memberName: string };
+  credentialReturnConfirmation: { memberName: string; credentialType?: string; serialNumber?: string };
+  returnAutoClosed: { memberName: string; credentialType?: string; serialNumber?: string };
+  credentialChangeConfirmation: { memberName: string; oldType: string; newType: string; oldSerial?: string; newSerial?: string };
+  credentialDeactivated: { memberName: string; credentialType: string; serialNumber: string; reason: "lost" | "damaged" };
+  damagedFobReported: { memberName: string };
+  verificationCode: { code: string };
+  magicLink: { memberName: string; magicLinkUrl: string };
+};
+
+/**
+ * Send a templated email. Renders the appropriate template and sends it.
+ * No-ops if RESEND_API_KEY is not configured. Accepts an optional `audit`
+ * context that is threaded through to sendEmail for audit_log writes.
+ */
+export async function sendTemplatedEmail<T extends keyof TemplateVariables>(
+  to: string,
+  templateType: T,
+  variables: TemplateVariables[T],
+  config: TenantEmailConfig,
+  attachments?: { filename: string; content: Buffer }[],
+  audit?: EmailAuditContext
+): Promise<EmailSendResult> {
+  const { subject, html } = renderTemplate(templateType, variables, config.clubName, {
+    logoUrl: config.logoUrl,
+    primaryColour: config.primaryColour,
+    secondaryColour: config.secondaryColour,
+    replyToEmail: config.replyToEmail,
+  });
+  return sendEmail(to, subject, html, config, attachments, audit, templateType as string);
+}
+
+export type EmailBranding = {
+  logoUrl?: string;
+  primaryColour?: string;
+  secondaryColour?: string;
+  replyToEmail?: string;
+};
+
+function renderTemplate<T extends keyof TemplateVariables>(
+  templateType: T,
+  variables: TemplateVariables[T],
+  clubName: string,
+  branding?: EmailBranding
+): { subject: string; html: string } {
+  // Set branding so the layout function picks it up
+  setEmailBranding({
+    logoUrl: branding?.logoUrl,
+    primaryColour: branding?.primaryColour,
+    secondaryColour: branding?.secondaryColour,
+    replyToEmail: branding?.replyToEmail,
+  });
+
+  switch (templateType) {
+    case "requestSubmitted": {
+      const v = variables as TemplateVariables["requestSubmitted"];
+      return {
+        subject: "Your request has been received",
+        html: requestSubmittedEmail(clubName, v.memberName, v.requestType, { paymentReceived: v.paymentReceived, exemptionRequested: v.exemptionRequested }),
+      };
+    }
+    case "damagedFobReported": {
+      const v = variables as TemplateVariables["damagedFobReported"];
+      return {
+        subject: "Your damaged fob report has been received",
+        html: damagedFobReportedEmail(clubName, v.memberName),
+      };
+    }
+    case "requestApproved": {
+      const v = variables as TemplateVariables["requestApproved"];
+      return {
+        subject: "Your request has been approved",
+        html: requestApprovedEmail(clubName, v.memberName),
+      };
+    }
+    case "requestRejected": {
+      const v = variables as TemplateVariables["requestRejected"];
+      return {
+        subject: "Update on your request",
+        html: requestRejectedEmail(clubName, v.memberName, v.reason),
+      };
+    }
+    case "readyForPickup": {
+      const v = variables as TemplateVariables["readyForPickup"];
+      return {
+        subject: "Your credential is ready for collection",
+        html: readyForPickupEmail(clubName, v.memberName, v.pickupLocation),
+      };
+    }
+    case "pickupReminder": {
+      const v = variables as TemplateVariables["pickupReminder"];
+      return {
+        subject: "Reminder: your credential is still waiting for collection",
+        html: pickupReminderEmail(clubName, v.memberName, v.pickupLocation, v.requestUrl),
+      };
+    }
+    case "credentialIssued": {
+      const v = variables as TemplateVariables["credentialIssued"];
+      return {
+        subject: "Your credential has been issued",
+        html: credentialIssuedEmail(clubName, v.memberName, v.credentialType, v.serialNumber),
+      };
+    }
+    case "accessRevoked": {
+      const v = variables as TemplateVariables["accessRevoked"];
+      return {
+        subject: "Your access has been revoked",
+        html: accessRevokedEmail(clubName, v.memberName, v.reason),
+      };
+    }
+    case "requestCancelled": {
+      const v = variables as TemplateVariables["requestCancelled"];
+      return {
+        subject: "Your request has been cancelled",
+        html: requestCancelledEmail(clubName, v.memberName, v.reason),
+      };
+    }
+    case "paymentReceived": {
+      const v = variables as TemplateVariables["paymentReceived"];
+      return {
+        subject: "Payment received",
+        html: paymentReceivedEmail(clubName, v.memberName),
+      };
+    }
+    case "requestOnHold": {
+      const v = variables as TemplateVariables["requestOnHold"];
+      return {
+        subject: "Your request has been placed on hold",
+        html: requestOnHoldEmail(clubName, v.memberName, v.reason),
+      };
+    }
+    case "exemptionRequested": {
+      const v = variables as TemplateVariables["exemptionRequested"];
+      return {
+        subject: "Exemption request submitted",
+        html: exemptionRequestedEmail(clubName, v.memberName),
+      };
+    }
+    case "exemptionApproved": {
+      const v = variables as TemplateVariables["exemptionApproved"];
+      return {
+        subject: "Your payment exemption has been approved",
+        html: exemptionApprovedEmail(clubName, v.memberName),
+      };
+    }
+    case "exemptionRejected": {
+      const v = variables as TemplateVariables["exemptionRejected"];
+      return {
+        subject: "Update on your exemption request",
+        html: exemptionRejectedEmail(clubName, v.memberName, v.reason, v.paymentUrl),
+      };
+    }
+    case "paymentRefunded": {
+      const v = variables as TemplateVariables["paymentRefunded"];
+      return {
+        subject: "Your payment has been refunded",
+        html: paymentRefundedEmail(clubName, v.memberName, v.reason),
+      };
+    }
+    case "attestationRequested": {
+      const v = variables as TemplateVariables["attestationRequested"];
+      return {
+        subject: `Please confirm you still have your ${clubName} fob or key`,
+        html: attestationRequestedEmail(clubName, v.memberName, v.attestUrl),
+      };
+    }
+    case "paymentReminder": {
+      const v = variables as TemplateVariables["paymentReminder"];
+      return {
+        subject: "Reminder: Payment required for your request",
+        html: paymentReminderEmail(clubName, v.memberName, v.amount, v.paymentUrl, v.cancelUrl),
+      };
+    }
+    case "paymentRequired": {
+      const v = variables as TemplateVariables["paymentRequired"];
+      return {
+        subject: "Payment required for your request",
+        html: paymentRequiredEmail(clubName, v.memberName, v.amount, v.paymentUrl, v.cancelUrl, v.reason),
+      };
+    }
+    case "credentialExpired": {
+      const v = variables as TemplateVariables["credentialExpired"];
+      return {
+        subject: `Your ${clubName} fob has expired`,
+        html: credentialExpiredEmail(clubName, v.memberName, v.serialNumber),
+      };
+    }
+    case "credentialReactivated": {
+      const v = variables as TemplateVariables["credentialReactivated"];
+      return {
+        subject: `Your ${clubName} ${credentialNoun(v.credentialType)} is active again`,
+        html: credentialReactivatedEmail(clubName, v.memberName, v.credentialType, v.serialNumber, v.expiryDate, v.season),
+      };
+    }
+    case "credentialExpiryWarning": {
+      const v = variables as TemplateVariables["credentialExpiryWarning"];
+      return {
+        subject: `Your ${clubName} fob will expire on ${v.expiresAt} unless you renew your membership`,
+        html: credentialExpiryWarningEmail(clubName, v.memberName, v.serialNumber, v.expiresAt),
+      };
+    }
+    case "credentialAccessUpdated": {
+      const v = variables as TemplateVariables["credentialAccessUpdated"];
+      return {
+        subject: "Your fob access has been updated",
+        html: credentialAccessUpdatedEmail(clubName, v.memberName, v.serialNumber),
+      };
+    }
+    case "memberArchived": {
+      const v = variables as TemplateVariables["memberArchived"];
+      return {
+        subject: "Your membership has been archived",
+        html: memberArchivedEmail(clubName, v.memberName),
+      };
+    }
+    case "credentialReturnConfirmation": {
+      const v = variables as TemplateVariables["credentialReturnConfirmation"];
+      return {
+        subject: "Your fob or key return has been processed",
+        html: credentialReturnConfirmationEmail(clubName, v.memberName, v.credentialType, v.serialNumber),
+      };
+    }
+    case "returnAutoClosed": {
+      const v = variables as TemplateVariables["returnAutoClosed"];
+      return {
+        subject: "Your fob or key return has been closed",
+        html: returnAutoClosedEmail(clubName, v.memberName, v.credentialType, v.serialNumber),
+      };
+    }
+    case "credentialChangeConfirmation": {
+      const v = variables as TemplateVariables["credentialChangeConfirmation"];
+      return {
+        subject: "Your fob or key change has been processed",
+        html: credentialChangeConfirmationEmail(clubName, v.memberName, v.oldType, v.newType, v.oldSerial, v.newSerial),
+      };
+    }
+    case "credentialDeactivated": {
+      const v = variables as TemplateVariables["credentialDeactivated"];
+      return {
+        subject: "Your fob or key has been deactivated",
+        html: credentialDeactivatedEmail(clubName, v.memberName, v.credentialType, v.serialNumber, v.reason),
+      };
+    }
+    case "verificationCode": {
+      const v = variables as TemplateVariables["verificationCode"];
+      return {
+        subject: `Your ${clubName} verification code`,
+        html: verificationCodeEmail(clubName, v.code),
+      };
+    }
+    case "magicLink": {
+      const v = variables as TemplateVariables["magicLink"];
+      return {
+        subject: `Sign in to ${clubName}`,
+        html: magicLinkEmail(clubName, v.memberName, v.magicLinkUrl),
+      };
+    }
+    default:
+      throw new Error(`Unknown email template type: ${templateType}`);
+  }
+}
+
+// ---- Admin notifications ----
+
+/**
+ * Send notification emails to admins who have a specific permission.
+ * Looks up all admins for the tenant with the required permission and sends them an email.
+ * Club admins and global admins automatically have all permissions.
+ *
+ * When `notificationType` is provided, each admin's notification preference is checked:
+ * - realtime (or no preference): send immediately
+ * - daily_summary: queue to the notifications table for batch sending
+ * - off (and not time-critical): skip entirely
+ */
+export async function sendAdminNotification(
+  tx: TransactionClient,
+  params: {
+    tenantId: string;
+    requiredPermission: string;
+    subject: string;
+    html: string;
+    tenantEmailConfig: TenantEmailConfig;
+    notificationType?: string;
+    /** Structured data stored in the notifications.data JSONB column for summary rendering */
+    summaryData?: { label: string; detail: string };
+    /** Audit context attached to each admin email send. */
+    audit?: Omit<EmailAuditContext, "tx">;
+  }
+): Promise<void> {
+  const {
+    tenantId,
+    requiredPermission,
+    subject,
+    html,
+    tenantEmailConfig,
+    notificationType,
+    summaryData,
+    audit,
+  } = params;
+
+  function buildAuditForAdmin(adminUserId: string): EmailAuditContext | undefined {
+    if (!audit) return undefined;
+    // Each admin email is audited against the MEMBER entity (the admin user).
+    // This keeps admin notifications discoverable in the admin's activity feed.
+    return {
+      tx,
+      tenantId: audit.tenantId,
+      entityType: AuditEntityType.MEMBER,
+      entityId: adminUserId,
+      actorId: audit.actorId ?? null,
+    };
+  }
+
+  // Query admin assignments for this tenant (or global admins with null tenantId)
+  const assignments = await tx
+    .select({
+      userId: adminAssignments.userId,
+      roleType: adminAssignments.roleType,
+      permissions: adminAssignments.permissions,
+    })
+    .from(adminAssignments)
+    .where(
+      or(
+        eq(adminAssignments.tenantId, tenantId),
+        isNull(adminAssignments.tenantId)
+      )
+    );
+
+  // Filter to admins who have the required permission
+  const matchingAdminUserIds = assignments
+    .filter((a) => {
+      // Club admins and global admins have all permissions
+      if (
+        a.roleType === AdminRoleType.CLUB_ADMIN ||
+        a.roleType === AdminRoleType.GLOBAL_ADMIN
+      ) {
+        return true;
+      }
+      // Permission-based admins must have the specific permission
+      return a.permissions.includes(requiredPermission);
+    })
+    .map((a) => a.userId);
+
+  if (matchingAdminUserIds.length === 0) return;
+
+  // Look up user details for matching admins in a single query
+  const adminUsers = await tx
+    .select({ id: users.id, email: users.email })
+    .from(users)
+    .where(inArray(users.id, matchingAdminUserIds));
+
+  const validAdmins = adminUsers.filter(
+    (u): u is { id: string; email: string } => Boolean(u.email)
+  );
+
+  if (validAdmins.length === 0) return;
+
+  // If no notification type is supplied, send immediately (legacy behaviour)
+  if (!notificationType) {
+    await Promise.allSettled(
+      validAdmins.map((admin) =>
+        sendEmail(
+          admin.email,
+          subject,
+          html,
+          tenantEmailConfig,
+          undefined,
+          buildAuditForAdmin(admin.id)
+        )
+      )
+    );
+    return;
+  }
+
+  // Per-admin frequency check
+  const realtimeAdmins: { email: string; id: string }[] = [];
+  const queuedRows: {
+    tenantId: string;
+    recipientId: string;
+    type: string;
+    channel: string;
+    title: string;
+    body: string;
+    data: Record<string, unknown>;
+  }[] = [];
+
+  for (const admin of validAdmins) {
+    const frequency = await getNotificationFrequency(tx, {
+      tenantId,
+      userId: admin.id,
+      notificationType,
+    });
+
+    if (frequency === NotificationFrequency.OFF) {
+      continue; // user opted out and it's not time-critical
+    }
+
+    if (frequency === NotificationFrequency.DAILY_SUMMARY) {
+      queuedRows.push({
+        tenantId,
+        recipientId: admin.id,
+        type: notificationType,
+        channel: NotificationChannel.EMAIL,
+        title: subject,
+        body: html,
+        data: summaryData ? { summaryItem: summaryData } : {},
+      });
+      continue;
+    }
+
+    // realtime — send now
+    realtimeAdmins.push(admin);
+  }
+
+  // Send realtime emails
+  if (realtimeAdmins.length > 0) {
+    await Promise.allSettled(
+      realtimeAdmins.map((admin) =>
+        sendEmail(
+          admin.email,
+          subject,
+          html,
+          tenantEmailConfig,
+          undefined,
+          buildAuditForAdmin(admin.id)
+        )
+      )
+    );
+  }
+
+  // Queue daily summary notifications (sentAt is left null = unsent)
+  if (queuedRows.length > 0) {
+    await tx.insert(notifications).values(queuedRows);
+  }
+}
+
+// ---- Daily summary batching ----
+
+
+/**
+ * Statuses that appear in the daily summary, mapped to their section title
+ * and the admin permission required to see them.
+ */
+const SUMMARY_SECTIONS = [
+  { status: "awaiting_approval", title: "Requests Awaiting Approval", permission: "approve" },
+  { status: "awaiting_exemption_review", title: "Exemption Reviews Needed", permission: "approve_exemption" },
+  { status: "awaiting_programming", title: "Requests Ready for Programming", permission: "program" },
+  { status: "awaiting_pickup", title: "Ready for Collection", permission: "issue" },
+] as const;
+
+/**
+ * Build and send daily summary emails based on the current state of requests.
+ * Queries fob_requests directly rather than reading from queued notifications,
+ * so the summary always reflects what is actually outstanding right now.
+ *
+ * `ops` (optional, supplied by the cron) adds email-delivery visibility to
+ * each summary: the tenant's outbound queue depth and today's platform-wide
+ * send count. Passed in rather than computed here so this module does not
+ * import the queue service (which imports this module).
+ */
+export async function sendDailySummaryEmails(ops?: {
+  sentToday: number;
+  queueDepthByTenant: Map<string, number>;
+}): Promise<{
+  recipientsSent: number;
+  sectionsIncluded: number;
+}> {
+  let recipientsSent = 0;
+  let sectionsIncluded = 0;
+
+  const appUrl = clientEnv.NEXT_PUBLIC_APP_URL;
+
+  // Get all tenants
+  const allTenants = await db
+    .select({
+      id: tenants.id,
+      name: tenants.name,
+      slug: tenants.slug,
+      settings: tenants.settings,
+      logoUrl: tenants.logoUrl,
+    })
+    .from(tenants);
+
+  for (const tenant of allTenants) {
+    const emailConfig = buildEmailConfig(tenant);
+    if (!emailConfig.sendEmails) continue;
+
+    // Query all outstanding requests for this tenant in one go
+    const outstanding = await db
+      .select({
+        id: fobRequests.id,
+        status: fobRequests.status,
+        requestType: fobRequests.requestType,
+        serialNumber: fobRequests.serialNumber,
+        requesterId: fobRequests.requesterId,
+        orphanFirstName: fobRequests.orphanFirstName,
+        orphanLastName: fobRequests.orphanLastName,
+        requesterFirstName: users.firstName,
+        requesterLastName: users.lastName,
+        exemptionReason: fobRequests.exemptionReason,
+        pickupLocationName: pickupLocations.name,
+      })
+      .from(fobRequests)
+      .leftJoin(users, eq(fobRequests.requesterId, users.id))
+      .leftJoin(pickupLocations, eq(fobRequests.pickupLocationId, pickupLocations.id))
+      .where(
+        and(
+          eq(fobRequests.tenantId, tenant.id),
+          inArray(
+            fobRequests.status,
+            SUMMARY_SECTIONS.map((s) => s.status)
+          )
+        )
+      );
+
+    // Returns the cron auto-closed in the last day.
+    const autoClosedReturns = await db
+      .select({
+        id: fobRequests.id,
+        serialNumber: fobRequests.serialNumber,
+        requesterFirstName: users.firstName,
+        requesterLastName: users.lastName,
+        credentialTypeName: credentialTypes.name,
+      })
+      .from(fobRequests)
+      .leftJoin(users, eq(fobRequests.requesterId, users.id))
+      .leftJoin(credentialTypes, eq(fobRequests.credentialTypeId, credentialTypes.id))
+      .where(
+        and(
+          eq(fobRequests.tenantId, tenant.id),
+          eq(fobRequests.requestType, "return"),
+          eq(fobRequests.status, "issued"),
+          gte(fobRequests.autoClosedAt, new Date(Date.now() - 24 * 60 * 60 * 1000))
+        )
+      );
+
+    // Credentials flagged for reprogramming (attestation expiry updates,
+    // permission-expiry flags) never create a fob_request, so they are
+    // invisible to the request-status sections above. Query them directly
+    // so programmers hear about staged expiry updates, not just requests.
+    const flaggedCredentials = await db
+      .select({
+        id: credentials.id,
+        serialNumber: credentials.serialNumber,
+        programmingReason: credentials.programmingReason,
+        ownerFirstName: users.firstName,
+        ownerLastName: users.lastName,
+      })
+      .from(credentials)
+      .leftJoin(users, eq(credentials.ownerId, users.id))
+      .where(
+        and(
+          eq(credentials.tenantId, tenant.id),
+          eq(credentials.programmingRequired, true)
+        )
+      );
+
+    if (outstanding.length === 0 && flaggedCredentials.length === 0 && autoClosedReturns.length === 0) continue;
+
+    // Group requests by status into sections
+    const sectionsByStatus = new Map<string, SummarySection>();
+    for (const section of SUMMARY_SECTIONS) {
+      const requests = outstanding.filter((r) => r.status === section.status);
+      if (requests.length === 0) continue;
+
+      sectionsByStatus.set(section.status, {
+        title: section.title,
+        count: requests.length,
+        items: requests.map((r) => {
+          const name = r.requesterFirstName
+            ? `${r.requesterFirstName} ${r.requesterLastName ?? ""}`.trim()
+            : r.orphanFirstName
+              ? `${r.orphanFirstName} ${r.orphanLastName ?? ""}`.trim()
+              : "Unknown";
+
+          let detail = r.requestType ?? "new";
+          if (r.status === "awaiting_pickup" && r.pickupLocationName) {
+            detail = r.pickupLocationName;
+          } else if (r.requestType === "return" && r.serialNumber) {
+            // The fob is coming in, not going out: make that obvious in the digest.
+            detail = `Return of #${r.serialNumber}`;
+          } else if (r.serialNumber) {
+            detail = `Serial: ${r.serialNumber}`;
+          }
+          if (r.status === "awaiting_exemption_review" && r.exemptionReason) {
+            detail = r.exemptionReason;
+          }
+
+          return { label: name, detail };
+        }),
+      });
+    }
+
+    // Programming-permission section for flagged credentials. Same gate as
+    // "Requests Ready for Programming"; inserted alongside it per admin.
+    const credentialSection: SummarySection | null =
+      flaggedCredentials.length > 0
+        ? {
+            title: "Credentials Awaiting Reprogramming",
+            count: flaggedCredentials.length,
+            items: flaggedCredentials.map((c) => {
+              const name = c.ownerFirstName
+                ? `${c.ownerFirstName} ${c.ownerLastName ?? ""}`.trim()
+                : "Unassigned";
+              const serial = c.serialNumber ? `Serial: ${c.serialNumber}` : "No serial";
+              return {
+                label: name,
+                detail: c.programmingReason
+                  ? `${serial} — ${c.programmingReason}`
+                  : `${serial} — Reprogramming required`,
+              };
+            }),
+          }
+        : null;
+
+    // Issue-permission section: returns closed without the fob coming back.
+    const autoClosedSection: SummarySection | null =
+      autoClosedReturns.length > 0
+        ? {
+            title: "Returns Auto-Closed (Fob Not Received)",
+            count: autoClosedReturns.length,
+            items: autoClosedReturns.map((r) => ({
+              label: `${r.requesterFirstName ?? "Unknown"} ${r.requesterLastName ?? ""}`.trim(),
+              detail: `${r.credentialTypeName ?? "Fob"} #${r.serialNumber ?? "?"} stays deactivated`,
+            })),
+          }
+        : null;
+
+    // Find admins for this tenant
+    const assignments = await db
+      .select({
+        userId: adminAssignments.userId,
+        roleType: adminAssignments.roleType,
+        permissions: adminAssignments.permissions,
+      })
+      .from(adminAssignments)
+      .where(
+        or(
+          eq(adminAssignments.tenantId, tenant.id),
+          isNull(adminAssignments.tenantId)
+        )
+      );
+
+    if (assignments.length === 0) continue;
+
+    const adminUserIds = assignments.map((a) => a.userId);
+    const adminUsers = await db
+      .select({ id: users.id, email: users.email, firstName: users.firstName })
+      .from(users)
+      .where(inArray(users.id, adminUserIds));
+
+    const adminUserMap = new Map(adminUsers.map((u) => [u.id, u]));
+
+    // Set branding for this tenant
+    setEmailBranding({
+      logoUrl: emailConfig.logoUrl,
+      primaryColour: emailConfig.primaryColour,
+      secondaryColour: emailConfig.secondaryColour,
+      replyToEmail: emailConfig.replyToEmail,
+    });
+
+    for (const assignment of assignments) {
+      const user = adminUserMap.get(assignment.userId);
+      if (!user?.email) continue;
+
+      // Build sections this admin can see based on their permissions
+      const isFullAdmin =
+        assignment.roleType === AdminRoleType.CLUB_ADMIN ||
+        assignment.roleType === AdminRoleType.GLOBAL_ADMIN;
+
+      const canSeeProgramming =
+        isFullAdmin || assignment.permissions.includes("program");
+
+      const visibleSections: SummarySection[] = [];
+      for (const sectionDef of SUMMARY_SECTIONS) {
+        if (!isFullAdmin && !assignment.permissions.includes(sectionDef.permission)) {
+          continue;
+        }
+        const section = sectionsByStatus.get(sectionDef.status);
+        if (section) visibleSections.push(section);
+        // Keep the two programming sections adjacent in the email.
+        if (sectionDef.status === "awaiting_programming" && canSeeProgramming && credentialSection) {
+          visibleSections.push(credentialSection);
+        }
+      }
+      // The credential section must still appear when there are no
+      // awaiting_programming requests (the push above is tied to that slot).
+      if (canSeeProgramming && credentialSection && !visibleSections.includes(credentialSection)) {
+        visibleSections.push(credentialSection);
+      }
+
+      const canSeeIssue = isFullAdmin || assignment.permissions.includes("issue");
+      if (canSeeIssue && autoClosedSection) visibleSections.push(autoClosedSection);
+
+      if (visibleSections.length === 0) continue;
+
+      // Build a fingerprint from visible item IDs to detect changes. If the
+      // outstanding requests and flagged credentials haven't changed since
+      // the last summary, skip sending to avoid duplicate emails. Flagged
+      // credential IDs are cred:-prefixed so the two ID sets cannot collide,
+      // and join the fingerprint for exactly the admins who see the section.
+      const visibleRequestIds = SUMMARY_SECTIONS
+        .filter((s) => isFullAdmin || assignment.permissions.includes(s.permission))
+        .flatMap((s) => outstanding.filter((r) => r.status === s.status).map((r) => r.id));
+      const visibleItemIds = [
+        ...visibleRequestIds,
+        ...(canSeeProgramming
+          ? flaggedCredentials.map((c) => `cred:${c.id}`)
+          : []),
+        ...(canSeeIssue ? autoClosedReturns.map((r) => `closed:${r.id}`) : []),
+      ].sort();
+      const fingerprint = createHash("sha256").update(visibleItemIds.join(",")).digest("hex").slice(0, 16);
+
+      // Skip if a daily summary with the same fingerprint was already sent
+      // recently. This prevents both duplicate sends within the same day AND
+      // sending unchanged summaries day after day when no requests have moved.
+      const recentSummaries = await db
+        .select({ metadata: auditLog.metadata })
+        .from(auditLog)
+        .where(
+          and(
+            eq(auditLog.tenantId, tenant.id),
+            eq(auditLog.entityId, user.id),
+            eq(auditLog.action, AuditAction.EMAIL_SENT)
+          )
+        )
+        .orderBy(desc(auditLog.createdAt))
+        .limit(5);
+
+      const alreadySentThisFingerprint = recentSummaries.some((e) => {
+        const meta = e.metadata as Record<string, unknown> | null;
+        return meta?.templateType === "dailySummary" && meta?.summaryFingerprint === fingerprint;
+      });
+      if (alreadySentThisFingerprint) continue;
+
+      const adminName = user.firstName ?? user.email.split("@")[0];
+      const dashboardUrl = `${appUrl}/t/${tenant.slug}/admin`;
+
+      const html = dailySummaryEmail(
+        tenant.name,
+        adminName,
+        visibleSections,
+        dashboardUrl,
+        ops
+          ? {
+              queueDepth: ops.queueDepthByTenant.get(tenant.id) ?? 0,
+              sentToday: ops.sentToday,
+            }
+          : undefined
+      );
+
+      try {
+        await withTenant(tenant.id, async (tx) => {
+          await sendEmail(
+            user.email,
+            `Daily Summary - ${tenant.name}`,
+            html,
+            emailConfig,
+            undefined,
+            {
+              tx,
+              tenantId: tenant.id,
+              entityType: AuditEntityType.MEMBER,
+              entityId: user.id,
+              actorId: null,
+              extraMetadata: { summaryFingerprint: fingerprint },
+            },
+            "dailySummary"
+          );
+        });
+
+        recipientsSent++;
+        sectionsIncluded += visibleSections.length;
+      } catch (err) {
+        console.error(`Failed to send daily summary to ${user.email}:`, err);
+      }
+    }
+  }
+
+  return { recipientsSent, sectionsIncluded };
+}

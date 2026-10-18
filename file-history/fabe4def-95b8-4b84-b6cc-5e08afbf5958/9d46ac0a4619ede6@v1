@@ -1,0 +1,971 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Permission, RequestStatus, RequestType, requestRequiresCollection, requestIsDeactivation } from "@accessbuddy/shared";
+
+type AvailableFob = { id: string; serialNumber: string; credentialTypeName: string | null };
+
+type Props = {
+  tenantSlug: string;
+  requestId: string;
+  requestType: string;
+  currentStatus: string;
+  validEvents: string[];
+  permissions: string[];
+  accessLevels: { id: string; name: string }[];
+  pickupLocations: { id: string; name: string; instructions?: string | null }[];
+  currentPickupLocationId?: string | null;
+  allowFobCreationAtProgramming: boolean;
+  availableFobs: AvailableFob[];
+  requestCredentialTypeName?: string | null;
+  credentialTypes: { id: string; name: string }[];
+  suggestedAccessLevelId?: string | null;
+  suggestedAccessLevelName?: string | null;
+  suggestedRuleName?: string | null;
+  canOverrideAccessLevel: boolean;
+  membershipCategory?: string | null;
+  rules: { name: string; priority: number; conditions: Record<string, unknown>; accessLevelId: string; accessLevelName: string }[];
+  splitPickupFromProgramming: boolean;
+  exemptionReason?: string | null;
+  memberFlags?: { isOfficer: boolean; isBoardMember: boolean; isStaff: boolean; officerExpiresAt?: string; boardExpiresAt?: string };
+  resolvedAccessLevelId?: string | null;
+  paidAt?: string | null;
+  refundedAt?: string | null;
+  paymentExempt?: boolean;
+  isOrphaned?: boolean;
+  /** Set while a payment demand raised on an issued request is outstanding. */
+  paymentReturnStatus?: string | null;
+  /** Member's name, for the collection confirm ("Collected X from <member>?"). */
+  memberName?: string;
+  /** The old fob to collect on a return or change_type, e.g. "Wristband #1572". */
+  collectLabel?: string | null;
+};
+
+const EVENT_PERMISSION_MAP: Record<string, string> = {
+  APPROVE: Permission.APPROVE,
+  REJECT: Permission.APPROVE,
+  HOLD: Permission.APPROVE,
+  RESUME: Permission.APPROVE,
+  APPROVE_EXEMPTION: Permission.APPROVE_EXEMPTION,
+  REJECT_EXEMPTION: Permission.APPROVE_EXEMPTION,
+  PAYMENT_EXEMPT: Permission.APPROVE_EXEMPTION,
+  PAYMENT_REQUIRED: Permission.APPROVE_EXEMPTION,
+  WITHDRAW_PAYMENT_REQUEST: Permission.APPROVE_EXEMPTION,
+  PROGRAM: Permission.PROGRAM,
+  SET_PICKUP: Permission.ISSUE,
+  ISSUE: Permission.ISSUE,
+  CANCEL: Permission.CANCEL,
+  REOPEN: Permission.REOPEN,
+};
+
+export function AdminActions({
+  tenantSlug,
+  requestId,
+  requestType,
+  currentStatus,
+  validEvents,
+  permissions,
+  accessLevels,
+  pickupLocations,
+  currentPickupLocationId,
+  allowFobCreationAtProgramming,
+  availableFobs,
+  requestCredentialTypeName,
+  credentialTypes,
+  suggestedAccessLevelId,
+  suggestedAccessLevelName,
+  suggestedRuleName,
+  canOverrideAccessLevel,
+  membershipCategory,
+  rules,
+  splitPickupFromProgramming,
+  exemptionReason,
+  memberFlags,
+  resolvedAccessLevelId,
+  paidAt,
+  refundedAt,
+  paymentExempt = false,
+  isOrphaned = false,
+  paymentReturnStatus = null,
+  memberName,
+  collectLabel,
+}: Props) {
+  const router = useRouter();
+  const [activeAction, setActiveAction] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [refunding, setRefunding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // Form state
+  const [reason, setReason] = useState("");
+  const [serialNumber, setSerialNumber] = useState("");
+  const [selectedFobId, setSelectedFobId] = useState("");
+  const [pickupLocationId, setPickupLocationId] = useState("");
+  const [credentialTypeId, setCredentialTypeId] = useState("");
+
+  // Access level comes from the wrapper's rule evaluation
+  const accessLevelId = resolvedAccessLevelId ?? suggestedAccessLevelId ?? "";
+
+  const isOfficer = memberFlags?.isOfficer ?? false;
+  const isBoardMember = memberFlags?.isBoardMember ?? false;
+  const isStaff = memberFlags?.isStaff ?? false;
+
+  // Filter events by user's permissions
+  const availableEvents = validEvents.filter((event) => {
+    const requiredPerm = EVENT_PERMISSION_MAP[event];
+    if (!requiredPerm) return false; // system events like PAYMENT_RECEIVED
+    return permissions.includes(requiredPerm);
+  });
+
+  const canUpdateLocation =
+    currentStatus === "awaiting_pickup" &&
+    permissions.includes(Permission.ISSUE);
+
+  // A return hands back an existing fob, so there is no replacement to swap in.
+  const canChangeCredential =
+    requestType !== RequestType.RETURN &&
+    (currentStatus === "programmed" || currentStatus === "awaiting_pickup") &&
+    permissions.includes(Permission.PROGRAM);
+
+  // Require Payment is the mirror of Grant Exemption: approver-level, and
+  // only meaningful while nothing has been paid.
+  // Orphaned requests are linked to a member first; the API refuses them.
+  // After issue only a new or additional credential can be billed; a return,
+  // access update, change of type or lost/damaged record has nothing to
+  // charge for (mirrors POST_ISSUE_BILLABLE_TYPES in the API route).
+  const postIssueBillable = requestType === "new" || requestType === "additional";
+  const canRequirePayment =
+    availableEvents.includes("PAYMENT_REQUIRED") &&
+    !paidAt &&
+    !isOrphaned &&
+    (currentStatus !== "issued" || postIssueBillable);
+
+  // A payment demand raised on an issued request. While it is outstanding
+  // the only ways out are pay, or the admin withdrawing it; Cancel and
+  // Grant Exemption are hidden because the credential is already in hand.
+  const postIssueDemand = !!paymentReturnStatus;
+  const canWithdrawPaymentRequest =
+    postIssueDemand && availableEvents.includes("WITHDRAW_PAYMENT_REQUEST") && !paidAt;
+
+  // Resend is not a transition, so it is not in validEvents. Offer it for any
+  // request still waiting on money (SUBMITTED = member abandoned the Stripe
+  // step at submission, AWAITING_PAYMENT = already demanded).
+  const canResendPaymentLink =
+    (currentStatus === "submitted" || currentStatus === "awaiting_payment") &&
+    !paidAt &&
+    !paymentExempt &&
+    !isOrphaned &&
+    permissions.includes(Permission.APPROVE_EXEMPTION);
+
+  async function resendPaymentLink() {
+    setSubmitting(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch(
+        `/api/v1/t/${tenantSlug}/requests/${requestId}/resend-payment-link`,
+        { method: "POST" }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to resend payment link");
+      setNotice(`Payment link sent to ${data.sentTo}`);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // Return and change_type only close once the issuer confirms the old fob is
+  // in hand, so their Issue button opens a confirm step instead of firing ISSUE.
+  const needsCollection = requestRequiresCollection(requestType);
+
+  async function executeAction(event: string, body?: Record<string, unknown>) {
+    setSubmitting(true);
+    setError(null);
+
+    const endpoint = event.toLowerCase().replace(/_/g, "-");
+    try {
+      const res = await fetch(
+        `/api/v1/t/${tenantSlug}/requests/${requestId}/${endpoint}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: body ? JSON.stringify(body) : undefined,
+        }
+      );
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? `Failed to ${event}`);
+      }
+
+      setActiveAction(null);
+      setReason("");
+      setSubmitting(false);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+      setSubmitting(false);
+    }
+  }
+
+  if (availableEvents.length === 0 && !canUpdateLocation && !canChangeCredential && !canResendPaymentLink) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Actions</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Action buttons */}
+        {!activeAction && (
+          <div className="flex flex-wrap gap-2">
+            {availableEvents.includes("APPROVE") && (
+              <Button
+                size="sm"
+                disabled={submitting || !accessLevelId}
+                onClick={() =>
+                  executeAction("APPROVE", {
+                    accessLevelId,
+                    isOfficer: isOfficer || undefined,
+                    isBoardMember: isBoardMember || undefined,
+                    isStaff: isStaff || undefined,
+                    officerExpiresAt: memberFlags?.officerExpiresAt ? new Date(memberFlags.officerExpiresAt).toISOString() : undefined,
+                    boardExpiresAt: memberFlags?.boardExpiresAt ? new Date(memberFlags.boardExpiresAt).toISOString() : undefined,
+                  })
+                }
+              >
+                {submitting ? "Approving..." : "Approve"}
+              </Button>
+            )}
+            {availableEvents.includes("REJECT") && (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setActiveAction("REJECT")}
+              >
+                Reject
+              </Button>
+            )}
+            {(availableEvents.includes("PROGRAM") || availableEvents.includes("SET_PICKUP")) && (
+              requestIsDeactivation(requestType)
+                ? <Button size="sm" onClick={() => setActiveAction("DEACTIVATE")}>Confirm Deactivation</Button>
+                : <Button size="sm" onClick={() => setActiveAction("PROGRAM")}>
+                    {availableEvents.includes("PROGRAM") && !splitPickupFromProgramming
+                      ? "Program & Set Pickup"
+                      : "Mark Programmed"}
+                  </Button>
+            )}
+            {availableEvents.includes("ISSUE") && (
+              needsCollection ? (
+                <Button size="sm" onClick={() => setActiveAction("COLLECT")} disabled={submitting}>
+                  {requestType === RequestType.RETURN ? "Mark Collected" : "Mark Issued"}
+                </Button>
+              ) : (
+                <Button size="sm" onClick={() => executeAction("ISSUE")} disabled={submitting}>
+                  {submitting ? "Issuing..." : "Mark Issued"}
+                </Button>
+              )
+            )}
+            {availableEvents.includes("HOLD") && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setActiveAction("HOLD")}
+              >
+                Hold
+              </Button>
+            )}
+            {availableEvents.includes("RESUME") && (
+              <Button size="sm" onClick={() => executeAction("RESUME")} disabled={submitting}>
+                {submitting ? "Resuming..." : "Resume"}
+              </Button>
+            )}
+            {availableEvents.includes("APPROVE_EXEMPTION") && (
+              <Button size="sm" onClick={() => setActiveAction("APPROVE_EXEMPTION")}>
+                Approve Exemption
+              </Button>
+            )}
+            {availableEvents.includes("REJECT_EXEMPTION") && (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setActiveAction("REJECT_EXEMPTION")}
+              >
+                {requestType === "replacement_damaged" ? "Request Payment" : "Reject Exemption"}
+              </Button>
+            )}
+            {availableEvents.includes("PAYMENT_EXEMPT") && !postIssueDemand && (
+              <Button size="sm" onClick={() => setActiveAction("PAYMENT_EXEMPT")}>
+                Grant Exemption
+              </Button>
+            )}
+            {canRequirePayment && (
+              <Button size="sm" variant="outline" onClick={() => setActiveAction("PAYMENT_REQUIRED")}>
+                Require Payment
+              </Button>
+            )}
+            {canWithdrawPaymentRequest && (
+              <Button size="sm" variant="outline" onClick={() => setActiveAction("WITHDRAW_PAYMENT_REQUEST")}>
+                Withdraw Payment Request
+              </Button>
+            )}
+            {canResendPaymentLink && (
+              <Button size="sm" variant="outline" disabled={submitting} onClick={resendPaymentLink}>
+                {submitting ? "Sending..." : "Resend Payment Link"}
+              </Button>
+            )}
+            {paidAt && !refundedAt && permissions.includes(Permission.REFUND) && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={refunding}
+                onClick={() => setActiveAction("REFUND")}
+              >
+                {refunding ? "Refunding..." : "Refund Payment"}
+              </Button>
+            )}
+            {availableEvents.includes("CANCEL") && !postIssueDemand && (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setActiveAction("CANCEL")}
+              >
+                Cancel
+              </Button>
+            )}
+            {availableEvents.includes("REOPEN") && (
+              <Button
+                size="sm"
+                onClick={() => setActiveAction("REOPEN")}
+              >
+                Reopen
+              </Button>
+            )}
+            {canUpdateLocation && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setPickupLocationId(currentPickupLocationId ?? "");
+                  setActiveAction("UPDATE_LOCATION");
+                }}
+              >
+                Update Location
+              </Button>
+            )}
+            {canChangeCredential && (
+              <Button size="sm" variant="outline" onClick={() => setActiveAction("CHANGE_CREDENTIAL")}>
+                Change Credential
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Approve Exemption form */}
+        {activeAction === "APPROVE_EXEMPTION" && (
+          <div className="space-y-3">
+            {exemptionReason && (
+              <div className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                <p className="text-xs font-medium text-amber-600 mb-1">Exemption Reason</p>
+                {exemptionReason}
+              </div>
+            )}
+            <p className="text-sm text-muted-foreground">
+              Approving will waive payment and move the request to the approval queue.
+            </p>
+            <ActionButtons
+              onConfirm={() => executeAction("APPROVE_EXEMPTION", {})}
+              onCancel={() => setActiveAction(null)}
+              submitting={submitting}
+              label="Approve Exemption"
+            />
+          </div>
+        )}
+
+        {/* Grant payment exemption (admin-initiated) */}
+        {activeAction === "PAYMENT_EXEMPT" && (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Grant a payment exemption for this request. It will skip the
+              payment requirement and move directly to the approval queue.
+            </p>
+            <div className="space-y-2">
+              <Label>Reason *</Label>
+              <Textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Why are you exempting this member from payment?"
+              />
+            </div>
+            <ActionButtons
+              onConfirm={() => executeAction("PAYMENT_EXEMPT", { reason })}
+              onCancel={() => setActiveAction(null)}
+              submitting={submitting}
+              disabled={!reason.trim()}
+              label="Grant Exemption"
+            />
+          </div>
+        )}
+
+        {/* Withdraw a post-issue payment demand */}
+        {activeAction === "WITHDRAW_PAYMENT_REQUEST" && (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Withdraw the payment request. The request returns to issued, the
+              exemption is restored, the payment link stops working and the
+              member is emailed that no payment is due.
+            </p>
+            <div className="space-y-2">
+              <Label>Reason (optional, included in the email)</Label>
+              <Textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Why is the payment request being withdrawn?"
+              />
+            </div>
+            <ActionButtons
+              onConfirm={() => executeAction("WITHDRAW_PAYMENT_REQUEST", reason.trim() ? { reason } : {})}
+              onCancel={() => setActiveAction(null)}
+              submitting={submitting}
+              label="Withdraw Payment Request"
+            />
+          </div>
+        )}
+
+        {/* Require payment (admin-initiated) */}
+        {activeAction === "PAYMENT_REQUIRED" && (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {currentStatus === "issued"
+                ? "Require payment for this already-issued credential. The member will be emailed a payment link (no cancel option, since they hold the credential). The request returns to issued once paid, or if you withdraw the request."
+                : "Move this request to awaiting payment. The member will be emailed a payment link, plus a link to cancel the request if they no longer need it. The request continues to approval once payment is received."}
+            </p>
+            <div className="space-y-2">
+              <Label>Reason *</Label>
+              <Textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Why is payment required? This is included in the email to the member."
+              />
+            </div>
+            <ActionButtons
+              onConfirm={() => executeAction("PAYMENT_REQUIRED", { reason })}
+              onCancel={() => setActiveAction(null)}
+              submitting={submitting}
+              disabled={!reason.trim()}
+              label="Require Payment"
+            />
+          </div>
+        )}
+
+        {/* Reject Exemption form */}
+        {activeAction === "REJECT_EXEMPTION" && (
+          <div className="space-y-3">
+            {exemptionReason && (
+              <div className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                <p className="text-xs font-medium text-amber-600 mb-1">Exemption Reason</p>
+                {exemptionReason}
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Rejection Reason *</Label>
+              <Textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Reason for rejecting the exemption..."
+              />
+            </div>
+            <ActionButtons
+              onConfirm={() => executeAction("REJECT_EXEMPTION", { reason })}
+              onCancel={() => setActiveAction(null)}
+              submitting={submitting}
+              disabled={!reason.trim()}
+              label="Reject Exemption"
+              destructive
+            />
+          </div>
+        )}
+
+        {/* Reject form */}
+        {activeAction === "REJECT" && (
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>Reason *</Label>
+              <Textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Reason for rejection..."
+              />
+            </div>
+            <ActionButtons
+              onConfirm={() => executeAction("REJECT", { reason })}
+              onCancel={() => setActiveAction(null)}
+              submitting={submitting}
+              disabled={!reason.trim()}
+              label="Reject"
+              destructive
+            />
+          </div>
+        )}
+
+        {/* Collection confirmation (return / change_type) */}
+        {activeAction === "COLLECT" && (
+          <div className="space-y-3">
+            <p className="text-sm font-medium">
+              Collected {collectLabel ?? "the old fob"} from {memberName ?? "the member"}?
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {requestType === RequestType.RETURN
+                ? "Confirming marks the fob as returned and closes this request."
+                : "Confirming marks the old fob as returned, closes this request, and flags the old fob for removal from the access system."}
+            </p>
+            <ActionButtons
+              onConfirm={() => executeAction("ISSUE", { collected: true })}
+              onCancel={() => setActiveAction(null)}
+              submitting={submitting}
+              label="Confirm Collected"
+            />
+          </div>
+        )}
+
+        {/* Deactivation confirmation (lost/damaged/return) */}
+        {activeAction === "DEACTIVATE" && (
+          <div className="space-y-3">
+            <p className="text-sm">
+              Confirm that this credential has been deactivated in the access control system.
+              {requestType === RequestType.RETURN && " The member still has the fob; you will confirm collection once they hand it in."}
+            </p>
+            <ActionButtons
+              onConfirm={() => executeAction("PROGRAM", {})}
+              onCancel={() => setActiveAction(null)}
+              submitting={submitting}
+              label="Confirm Deactivated"
+            />
+          </div>
+        )}
+
+        {/* Program form (serial + location if awaiting_programming, location only if programmed) */}
+        {activeAction === "PROGRAM" && (() => {
+          const needsSerial = currentStatus === "awaiting_programming";
+          const selectedFob = selectedFobId ? availableFobs.find((f) => f.id === selectedFobId) : null;
+          const typeMismatch = selectedFob && requestCredentialTypeName && selectedFob.credentialTypeName !== requestCredentialTypeName;
+          return (
+            <div className="space-y-3">
+              {needsSerial && (
+                <div className="space-y-2">
+                  <Label>Serial Number *</Label>
+                  {allowFobCreationAtProgramming ? (
+                    <Input
+                      value={serialNumber}
+                      onChange={(e) => {
+                        setSerialNumber(e.target.value);
+                        setSelectedFobId("");
+                      }}
+                      placeholder="Fob/credential serial number..."
+                    />
+                  ) : availableFobs.length > 0 ? (
+                    <Select
+                      value={selectedFobId}
+                      onValueChange={(v) => {
+                        const id = v ?? "";
+                        setSelectedFobId(id);
+                        const fob = availableFobs.find((f) => f.id === id);
+                        setSerialNumber(fob?.serialNumber ?? "");
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select an available fob...">
+                          {(value: string) => {
+                            const fob = availableFobs.find((f) => f.id === value);
+                            return fob ? `#${fob.serialNumber}${fob.credentialTypeName ? ` (${fob.credentialTypeName})` : ""}` : "Select an available fob...";
+                          }}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableFobs.map((fob) => {
+                          const fobLabel = `#${fob.serialNumber}${fob.credentialTypeName ? ` (${fob.credentialTypeName})` : ""}`;
+                          return (
+                            <SelectItem key={fob.id} value={fob.id} label={fobLabel}>
+                              {fobLabel}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-sm text-muted-foreground py-2">
+                      No unallocated fobs available. Add fobs to inventory first.
+                    </p>
+                  )}
+                  {typeMismatch && (
+                    <p className="text-sm text-amber-600 rounded bg-amber-50 px-3 py-2">
+                      This fob is a <strong>{selectedFob.credentialTypeName}</strong> but the request is for a <strong>{requestCredentialTypeName}</strong>.
+                    </p>
+                  )}
+                </div>
+              )}
+              {pickupLocations.length > 0 && (() => {
+                const selectedPickup = pickupLocations.find((l) => l.id === pickupLocationId);
+                return (
+                  <div className="space-y-2">
+                    <Label>Pickup Location *</Label>
+                    <Select value={pickupLocationId} onValueChange={(v) => setPickupLocationId(v ?? "")}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select location...">
+                          {(value: string) => pickupLocations.find((l) => l.id === value)?.name ?? value}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {pickupLocations.map((loc) => (
+                          <SelectItem key={loc.id} value={loc.id} label={loc.name}>
+                            {loc.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {selectedPickup?.instructions && (
+                      <p className="rounded-md bg-muted px-3 py-2 text-xs whitespace-pre-wrap">
+                        <span className="font-semibold">Instructions: </span>
+                        {selectedPickup.instructions}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+              <ActionButtons
+                onConfirm={async () => {
+                  setSubmitting(true);
+                  setError(null);
+                  try {
+                    let alreadyAwaitingPickup = false;
+                    if (needsSerial) {
+                      // The chosen pickup location travels WITH the program
+                      // call: non-split mode auto-chains SET_PICKUP and emails
+                      // the member inside that transaction, so a follow-up
+                      // set-pickup call would arrive after the email had
+                      // already named a different location.
+                      const res1 = await fetch(
+                        `/api/v1/t/${tenantSlug}/requests/${requestId}/program`,
+                        { method: "POST", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            ...(selectedFobId ? { serialNumber, credentialId: selectedFobId } : { serialNumber }),
+                            ...(pickupLocationId ? { pickupLocationId } : {}),
+                          }) }
+                      );
+                      const data = await res1.json();
+                      if (!res1.ok) {
+                        throw new Error(data.error ?? "Failed to program");
+                      }
+                      alreadyAwaitingPickup = data.request?.status === RequestStatus.AWAITING_PICKUP;
+                    }
+                    // Split mode (or a request already at PROGRAMMED) still
+                    // needs the explicit SET_PICKUP transition, which is the
+                    // one that emails the member.
+                    if (pickupLocationId && !alreadyAwaitingPickup) {
+                      const res2 = await fetch(
+                        `/api/v1/t/${tenantSlug}/requests/${requestId}/set-pickup`,
+                        { method: "POST", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ pickupLocationId }) }
+                      );
+                      if (!res2.ok) {
+                        const data = await res2.json();
+                        throw new Error(data.error ?? "Failed to set pickup location");
+                      }
+                    }
+                    router.refresh();
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "Something went wrong");
+                    setSubmitting(false);
+                  }
+                }}
+                onCancel={() => setActiveAction(null)}
+                submitting={submitting}
+                disabled={(needsSerial && !serialNumber.trim()) || (pickupLocations.length > 0 && !pickupLocationId)}
+                label={
+                  needsSerial
+                    ? pickupLocations.length > 0
+                      ? "Program & Set Pickup"
+                      : "Program"
+                    : "Set Pickup Location"
+                }
+              />
+            </div>
+          );
+        })()}
+
+        {/* Change Credential form */}
+        {activeAction === "CHANGE_CREDENTIAL" && (() => {
+          const selectedFob = selectedFobId ? availableFobs.find((f) => f.id === selectedFobId) : null;
+          const typeMismatch = selectedFob && requestCredentialTypeName && selectedFob.credentialTypeName !== requestCredentialTypeName;
+          return (
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label>New Serial Number *</Label>
+                {allowFobCreationAtProgramming ? (
+                  <Input
+                    value={serialNumber}
+                    onChange={(e) => {
+                      setSerialNumber(e.target.value);
+                      setSelectedFobId("");
+                    }}
+                    placeholder="Fob/credential serial number..."
+                  />
+                ) : availableFobs.length > 0 ? (
+                  <Select
+                    value={selectedFobId}
+                    onValueChange={(v) => {
+                      const id = v ?? "";
+                      setSelectedFobId(id);
+                      const fob = availableFobs.find((f) => f.id === id);
+                      setSerialNumber(fob?.serialNumber ?? "");
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select an available fob...">
+                        {(value: string) => {
+                          const fob = availableFobs.find((f) => f.id === value);
+                          return fob ? `#${fob.serialNumber}${fob.credentialTypeName ? ` (${fob.credentialTypeName})` : ""}` : "Select an available fob...";
+                        }}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableFobs.map((fob) => {
+                        const fobLabel = `#${fob.serialNumber}${fob.credentialTypeName ? ` (${fob.credentialTypeName})` : ""}`;
+                        return (
+                          <SelectItem key={fob.id} value={fob.id} label={fobLabel}>
+                            {fobLabel}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm text-muted-foreground py-2">
+                    No unallocated fobs available. Add fobs to inventory first.
+                  </p>
+                )}
+                {selectedFob && (
+                  <p className="text-xs text-muted-foreground">
+                    Type: {selectedFob.credentialTypeName ?? "Unknown"}
+                  </p>
+                )}
+                {typeMismatch && (
+                  <p className="text-sm text-amber-600 rounded bg-amber-50 px-3 py-2">
+                    This fob is a <strong>{selectedFob.credentialTypeName}</strong> but the request is for a <strong>{requestCredentialTypeName}</strong>. The request type will be updated to match.
+                  </p>
+                )}
+              </div>
+              <ActionButtons
+                onConfirm={() =>
+                  executeAction(
+                    "CHANGE_CREDENTIAL",
+                    selectedFobId ? { serialNumber, credentialId: selectedFobId } : { serialNumber }
+                  )
+                }
+                onCancel={() => setActiveAction(null)}
+                submitting={submitting}
+                disabled={!serialNumber.trim()}
+                label="Change Credential"
+              />
+            </div>
+          );
+        })()}
+
+        {/* Hold form */}
+        {activeAction === "HOLD" && (
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>Reason *</Label>
+              <Textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Reason for hold..."
+              />
+            </div>
+            <ActionButtons
+              onConfirm={() => executeAction("HOLD", { reason })}
+              onCancel={() => setActiveAction(null)}
+              submitting={submitting}
+              disabled={!reason.trim()}
+              label="Place on Hold"
+            />
+          </div>
+        )}
+
+        {/* Update Location form (awaiting_pickup only) */}
+        {activeAction === "UPDATE_LOCATION" && (() => {
+          const selectedPickup = pickupLocations.find((l) => l.id === pickupLocationId);
+          return (
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label>Pickup Location *</Label>
+                <Select value={pickupLocationId} onValueChange={(v) => setPickupLocationId(v ?? "")}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select location...">
+                      {(value: string) => pickupLocations.find((l) => l.id === value)?.name ?? value}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pickupLocations.map((loc) => (
+                      <SelectItem key={loc.id} value={loc.id} label={loc.name}>
+                        {loc.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedPickup?.instructions && (
+                  <p className="rounded-md bg-muted px-3 py-2 text-xs whitespace-pre-wrap">
+                    <span className="font-semibold">Instructions: </span>
+                    {selectedPickup.instructions}
+                  </p>
+                )}
+              </div>
+              <ActionButtons
+                onConfirm={() => executeAction("SET_PICKUP", { pickupLocationId })}
+                onCancel={() => setActiveAction(null)}
+                submitting={submitting}
+                disabled={!pickupLocationId}
+                label="Update Location"
+              />
+            </div>
+          );
+        })()}
+
+        {/* Cancel form */}
+        {activeAction === "CANCEL" && (
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>Reason *</Label>
+              <Textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Reason for cancellation..."
+              />
+            </div>
+            <ActionButtons
+              onConfirm={() => executeAction("CANCEL", { reason })}
+              onCancel={() => setActiveAction(null)}
+              submitting={submitting}
+              disabled={!reason.trim()}
+              label="Cancel Request"
+              destructive
+            />
+          </div>
+        )}
+
+        {activeAction === "REOPEN" && (
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>Reason *</Label>
+              <Textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Reason for reopening..."
+              />
+            </div>
+            <ActionButtons
+              onConfirm={() => executeAction("REOPEN", { reason })}
+              onCancel={() => setActiveAction(null)}
+              submitting={submitting}
+              disabled={!reason.trim()}
+              label="Reopen Request"
+            />
+          </div>
+        )}
+
+        {/* Refund form */}
+        {activeAction === "REFUND" && (
+          <div className="space-y-3">
+            <p className="text-sm">Refund this payment? The request will continue as normal.</p>
+            <div className="space-y-2">
+              <Label>Reason *</Label>
+              <Textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Reason for refund..."
+              />
+            </div>
+            <ActionButtons
+              onConfirm={async () => {
+                setRefunding(true);
+                try {
+                  const res = await fetch(`/api/v1/t/${tenantSlug}/requests/${requestId}/refund`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ reason }),
+                  });
+                  if (!res.ok) {
+                    const d = await res.json();
+                    setError(d.error ?? "Refund failed");
+                  } else {
+                    setActiveAction(null);
+                    setReason("");
+                    router.refresh();
+                  }
+                } finally {
+                  setRefunding(false);
+                }
+              }}
+              onCancel={() => { setActiveAction(null); setReason(""); }}
+              submitting={refunding}
+              disabled={!reason.trim()}
+              label="Confirm Refund"
+            />
+          </div>
+        )}
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        {notice && !error && <p className="text-sm text-green-700">{notice}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ActionButtons({
+  onConfirm,
+  onCancel,
+  submitting,
+  disabled,
+  label,
+  destructive,
+}: {
+  onConfirm: () => void;
+  onCancel: () => void;
+  submitting: boolean;
+  disabled?: boolean;
+  label: string;
+  destructive?: boolean;
+}) {
+  return (
+    <div className="flex gap-2">
+      <Button
+        size="sm"
+        variant={destructive ? "destructive" : "default"}
+        onClick={onConfirm}
+        disabled={submitting || disabled}
+      >
+        {submitting ? "..." : label}
+      </Button>
+      <Button size="sm" variant="outline" onClick={onCancel}>
+        Back
+      </Button>
+    </div>
+  );
+}

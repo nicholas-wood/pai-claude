@@ -1,0 +1,31 @@
+-- SMLSC pickup location member messages (run AFTER migration 0019 is live).
+-- Member-facing copy per Nick, 2026-10-18. `instructions` (admin-only, holds
+-- the safe code) is deliberately untouched.
+--
+-- Idempotent: safe to re-run. Scoped by tenant slug + location name.
+
+BEGIN;
+
+UPDATE pickup_locations pl
+SET member_message = 'This can be collected during Nipper sessions. Please see the team at the merchandise stand.'
+FROM tenants t
+WHERE t.id = pl.tenant_id AND t.slug = 'south-melb-lsc' AND pl.name = 'Merchandise Cupboard';
+
+UPDATE pickup_locations pl
+SET member_message = 'These can be collected during patrol hours. Please ask to speak to the patrol captain who will be able to assist you with your fob. Alternatively, please email Sue at building@southmelbournelsc.com.au to arrange a time.'
+FROM tenants t
+WHERE t.id = pl.tenant_id AND t.slug = 'south-melb-lsc' AND pl.name = 'Patrol Tower';
+
+UPDATE pickup_locations pl
+SET member_message = 'Your fob is marked as ready in our system but is no longer at the clubhouse. If you have already received your fob, please use the link below to let us know.',
+    confirm_receipt_enabled = true
+FROM tenants t
+WHERE t.id = pl.tenant_id AND t.slug = 'south-melb-lsc' AND pl.name = 'Missing';
+
+-- Verify
+SELECT pl.name, pl.member_message, pl.confirm_receipt_enabled, pl.is_active
+FROM pickup_locations pl JOIN tenants t ON t.id = pl.tenant_id
+WHERE t.slug = 'south-melb-lsc'
+ORDER BY pl.name;
+
+COMMIT;

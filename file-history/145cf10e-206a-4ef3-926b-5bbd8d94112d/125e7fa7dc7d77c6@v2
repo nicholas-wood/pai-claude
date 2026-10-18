@@ -1,0 +1,152 @@
+import { NextRequest, NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+import { Permission, AuditEntityType, AuditAction } from "@accessbuddy/shared";
+import { fobRequests, credentialTypes, accessLevels } from "@accessbuddy/db";
+import { getAuthUser } from "@/lib/auth";
+import { resolveTenant } from "@/lib/tenant";
+import { checkPermission } from "@/lib/permissions";
+import { withTenant } from "@/lib/with-tenant";
+import { createAuditEntry } from "@/lib/services/audit";
+import { z } from "zod";
+
+const updateRequestSchema = z.object({
+  membershipCategory: z.string().min(1).max(100).optional(),
+  credentialTypeId: z.string().uuid().optional(),
+  accessLevelId: z.string().uuid().nullable().optional(),
+});
+
+/**
+ * Update request fields pre-approval (membership category, credential type).
+ * Only allowed before the request is approved (not in final states).
+ */
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string; id: string }> }
+) {
+  try {
+    const auth = await getAuthUser();
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    const { slug, id: requestId } = await params;
+    const tenant = await resolveTenant(slug);
+    if (!tenant) {
+      return NextResponse.json({ error: "Organisation not found" }, { status: 404 });
+    }
+
+    const permResult = checkPermission(auth, tenant.id, Permission.APPROVE);
+    if (!permResult.granted) {
+      return NextResponse.json({ error: permResult.reason }, { status: 403 });
+    }
+
+    const raw = await request.json();
+    const parsed = updateRequestSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+
+    const body = parsed.data;
+    if (!body.membershipCategory && !body.credentialTypeId && body.accessLevelId === undefined) {
+      return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
+    }
+
+    const FINAL_STATES = ["issued", "rejected", "cancelled"];
+
+    const updated = await withTenant(tenant.id, async (tx) => {
+      const [req] = await tx
+        .select()
+        .from(fobRequests)
+        .where(eq(fobRequests.id, requestId))
+        .limit(1);
+
+      if (!req) throw new Error("Request not found");
+
+      if (FINAL_STATES.includes(req.status)) {
+        throw new Error("Cannot update a request in a final state");
+      }
+      // A post-issue payment demand is still an issued request underneath;
+      // changing its credential type or category would desync the credential.
+      if (req.paymentReturnStatus) {
+        throw new Error("Cannot update a request while a post-issue payment request is outstanding");
+      }
+
+      const updates: Record<string, unknown> = { updatedAt: new Date() };
+      const changes: Record<string, { from: unknown; to: unknown }> = {};
+
+      if (body.membershipCategory && body.membershipCategory !== req.membershipCategory) {
+        changes.membershipCategory = { from: req.membershipCategory, to: body.membershipCategory };
+        updates.membershipCategory = body.membershipCategory;
+      }
+
+      if (body.credentialTypeId && body.credentialTypeId !== req.credentialTypeId) {
+        // Look up new credential type name
+        const [newCt] = await tx
+          .select({ id: credentialTypes.id, name: credentialTypes.name })
+          .from(credentialTypes)
+          .where(eq(credentialTypes.id, body.credentialTypeId))
+          .limit(1);
+
+        if (!newCt) throw new Error("Credential type not found");
+
+        // Look up old credential type name
+        let oldName: string | null = null;
+        if (req.credentialTypeId) {
+          const [oldCt] = await tx
+            .select({ name: credentialTypes.name })
+            .from(credentialTypes)
+            .where(eq(credentialTypes.id, req.credentialTypeId))
+            .limit(1);
+          oldName = oldCt?.name ?? null;
+        }
+
+        changes.credentialType = { from: oldName ?? "none", to: newCt.name };
+        updates.credentialTypeId = body.credentialTypeId;
+      }
+
+      if (body.accessLevelId !== undefined && body.accessLevelId !== req.accessLevelId) {
+        const oldName = req.accessLevelId
+          ? (await tx.select({ name: accessLevels.name }).from(accessLevels).where(eq(accessLevels.id, req.accessLevelId)).limit(1))[0]?.name ?? "(unknown)"
+          : "(none)";
+        const newName = body.accessLevelId
+          ? (await tx.select({ name: accessLevels.name }).from(accessLevels).where(eq(accessLevels.id, body.accessLevelId)).limit(1))[0]?.name ?? "(unknown)"
+          : "(none)";
+        changes.accessLevel = { from: oldName, to: newName };
+        updates.accessLevelId = body.accessLevelId;
+      }
+
+      if (Object.keys(changes).length === 0) {
+        return req;
+      }
+
+      const [result] = await tx
+        .update(fobRequests)
+        .set(updates)
+        .where(eq(fobRequests.id, requestId))
+        .returning();
+
+      await createAuditEntry(tx, {
+        tenantId: tenant.id,
+        entityType: AuditEntityType.FOB_REQUEST,
+        entityId: requestId,
+        action: AuditAction.UPDATE,
+        actorId: auth.user.id,
+        metadata: { changes, updatedBy: auth.user.id },
+      });
+
+      return result;
+    });
+
+    return NextResponse.json({ request: updated });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Internal server error";
+    if (message.includes("Cannot") || message.includes("not found") || message.includes("final state")) {
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+    console.error("Update request error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}

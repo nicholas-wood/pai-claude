@@ -1,0 +1,107 @@
+import { NextRequest, NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+import { z } from "zod";
+import { RequestStatus } from "@accessbuddy/shared";
+import { fobRequests } from "@accessbuddy/db";
+import { resolveTenant } from "@/lib/tenant";
+import { withTenant } from "@/lib/with-tenant";
+import { transitionRequest, requestHasPaymentInFlight } from "@/lib/services/requests";
+import { verifyCancelToken } from "@/lib/payment-links";
+
+const bodySchema = z.object({
+  token: z.string().min(1),
+  reason: z.string().trim().min(1, "Reason is required").max(500),
+});
+
+// A member can only back out while the request is still waiting on them or
+// on payment review. Once an admin has approved it the member uses the
+// signed-in dashboard cancel, which goes through the normal ownership check.
+const CANCELLABLE_BY_LINK: string[] = [
+  RequestStatus.SUBMITTED,
+  RequestStatus.AWAITING_PAYMENT,
+  RequestStatus.AWAITING_EXEMPTION_REVIEW,
+];
+
+/**
+ * Public, token-authenticated member cancel. The token is the HMAC issued
+ * with the emailed payment link (see payment-links.ts). No session needed,
+ * which matters because the member who abandoned payment may never have
+ * signed in.
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string; id: string }> }
+) {
+  try {
+    const { slug, id: requestId } = await params;
+    const tenant = await resolveTenant(slug);
+    if (!tenant) {
+      return NextResponse.json({ error: "Organisation not found" }, { status: 404 });
+    }
+
+    const raw = await request.json().catch(() => ({}));
+    const parsed = bodySchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.errors[0]?.message ?? "Invalid input" },
+        { status: 400 }
+      );
+    }
+    const { token, reason } = parsed.data;
+
+    const verdict = verifyCancelToken({ token, tenantId: tenant.id, requestId });
+    if (!verdict.valid) {
+      const message =
+        verdict.reason === "expired"
+          ? "This cancel link has expired. Please contact the club to cancel your request."
+          : "This cancel link is not valid.";
+      return NextResponse.json({ error: message }, { status: 403 });
+    }
+
+    const updated = await withTenant(tenant.id, async (tx) => {
+      const [req] = await tx
+        .select()
+        .from(fobRequests)
+        .where(eq(fobRequests.id, requestId))
+        .limit(1);
+
+      if (!req) throw new Error("Request not found");
+      if (req.status === RequestStatus.CANCELLED) {
+        return req; // idempotent: clicking the link twice is fine
+      }
+      if (!CANCELLABLE_BY_LINK.includes(req.status)) {
+        throw new Error("This request can no longer be cancelled from this link. Please contact the club.");
+      }
+      // A demand raised after issue relates to a credential the member already
+      // holds; cancelling the request is not an option. The email for these
+      // carries no cancel link, so this only guards a hand-built URL.
+      if (req.paymentReturnStatus) {
+        throw new Error("This payment relates to a credential you already hold, so the request cannot be cancelled. Please contact the club if you believe no payment is due.");
+      }
+      // Ask Stripe, not just paidAt: a late webhook must not let a paid
+      // request be cancelled here with no refund.
+      if (await requestHasPaymentInFlight(tx, { request: req, tenantId: tenant.id })) {
+        throw new Error("This request has already been paid and cannot be cancelled from this link. Please contact the club.");
+      }
+
+      return transitionRequest(tx, {
+        requestId,
+        tenantId: tenant.id,
+        event: "CANCEL",
+        actorId: null,
+        metadata: { reason, action: "member_cancel_via_link" },
+      });
+    });
+
+    return NextResponse.json({ ok: true, status: updated.status });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal server error";
+    const known =
+      message.includes("Cannot") ||
+      message.includes("not found") ||
+      message.includes("no longer") ||
+      message.includes("already been paid");
+    if (!known) console.error("Cancel-by-token error:", err);
+    return NextResponse.json({ error: known ? message : "Internal server error" }, { status: known ? 400 : 500 });
+  }
+}
