@@ -1,0 +1,408 @@
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { eq, and, desc, isNull, inArray, sql } from "drizzle-orm";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { RequestStatusBadge, CredentialStatusBadge } from "@/components/status-badge";
+import { BackButton } from "@/components/back-button";
+import { AuditTrail } from "@/components/audit-trail";
+import { getAuthUser } from "@/lib/auth";
+import { resolveTenant } from "@/lib/tenant";
+import { withTenant } from "@/lib/with-tenant";
+import { getEffectivePermissions } from "@/lib/permissions";
+import { isAutoClosedReturn } from "@/lib/request-display";
+import {
+  users,
+  tenantMemberships,
+  fobRequests,
+  credentials,
+  credentialTypes,
+  accessLevels,
+  attestationRequests,
+  auditLog,
+} from "@accessbuddy/db";
+import { Permission } from "@accessbuddy/shared";
+import type { TenantSettings } from "@accessbuddy/shared";
+import { RenewButton } from "./renew-button";
+import { MemberDetailsSection } from "./member-edit";
+import { ArchiveButton } from "./archive-button";
+import { AttestationSection } from "./attestation-section";
+import { CredentialActions } from "./credential-actions";
+
+export const dynamic = "force-dynamic";
+
+export default async function MemberDetailPage({
+  params,
+}: {
+  params: Promise<{ slug: string; id: string }>;
+}) {
+  const { slug, id: userId } = await params;
+  const [auth, tenant] = await Promise.all([
+    getAuthUser(),
+    resolveTenant(slug),
+  ]);
+  if (!auth) redirect("/sign-in");
+  if (!tenant) notFound();
+
+  const data = await withTenant(tenant.id, async (tx) => {
+    const [user] = await tx
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (!user) return null;
+
+    const [membershipRow] = await tx
+      .select({
+        membership: tenantMemberships,
+        accessLevelName: accessLevels.name,
+      })
+      .from(tenantMemberships)
+      .leftJoin(accessLevels, eq(tenantMemberships.accessLevelId, accessLevels.id))
+      .where(eq(tenantMemberships.userId, userId))
+      .limit(1);
+    const membership = membershipRow?.membership ?? null;
+    const membershipAccessLevelName = membershipRow?.accessLevelName ?? null;
+
+    const requests = await tx
+      .select({
+        id: fobRequests.id,
+        status: fobRequests.status,
+        requestType: fobRequests.requestType,
+        autoClosedAt: fobRequests.autoClosedAt,
+        submittedAt: fobRequests.submittedAt,
+        credentialTypeName: credentialTypes.name,
+      })
+      .from(fobRequests)
+      .leftJoin(credentialTypes, eq(fobRequests.credentialTypeId, credentialTypes.id))
+      .where(eq(fobRequests.requesterId, userId))
+      .orderBy(desc(fobRequests.createdAt));
+
+    const creds = await tx
+      .select({
+        id: credentials.id,
+        serialNumber: credentials.serialNumber,
+        status: credentials.status,
+        issuedAt: credentials.issuedAt,
+        expiresAt: credentials.expiresAt,
+        programmingRequired: credentials.programmingRequired,
+        credentialTypeName: credentialTypes.name,
+        accessLevelName: accessLevels.name,
+      })
+      .from(credentials)
+      .leftJoin(credentialTypes, eq(credentials.credentialTypeId, credentialTypes.id))
+      .leftJoin(accessLevels, eq(credentials.accessLevelId, accessLevels.id))
+      .where(eq(credentials.ownerId, userId))
+      .orderBy(desc(credentials.issuedAt));
+
+    // Fetch attestation history (attestation_requests is FORCE-RLS since
+    // migration 0011; this runs inside withTenant with an explicit
+    // tenant_id predicate as defence in depth)
+    const attestations = await tx
+      .select({
+        id: attestationRequests.id,
+        season: attestationRequests.season,
+        status: attestationRequests.status,
+        createdAt: attestationRequests.createdAt,
+        tokenExpiresAt: attestationRequests.tokenExpiresAt,
+        completedAt: attestationRequests.completedAt,
+        credentialResponses: attestationRequests.credentialResponses,
+        credentialIds: attestationRequests.credentialIds,
+      })
+      .from(attestationRequests)
+      .where(
+        and(
+          eq(attestationRequests.userId, userId),
+          eq(attestationRequests.tenantId, tenant.id)
+        )
+      )
+      .orderBy(desc(attestationRequests.createdAt));
+
+    const allCredentialTypes = await tx
+      .select({ id: credentialTypes.id, name: credentialTypes.name })
+      .from(credentialTypes);
+
+    const allAccessLevels = await tx
+      .select({ id: accessLevels.id, name: accessLevels.name })
+      .from(accessLevels);
+
+    // Available fobs: unallocated (no owner) OR deactivated (can be
+    // reallocated) OR this member's own expired/returned fobs, which the
+    // "expiry update" stage re-attaches when the member still holds them.
+    const { or } = await import("drizzle-orm");
+    const unallocatedFobs = await tx
+      .select({
+        id: credentials.id,
+        serialNumber: credentials.serialNumber,
+        credentialTypeId: credentials.credentialTypeId,
+        credentialTypeName: credentialTypes.name,
+        status: credentials.status,
+        ownerId: credentials.ownerId,
+        deactivationReason: credentials.deactivationReason,
+        previousOwnerFirstName: users.firstName,
+        previousOwnerLastName: users.lastName,
+      })
+      .from(credentials)
+      .leftJoin(credentialTypes, eq(credentials.credentialTypeId, credentialTypes.id))
+      .leftJoin(users, eq(credentials.ownerId, users.id))
+      .where(
+        or(
+          isNull(credentials.ownerId),
+          eq(credentials.status, "deactivated"),
+          and(
+            eq(credentials.ownerId, userId),
+            inArray(credentials.status, ["expired", "returned"])
+          )
+        )
+      );
+
+    // Collated audit trail: all entries related to this member
+    // - entries where this user is the actor
+    // - entries for their requests
+    // - entries for their credentials
+    // - entries where entityId is the user ID (member-level actions)
+    const requestIds = requests.map((r) => r.id);
+    const credentialIds = creds.map((c) => c.id);
+    const allEntityIds = [userId, ...requestIds, ...credentialIds].filter(Boolean);
+
+    const memberAuditTrail = allEntityIds.length > 0
+      ? await tx
+          .select({
+            id: auditLog.id,
+            action: auditLog.action,
+            fromState: auditLog.fromState,
+            toState: auditLog.toState,
+            actorType: auditLog.actorType,
+            actorFirstName: users.firstName,
+            actorLastName: users.lastName,
+            metadata: auditLog.metadata,
+            createdAt: auditLog.createdAt,
+            entityType: auditLog.entityType,
+            entityId: auditLog.entityId,
+          })
+          .from(auditLog)
+          .leftJoin(users, eq(auditLog.actorId, users.id))
+          .where(inArray(auditLog.entityId, allEntityIds))
+          .orderBy(desc(auditLog.createdAt))
+          .limit(100)
+      : [];
+
+    return {
+      user,
+      membership,
+      membershipAccessLevelName,
+      requests,
+      credentials: creds,
+      attestations,
+      memberAuditTrail,
+      allCredentialTypes,
+      allAccessLevels,
+      unallocatedFobs,
+    };
+  });
+
+  if (!data) notFound();
+  const {
+    user,
+    membership,
+    membershipAccessLevelName,
+    requests: memberRequests,
+    credentials: memberCreds,
+    attestations,
+    allCredentialTypes,
+    allAccessLevels,
+    unallocatedFobs,
+  } = data;
+
+  // Credentials with a scoped confirmation still waiting on the member
+  // (admin re-added a fob the member says they hold).
+  const awaitingConfirmationIds = new Set(
+    attestations
+      .filter((a) => a.status === "pending" && a.credentialIds?.length)
+      .flatMap((a) => a.credentialIds ?? [])
+  );
+  const credentialLabel = (id: string) => {
+    const c = memberCreds.find((x) => x.id === id);
+    if (!c) return null;
+    return `${c.credentialTypeName ?? "Credential"}${c.serialNumber ? ` #${c.serialNumber}` : ""}`;
+  };
+
+  const permissions = getEffectivePermissions(auth, tenant.id);
+  const canRenew = permissions.includes(Permission.RENEW);
+  const canProgram = permissions.includes(Permission.PROGRAM);
+  const canManualAdd = permissions.includes(Permission.MANUAL_ADD);
+  const canApprove = permissions.includes(Permission.APPROVE);
+  const settings = tenant.settings as TenantSettings & { seasons?: string[] };
+  const allowFobCreationAtProgramming = settings.allowFobCreationAtProgramming ?? false;
+
+  return (
+    <div className="space-y-6">
+      <BackButton fallback={`/t/${slug}/admin/members`} />
+      <h1 className="text-2xl font-bold">
+        {user.firstName} {user.lastName}
+      </h1>
+
+      {/* Member Details */}
+      {membership ? (
+        <MemberDetailsSection
+          tenantSlug={slug}
+          userId={userId}
+          firstName={user.firstName}
+          lastName={user.lastName}
+          email={user.email}
+          dateOfBirth={user.dateOfBirth ?? null}
+          membershipCategory={membership.membershipCategory}
+          accessLevelId={membership.accessLevelId}
+          accessLevelName={membershipAccessLevelName}
+          accessLevels={allAccessLevels}
+          status={membership.status}
+          currentSeason={membership.currentSeason}
+          isOfficer={membership.isOfficer}
+          isBoardMember={membership.isBoardMember}
+          isStaff={membership.isStaff}
+          officerExpiresAt={membership.officerExpiresAt?.toISOString() ?? null}
+          boardExpiresAt={membership.boardExpiresAt?.toISOString() ?? null}
+          membershipCategories={((settings as TenantSettings).membershipCategories ?? []).sort()}
+          canEdit={canApprove}
+          canRenew={canRenew}
+          canArchive={canApprove}
+          seasons={settings.seasons ?? []}
+          renewButton={canRenew ? (
+            <RenewButton
+              tenantSlug={slug}
+              userId={userId}
+              seasons={settings.seasons ?? []}
+              currentSeason={membership.currentSeason ?? undefined}
+            />
+          ) : null}
+          archiveButton={canApprove ? (
+            <ArchiveButton tenantSlug={slug} userId={userId} currentStatus={membership.status} />
+          ) : null}
+        />
+      ) : (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Member Details</CardTitle></CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">No membership record</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Credentials & Actions (merged) */}
+      <CredentialActions
+        tenantSlug={slug}
+        memberId={userId}
+        credentials={memberCreds.map((c) => ({
+          ...c,
+          awaitingMemberConfirmation: awaitingConfirmationIds.has(c.id),
+        }))}
+        credentialTypes={allCredentialTypes}
+        accessLevels={allAccessLevels}
+        availableFobs={unallocatedFobs
+          .filter((f): f is typeof f & { serialNumber: string } => f.serialNumber !== null)
+          .map((f) => ({
+            id: f.id,
+            serialNumber: f.serialNumber,
+            credentialTypeId: f.credentialTypeId,
+            credentialTypeName: f.credentialTypeName,
+            status: f.status,
+            deactivationReason: f.deactivationReason,
+            // Only the rows the extended query added (this member's own
+            // expired/returned fobs) are stage-gated. Their own deactivated
+            // fobs were always offered under "Previously Assigned" for every
+            // stage and still are.
+            ownedByThisMember:
+              f.ownerId === userId && (f.status === "expired" || f.status === "returned"),
+            previousOwnerName: (f.previousOwnerFirstName || f.previousOwnerLastName)
+              ? [f.previousOwnerFirstName, f.previousOwnerLastName].filter(Boolean).join(" ")
+              : null,
+          }))}
+        allowFobCreationAtProgramming={allowFobCreationAtProgramming}
+        canProgram={canProgram}
+        canManualAdd={canManualAdd}
+        memberAccessLevelName={membershipAccessLevelName}
+      />
+
+      {/* Attestations */}
+      <AttestationSection
+        tenantSlug={slug}
+        userId={userId}
+        attestations={attestations.map((a) => ({
+          id: a.id,
+          season: a.season,
+          status: a.status,
+          createdAt: a.createdAt.toISOString(),
+          tokenExpiresAt: a.tokenExpiresAt.toISOString(),
+          completedAt: a.completedAt?.toISOString() ?? null,
+          credentialResponses: a.credentialResponses ?? null,
+          credentialIds: a.credentialIds ?? null,
+          scopedLabel: a.credentialIds?.length
+            ? `Confirm ${a.credentialIds.map(credentialLabel).filter(Boolean).join(", ") || "fob"} - member to confirm they have it`
+            : null,
+        }))}
+        seasons={settings.seasons ?? []}
+        canRenew={canRenew}
+      />
+
+      {/* Requests */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            Requests ({memberRequests.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {memberRequests.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No requests</p>
+          ) : (
+            <div className="space-y-2">
+              {memberRequests.map((r) => (
+                <Link
+                  key={r.id}
+                  href={`/t/${slug}/admin/requests/${r.id}`}
+                  className="flex items-center justify-between rounded border p-2 text-sm transition-colors hover:bg-accent/50"
+                >
+                  <div>
+                    <span className="capitalize">
+                      {r.requestType.replace(/_/g, " ")}
+                    </span>
+                    <p className="text-xs text-muted-foreground">
+                      {r.credentialTypeName} &middot;{" "}
+                      {new Date(r.submittedAt).toLocaleDateString("en-AU", { timeZone: "Australia/Melbourne" })}
+                    </p>
+                  </div>
+                  <RequestStatusBadge status={r.status} requestType={r.requestType} autoClosed={isAutoClosedReturn(r)} />
+                </Link>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Collated Audit Trail */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Audit Trail</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AuditTrail
+            entries={data.memberAuditTrail.map((e) => ({
+              id: e.id,
+              action: e.action,
+              fromState: e.fromState,
+              toState: e.toState,
+              actorType: e.actorType,
+              actorName: e.actorFirstName ? `${e.actorFirstName} ${e.actorLastName ?? ""}`.trim() : null,
+              metadata: e.metadata as Record<string, unknown> | null,
+              createdAt: e.createdAt.toISOString(),
+              entityType: e.entityType,
+              entityId: e.entityId,
+            }))}
+            slug={slug}
+            enableEmailPreview
+          />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

@@ -1,0 +1,585 @@
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
+import { describeRetirementAudit } from "@/lib/request-display";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { describeAttestationAction } from "@/lib/audit-labels";
+
+type AuditEntry = {
+  id?: string;
+  action: string;
+  fromState: string | null;
+  toState: string | null;
+  actorType: string;
+  actorName?: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  entityType?: string;
+  entityId?: string;
+};
+
+function formatDate(date: string | null) {
+  if (!date) return "-";
+  return new Date(date).toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Australia/Melbourne",
+  });
+}
+
+function humaniseStatus(status: string): string {
+  const labels: Record<string, string> = {
+    submitted: "Submitted",
+    awaiting_payment: "Awaiting Payment",
+    awaiting_approval: "Awaiting Approval",
+    awaiting_programming: "Awaiting Programming",
+    programmed: "Programmed",
+    awaiting_pickup: "Awaiting Pickup",
+    issued: "Issued",
+    on_hold: "On Hold",
+    cancelled: "Cancelled",
+    rejected: "Rejected",
+    active: "Active",
+    lost: "Reported Lost",
+    damaged: "Reported Damaged",
+    inactive_lost: "Inactive - Lost",
+    inactive_damaged: "Inactive - Damaged",
+    deactivated: "Deactivated",
+    expired: "Expired",
+    returned: "Returned",
+  };
+  return labels[status] ?? status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function describeAction(entry: AuditEntry): string {
+  const meta = entry.metadata;
+  if (meta?.legacyEvent) return String(meta.legacyEvent);
+
+  if (entry.action === "create") {
+    if (meta?.action === "manual_add") {
+      const desc = meta.stageDescription as string | undefined;
+      const serial = meta.serialNumber as string | undefined;
+      const typeName = meta.credentialTypeName as string | undefined;
+      const parts = ["Manually added"];
+      if (typeName) parts.push(typeName);
+      if (serial) parts.push(`#${serial}`);
+      if (desc) parts.push(`- ${desc}`);
+      return parts.join(" ");
+    }
+    const type = meta?.requestType as string | undefined;
+    if (type) {
+      const typeLabels: Record<string, string> = {
+        new: "New request submitted",
+        replacement_lost: "Lost fob reported",
+        replacement_damaged: "Damaged fob reported",
+        additional: "Additional credential requested",
+        return: "Return submitted",
+        change_type: "Type change requested",
+        access_update: "Access update requested",
+        replacement_new: "Replacement request created",
+      };
+      return typeLabels[type] ?? "Request submitted";
+    }
+    // Credential creation
+    if (entry.entityType === "credential") {
+      const serial = meta?.serialNumber as string | undefined;
+      const assignedTo = meta?.assignedTo as string | undefined;
+      if (serial && assignedTo) return `Credential #${serial} created and assigned to ${assignedTo}`;
+      if (serial) return `Credential #${serial} created`;
+      if (assignedTo) return `Credential created and assigned to ${assignedTo}`;
+      return "Credential created";
+    }
+    // Member creation
+    if (entry.entityType === "member") {
+      return "Member record created";
+    }
+    return "Created";
+  }
+
+  if (entry.action === "status_change") {
+    // Return / change_type retirement entries get specific labels.
+    const retirement = describeRetirementAudit(meta, { from: entry.fromState, to: entry.toState });
+    if (retirement) return retirement;
+
+    // Describe the action, not the state transition
+    const transitionLabels: Record<string, string> = {
+      "submitted_awaiting_payment": "Payment required",
+      "awaiting_approval_awaiting_payment": "Payment required",
+      "issued_awaiting_payment": "Payment required after issue",
+      "issued_awaiting_pickup": "Member's collection report reverted, back to awaiting pickup",
+      "awaiting_payment_issued": "Payment received", // overridden below for withdraw / exemption
+      "awaiting_exemption_review_issued": "Exemption approved, back to issued",
+      "submitted_awaiting_approval": "Submitted for approval",
+      "submitted_awaiting_programming": "Auto-approved",
+      "awaiting_payment_awaiting_approval": "Payment received", // overridden below for exemptions
+      "awaiting_approval_awaiting_programming": "Request approved",
+      "awaiting_approval_rejected": "Request rejected",
+      "awaiting_approval_on_hold": "Placed on hold",
+      "awaiting_programming_programmed": "Credential programmed",
+      "programmed_awaiting_pickup": "Pickup location set",
+      "awaiting_pickup_issued": "Issued",
+      "on_hold_awaiting_approval": "Resumed from hold",
+      "submitted_awaiting_exemption_review": "Payment exemption requested",
+      "awaiting_payment_awaiting_exemption_review": "Payment exemption requested",
+      "awaiting_exemption_review_awaiting_approval": "Exemption approved",
+      "awaiting_exemption_review_awaiting_payment": "Exemption rejected",
+    };
+
+    if (entry.fromState && entry.toState) {
+      const key = `${entry.fromState}_${entry.toState}`;
+      // Member reported (via the pickup email link) that the fob was already
+      // handed over. Name the real issuer, not the member who recorded it.
+      if (key === "awaiting_pickup_issued" && meta?.action === "member_confirmed_receipt") {
+        const by = (meta.issuedByName as string | undefined) ?? "someone";
+        const where = (meta.issuedWhere as string | undefined) ?? "the club";
+        return `Member confirmed they already have it (issued by ${by} at ${where})`;
+      }
+      // Differentiate exemption grants from actual payments
+      if (key === "awaiting_payment_awaiting_approval" && meta?.action === "admin_grant_exemption") {
+        return "Exemption granted";
+      }
+      if (key === "submitted_awaiting_approval" && meta?.action === "admin_grant_exemption") {
+        return "Exemption granted";
+      }
+      if (entry.toState === "awaiting_payment" && meta?.action === "abandoned_payment_sweep") {
+        return "Payment not completed at submission, payment link emailed";
+      }
+      if (entry.toState === "awaiting_payment" && meta?.action === "admin_require_payment") {
+        return "Payment required by admin, payment link emailed";
+      }
+      if (entry.toState === "cancelled" && meta?.action === "member_cancel_via_link") {
+        return "Cancelled by member via emailed link";
+      }
+      if (key === "awaiting_payment_issued" && meta?.action === "payment_request_withdrawn") {
+        return "Payment request withdrawn, back to issued";
+      }
+      if (key === "awaiting_payment_issued" && meta?.action === "admin_grant_exemption") {
+        return "Exemption granted, back to issued";
+      }
+      // Link an orphaned request to a real member account. The transition can
+      // be submitted->awaiting_payment/approval/programming depending on
+      // payment state, but the meaningful event is the link itself.
+      if (meta?.action === "link_orphaned_request") {
+        const linkedName = (meta.linkedMemberName as string | undefined)
+          ?? (meta.orphanName as string | undefined)?.trim()
+          ?? "member";
+        const orphanEmail = meta.orphanEmail as string | undefined;
+        const linkedEmail = meta.linkedMemberEmail as string | undefined;
+        const emailNote = orphanEmail && linkedEmail && orphanEmail !== linkedEmail
+          ? ` (${orphanEmail} → ${linkedEmail})`
+          : linkedEmail
+            ? ` (${linkedEmail})`
+            : "";
+        return `Request linked to ${linkedName}${emailNote}`;
+      }
+      if (transitionLabels[key]) {
+        // Enrich programmed label with credential type + serial when known.
+        const label = transitionLabels[key];
+        if (key === "awaiting_programming_programmed") {
+          const typeName = meta?.credentialTypeName as string | undefined;
+          const serial = meta?.serialNumber as string | undefined;
+          if (typeName && serial) return `${label}: ${typeName} #${serial}`;
+          if (serial) return `${label} (#${serial})`;
+          if (typeName) return `${label}: ${typeName}`;
+        }
+        return label;
+      }
+    }
+
+    // Cancellation from any state. Make the label type-specific so an
+    // access_update cancellation reads "Update cancelled" instead of a bare
+    // "Cancelled", matching the user-facing request type.
+    if (entry.toState === "cancelled") {
+      const reqType = meta?.requestType as string | undefined;
+      switch (reqType) {
+        case "access_update":
+          return "Update cancelled";
+        case "replacement_lost":
+          return "Lost replacement cancelled";
+        case "replacement_damaged":
+          return "Damaged replacement cancelled";
+        case "additional":
+          return "Additional request cancelled";
+        case "return":
+          return "Return cancelled";
+        case "change_type":
+          return "Type change cancelled";
+        case "new":
+          return "New request cancelled";
+        default:
+          return "Cancelled";
+      }
+    }
+    if (entry.toState === "on_hold") return "Placed on hold";
+    if (meta?.action === "deactivation_complete") return "Deactivation complete";
+    if (entry.fromState === "rejected" && entry.toState === "awaiting_approval") return "Reopened (was rejected)";
+    if (entry.fromState === "cancelled" && entry.toState === "awaiting_approval") return "Reopened (was cancelled)";
+
+    // Fallback
+    if (entry.fromState && entry.toState) {
+      return `${humaniseStatus(entry.fromState)} \u2192 ${humaniseStatus(entry.toState)}`;
+    }
+    if (entry.toState) return `Status set to ${humaniseStatus(entry.toState)}`;
+  }
+
+  if (entry.action === "update") {
+    const attestationLabel = describeAttestationAction(meta);
+    if (attestationLabel) return attestationLabel;
+    if (meta?.action === "assigned") return `Assigned to ${meta?.assignedTo ?? "member"}`;
+    if (meta?.action === "reassigned") return `Reassigned to ${meta?.assignedTo ?? "member"}`;
+    if (meta?.action === "reconciliation_apply") {
+      const applied = meta.applied as string | undefined;
+      const kind = (meta.kind as string | undefined)?.replace(/_/g, " ");
+      return applied
+        ? `Reconciliation: ${applied}`
+        : kind
+          ? `Reconciliation: ${kind} resolved`
+          : "Reconciliation update applied";
+    }
+    if (meta?.action === "backfill_link_to_paired_request") {
+      return "Linked to paired replacement request";
+    }
+    if (meta?.action === "confirm_programming") return "Programming confirmed";
+    if (meta?.action === "member_declined_confirmation") {
+      return typeof meta.description === "string" && meta.description
+        ? meta.description
+        : "Member confirmed they no longer have the fob. Member must submit a new request to replace their fob.";
+    }
+    if (meta?.action === "confirmation_cancelled") {
+      const reason = typeof meta.reason === "string" && meta.reason ? `: ${meta.reason}` : "";
+      return `Member confirmation cancelled by admin${reason}`;
+    }
+    if (meta?.action === "manual_expiry_update") {
+      if (meta.awaitingMemberConfirmation) {
+        const sent = meta.confirmationEmailSent === false ? " (no email address on file)" : "";
+        return `Re-added to member - confirmation email sent, expiry update staged once they confirm${sent}`;
+      }
+      const pending = meta.pendingExpiresAt as string | undefined;
+      const when = pending ? formatDate(pending) : "a new date";
+      return `Re-added to member - expiry update staged for ${when}, awaiting programming`;
+    }
+    if (meta?.action === "link_orphaned_request") return "Linked to member";
+    if (meta?.action === "renew") return `Membership renewed (${meta?.season ?? ""})`;
+    if (meta?.action === "swap") {
+      const fromType = (meta.fromCredentialTypeName as string | undefined) ?? "Credential";
+      const fromSerial = (meta.fromSerialNumber as string | undefined) ?? "?";
+      const toType = (meta.toCredentialTypeName as string | undefined) ?? "Credential";
+      const toSerial = (meta.toSerialNumber as string | undefined) ?? "?";
+      const reason = (meta.reason as string | undefined)?.trim();
+      const base = `Credential swapped. ${fromType} #${fromSerial} swapped for ${toType} #${toSerial}`;
+      return reason ? `${base}. Reason: ${reason}` : base;
+    }
+    if (meta?.changes && typeof meta.changes === "object") {
+      // Member updates store changes as a string array (e.g. ["officer: true", "category: Senior -> Junior"])
+      if (Array.isArray(meta.changes)) {
+        const items = meta.changes as string[];
+        if (items.length > 0) return items.join(". ");
+        return "Member details updated";
+      }
+
+      // Request/credential updates store changes as { field: { from, to } }
+      const changes = meta.changes as Record<string, { from: unknown; to: unknown }>;
+      const fieldLabels: Record<string, string> = {
+        membershipCategory: "Membership category",
+        credentialType: "Credential type",
+        credentialTypeId: "Credential type",
+        accessLevel: "Access level",
+        accessLevelId: "Access level",
+        owner: "Owner",
+        ownerId: "Owner",
+        status: "Status",
+        expiresAt: "Expiry",
+        accessStartsAt: "Access starts",
+        firstName: "First name",
+        lastName: "Last name",
+        email: "Email",
+      };
+      // Detect UUID-like values and display them as a short prefix so two
+      // distinct ids are at least visually distinguishable. The audit
+      // writers in this codebase resolve names where possible, but older
+      // entries and any miss-by-one writer surfaces as a UUID — show the
+      // first 8 chars rather than a meaningless "(member)" placeholder.
+      const formatValue = (val: unknown): string => {
+        if (val === null || val === undefined) return "none";
+        const s = String(val);
+        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) {
+          return `${s.slice(0, 8)}…`;
+        }
+        return s;
+      };
+      const descriptions = Object.entries(changes).map(([field, { from, to }]) => {
+        const label = fieldLabels[field] ?? field;
+        return `${label} changed from "${formatValue(from)}" to "${formatValue(to)}"`;
+      });
+      if (descriptions.length > 0) return descriptions.join(". ");
+      return "Request details updated";
+    }
+    if (meta?.action === "permission_expired") {
+      const changes = meta.changes as string[] | undefined;
+      return changes ? `Permission expired: ${changes.join(", ")}` : "Permission expired";
+    }
+    if (meta?.action === "attestation_completed") {
+      const confirmed = meta.confirmedCount as number | undefined;
+      const lost = meta.lostCount as number | undefined;
+      return `Attestation completed (${confirmed ?? 0} confirmed, ${lost ?? 0} lost)`;
+    }
+    if (meta?.action === "auto_refund") return `Auto-refund issued (${meta.trigger ?? "unknown trigger"})`;
+    if (meta?.action === "refund") return "Payment refunded";
+    if (meta?.action === "payment_link_resent") {
+      const to = meta.sentTo as string | undefined;
+      return to ? `Payment link resent to ${to}` : "Payment link resent";
+    }
+    if (meta?.action === "payment_failed") {
+      const msg = meta.failureMessage as string | undefined;
+      return msg ? `Payment failed: ${msg}` : "Payment failed";
+    }
+    if (meta?.action === "dispute_created") {
+      const reason = meta.reason as string | undefined;
+      const pretty = reason ? reason.replace(/_/g, " ") : null;
+      return pretty ? `Dispute raised: ${pretty}` : "Dispute raised";
+    }
+    // Entity-specific fallbacks
+    if (entry.entityType === "credential") return "Credential updated";
+    if (entry.entityType === "member") return "Member details updated";
+    if (entry.entityType === "fob_request") return "Request updated";
+    return "Updated";
+  }
+
+  if (entry.action === "delete") {
+    if (entry.entityType === "credential") return "Credential removed";
+    if (entry.entityType === "member") return "Member removed";
+    return "Deleted";
+  }
+
+  if (entry.action === "email_sent") {
+    const subject = meta?.subject as string | undefined;
+    if (meta?.suppressed) return subject ? `Email not sent: ${subject}` : "Email not sent";
+    if (meta?.noop) return subject ? `Email skipped: ${subject}` : "Email skipped";
+    return subject ? `Email sent: ${subject}` : "Email sent";
+  }
+
+  if (entry.action === "email_failed") {
+    const subject = meta?.subject as string | undefined;
+    return subject ? `Email failed: ${subject}` : "Email failed";
+  }
+
+  return entry.action.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function getEntryStyle(entry: AuditEntry): { dotClass: string; badge: { label: string; className: string } | null } {
+  const meta = entry.metadata;
+  if (entry.action === "email_sent") {
+    if (meta?.suppressed) {
+      return {
+        dotClass: "bg-amber-500",
+        badge: { label: "Suppressed", className: "bg-amber-100 text-amber-800 border-amber-200" },
+      };
+    }
+    if (meta?.noop) {
+      return {
+        dotClass: "bg-muted-foreground",
+        badge: { label: "Skipped", className: "bg-muted text-muted-foreground border-border" },
+      };
+    }
+    return {
+      dotClass: "bg-blue-500",
+      badge: { label: "Email", className: "bg-blue-50 text-blue-700 border-blue-200" },
+    };
+  }
+  if (entry.action === "email_failed") {
+    return {
+      dotClass: "bg-red-500",
+      badge: { label: "Failed", className: "bg-red-50 text-red-700 border-red-200" },
+    };
+  }
+  return { dotClass: "bg-primary", badge: null };
+}
+
+function describeActor(entry: AuditEntry): string {
+  if (entry.actorType === "system") return "System";
+  if (entry.actorType === "webhook") return "Payment";
+  if (entry.actorName) return entry.actorName;
+  const meta = entry.metadata;
+  if (meta?.name && typeof meta.name === "string") return meta.name;
+  if (entry.actorType === "user") return "Member";
+  return "Admin";
+}
+
+export function AuditTrail({
+  entries,
+  slug,
+  enableEmailPreview = false,
+}: {
+  entries: AuditEntry[];
+  slug: string;
+  enableEmailPreview?: boolean;
+}) {
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewMeta, setPreviewMeta] = useState<{ subject: string; to: string; date: string } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  async function openEmailPreview(entry: AuditEntry) {
+    if (!entry.id) return;
+    setPreviewOpen(true);
+    setPreviewLoading(true);
+    setPreviewHtml(null);
+    setPreviewMeta({
+      subject: (entry.metadata?.subject as string) ?? "No subject",
+      to: (entry.metadata?.to as string) ?? "Unknown",
+      date: formatDate(entry.createdAt),
+    });
+    try {
+      const res = await fetch(`/api/v1/t/${slug}/audit/${entry.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setPreviewHtml((data.entry?.metadata?.html as string | undefined) ?? null);
+      }
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  if (entries.length === 0) {
+    return <p className="text-sm text-muted-foreground">No history recorded.</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {entries.map((entry, i) => {
+        const meta = entry.metadata;
+        const relatedRequestId = meta?.requestId as string | undefined;
+        const relatedDeactivationId = meta?.relatedDeactivationId as string | undefined;
+        const { dotClass, badge } = getEntryStyle(entry);
+        const isEmailEntry = entry.action === "email_sent" || entry.action === "email_failed";
+        const emailTo = isEmailEntry ? (meta?.to as string | undefined) : undefined;
+        const emailError = entry.action === "email_failed" ? (meta?.error as string | undefined) : undefined;
+
+        return (
+          <div key={i} className="flex items-start gap-3 text-sm">
+            <div className={`mt-1 h-2 w-2 shrink-0 rounded-full ${dotClass}`} />
+            <div className="min-w-0 flex-1">
+              <p className="font-medium flex flex-wrap items-center gap-2">
+                <span>{describeAction(entry)}</span>
+                {badge && (
+                  <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${badge.className}`}>
+                    {badge.label}
+                  </span>
+                )}
+              </p>
+              <div className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
+                <span>{formatDate(entry.createdAt)}</span>
+                <span>&middot; {describeActor(entry)}</span>
+                {relatedRequestId && (
+                  <>
+                    <span>&middot;</span>
+                    <Link
+                      href={`/t/${slug}/admin/requests/${relatedRequestId}`}
+                      className="text-primary hover:underline"
+                    >
+                      View request
+                    </Link>
+                  </>
+                )}
+                {relatedDeactivationId && (
+                  <>
+                    <span>&middot;</span>
+                    <Link
+                      href={`/t/${slug}/admin/requests/${relatedDeactivationId}`}
+                      className="text-primary hover:underline"
+                    >
+                      View deactivation
+                    </Link>
+                  </>
+                )}
+              </div>
+              {emailTo && (
+                <p className="text-xs text-muted-foreground">
+                  To: {emailTo}
+                  {enableEmailPreview && entry.action === "email_sent" && entry.id && !meta?.suppressed && !meta?.noop && (
+                    <button
+                      type="button"
+                      onClick={() => openEmailPreview(entry)}
+                      className="ml-2 inline-flex items-center rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                    >
+                      View email
+                    </button>
+                  )}
+                </p>
+              )}
+              {entry.action === "email_sent" && meta?.suppressed === true && (
+                <p className="text-xs text-amber-700">
+                  Email delivery is disabled in tenant settings. No message was sent.
+                </p>
+              )}
+              {emailError && (
+                <p className="text-xs text-red-700">
+                  Error: {emailError}
+                </p>
+              )}
+              {!isEmailEntry && meta?.reason != null && (
+                <p className="text-xs text-muted-foreground">
+                  Reason: {String(meta.reason)}
+                </p>
+              )}
+              {meta?.accessUpdateReason != null && (
+                <p className="text-xs text-muted-foreground">
+                  Change: {String(meta.accessUpdateReason)}
+                </p>
+              )}
+              {!isEmailEntry && meta?.serialNumber != null && (
+                <p className="text-xs text-muted-foreground">
+                  Serial: #{String(meta.serialNumber)}
+                </p>
+              )}
+              {meta?.linkedMemberEmail != null && (
+                <p className="text-xs text-muted-foreground">
+                  Linked to: {String(meta.linkedMemberEmail)}
+                </p>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      {enableEmailPreview && (
+        <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+          <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="text-base">Email Preview</DialogTitle>
+              {previewMeta && (
+                <div className="space-y-0.5 text-xs text-muted-foreground pt-1">
+                  <p><span className="font-medium">Subject:</span> {previewMeta.subject}</p>
+                  <p><span className="font-medium">To:</span> {previewMeta.to}</p>
+                  <p><span className="font-medium">Sent:</span> {previewMeta.date}</p>
+                </div>
+              )}
+            </DialogHeader>
+            <div className="flex-1 min-h-0 mt-2">
+              {previewLoading ? (
+                <div className="flex items-center justify-center h-48 text-sm text-muted-foreground">
+                  Loading email...
+                </div>
+              ) : previewHtml ? (
+                <iframe
+                  sandbox="allow-same-origin"
+                  title="Email preview"
+                  className="w-full h-[60vh] rounded border"
+                  srcDoc={previewHtml}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-48 text-sm text-muted-foreground">
+                  No email content available. This email may have been sent before content storage was enabled.
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
+  );
+}

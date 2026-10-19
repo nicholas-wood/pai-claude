@@ -1,0 +1,531 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CredentialStatusBadge } from "@/components/status-badge";
+import { FobPicker, type AvailableFob } from "@/components/fob-picker";
+import { SwapCredentialForm } from "@/components/swap-credential-form";
+
+type Credential = {
+  id: string;
+  serialNumber: string | null;
+  status: string;
+  credentialTypeName: string | null;
+  accessLevelName: string | null;
+  expiresAt: Date | null;
+  issuedAt: Date | null;
+  /** A programming change (e.g. staged expiry) is waiting on the programmer. */
+  programmingRequired?: boolean;
+  /** Re-added fob waiting for the member to confirm they have it. */
+  awaitingMemberConfirmation?: boolean;
+};
+
+type IdName = { id: string; name: string };
+
+/**
+ * Season rollover (1 September) as the server's membershipYearExpiry applies
+ * it: on or after 1 July the season being entered ends 1 September next year.
+ * Display-only; the server derives the season in the tenant zone.
+ */
+function seasonEndHint(): string {
+  const now = new Date();
+  const year = now.getMonth() >= 6 ? now.getFullYear() + 1 : now.getFullYear();
+  return `1 Sep ${year}`;
+}
+
+type Props = {
+  tenantSlug: string;
+  memberId: string;
+  credentials: Credential[];
+  credentialTypes: IdName[];
+  accessLevels: IdName[];
+  availableFobs: AvailableFob[];
+  allowFobCreationAtProgramming: boolean;
+  canProgram: boolean;
+  canManualAdd: boolean;
+  memberAccessLevelName: string | null;
+};
+
+type ActiveAction =
+  | { type: "add" }
+  | { type: "revoke"; credentialId: string }
+  | { type: "swap"; credentialId: string; currentCredentialTypeName: string | null; currentAccessLevelName: string | null }
+  | null;
+
+export function CredentialActions({
+  tenantSlug,
+  memberId,
+  credentials: memberCreds,
+  credentialTypes,
+  accessLevels,
+  availableFobs,
+  allowFobCreationAtProgramming,
+  canProgram,
+  canManualAdd,
+  memberAccessLevelName,
+}: Props) {
+  const router = useRouter();
+  const [activeAction, setActiveAction] = useState<ActiveAction>(null);
+
+  const activeCreds = memberCreds.filter((c) => c.status === "active");
+  const inactiveCreds = memberCreds.filter((c) => c.status !== "active");
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">
+            Credentials ({memberCreds.length})
+          </CardTitle>
+          {canManualAdd && activeAction === null && (
+            <Button
+              size="sm"
+              onClick={() => setActiveAction({ type: "add" })}
+            >
+              Add Credential
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {activeAction?.type === "add" && (
+          <AddCredentialForm
+            tenantSlug={tenantSlug}
+            memberId={memberId}
+            availableFobs={availableFobs}
+            allowFobCreationAtProgramming={allowFobCreationAtProgramming}
+            memberAccessLevelName={memberAccessLevelName}
+            accessLevels={accessLevels}
+            onDone={() => {
+              setActiveAction(null);
+              router.refresh();
+            }}
+            onCancel={() => setActiveAction(null)}
+          />
+        )}
+
+        {activeAction?.type === "revoke" && (
+          <RevokeCredentialForm
+            tenantSlug={tenantSlug}
+            credentialId={activeAction.credentialId}
+            onDone={() => {
+              setActiveAction(null);
+              router.refresh();
+            }}
+            onCancel={() => setActiveAction(null)}
+          />
+        )}
+
+        {activeAction?.type === "swap" && (
+          <SwapCredentialForm
+            tenantSlug={tenantSlug}
+            credentialId={activeAction.credentialId}
+            availableFobs={availableFobs}
+            allowFobCreationAtProgramming={allowFobCreationAtProgramming}
+            onDone={() => {
+              setActiveAction(null);
+              router.refresh();
+            }}
+            onCancel={() => setActiveAction(null)}
+          />
+        )}
+
+        {/* Active credentials with action buttons */}
+        {activeCreds.length === 0 && inactiveCreds.length === 0 && activeAction === null && (
+          <p className="text-sm text-muted-foreground">No credentials</p>
+        )}
+
+        {activeAction === null &&
+          activeCreds.map((c) => (
+            <div
+              key={c.id}
+              className="flex items-center justify-between rounded border p-2 text-sm"
+            >
+              <Link
+                href={`/t/${tenantSlug}/admin/fobs/${c.id}`}
+                className="flex-1 transition-colors hover:text-primary"
+              >
+                <span className="font-medium">{c.credentialTypeName}</span>
+                {c.serialNumber && (
+                  <span className="ml-2 text-muted-foreground">
+                    #{c.serialNumber}
+                  </span>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {c.accessLevelName ?? "No level"}
+                  {c.expiresAt &&
+                    ` \u00B7 Expires ${new Date(c.expiresAt).toLocaleDateString("en-AU", { timeZone: "Australia/Melbourne" })}`}
+                </p>
+              </Link>
+              <div className="flex items-center gap-2">
+                <CredentialStatusBadge status={c.status} />
+                {canProgram && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setActiveAction({
+                          type: "swap",
+                          credentialId: c.id,
+                          currentCredentialTypeName: c.credentialTypeName,
+                          currentAccessLevelName: c.accessLevelName,
+                        })
+                      }
+                    >
+                      Swap
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() =>
+                        setActiveAction({ type: "revoke", credentialId: c.id })
+                      }
+                    >
+                      Revoke
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+
+        {/* Inactive credentials (read-only, no action buttons) */}
+        {activeAction === null &&
+          inactiveCreds.map((c) => (
+            <Link
+              key={c.id}
+              href={`/t/${tenantSlug}/admin/fobs/${c.id}`}
+              className="flex items-center justify-between rounded border p-2 text-sm opacity-60 transition-colors hover:bg-accent/50"
+            >
+              <div>
+                <span className="font-medium">{c.credentialTypeName}</span>
+                {c.serialNumber && (
+                  <span className="ml-2 text-muted-foreground">
+                    #{c.serialNumber}
+                  </span>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {c.accessLevelName ?? "No level"}
+                  {c.expiresAt &&
+                    ` \u00B7 Expires ${new Date(c.expiresAt).toLocaleDateString("en-AU", { timeZone: "Australia/Melbourne" })}`}
+                </p>
+              </div>
+              <span className="flex items-center gap-2">
+                {c.awaitingMemberConfirmation && (
+                  <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-800">
+                    Awaiting member confirmation
+                  </span>
+                )}
+                {c.programmingRequired && (
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800">
+                    Update staged
+                  </span>
+                )}
+                <CredentialStatusBadge status={c.status} />
+              </span>
+            </Link>
+          ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* --- Add Credential Form (simplified: just fob picker) --- */
+
+function AddCredentialForm({
+  tenantSlug,
+  memberId,
+  availableFobs,
+  allowFobCreationAtProgramming,
+  memberAccessLevelName,
+  accessLevels,
+  onDone,
+  onCancel,
+}: {
+  tenantSlug: string;
+  memberId: string;
+  availableFobs: AvailableFob[];
+  allowFobCreationAtProgramming: boolean;
+  memberAccessLevelName: string | null;
+  accessLevels: IdName[];
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  type Stage = "programming" | "pickup" | "issued" | "expiry_update";
+  const [selectedFobId, setSelectedFobId] = useState("");
+  const [manualSerialNumber, setManualSerialNumber] = useState("");
+  const [stage, setStage] = useState<Stage>("programming");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [manualAccessLevelId, setManualAccessLevelId] = useState("");
+  const [manualExpiresAt, setManualExpiresAt] = useState("");
+
+  const isExpiryUpdate = stage === "expiry_update";
+  // The member's own expired/returned fobs are only re-attachable through the
+  // expiry update stage; the other stages would try to create them again.
+  const fobsForStage = isExpiryUpdate
+    ? availableFobs
+    : availableFobs.filter((f) => !f.ownedByThisMember);
+  const selectedFob = selectedFobId
+    ? fobsForStage.find((f) => f.id === selectedFobId) ?? null
+    : null;
+  const effectiveSerial = selectedFob?.serialNumber ?? manualSerialNumber;
+  const needsActivation = stage === "pickup" || stage === "issued";
+  const noRuleMatch = !memberAccessLevelName;
+  const showManualFields = (needsActivation || isExpiryUpdate) && noRuleMatch;
+
+  function changeStage(next: Stage) {
+    setStage(next);
+    if (next !== "expiry_update" && selectedFob?.ownedByThisMember) {
+      setSelectedFobId("");
+    }
+  }
+
+  async function handleSubmit() {
+    if (!effectiveSerial.trim()) return;
+    if (showManualFields && !manualAccessLevelId) return;
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/v1/t/${tenantSlug}/credentials`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ownerId: memberId,
+          serialNumber: effectiveSerial.trim(),
+          credentialId: selectedFob?.id,
+          credentialTypeId: selectedFob?.credentialTypeId,
+          stage,
+          ...(showManualFields && manualAccessLevelId ? { accessLevelId: manualAccessLevelId } : {}),
+          ...(showManualFields && manualExpiresAt ? { expiresAt: manualExpiresAt } : {}),
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "Failed to add credential");
+      }
+
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border p-4">
+      <p className="text-sm font-medium">Add Credential</p>
+
+      <div className="space-y-2">
+        <Label className="text-xs">Stage</Label>
+        <div className="space-y-1">
+          {[
+            { value: "programming" as const, label: "Send for Programming", desc: "Credential needs to be programmed first" },
+            { value: "pickup" as const, label: "Programmed - Ready for Pickup", desc: "Already programmed, waiting for member to collect" },
+            { value: "issued" as const, label: "Programmed & Issued", desc: "Already programmed and handed to the member" },
+            { value: "expiry_update" as const, label: "Member already has this fob - update expiry", desc: "The fob is expired or was removed from the member but they still hold it. The member is emailed to confirm they have it; once they do, it goes to the programmer for an expiry update. Nothing to pick up" },
+          ].map((opt) => (
+            <label key={opt.value} className="flex items-start gap-2 cursor-pointer rounded border p-2 hover:bg-accent/50">
+              <input
+                type="radio"
+                name="stage"
+                value={opt.value}
+                checked={stage === opt.value}
+                onChange={() => changeStage(opt.value)}
+                className="mt-0.5"
+              />
+              <div>
+                <p className="text-sm font-medium">{opt.label}</p>
+                <p className="text-xs text-muted-foreground">{opt.desc}</p>
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <FobPicker
+        availableFobs={fobsForStage}
+        allowFobCreationAtProgramming={allowFobCreationAtProgramming}
+        selectedFobId={selectedFobId}
+        manualSerialNumber={manualSerialNumber}
+        onSelect={(fob) => {
+          setSelectedFobId(fob?.id ?? "");
+          setManualSerialNumber("");
+        }}
+        onManualSerialChange={(v) => {
+          setManualSerialNumber(v);
+          setSelectedFobId("");
+        }}
+      />
+
+      {/* Own-fob notice (expiry update) or reassignment warning */}
+      {selectedFob?.ownedByThisMember ? (
+        <p className="text-xs text-amber-600 rounded bg-amber-50 px-3 py-2">
+          This fob is on this member&apos;s record as {selectedFob.status?.replace(/_/g, " ") ?? "inactive"}. The member will be emailed to confirm they have it. Once they confirm, it goes to the programmer with an expiry of {seasonEndHint()}; it stays expired until the programmer confirms, and the member is emailed then. If they say they do not have it, a lost replacement is raised.
+        </p>
+      ) : selectedFob?.previousOwnerName ? (
+        <p className="text-xs text-amber-600 rounded bg-amber-50 px-3 py-2">
+          This fob was previously assigned to {selectedFob.previousOwnerName}
+          {selectedFob.deactivationReason ? ` and deactivated: "${selectedFob.deactivationReason}"` : ""}.{" "}
+          {isExpiryUpdate
+            ? "It will be re-attached to this member, who will be emailed to confirm they have it before it goes to the programmer. Check the deactivation reason before re-adding a fob that was reported lost or stolen."
+            : "It will be reassigned to this member."}
+        </p>
+      ) : null}
+
+      {/* When activating and rules matched: show what will be applied */}
+      {(needsActivation || isExpiryUpdate) && effectiveSerial.trim() && !noRuleMatch && (
+        <div className="rounded bg-blue-50 px-3 py-2 text-sm space-y-1">
+          <p>Access Level: <strong>{memberAccessLevelName}</strong></p>
+          {!isExpiryUpdate && (
+            <p className="text-xs text-muted-foreground">Expiry calculated automatically (Sep 1 rollover, or no expiry for staff/board)</p>
+          )}
+        </div>
+      )}
+
+      {/* When activating and no rules matched: manual fields */}
+      {showManualFields && (
+        <div className="space-y-3 rounded border border-amber-200 bg-amber-50/50 p-3">
+          <p className="text-xs font-medium text-amber-700">No access level rule matched for this member. Please set manually.</p>
+          <div className="space-y-2">
+            <Label className="text-xs">Access Level *</Label>
+            <select
+              value={manualAccessLevelId}
+              onChange={(e) => setManualAccessLevelId(e.target.value)}
+              className="w-full rounded-md border px-3 py-1.5 text-sm"
+            >
+              <option value="">Select access level...</option>
+              {accessLevels.map((al) => (
+                <option key={al.id} value={al.id}>{al.name}</option>
+              ))}
+            </select>
+          </div>
+          {!isExpiryUpdate && (
+            <div className="space-y-2">
+              <Label className="text-xs">Expiry Date (leave blank for no expiry)</Label>
+              <Input
+                type="date"
+                value={manualExpiresAt}
+                onChange={(e) => setManualExpiresAt(e.target.value)}
+                className="h-8"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Expiry update: what happens next */}
+      {isExpiryUpdate && (
+        <p className="text-xs text-muted-foreground">
+          New expiry will be the end of the membership year ({seasonEndHint()}), applied by the programmer after the member confirms they have the fob.
+        </p>
+      )}
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          onClick={handleSubmit}
+          disabled={submitting || !effectiveSerial.trim() || (showManualFields && !manualAccessLevelId)}
+        >
+          {submitting
+            ? isExpiryUpdate ? "Sending..." : "Adding..."
+            : isExpiryUpdate ? "Send Confirmation to Member" : "Add Credential"}
+        </Button>
+        <Button size="sm" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* --- Revoke Credential Form --- */
+
+function RevokeCredentialForm({
+  tenantSlug,
+  credentialId,
+  onDone,
+  onCancel,
+}: {
+  tenantSlug: string;
+  credentialId: string;
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleRevoke() {
+    if (!reason.trim()) return;
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const res = await fetch(
+        `/api/v1/t/${tenantSlug}/credentials/${credentialId}/revoke`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: reason.trim() }),
+        }
+      );
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "Failed to revoke credential");
+      }
+
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border border-destructive/30 p-4">
+      <p className="text-sm font-medium text-destructive">Revoke Credential</p>
+
+      <div className="space-y-2">
+        <Label className="text-xs">Reason *</Label>
+        <Textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Why is this credential being revoked?"
+          rows={3}
+        />
+      </div>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          variant="destructive"
+          onClick={handleRevoke}
+          disabled={submitting || !reason.trim()}
+        >
+          {submitting ? "Revoking..." : "Confirm Revoke"}
+        </Button>
+        <Button size="sm" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* --- Swap Credential Form --- */
+

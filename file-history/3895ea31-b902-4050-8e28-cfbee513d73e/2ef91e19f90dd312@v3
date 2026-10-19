@@ -1,0 +1,477 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import { useParams } from "next/navigation";
+import Link from "next/link";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+type AuditEntry = {
+  id: string;
+  entityType: string;
+  entityId: string;
+  entityLabel: string | null;
+  action: string;
+  fromState: string | null;
+  toState: string | null;
+  actorType: string;
+  actorId: string | null;
+  actorFirstName: string | null;
+  actorLastName: string | null;
+  actorEmail: string | null;
+  metadata: Record<string, unknown> | null;
+  hasHtml?: boolean;
+  createdAt: string;
+};
+
+const ENTITY_TYPE_LABELS: Record<string, string> = {
+  fob_request: "Request",
+  credential: "Credential",
+  member: "Member",
+  payment: "Payment",
+  admin: "Admin",
+  tenant: "Tenant",
+};
+
+const ACTION_LABELS: Record<string, string> = {
+  create: "Created",
+  update: "Updated",
+  delete: "Deleted",
+  status_change: "Status Change",
+  email_sent: "Email Sent",
+  email_failed: "Email Failed",
+  login: "Login",
+};
+
+function getEmailBadge(entry: AuditEntry): { label: string; className: string } | null {
+  if (entry.action === "email_sent") {
+    const meta = entry.metadata;
+    if (meta?.suppressed) {
+      return { label: "Suppressed", className: "bg-amber-100 text-amber-800 border-amber-200" };
+    }
+    if (meta?.noop) {
+      return { label: "Skipped", className: "bg-muted text-muted-foreground border-border" };
+    }
+    return { label: "Email", className: "bg-blue-50 text-blue-700 border-blue-200" };
+  }
+  if (entry.action === "email_failed") {
+    return { label: "Failed", className: "bg-red-50 text-red-700 border-red-200" };
+  }
+  return null;
+}
+
+const STATE_LABELS: Record<string, string> = {
+  submitted: "Submitted",
+  awaiting_payment: "Awaiting Payment",
+  awaiting_exemption_review: "Exemption Review",
+  awaiting_approval: "Awaiting Approval",
+  awaiting_programming: "Awaiting Programming",
+  programmed: "Programmed",
+  awaiting_pickup: "Awaiting Pickup",
+  on_hold: "On Hold",
+  issued: "Issued",
+  rejected: "Rejected",
+  cancelled: "Cancelled",
+  active: "Active",
+  pending_programming: "Pending Programming",
+  lost: "Reported Lost",
+  damaged: "Reported Damaged",
+  inactive_lost: "Inactive - Lost",
+  inactive_damaged: "Inactive - Damaged",
+  deactivated: "Deactivated",
+  expired: "Expired",
+  returned: "Returned",
+  inactive: "Inactive",
+};
+
+function formatState(state: string): string {
+  return STATE_LABELS[state] ?? state.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function formatAction(action: string): string {
+  return ACTION_LABELS[action] ?? action.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function formatEntityType(type: string): string {
+  return ENTITY_TYPE_LABELS[type] ?? type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function describeMetadata(meta: Record<string, unknown> | null): string | null {
+  if (!meta) return null;
+  const parts: string[] = [];
+
+  if (meta.action && typeof meta.action === "string") {
+    const actionLabels: Record<string, string> = {
+      auto_refund: "Auto-refund triggered",
+      manual_add: "Manually added credential",
+      assigned: "Assigned to member",
+      reassigned: "Reassigned to member",
+      issued: "Credential issued",
+      refund: "Manual refund",
+      attestation_expiry_update: "Attestation expiry update",
+      attestation_lost_report: "Attestation lost report",
+      attestation_reprogramming: "Attestation reprogramming",
+      attestation_resent: "Credential confirmation resent",
+      attestation_auto_resent: "Credential confirmation reminder sent automatically",
+      attestation_force_completed: "Credential confirmation force-completed",
+      permission_expiry_reprogramming: "Permission expiry reprogramming",
+      confirm_programming: "Programming confirmed",
+      manual_expiry_update: "Fob re-added to member - member asked to confirm they have it",
+      attestation_cancelled: "Fob confirmation cancelled by admin",
+      attestation_admin_confirmed: "Fob confirmation answered by admin on the member's behalf",
+      confirmation_cancelled: "Member confirmation cancelled",
+      attestation_completed: "Credential confirmation completed",
+      swap: "Credential swapped",
+      swap_deactivation: "Swap - old credential deactivation",
+      swap_activation: "Swap - new credential activation",
+      program_deactivation: "Deactivated via programming",
+      return_deactivation: "Return - fob deactivated, awaiting collection",
+      collected: "Fob collected from member",
+      return_auto_closed: "Return auto-closed - fob not received",
+      exchanged: "Fob exchanged for a new type",
+      program_activation: "Activated via programming",
+      member_confirmed_receipt: "Member confirmed they already have the fob",
+      member_receipt_reverted: "Member's collection report reverted",
+      link_orphaned_request: "Linked orphaned request",
+      reported_via_submit: "Reported via submission form",
+      renew: "Membership renewed",
+      permission_expired: "Permission expired",
+    };
+    const label = actionLabels[meta.action as string];
+    if (label) parts.push(label);
+  }
+
+  if (meta.reason && typeof meta.reason === "string") {
+    parts.push(meta.reason as string);
+  }
+
+  if (meta.season && typeof meta.season === "string") {
+    parts.push(`Season: ${meta.season}`);
+  }
+
+  if (meta.serialNumber && typeof meta.serialNumber === "string") {
+    parts.push(`Fob #${meta.serialNumber}`);
+  }
+
+  if (meta.newAccessLevelName && typeof meta.newAccessLevelName === "string") {
+    parts.push(`Access: ${meta.newAccessLevelName}`);
+  }
+
+  if (meta.stageDescription && typeof meta.stageDescription === "string") {
+    parts.push(meta.stageDescription as string);
+  }
+
+  // Email audit entries - show subject line
+  if (meta.subject && typeof meta.subject === "string") {
+    parts.push(meta.subject as string);
+  }
+
+  if (meta.to && typeof meta.to === "string") {
+    parts.push(`To: ${meta.to}`);
+  }
+
+  // Settings change audit entries
+  if (meta.action === "settings_update" && meta.changes && typeof meta.changes === "object") {
+    const changes = meta.changes as Record<string, { from: unknown; to: unknown }>;
+    const fields = Object.keys(changes);
+    parts.push(`Changed: ${fields.join(", ")}`);
+  }
+
+  if (meta.assignedTo && typeof meta.assignedTo === "string") {
+    parts.push(`Member: ${meta.assignedTo}`);
+  }
+
+  if (meta.requestType && typeof meta.requestType === "string") {
+    const typeLabels: Record<string, string> = {
+      new: "New", replacement_lost: "Lost replacement", replacement_damaged: "Damaged replacement",
+      additional: "Additional", return: "Return", change_type: "Type change", access_update: "Access update",
+    };
+    parts.push(typeLabels[meta.requestType as string] ?? (meta.requestType as string));
+  }
+
+  return parts.length > 0 ? parts.join(" - ") : null;
+}
+
+function formatActor(entry: AuditEntry): string {
+  if (entry.actorType === "system") return "System";
+  if (entry.actorType === "webhook") return "Stripe Webhook";
+  if (entry.actorFirstName || entry.actorLastName) {
+    return `${entry.actorFirstName ?? ""} ${entry.actorLastName ?? ""}`.trim();
+  }
+  if (entry.actorEmail) return entry.actorEmail;
+  return "Unknown";
+}
+
+export default function AuditLogPage() {
+  const params = useParams<{ slug: string }>();
+  const slug = params.slug;
+  const [entries, setEntries] = useState<AuditEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [keyword, setKeyword] = useState("");
+  const [entityTypeFilter, setEntityTypeFilter] = useState("all");
+  const [actorFilter, setActorFilter] = useState("");
+
+  useEffect(() => {
+    const timeout = setTimeout(() => fetchAudit(), 300);
+    return () => clearTimeout(timeout);
+  }, [slug, keyword, entityTypeFilter, actorFilter]);
+
+  async function fetchAudit() {
+    setLoading(true);
+    try {
+      const url = new URL(`/api/v1/t/${slug}/audit`, window.location.origin);
+      if (keyword) url.searchParams.set("q", keyword);
+      if (entityTypeFilter !== "all") url.searchParams.set("entityType", entityTypeFilter);
+      if (actorFilter) url.searchParams.set("actorId", actorFilter);
+      const res = await fetch(url.toString());
+      if (res.ok) {
+        const data = await res.json();
+        setEntries(data.entries ?? []);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Build unique actors from entries for the filter dropdown
+  const actors = Array.from(
+    new Map(
+      entries
+        .filter((e) => e.actorId && e.actorType === "user")
+        .map((e) => [e.actorId!, { id: e.actorId!, name: formatActor(e) }])
+    ).values()
+  ).sort((a, b) => a.name.localeCompare(b.name));
+
+  function formatDate(date: string | null) {
+    if (!date) return "-";
+    return new Date(date).toLocaleDateString("en-AU", {
+      timeZone: "Australia/Melbourne",
+      day: "numeric", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+  }
+
+  // Email preview state
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewMeta, setPreviewMeta] = useState<{ subject: string; to: string; date: string } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  async function openEmailPreview(entry: AuditEntry) {
+    setPreviewOpen(true);
+    setPreviewLoading(true);
+    setPreviewMeta({
+      subject: (entry.metadata?.subject as string) ?? "No subject",
+      to: (entry.metadata?.to as string) ?? "Unknown",
+      date: formatDate(entry.createdAt),
+    });
+
+    try {
+      const res = await fetch(`/api/v1/t/${slug}/audit/${entry.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        const html = data.entry?.metadata?.html;
+        setPreviewHtml(html ?? null);
+      }
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  // Write HTML to iframe when it loads (sandbox prevents XSS)
+  useEffect(() => {
+    if (previewHtml && iframeRef.current) {
+      const doc = iframeRef.current.contentDocument;
+      if (doc) {
+        doc.open();
+        doc.write(previewHtml);
+        doc.close();
+      }
+    }
+  }, [previewHtml]);
+
+  return (
+    <div className="space-y-4">
+      <h1 className="text-2xl font-bold">Audit Log</h1>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-2">
+        <Input
+          placeholder="Search events..."
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+          className="max-w-xs"
+        />
+        <Select value={entityTypeFilter} onValueChange={(v) => setEntityTypeFilter(v ?? "all")}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue>
+              {entityTypeFilter === "all" ? "All Types" : formatEntityType(entityTypeFilter)}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all" label="All Types">All Types</SelectItem>
+            <SelectItem value="fob_request" label="Requests">Requests</SelectItem>
+            <SelectItem value="credential" label="Credentials">Credentials</SelectItem>
+            <SelectItem value="member" label="Members">Members</SelectItem>
+            <SelectItem value="admin" label="Admin">Admin</SelectItem>
+          </SelectContent>
+        </Select>
+        {actors.length > 0 && (
+          <Select value={actorFilter || "all"} onValueChange={(v) => setActorFilter(v === "all" ? "" : v ?? "")}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue>
+                {actorFilter ? actors.find((a) => a.id === actorFilter)?.name ?? "All Users" : "All Users"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" label="All Users">All Users</SelectItem>
+              {actors.map((a) => (
+                <SelectItem key={a.id} value={a.id} label={a.name}>{a.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {(keyword || entityTypeFilter !== "all" || actorFilter) && (
+          <Button variant="ghost" size="sm" onClick={() => {
+            setKeyword(""); setEntityTypeFilter("all"); setActorFilter("");
+          }}>
+            Clear
+          </Button>
+        )}
+      </div>
+
+      <p className="text-sm text-muted-foreground">{entries.length} entries</p>
+
+      {loading && entries.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      ) : entries.length === 0 ? (
+        <Card>
+          <CardContent className="py-8 text-center text-muted-foreground">
+            No audit entries found.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-1">
+          {entries.map((entry) => {
+            const description = describeMetadata(entry.metadata);
+            const entityTypeLabel = formatEntityType(entry.entityType);
+            const bubbleText = entry.entityLabel
+              ? `${entityTypeLabel}: ${entry.entityLabel}`
+              : entityTypeLabel;
+            const entityUrl = entry.entityType === "fob_request"
+              ? `/t/${slug}/admin/requests/${entry.entityId}`
+              : entry.entityType === "credential"
+                ? `/t/${slug}/admin/fobs/${entry.entityId}`
+                : entry.entityType === "member"
+                  ? `/t/${slug}/admin/members/${entry.entityId}`
+                  : null;
+
+            const emailBadge = getEmailBadge(entry);
+
+            return (
+              <Card key={entry.id}>
+                <CardContent className="flex items-start justify-between py-3 text-sm">
+                  <div className="space-y-0.5">
+                    <p className="font-medium flex flex-wrap items-center gap-2">
+                      {entityUrl ? (
+                        <Link
+                          href={entityUrl}
+                          className="rounded bg-muted px-1.5 py-0.5 text-xs hover:bg-primary/10 hover:text-primary transition-colors"
+                        >
+                          {bubbleText}
+                        </Link>
+                      ) : (
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                          {bubbleText}
+                        </span>
+                      )}
+                      <span>
+                      {entry.action === "status_change" && entry.fromState && entry.toState
+                        ? `${formatState(entry.fromState)} \u2192 ${formatState(entry.toState)}`
+                        : entry.action === "status_change" && entry.toState
+                          ? `\u2192 ${formatState(entry.toState)}`
+                          : formatAction(entry.action)}
+                      </span>
+                      {emailBadge && (
+                        <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${emailBadge.className}`}>
+                          {emailBadge.label}
+                        </span>
+                      )}
+                      {entry.hasHtml && (
+                        <button
+                          onClick={() => openEmailPreview(entry)}
+                          className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                        >
+                          View Email
+                        </button>
+                      )}
+                    </p>
+                    {description && (
+                      <p className="text-xs text-muted-foreground">{description}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {formatActor(entry)}
+                    </p>
+                  </div>
+                  <span className="whitespace-nowrap text-xs text-muted-foreground ml-4">
+                    {formatDate(entry.createdAt)}
+                  </span>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Email Preview Dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-base">Email Preview</DialogTitle>
+            {previewMeta && (
+              <div className="space-y-0.5 text-xs text-muted-foreground pt-1">
+                <p><span className="font-medium">Subject:</span> {previewMeta.subject}</p>
+                <p><span className="font-medium">To:</span> {previewMeta.to}</p>
+                <p><span className="font-medium">Sent:</span> {previewMeta.date}</p>
+              </div>
+            )}
+          </DialogHeader>
+          <div className="flex-1 min-h-0 mt-2">
+            {previewLoading ? (
+              <div className="flex items-center justify-center h-48 text-sm text-muted-foreground">
+                Loading email...
+              </div>
+            ) : previewHtml ? (
+              <iframe
+                ref={iframeRef}
+                sandbox="allow-same-origin"
+                title="Email preview"
+                className="w-full h-[60vh] rounded border"
+                srcDoc={previewHtml}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-48 text-sm text-muted-foreground">
+                No email content available. This email was sent before content storage was enabled.
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

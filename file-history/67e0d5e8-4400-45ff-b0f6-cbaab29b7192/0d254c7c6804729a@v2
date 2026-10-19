@@ -1,0 +1,8 @@
+# Bash login shells read this file INSTEAD of ~/.profile. Chain to ~/.profile so
+# ~/.bashrc and ~/.local/bin (where `claude` lives) load in login shells too.
+if [ -f "$HOME/.profile" ]; then
+    . "$HOME/.profile"
+fi
+
+# Added by PAI installer — make bun reachable for hook subprocesses
+export PATH="$HOME/.bun/bin:$PATH"
