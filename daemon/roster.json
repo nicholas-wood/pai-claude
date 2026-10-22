@@ -1,6 +1,79 @@
 {
   "proto": 1,
-  "supervisorPid": 2608508,
-  "updatedAt": 1792437240495,
-  "workers": {}
+  "supervisorPid": 3917735,
+  "updatedAt": 1792660622312,
+  "workers": {
+    "3895ea31": {
+      "pid": 2608537,
+      "procStart": "545464090",
+      "sessionId": "3895ea31-b902-4050-8e28-cfbee513d73e",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/3895ea31.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/16a2ee22.pty.sock",
+      "cliVersion": "2.1.303",
+      "startedAt": 1792660561869,
+      "attempt": 1,
+      "cwd": "/home/nicholas-wood/.claude",
+      "dispatch": {
+        "proto": 1,
+        "short": "3895ea31",
+        "nonce": "54507a2b",
+        "sessionId": "3895ea31-b902-4050-8e28-cfbee513d73e",
+        "createdAt": 1792660561862,
+        "source": "fleet",
+        "cwd": "/home/nicholas-wood/.claude",
+        "launch": {
+          "mode": "resume",
+          "sessionId": "3895ea31-b902-4050-8e28-cfbee513d73e",
+          "transcriptPath": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/3895ea31-b902-4050-8e28-cfbee513d73e.jsonl",
+          "fork": false,
+          "flagArgs": [
+            "--agent",
+            "claude",
+            "--model",
+            "fable[1m]"
+          ],
+          "restoresTranscript": true
+        },
+        "env": {},
+        "isolation": "none",
+        "respawnFlags": [
+          "--agent",
+          "claude",
+          "--model",
+          "fable[1m]"
+        ],
+        "agent": "claude",
+        "seed": {
+          "intent": "",
+          "name": "fob expiry update flow"
+        },
+        "cols": 216,
+        "rows": 50
+      },
+      "decModes": [
+        2004,
+        2031,
+        1004,
+        1000,
+        1002,
+        1003,
+        1006
+      ],
+      "firedInteractiveMarks": [
+        {
+          "kind": "content_paint",
+          "msgsLoaded": 1368,
+          "msgsInJsonl": 1368,
+          "msgsRenderedAtFirstPaint": 1367
+        },
+        {
+          "kind": "prompt_idle"
+        }
+      ],
+      "rvAuth": "ecc63d37eaf3252178804ea72419b547",
+      "ptyAuth": "31d2a83ac9c52d6e277fa1a9b6a0c294",
+      "replPid": 2608550,
+      "replProcStart": "545464102"
+    }
+  }
 }
