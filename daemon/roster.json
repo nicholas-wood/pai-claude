@@ -1,6 +1,77 @@
 {
   "proto": 1,
-  "supervisorPid": 3600434,
-  "updatedAt": 1792745164083,
-  "workers": {}
+  "supervisorPid": 1749650,
+  "updatedAt": 1792928945534,
+  "workers": {
+    "eb37ba0f": {
+      "pid": 3600454,
+      "procStart": "580744494",
+      "sessionId": "eb37ba0f-88de-430b-bf99-eaa3ae675847",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/eb37ba0f.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/ebc0f99f.pty.sock",
+      "cliVersion": "2.1.309",
+      "startedAt": 1792925315886,
+      "attempt": 1,
+      "cwd": "/home/nicholas-wood",
+      "dispatch": {
+        "proto": 1,
+        "short": "eb37ba0f",
+        "nonce": "6166ab81",
+        "sessionId": "eb37ba0f-88de-430b-bf99-eaa3ae675847",
+        "createdAt": 1792925315819,
+        "source": "slash",
+        "cwd": "/home/nicholas-wood",
+        "launch": {
+          "mode": "resume",
+          "sessionId": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood/a41406ba-b91d-4d15-85cb-d95c202a2a22.jsonl",
+          "fork": true,
+          "flagArgs": [
+            "--reply-on-resume",
+            "--permission-mode",
+            "default"
+          ],
+          "restoresTranscript": true
+        },
+        "env": {
+          "CLAUDE_BG_ISOLATION": "none"
+        },
+        "isolation": "none",
+        "respawnFlags": [
+          "--reply-on-resume",
+          "--permission-mode",
+          "default"
+        ],
+        "seed": {
+          "intent": "Why is my tailscale remote connection not working",
+          "name": "Tailscale remote connection issue"
+        },
+        "cols": 80,
+        "rows": 24
+      },
+      "decModes": [
+        2004,
+        2031,
+        1004,
+        1000,
+        1002,
+        1003,
+        1006
+      ],
+      "firedInteractiveMarks": [
+        {
+          "kind": "content_paint",
+          "msgsLoaded": 18,
+          "msgsInJsonl": 18,
+          "msgsRenderedAtFirstPaint": 18
+        },
+        {
+          "kind": "prompt_idle"
+        }
+      ],
+      "rvAuth": "da724e883ce3eb856665edbeb9fa8715",
+      "ptyAuth": "67d5e129a7377857b4083646b8a36308",
+      "replPid": 3600460,
+      "replProcStart": "580744503"
+    }
+  }
 }
