@@ -1,7 +1,7 @@
 {
   "proto": 1,
-  "supervisorPid": 1749650,
-  "updatedAt": 1792928945534,
+  "supervisorPid": 274588,
+  "updatedAt": 1793519711536,
   "workers": {
     "eb37ba0f": {
       "pid": 3600454,
@@ -72,6 +72,63 @@
       "ptyAuth": "67d5e129a7377857b4083646b8a36308",
       "replPid": 3600460,
       "replProcStart": "580744503"
+    },
+    "18cbf785": {
+      "pid": 1749888,
+      "procStart": "601636732",
+      "sessionId": "18cbf785-d7ae-4326-8084-ed3631bd1705",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/18cbf785.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/b75c302d.pty.sock",
+      "cliVersion": "2.1.310",
+      "startedAt": 1793516097840,
+      "attempt": 1,
+      "cwd": "/home/nicholas-wood/.claude",
+      "dispatch": {
+        "proto": 1,
+        "short": "18cbf785",
+        "nonce": "d66f1f67",
+        "sessionId": "18cbf785-d7ae-4326-8084-ed3631bd1705",
+        "createdAt": 1793516097833,
+        "source": "fleet",
+        "cwd": "/home/nicholas-wood/.claude",
+        "launch": {
+          "mode": "prompt",
+          "args": [
+            "--session-id",
+            "18cbf785-d7ae-4326-8084-ed3631bd1705",
+            "--agent",
+            "claude",
+            "--",
+            "Please update the node version for accessbuddy"
+          ],
+          "restoresTranscript": false
+        },
+        "env": {},
+        "isolation": "none",
+        "respawnFlags": [
+          "--agent",
+          "claude"
+        ],
+        "agent": "claude",
+        "seed": {
+          "intent": "Please update the node version for accessbuddy"
+        },
+        "cols": 214,
+        "rows": 50
+      },
+      "decModes": [
+        2004,
+        2031,
+        1004,
+        1000,
+        1002,
+        1003,
+        1006
+      ],
+      "rvAuth": "0ca4eab1139d3c3a286b35024e145e88",
+      "ptyAuth": "9b12361b0f3f6a0d069ca55fc4c5d2a7",
+      "replPid": 1749894,
+      "replProcStart": "601636744"
     }
   }
 }
