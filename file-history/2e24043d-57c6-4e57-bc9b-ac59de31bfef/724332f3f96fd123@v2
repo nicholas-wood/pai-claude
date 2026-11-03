@@ -1,0 +1,49 @@
+-- Force renew probe, 3 Nov 2026. Read-only. Run inside a prod DB window
+-- (audit_log is FORCE RLS, so the tenant must be set first).
+--
+-- Q1: the member force-renewed today (ffa19098-...): fob state and whether
+--     anything is staged for the programmer.
+-- Q2: every force_renew_expiry_update row ever written by the OLD route
+--     (it rewrote the live expiry: metadata has newExpiresAt and no
+--     pendingExpiresAt). Each such ACTIVE fob was never programmed and the
+--     new route's skip rule will leave it alone; flag those by hand.
+-- Q3: all force_renew member events, to size the blast radius.
+
+SELECT set_config('app.current_tenant_id',
+  (SELECT id::text FROM tenants WHERE slug = 'south-melb-lsc'), false);
+
+-- Q1
+SELECT c.id, c.serial_number, c.status, c.expires_at, c.pending_expires_at,
+       c.programming_required, c.programming_reason, c.programming_requested_at
+FROM credentials c
+WHERE c.owner_id = 'ffa19098-64b5-4802-95a2-3137ce1ee3e0'
+ORDER BY c.status, c.serial_number;
+
+SELECT a.id, a.season, a.status, a.credential_ids, a.created_at, a.completed_at
+FROM attestation_requests a
+WHERE a.user_id = 'ffa19098-64b5-4802-95a2-3137ce1ee3e0'
+ORDER BY a.created_at DESC;
+
+-- Q2
+SELECT al.created_at, al.entity_id AS credential_id, c.serial_number, c.status,
+       c.expires_at, c.programming_required,
+       al.metadata->>'season' AS season,
+       al.metadata->>'newExpiresAt' AS rewritten_to,
+       u.first_name || ' ' || u.last_name AS owner
+FROM audit_log al
+JOIN credentials c ON c.id = al.entity_id
+LEFT JOIN users u ON u.id = c.owner_id
+WHERE al.entity_type = 'credential'
+  AND al.metadata->>'action' = 'force_renew_expiry_update'
+  AND al.metadata->>'pendingExpiresAt' IS NULL
+ORDER BY al.created_at;
+
+-- Q3
+SELECT al.created_at, al.entity_id AS user_id,
+       u.first_name || ' ' || u.last_name AS member,
+       al.metadata->>'season' AS season, al.metadata->>'reason' AS reason
+FROM audit_log al
+LEFT JOIN users u ON u.id = al.entity_id
+WHERE al.entity_type = 'member'
+  AND al.metadata->>'action' = 'force_renew'
+ORDER BY al.created_at;

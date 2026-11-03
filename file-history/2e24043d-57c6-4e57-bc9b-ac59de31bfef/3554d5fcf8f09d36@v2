@@ -1,0 +1,544 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { and, eq, inArray } from "drizzle-orm";
+import { NextRequest } from "next/server";
+
+/**
+ * Force renew (POST /members/[id]/force-renew) stages the expiry update.
+ *
+ * Before Nov 2026 the admin bypass wrote `expiresAt` straight onto ACTIVE
+ * fobs and ignored EXPIRED ones, so the programmer was never told and the
+ * fob never appeared on the admin "Credential updates" list (its only filter
+ * is `programmingRequired`). It now does what the member's "yes" on the
+ * confirmation page does.
+ *
+ * Proves:
+ *   (a) expired fob → staged (pendingExpiresAt = season end, flagged,
+ *       reason names the fob and "re-enable"), status stays expired, live
+ *       expiresAt untouched, one audit row, id in the response,
+ *   (b) active fob with an old expiry → staged the same way, status active,
+ *   (c) active fob already at the target expiry → untouched,
+ *   (d) already-flagged fob keeps its reason; the staged date moves only when
+ *       it differs,
+ *   (e) a second run for the same season changes nothing and writes no new
+ *       credential audit rows,
+ *   (f) deactivated / returned / pending_programming fobs are untouched,
+ *   (g) staff members' fobs are untouched,
+ *   (h) every pending attestation (unscoped and scoped) is completed,
+ *   (i) confirm-programming then promotes the expiry: an expired fob is
+ *       reactivated with one credentialReactivated email, an active fob stays
+ *       active.
+ *
+ * Auth, tenant and permissions are mocked so the handler runs directly;
+ * everything below it hits the real database. Gated on DATABASE_URL.
+ */
+
+const hasDb = !!process.env.DATABASE_URL;
+
+const ctx: { tenant: { id: string; slug: string } | null; actorId: string | null } = {
+  tenant: null,
+  actorId: null,
+};
+
+const sentTemplates: string[] = [];
+
+vi.mock("@/lib/auth", () => ({
+  getAuthUser: async () => ({
+    user: {
+      id: ctx.actorId,
+      firebaseUid: "force-renew-fb",
+      email: "force-renew@example.com",
+      firstName: "Force",
+      lastName: "Admin",
+      phone: null,
+    },
+    memberships: [],
+    isGlobalAdmin: false,
+  }),
+}));
+
+vi.mock("@/lib/tenant", () => ({
+  resolveTenant: async (slug: string) =>
+    ctx.tenant && slug === ctx.tenant.slug
+      ? {
+          id: ctx.tenant.id,
+          name: "Force Renew Club",
+          slug: ctx.tenant.slug,
+          settings: {},
+          timezone: "Australia/Melbourne",
+          logoUrl: null,
+          stripeAccountId: null,
+        }
+      : null,
+}));
+
+vi.mock("@/lib/permissions", () => ({
+  checkPermission: () => ({ granted: true }),
+  checkMembership: () => ({ granted: true }),
+}));
+
+vi.mock("@/lib/services/email", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/services/email")>();
+  return {
+    ...actual,
+    sendTemplatedEmail: vi.fn(async (_to: string, template: string) => {
+      sentTemplates.push(template);
+      return { sent: true } as never;
+    }),
+    sendEmail: vi.fn(async () => ({ sent: true }) as never),
+  };
+});
+
+// 1 Sep 2027 00:00 Australia/Melbourne (AEST, UTC+10)
+const SEASON = "2026/2027";
+const SEASON_END = new Date("2027-08-31T14:00:00.000Z");
+const OLD_EXPIRY = new Date("2026-08-31T14:00:00.000Z");
+
+describe.skipIf(!hasDb)("force renew stages the expiry update", () => {
+  let db: typeof import("@accessbuddy/db").db;
+  let tenants: typeof import("@accessbuddy/db").tenants;
+  let users: typeof import("@accessbuddy/db").users;
+  let tenantMemberships: typeof import("@accessbuddy/db").tenantMemberships;
+  let credentialTypes: typeof import("@accessbuddy/db").credentialTypes;
+  let accessLevels: typeof import("@accessbuddy/db").accessLevels;
+  let credentials: typeof import("@accessbuddy/db").credentials;
+  let attestationRequests: typeof import("@accessbuddy/db").attestationRequests;
+  let auditLog: typeof import("@accessbuddy/db").auditLog;
+  let forceRenew: typeof import("@/app/api/v1/t/[slug]/members/[id]/force-renew/route").POST;
+  let confirmProgramming: typeof import("@/app/api/v1/t/[slug]/credentials/[id]/confirm-programming/route").POST;
+  let CredentialStatus: typeof import("@accessbuddy/shared").CredentialStatus;
+
+  let tenant: { id: string; slug: string };
+  let admin: { id: string };
+  let member: { id: string };
+  let staffMember: { id: string };
+  let fobType: { id: string };
+  let level: { id: string };
+  let suffix: string;
+
+  async function post(userId: string, body: unknown = { season: SEASON, reason: "Paid at the desk" }) {
+    const request = new NextRequest(
+      `http://localhost/api/v1/t/${tenant.slug}/members/${userId}/force-renew`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }
+    );
+    const res = await forceRenew(request, {
+      params: Promise.resolve({ slug: tenant.slug, id: userId }),
+    });
+    return { status: res.status, json: await res.json() };
+  }
+
+  async function confirm(credentialId: string) {
+    const request = new NextRequest(
+      `http://localhost/api/v1/t/${tenant.slug}/credentials/${credentialId}/confirm-programming`,
+      { method: "POST" }
+    );
+    const res = await confirmProgramming(request, {
+      params: Promise.resolve({ slug: tenant.slug, id: credentialId }),
+    });
+    return { status: res.status, json: await res.json() };
+  }
+
+  async function seedCredential(values: {
+    serial: string;
+    ownerId: string | null;
+    status: string;
+    expiresAt?: Date | null;
+    pendingExpiresAt?: Date | null;
+    programmingRequired?: boolean;
+    programmingReason?: string | null;
+    deactivationReason?: string | null;
+  }) {
+    const [row] = await db
+      .insert(credentials)
+      .values({
+        tenantId: tenant.id,
+        ownerId: values.ownerId,
+        credentialTypeId: fobType.id,
+        serialNumber: values.serial,
+        status: values.status,
+        issuedAt: new Date("2025-09-01T00:00:00.000Z"),
+        expiresAt: values.expiresAt === undefined ? OLD_EXPIRY : values.expiresAt,
+        pendingExpiresAt: values.pendingExpiresAt ?? null,
+        programmingRequired: values.programmingRequired ?? false,
+        programmingReason: values.programmingReason ?? null,
+        programmingRequestedAt: values.programmingRequired ? new Date() : null,
+        deactivatedBy: values.deactivationReason ? admin.id : null,
+        deactivationReason: values.deactivationReason ?? null,
+      })
+      .returning({ id: credentials.id });
+    return row;
+  }
+
+  async function load(credentialId: string) {
+    const [row] = await db.select().from(credentials).where(eq(credentials.id, credentialId)).limit(1);
+    return row;
+  }
+
+  async function auditRows(credentialId: string, action?: string) {
+    const rows = await db
+      .select({ metadata: auditLog.metadata })
+      .from(auditLog)
+      .where(and(eq(auditLog.entityType, "credential"), eq(auditLog.entityId, credentialId)));
+    return action
+      ? rows.filter((r) => (r.metadata as Record<string, unknown> | null)?.action === action)
+      : rows;
+  }
+
+  async function membership(userId: string) {
+    const [m] = await db
+      .select()
+      .from(tenantMemberships)
+      .where(and(eq(tenantMemberships.tenantId, tenant.id), eq(tenantMemberships.userId, userId)));
+    return m;
+  }
+
+  async function clearMemberCredentials() {
+    await db.delete(credentials).where(eq(credentials.tenantId, tenant.id));
+    await db.delete(attestationRequests).where(eq(attestationRequests.tenantId, tenant.id));
+  }
+
+  beforeAll(async () => {
+    const dbPackage = await import("@accessbuddy/db");
+    const shared = await import("@accessbuddy/shared");
+    db = dbPackage.db;
+    tenants = dbPackage.tenants;
+    users = dbPackage.users;
+    tenantMemberships = dbPackage.tenantMemberships;
+    credentialTypes = dbPackage.credentialTypes;
+    accessLevels = dbPackage.accessLevels;
+    credentials = dbPackage.credentials;
+    attestationRequests = dbPackage.attestationRequests;
+    auditLog = dbPackage.auditLog;
+    CredentialStatus = shared.CredentialStatus;
+
+    suffix = `${Date.now()}`;
+    const [t] = await db
+      .insert(tenants)
+      .values({ name: `Force Renew Club ${suffix}`, slug: `force-renew-${suffix}` })
+      .returning({ id: tenants.id, slug: tenants.slug });
+    tenant = t;
+    ctx.tenant = tenant;
+
+    const mkUser = async (tag: string, first: string, last: string) => {
+      const [u] = await db
+        .insert(users)
+        .values({
+          firebaseUid: `force-renew-${tag}-${suffix}`,
+          email: `force-renew-${tag}-${suffix}@example.com`,
+          firstName: first,
+          lastName: last,
+        })
+        .returning({ id: users.id });
+      return u;
+    };
+    admin = await mkUser("admin", "Force", "Admin");
+    member = await mkUser("member", "Mia", "Member");
+    staffMember = await mkUser("staff", "Sam", "Staff");
+    ctx.actorId = admin.id;
+
+    [fobType] = await db
+      .insert(credentialTypes)
+      .values({ tenantId: tenant.id, name: "Fob", priceCents: 0 })
+      .returning({ id: credentialTypes.id });
+    [level] = await db
+      .insert(accessLevels)
+      .values({ tenantId: tenant.id, name: "Member access" })
+      .returning({ id: accessLevels.id });
+
+    await db.insert(tenantMemberships).values([
+      { tenantId: tenant.id, userId: member.id, accessLevelId: level.id, status: "active", currentSeason: "2025/2026" },
+      { tenantId: tenant.id, userId: staffMember.id, accessLevelId: level.id, status: "active", isStaff: true },
+    ]);
+
+    ({ POST: forceRenew } = await import("@/app/api/v1/t/[slug]/members/[id]/force-renew/route"));
+    ({ POST: confirmProgramming } = await import(
+      "@/app/api/v1/t/[slug]/credentials/[id]/confirm-programming/route"
+    ));
+  });
+
+  beforeEach(async () => {
+    sentTemplates.length = 0;
+    await clearMemberCredentials();
+  });
+
+  afterAll(async () => {
+    await db.delete(auditLog).where(eq(auditLog.tenantId, tenant.id));
+    await db.delete(attestationRequests).where(eq(attestationRequests.tenantId, tenant.id));
+    await db.delete(credentials).where(eq(credentials.tenantId, tenant.id));
+    await db.delete(tenantMemberships).where(eq(tenantMemberships.tenantId, tenant.id));
+    await db.delete(accessLevels).where(eq(accessLevels.tenantId, tenant.id));
+    await db.delete(credentialTypes).where(eq(credentialTypes.tenantId, tenant.id));
+    await db.delete(tenants).where(eq(tenants.id, tenant.id));
+    await db.delete(users).where(inArray(users.id, [admin.id, member.id, staffMember.id]));
+  });
+
+  it("stages an expired fob for the programmer instead of skipping it (ISC-182/183/188/189/196)", async () => {
+    const cred = await seedCredential({ serial: `EXP-${suffix}`, ownerId: member.id, status: "expired" });
+
+    const { status, json } = await post(member.id);
+    expect(status).toBe(200);
+    expect(json.forceRenewed).toBe(true);
+    expect(json.staged).toEqual([cred.id]);
+    expect(json.skipped).toEqual([]);
+    expect(json.pendingExpiresAt).toBe(SEASON_END.toISOString());
+
+    const after = await load(cred.id);
+    expect(after.status).toBe(CredentialStatus.EXPIRED);
+    expect(after.expiresAt?.toISOString()).toBe(OLD_EXPIRY.toISOString());
+    expect(after.pendingExpiresAt?.toISOString()).toBe(SEASON_END.toISOString());
+    expect(after.programmingRequired).toBe(true);
+    expect(after.programmingRequestedAt).not.toBeNull();
+    expect(after.programmingReason).toContain("Force renewal (2026/2027)");
+    expect(after.programmingReason).toContain("Paid at the desk");
+    expect(after.programmingReason).toContain(`Fob #EXP-${suffix}`);
+    expect(after.programmingReason).toContain("re-enable");
+
+    const rows = await auditRows(cred.id, "force_renew_expiry_update");
+    expect(rows).toHaveLength(1);
+    const meta = rows[0].metadata as Record<string, unknown>;
+    expect(meta.pendingExpiresAt).toBe(SEASON_END.toISOString());
+    expect(meta.previousExpiresAt).toBe(OLD_EXPIRY.toISOString());
+    expect(meta.programmingRequired).toBe(true);
+    expect(meta.season).toBe(SEASON);
+    expect(meta.reason).toBe("Paid at the desk");
+
+    const m = await membership(member.id);
+    expect(m.currentSeason).toBe(SEASON);
+    expect(m.status).toBe("active");
+  });
+
+  it("stages an active fob without touching its live expiry (ISC-181/182/198)", async () => {
+    const cred = await seedCredential({ serial: `ACT-${suffix}`, ownerId: member.id, status: "active" });
+
+    const { json } = await post(member.id);
+    expect(json.staged).toEqual([cred.id]);
+
+    const after = await load(cred.id);
+    expect(after.status).toBe(CredentialStatus.ACTIVE);
+    expect(after.expiresAt?.toISOString()).toBe(OLD_EXPIRY.toISOString());
+    expect(after.pendingExpiresAt?.toISOString()).toBe(SEASON_END.toISOString());
+    expect(after.programmingRequired).toBe(true);
+    expect(after.programmingReason).not.toContain("re-enable");
+  });
+
+  it("leaves an active fob already at the target expiry alone (ISC-184)", async () => {
+    const cred = await seedCredential({
+      serial: `DONE-${suffix}`,
+      ownerId: member.id,
+      status: "active",
+      expiresAt: SEASON_END,
+    });
+
+    const { json } = await post(member.id);
+    expect(json.staged).toEqual([]);
+    expect(json.skipped).toEqual([cred.id]);
+
+    const after = await load(cred.id);
+    expect(after.programmingRequired).toBe(false);
+    expect(after.pendingExpiresAt).toBeNull();
+    expect(await auditRows(cred.id)).toHaveLength(0);
+  });
+
+  it("keeps the reason on an already-flagged fob and only moves the staged date when it differs (ISC-185/199)", async () => {
+    const sameDate = await seedCredential({
+      serial: `FLAG-SAME-${suffix}`,
+      ownerId: member.id,
+      status: "expired",
+      programmingRequired: true,
+      programmingReason: "Member confirmed they hold this Fob - update expiry",
+      pendingExpiresAt: SEASON_END,
+    });
+    const otherDate = await seedCredential({
+      serial: `FLAG-OTHER-${suffix}`,
+      ownerId: member.id,
+      status: "expired",
+      programmingRequired: true,
+      programmingReason: "Pending exchange removal",
+      pendingExpiresAt: new Date("2026-12-31T13:00:00.000Z"),
+    });
+
+    const { json } = await post(member.id);
+    expect(json.skipped).toEqual([sameDate.id]);
+    expect(json.staged).toEqual([otherDate.id]);
+
+    const same = await load(sameDate.id);
+    expect(same.programmingReason).toBe("Member confirmed they hold this Fob - update expiry");
+    expect(same.pendingExpiresAt?.toISOString()).toBe(SEASON_END.toISOString());
+    expect(await auditRows(sameDate.id)).toHaveLength(0);
+
+    const other = await load(otherDate.id);
+    expect(other.programmingReason).toBe("Pending exchange removal");
+    expect(other.pendingExpiresAt?.toISOString()).toBe(SEASON_END.toISOString());
+    const rows = await auditRows(otherDate.id, "force_renew_expiry_update");
+    expect(rows).toHaveLength(1);
+    expect((rows[0].metadata as Record<string, unknown>).alreadyFlagged).toBe(true);
+  });
+
+  it("is a no-op on credentials when run twice for the same season (ISC-199)", async () => {
+    const cred = await seedCredential({ serial: `TWICE-${suffix}`, ownerId: member.id, status: "expired" });
+
+    await post(member.id);
+    const first = await load(cred.id);
+    const { json } = await post(member.id);
+    expect(json.staged).toEqual([]);
+    expect(json.skipped).toEqual([cred.id]);
+
+    const second = await load(cred.id);
+    expect(second.programmingReason).toBe(first.programmingReason);
+    expect(second.programmingRequestedAt?.toISOString()).toBe(first.programmingRequestedAt?.toISOString());
+    expect(second.pendingExpiresAt?.toISOString()).toBe(first.pendingExpiresAt?.toISOString());
+    expect(await auditRows(cred.id, "force_renew_expiry_update")).toHaveLength(1);
+  });
+
+  it("ignores fobs in any other status (ISC-186)", async () => {
+    const deactivated = await seedCredential({ serial: `DEACT-${suffix}`, ownerId: member.id, status: "deactivated" });
+    const returned = await seedCredential({ serial: `RET-${suffix}`, ownerId: member.id, status: "returned" });
+    const pendingProg = await seedCredential({ serial: `PEND-${suffix}`, ownerId: member.id, status: "pending_programming", expiresAt: null });
+
+    const { json } = await post(member.id);
+    expect(json.staged).toEqual([]);
+    expect(json.skipped).toEqual([]);
+
+    for (const c of [deactivated, returned, pendingProg]) {
+      const row = await load(c.id);
+      expect(row.programmingRequired).toBe(false);
+      expect(row.pendingExpiresAt).toBeNull();
+      expect(await auditRows(c.id)).toHaveLength(0);
+    }
+  });
+
+  it("tells the programmer a re-added fob's old deactivation reason and clears it (QA finding 2)", async () => {
+    const cred = await seedCredential({
+      serial: `READD-${suffix}`,
+      ownerId: member.id,
+      status: "expired",
+      deactivationReason: "Revoked - reported lost",
+    });
+
+    const { json } = await post(member.id);
+    expect(json.staged).toEqual([cred.id]);
+
+    const after = await load(cred.id);
+    expect(after.programmingReason).toContain("(previously deactivated: Revoked - reported lost)");
+    expect(after.deactivationReason).toBeNull();
+    expect(after.deactivatedBy).toBeNull();
+  });
+
+  it("leaves staff members' fobs untouched and their scoped confirmation pending (ISC-187, QA finding 1)", async () => {
+    const cred = await seedCredential({ serial: `STAFF-${suffix}`, ownerId: staffMember.id, status: "expired" });
+    const [scoped] = await db
+      .insert(attestationRequests)
+      .values({
+        tenantId: tenant.id,
+        userId: staffMember.id,
+        season: SEASON,
+        token: `staff-scoped-${suffix}`,
+        tokenExpiresAt: new Date(Date.now() + 86_400_000),
+        status: "pending",
+        initiatedBy: admin.id,
+        credentialIds: [cred.id],
+      })
+      .returning({ id: attestationRequests.id });
+
+    const { status, json } = await post(staffMember.id);
+    expect(status).toBe(200);
+    expect(json.staged).toEqual([]);
+    expect(json.pendingExpiresAt).toBeNull();
+
+    const after = await load(cred.id);
+    expect(after.programmingRequired).toBe(false);
+    expect(after.pendingExpiresAt).toBeNull();
+    expect((await membership(staffMember.id)).currentSeason).toBe(SEASON);
+
+    const [att] = await db.select().from(attestationRequests).where(eq(attestationRequests.id, scoped.id));
+    expect(att.status).toBe("pending");
+  });
+
+  it("completes every pending attestation, recording the staged fob as confirmed (ISC-189)", async () => {
+    const cred = await seedCredential({ serial: `ATT-${suffix}`, ownerId: member.id, status: "expired" });
+    const [unscoped] = await db
+      .insert(attestationRequests)
+      .values({
+        tenantId: tenant.id,
+        userId: member.id,
+        season: SEASON,
+        token: `unscoped-${suffix}`,
+        tokenExpiresAt: new Date(Date.now() + 86_400_000),
+        status: "pending",
+        initiatedBy: admin.id,
+      })
+      .returning({ id: attestationRequests.id });
+    const [scoped] = await db
+      .insert(attestationRequests)
+      .values({
+        tenantId: tenant.id,
+        userId: member.id,
+        season: SEASON,
+        token: `scoped-${suffix}`,
+        tokenExpiresAt: new Date(Date.now() + 86_400_000),
+        status: "pending",
+        initiatedBy: admin.id,
+        credentialIds: [cred.id],
+      })
+      .returning({ id: attestationRequests.id });
+
+    await post(member.id);
+
+    const rows = await db
+      .select()
+      .from(attestationRequests)
+      .where(inArray(attestationRequests.id, [unscoped.id, scoped.id]));
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.status).toBe("completed");
+      expect(row.completedAt).not.toBeNull();
+      expect(row.credentialResponses).toEqual([
+        { credentialId: cred.id, confirmed: true, note: "Force-renewed by admin: Paid at the desk" },
+      ]);
+    }
+
+    const memberAudit = await db
+      .select({ metadata: auditLog.metadata })
+      .from(auditLog)
+      .where(and(eq(auditLog.entityType, "member"), eq(auditLog.entityId, member.id)));
+    const forced = memberAudit.filter(
+      (r) => (r.metadata as Record<string, unknown>).action === "attestation_force_completed"
+    );
+    expect(forced).toHaveLength(2);
+  });
+
+  it("hands off to confirm-programming: expired fob reactivated with one email, active fob stays active (ISC-190/191/192)", async () => {
+    const expired = await seedCredential({ serial: `HAND-EXP-${suffix}`, ownerId: member.id, status: "expired" });
+    const active = await seedCredential({ serial: `HAND-ACT-${suffix}`, ownerId: member.id, status: "active" });
+
+    const { json } = await post(member.id);
+    expect(json.staged.sort()).toEqual([expired.id, active.id].sort());
+
+    // Both rows now carry the only flag the /admin credential updates list filters on.
+    const flagged = await db
+      .select({ id: credentials.id })
+      .from(credentials)
+      .where(and(eq(credentials.tenantId, tenant.id), eq(credentials.programmingRequired, true)));
+    expect(flagged.map((r) => r.id).sort()).toEqual([expired.id, active.id].sort());
+
+    const r1 = await confirm(expired.id);
+    expect(r1.status).toBe(200);
+    const e = await load(expired.id);
+    expect(e.status).toBe(CredentialStatus.ACTIVE);
+    expect(e.expiresAt?.toISOString()).toBe(SEASON_END.toISOString());
+    expect(e.pendingExpiresAt).toBeNull();
+    expect(e.programmingRequired).toBe(false);
+    expect(sentTemplates).toEqual(["credentialReactivated"]);
+
+    const r2 = await confirm(active.id);
+    expect(r2.status).toBe(200);
+    const a = await load(active.id);
+    expect(a.status).toBe(CredentialStatus.ACTIVE);
+    expect(a.expiresAt?.toISOString()).toBe(SEASON_END.toISOString());
+    expect(a.programmingRequired).toBe(false);
+    expect(sentTemplates).toEqual(["credentialReactivated"]);
+  });
+});

@@ -1,0 +1,28 @@
+// Embedded Postgres for AccessBuddy DB-gated tests on the Linux box.
+// DATABASE_URL=postgres://accessbuddy:testpassword@127.0.0.1:54329/accessbuddy_test
+import EmbeddedPostgres from "embedded-postgres";
+
+const pg = new EmbeddedPostgres({
+  databaseDir: `${import.meta.dir}/data`,
+  user: "accessbuddy",
+  password: "testpassword",
+  port: 54329,
+  persistent: true,
+});
+
+await pg.initialise();
+await pg.start();
+try {
+  await pg.createDatabase("accessbuddy_test");
+} catch (err) {
+  console.log("createDatabase:", err instanceof Error ? err.message : err);
+}
+console.log("READY accessbuddy_test on 54329");
+
+const stop = async () => {
+  await pg.stop();
+  process.exit(0);
+};
+process.on("SIGINT", stop);
+process.on("SIGTERM", stop);
+setInterval(() => {}, 1 << 30);

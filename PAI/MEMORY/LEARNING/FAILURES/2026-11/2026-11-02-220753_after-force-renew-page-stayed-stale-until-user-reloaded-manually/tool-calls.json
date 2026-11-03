@@ -1,0 +1,1001 @@
+[
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/ALGORITHM/LATEST"
+    },
+    "timestamp": "2026-11-03T02:28:32.408Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/ALGORITHM/v6.3.0.md"
+    },
+    "timestamp": "2026-11-03T02:28:35.418Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Algorithm. Entering the Observe phase.\", \"voice_id\": \"pNInz6obpgDQGcFmaJgB\", \"voice_enabled\": true}' >/dev/null 2>&1; fd -t d -d 3 -i accessbuddy ~/Documents/workspace 2>/dev/null | head; fd -t d -d 3 -i accessbuddy ~ --exclude .claude 2>/dev/null | head",
+      "description": "Announce phase and locate the AccessBuddy repo"
+    },
+    "timestamp": "2026-11-03T02:28:49.693Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls ~/Documents/workspace/projects/ 2>/dev/null; ls ~/code 2>/dev/null; cat ~/.claude/projects/-home-nicholas-wood--claude/memory/project-accessbuddy-pr111-expiry-update-stage.md; cat ~/.claude/projects/-home-nicholas-wood--claude/memory/gotcha-accessbuddy-prod-access.md; cat ~/.claude/projects/-home-nicholas-wood--claude/memory/gotcha-automode-blocks-prod-db-window.md",
+      "description": "List workspace projects and read AccessBuddy memory notes"
+    },
+    "timestamp": "2026-11-03T02:28:54.138Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy && git status -sb | head -5 && git log --oneline -8 && echo ---- && rg -il \"force.?renew\" --type ts --type tsx -g '!node_modules' . | head -30",
+      "description": "Show repo state and find force-renew code files"
+    },
+    "timestamp": "2026-11-03T02:28:59.719Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy && ls; for d in */; do [ -d \"$d/.git\" ] && echo \"REPO: $d\" && git -C \"$d\" log --oneline -3 && git -C \"$d\" status -sb | head -2; done; rg -il \"force.?renew\" -g '*.ts' -g '*.tsx' -g '!node_modules' . | head -30",
+      "description": "Find the nested code repo and force-renew source files"
+    },
+    "timestamp": "2026-11-03T02:29:03.721Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && git fetch -q origin 2>&1 | tail -2; git log --oneline -12 origin/main; echo ---; git worktree list; echo ---; git status -s | head; echo ---; git grep -il \"force.\\?renew\" origin/main -- '*.ts' '*.tsx' | head -30",
+      "description": "Fetch origin, list recent main commits, worktrees, and force-renew files"
+    },
+    "timestamp": "2026-11-03T02:29:08.369Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && git checkout -q main && git pull -q --ff-only origin main && git log --oneline -1 && echo --- && cat \"apps/web/src/app/api/v1/t/[slug]/members/[id]/force-renew/route.ts\"",
+      "description": "Switch checkout to main and print the force-renew route"
+    },
+    "timestamp": "2026-11-03T02:29:23.019Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && rg -n \"pendingExpiresAt|programmingRequired\" --type ts -g '!node_modules' -g '!*.test.ts' -l | head -40; echo ---; rg -n \"pendingExpiresAt\\s*:|programmingRequired\\s*:\\s*true|programmingRequiredReason\" \"apps/web/src/app/api/v1/attest\" \"apps/web/src/app/api/v1/t/[slug]\" -g '!*.test.ts' | head -40",
+      "description": "Locate every writer of the staged-expiry fields"
+    },
+    "timestamp": "2026-11-03T02:29:39.631Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && sed -n 250,400p \"apps/web/src/app/api/v1/t/[slug]/attestations/[token]/route.ts\"",
+      "description": "Print the member attestation yes-path that stages the expiry update"
+    },
+    "timestamp": "2026-11-03T02:29:44.708Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && cat \"apps/web/src/app/api/v1/t/[slug]/members/[id]/confirm-on-behalf/route.ts\"",
+      "description": "Print the admin confirm-on-behalf route"
+    },
+    "timestamp": "2026-11-03T02:29:45.789Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && rg -n -i \"force.?renew\" \"apps/web/src/app/t/[slug]/admin/members/[id]/attestation-section.tsx\" | head -20; echo ---; rg -n \"programmingRequired\" \"apps/web/src/app/t/[slug]/admin/page.tsx\" | head; echo --- GITLOG force-renew; git log --format='%h %ad %s' --date=short -- \"apps/web/src/app/api/v1/t/[slug]/members/[id]/force-renew/route.ts\" | head; echo --- GITLOG attest staging; git log -S\"programmingRequired: true\" --format='%h %ad %s' --date=short -- \"apps/web/src/app/api/v1/t/[slug]/attestations/[token]/route.ts\" | head; echo --- TESTS; rg -l -i \"force.?renew\" --type ts -g '*.test.ts' -g '!node_modules' . | head",
+      "description": "Show force-renew UI hooks, admin list filter, git history, and tests"
+    },
+    "timestamp": "2026-11-03T02:29:49.849Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ssh -o ConnectTimeout=15 mac '/opt/homebrew/bin/gcloud logging read \"resource.type=cloud_run_revision AND resource.labels.service_name=accessbuddy-production AND httpRequest.requestUrl:\\\"force-renew\\\" AND timestamp>=\\\"2026-11-02T13:00:00Z\\\"\" --project accessbuddy-prod --format=\"value(timestamp,httpRequest.requestMethod,httpRequest.requestUrl,httpRequest.status,httpRequest.remoteIp)\" --limit 20' 2>&1 | tail -20",
+      "description": "Read today's production request logs for the force-renew endpoint"
+    },
+    "timestamp": "2026-11-03T02:29:52.438Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && echo \"== audit labels\"; rg -n \"force_renew|attestation_expiry_update|manual_expiry_update\" apps/web/src/components/audit-trail.tsx | head; echo \"== attestation insert + credential selection\"; rg -n -B2 -A2 \"insert\\(attestationRequests\\)\" --type ts -g '!node_modules' -g '!*.test.ts' . | head -60",
+      "description": "Check audit labels and where renewal attestations are created"
+    },
+    "timestamp": "2026-11-03T02:30:33.269Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && echo \"== admin queue filter\"; sed -n 100,140p \"apps/web/src/app/t/[slug]/admin/page.tsx\"; echo \"== credential-actions fetch targets\"; rg -n \"fetch\\(|/api/v1\" \"apps/web/src/app/t/[slug]/admin/members/[id]/credential-actions.tsx\" | head -20; echo \"== PATCH credential allows pendingExpiresAt?\"; rg -n \"pendingExpiresAt|programmingRequired|expiresAt\" \"apps/web/src/app/api/v1/t/[slug]/credentials/[id]/route.ts\" | head -20",
+      "description": "Show admin queue filter, member-page credential actions, and PATCH fields"
+    },
+    "timestamp": "2026-11-03T02:30:36.238Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && echo \"== tests\"; fd -e test.ts . apps/web/src | rg -i \"attest|confirm-on-behalf|renew|members\" | head; echo \"== test cmds\"; rg -n \"\\\"test|typecheck|lint\" package.json apps/web/package.json | head; echo \"== project CLAUDE\"; sed -n 1,80p CLAUDE.md 2>/dev/null | head -80",
+      "description": "List related test files and project test conventions"
+    },
+    "timestamp": "2026-11-03T02:30:38.749Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && sed -n 40,140p \"apps/web/src/app/api/v1/t/[slug]/members/[id]/renew/route.ts\"",
+      "description": "Print the normal admin Renew route body"
+    },
+    "timestamp": "2026-11-03T02:30:47.308Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && echo \"== attest GET credential listing\"; rg -n \"CredentialStatus\\.|status\" \"apps/web/src/app/api/v1/t/[slug]/attestations/[token]/route.ts\" | sed -n 1,40p; echo \"== cron attestation creation credential filter\"; sed -n 340,420p apps/web/src/app/api/cron/daily/route.ts",
+      "description": "Show which credential statuses renewal attestations cover"
+    },
+    "timestamp": "2026-11-03T02:30:49.569Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && echo \"== audit-trail generic rendering\"; sed -n 225,300p apps/web/src/components/audit-trail.tsx; echo \"== confirm-programming core\"; sed -n 60,200p \"apps/web/src/app/api/v1/t/[slug]/credentials/[id]/confirm-programming/route.ts\"",
+      "description": "Show audit trail rendering and confirm-programming promotion logic"
+    },
+    "timestamp": "2026-11-03T02:30:51.448Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && find apps/web/src -name '*.test.ts' | rg -i \"attest|confirm|renew|member|credential\" | head -20; echo \"== vitest config\"; cat apps/web/vitest.config.* 2>/dev/null | head -40; echo \"== ISA tail\"; tail -n 40 ../ISA.md | head -60",
+      "description": "List related tests, vitest config, and project ISA tail"
+    },
+    "timestamp": "2026-11-03T02:30:53.448Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && sed -n 195,290p \"apps/web/src/app/t/[slug]/admin/members/[id]/attestation-section.tsx\"; echo \"== schema\"; rg -n -A6 \"forceRenewSchema\" packages/shared/src/schemas.ts | head -14; echo \"== helpers\"; cat apps/web/src/lib/scoped-attestation.ts; rg -n \"export\" apps/web/src/lib/format-date.ts apps/web/src/lib/timezone.ts | head",
+      "description": "Show force-renew UI copy, schema, and date helpers"
+    },
+    "timestamp": "2026-11-03T02:32:19.068Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && sed -n 1,120p apps/web/src/__tests__/attestation-resend.test.ts; echo \"== embedded pg\"; ss -ltn 2>/dev/null | grep 54329; ls /tmp/ab-pg-scratch 2>/dev/null; ls apps/web/src/__tests__/ | head -40",
+      "description": "Show DB-gated test harness and embedded Postgres status"
+    },
+    "timestamp": "2026-11-03T02:32:20.883Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ssh -o ConnectTimeout=15 mac '/opt/homebrew/bin/gcloud logging read \"resource.type=cloud_run_revision AND resource.labels.service_name=accessbuddy-production AND httpRequest.requestUrl:\\\"force-renew\\\" AND httpRequest.requestMethod=\\\"POST\\\"\" --project accessbuddy-prod --freshness=30d --format=\"value(timestamp,httpRequest.requestUrl,httpRequest.status)\" --limit 50' 2>&1 | tail -30",
+      "description": "List all force-renew POSTs in production over the last 30 days"
+    },
+    "timestamp": "2026-11-03T02:32:23.278Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -il \"force.?renew|programmingRequired|expiry update\" ~/.claude/projects/-home-nicholas-wood--claude/memory/ ~/.claude/PAI/MEMORY/LEARNING/ 2>/dev/null | head; echo \"== codex\"; which codex || echo \"codex missing\"",
+      "description": "Sweep feedback memories for force-renew lessons and check codex availability"
+    },
+    "timestamp": "2026-11-03T02:32:25.279Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cat \"/home/nicholas-wood/.claude/PAI/MEMORY/LEARNING/FAILURES/2026-11/2026-11-02-182836_assistant-stalled-on-login-then-investigated-christine-cardwell-fob-expiry/CONTEXT.md\"; echo \"== learning\"; cat /home/nicholas-wood/.claude/PAI/MEMORY/LEARNING/ALGORITHM/2026-11/2026-11-03-132833_LEARNING_sentiment-rating-3.md | head -60; echo \"== prior work dirs\"; ls -dt ~/.claude/PAI/MEMORY/WORK/*/ 2>/dev/null | head -5; ls -d ~/.claude/PAI/MEMORY/WORK/*force* ~/.claude/PAI/MEMORY/WORK/*christine* ~/.claude/PAI/MEMORY/WORK/*renew* 2>/dev/null",
+      "description": "Read the prior session's failure context and look for an existing work ISA"
+    },
+    "timestamp": "2026-11-03T02:33:23.257Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && sed -n 1,140p apps/web/src/__tests__/manual-add-expiry-update.test.ts",
+      "description": "Show the DB-gated expiry-update test setup to model the new test on"
+    },
+    "timestamp": "2026-11-03T02:33:24.508Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && sed -n 140,330p apps/web/src/__tests__/manual-add-expiry-update.test.ts",
+      "description": "Show the test harness seeding and cleanup"
+    },
+    "timestamp": "2026-11-03T02:33:31.920Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy && sed -n 1,30p ISA.md; echo \"== sections\"; rg -n \"^## \" ISA.md; echo \"== last ISC ids\"; rg -o \"ISC-[0-9]+(\\.[0-9]+)?\" ISA.md | sort -t- -k2 -n -u | tail -3; echo \"== features sample\"; rg -n -A3 \"^## Features\" ISA.md | head -8",
+      "description": "Show project ISA frontmatter, sections, and highest ISC id"
+    },
+    "timestamp": "2026-11-03T02:33:34.308Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy && sed -n 262,282p ISA.md; echo \"== test strategy tail\"; sed -n 388,400p ISA.md; echo \"== features tail\"; sed -n 420,433p ISA.md; echo \"== decisions tail\"; sed -n 455,473p ISA.md",
+      "description": "Show the project ISA section formats to append to"
+    },
+    "timestamp": "2026-11-03T02:33:39.142Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && sed -n 330,420p apps/web/src/__tests__/manual-add-expiry-update.test.ts",
+      "description": "Show the test membership seeding and cleanup"
+    },
+    "timestamp": "2026-11-03T02:33:40.181Z"
+  },
+  {
+    "name": "Skill",
+    "input": {
+      "skill": "ISA",
+      "args": "append to ~/Documents/workspace/projects/accessbuddy/ISA.md at tier E3: new feature \"Force renew stages the expiry update instead of writing expiresAt directly\" with ISC-181 onward, Test Strategy rows, Features row, and a Decisions entry dated 2026-11-03"
+    },
+    "timestamp": "2026-11-03T02:34:01.357Z"
+  },
+  {
+    "name": "Skill",
+    "input": {
+      "skill": "RootCauseAnalysis",
+      "args": "FiveWhys: AccessBuddy force renew for a member today did not put her fob into the expiry-update (programming) queue"
+    },
+    "timestamp": "2026-11-03T02:34:02.508Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Running the Append workflow in the ISA skill\"}' > /dev/null 2>&1 &\necho ok",
+      "description": "Voice notification for the ISA Append workflow"
+    },
+    "timestamp": "2026-11-03T02:34:25.389Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/ISA.md",
+      "old_string": "- [DEFERRED-VERIFY] ISC-180: Live: after release, the revert button appears on a member-confirmed SMLSC request and the member email arrives (Interceptor)\n\n## Test Strategy",
+      "new_string": "- [DEFERRED-VERIFY] ISC-180: Live: after release, the revert button appears on a member-confirmed SMLSC request and the member email arrives (Interceptor)\n- [ ] ISC-181: `force-renew/route.ts` contains no direct write of `expiresAt` on a credential\n- [ ] ISC-182: For each credential owned by the member with status `active` or `expired`, force renew sets `pendingExpiresAt` = 1 Sep of the season's second year (tenant timezone), `programmingRequired: true`, `programmingReason` naming \"Force renewal\", the season and the new date, and `programmingRequestedAt`\n- [ ] ISC-183: An `expired` fob is staged by force renew (previously skipped) and its status stays `expired` until confirm-programming\n- [ ] ISC-184: An `active` fob whose `expiresAt` already equals the target and is not flagged is left untouched (no spurious programming row)\n- [ ] ISC-185: A fob already flagged for programming keeps its existing reason; only `pendingExpiresAt` moves to the target when it differs\n- [ ] ISC-186: Credentials in any other status (`deactivated`, `returned`, `lost`, `damaged`, `pending_programming`, `inactive_*`) are untouched by force renew\n- [ ] ISC-187: Staff and board-member credentials are untouched (existing exemption preserved)\n- [ ] ISC-188: One credential audit row per staged fob with `action: force_renew_expiry_update`, `season`, `reason`, `pendingExpiresAt`, `previousExpiresAt`, `programmingRequired: true`\n- [ ] ISC-189: Member-level `force_renew` audit and the force-completion of a pending attestation are unchanged\n- [ ] ISC-190: A force-renew-staged fob appears on the `/admin` credential updates list (query keyed on `programmingRequired = true`, unchanged)\n- [ ] ISC-191: confirm-programming on a force-renew-staged `expired` fob promotes the expiry, sets `active`, and sends one `credentialReactivated` email (route unchanged, test proves)\n- [ ] ISC-192: confirm-programming on a force-renew-staged `active` fob promotes the expiry and leaves status `active`\n- [ ] ISC-193: `audit-trail.tsx` labels `force_renew_expiry_update` as \"Force renewal (season) - expiry update staged for <date>, awaiting programming\" and `force_renew` as \"Membership force-renewed (season) by admin: <reason>\"\n- [ ] ISC-194: The admin audit page label map knows both actions\n- [ ] ISC-195: The Force Renew form copy says the member's fobs are sent to the programming queue; the words \"immediately renew credentials\" are gone\n- [ ] ISC-196: The route response carries `staged` (credential ids) and the UI confirms \"N fob(s) sent for programming\"\n- [ ] ISC-197: DB-gated `force-renew.test.ts` covers ISC-182..192 against the embedded Postgres\n- [ ] ISC-198: Anti: force renew never writes `status` on a credential\n- [ ] ISC-199: Anti: a second force renew for the same season creates no second flag, no second audit row for an already-staged fob, and keeps the reason\n- [ ] ISC-200: `bun run typecheck`, `bun run lint`, `bun run test` pass with 0 skipped on the embedded Postgres\n- [ ] ISC-201: Work lands as a `fix:` commit on `fix/force-renew-stages-expiry-update` with a PR open against `main`\n- [ ] ISC-202: Live: after release, Force Renew on the affected SMLSC member puts her fob on `/admin` credential updates (Interceptor)\n- [ ] ISC-203: Nick's report names the cause, which branch the member's fob hit today, and the one-step remediation\n\n## Test Strategy"
+    },
+    "timestamp": "2026-11-03T02:34:40.479Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/ISA.md",
+      "old_string": "| ISC-180 | live | post-release Interceptor screenshot | screenshot | Interceptor (deferred) |\n",
+      "new_string": "| ISC-180 | live | post-release Interceptor screenshot | screenshot | Interceptor (deferred) |\n| ISC-181, ISC-198 | code | `rg \"expiresAt:|status:\" force-renew/route.ts` inside `.set(` on credentials | no match | rg |\n| ISC-182, ISC-183, ISC-184, ISC-185, ISC-186, ISC-187, ISC-188, ISC-189, ISC-191, ISC-192, ISC-199 | test | `force-renew.test.ts` DB-gated cases | pass, 0 skipped | bun test |\n| ISC-190 | code | `admin/page.tsx` filter `eq(credentials.programmingRequired, true)` unchanged | match present | rg |\n| ISC-193, ISC-194 | code+test | labels in `audit-trail.tsx` and `admin/audit/page.tsx`; unit assertion | match present | rg / bun test |\n| ISC-195, ISC-196 | code | `attestation-section.tsx` copy and `staged` in route response | match present | rg |\n| ISC-197, ISC-200 | build | typecheck / lint / test exit 0 | exit 0 | Bash |\n| ISC-201 | process | `gh pr view` (via ssh mac) | PR exists | gh |\n| ISC-202 | live | post-release Interceptor screenshot of `/admin` | screenshot | Interceptor (deferred) |\n| ISC-203 | report | final message to Nick | present | ReReadCheck |\n"
+    },
+    "timestamp": "2026-11-03T02:34:46.749Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/ISA.md",
+      "old_string": "| Admin revert of a member-confirmed receipt (event, service guard, route, UI, member email, labels) | ISC-170, ISC-171, ISC-172, ISC-173, ISC-174, ISC-175, ISC-176, ISC-177, ISC-178, ISC-179, ISC-180 | \"I already have my fob\" report | no |\n",
+      "new_string": "| Admin revert of a member-confirmed receipt (event, service guard, route, UI, member email, labels) | ISC-170, ISC-171, ISC-172, ISC-173, ISC-174, ISC-175, ISC-176, ISC-177, ISC-178, ISC-179, ISC-180 | \"I already have my fob\" report | no |\n| Force renew stages the expiry update instead of writing expiresAt directly (route rewrite, audit labels, form copy, DB test) | ISC-181, ISC-182, ISC-183, ISC-184, ISC-185, ISC-186, ISC-187, ISC-188, ISC-189, ISC-190, ISC-191, ISC-192, ISC-193, ISC-194, ISC-195, ISC-196, ISC-197, ISC-198, ISC-199, ISC-200, ISC-201, ISC-202, ISC-203 | Member confirmation (shares confirm-programming) | no |\n"
+    },
+    "timestamp": "2026-11-03T02:34:52.010Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/ISA.md",
+      "old_string": "because they execute only on a release, so a PR's checks cannot exercise them. E2 delegation floor relaxed: three-file sed-level edit fully in-context; an infra-ops agent would only add latency.\n",
+      "new_string": "because they execute only on a release, so a PR's checks cannot exercise them. E2 delegation floor relaxed: three-file sed-level edit fully in-context; an infra-ops agent would only add latency.\n- 2026-11-03: Force renew bypasses the staged-expiry design (ISC-181..203). Trigger: Nick reported that today's force renew for an SMLSC member did not send her fob for an expiry update. Evidence: one `POST .../force-renew` at 00:28Z returned 200 (the only one in 30 days); `force-renew/route.ts` is untouched since 31 Mar 2026, before the 8 Apr change that made renewal stage `pendingExpiresAt` + `programmingRequired` for the programmer. It still writes `expiresAt` directly on `active` fobs (AccessBuddy then shows a date the door system never received) and skips `expired` fobs entirely, so nothing ever reaches `/admin` credential updates, whose only filter is `programmingRequired`. The 2026-09-04 decision already recorded \"force-renew skips already-expired fobs\" as a known gap; it was never actioned. Fix: force renew now does what the member's \"yes\" does, for `active` and `expired` fobs (the attestation GET's own filter), skipping a fob already at the target expiry so a renewal that was already programmed does not re-queue. Rejected: refusing force renew when a fob is already staged (idempotent re-run is the remediation path for the affected member). Delegation floor (E3 soft ≥2) relaxed to one: Forge needs the codex CLI, absent on this box (recorded gotcha); the route is one function fully read in-context; `accessbuddy-qa-verify` runs the independent gate. ISC count 23 < soft floor 32: a single route plus labels and copy; more criteria would be manufactured.\n"
+    },
+    "timestamp": "2026-11-03T02:35:01.700Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/ISA.md",
+      "offset": 279,
+      "limit": 4
+    },
+    "timestamp": "2026-11-03T04:51:10.921Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/ISA.md",
+      "offset": 397,
+      "limit": 4
+    },
+    "timestamp": "2026-11-03T04:51:11.899Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/ISA.md",
+      "offset": 430,
+      "limit": 4
+    },
+    "timestamp": "2026-11-03T04:51:12.905Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/ISA.md",
+      "offset": 464,
+      "limit": 4
+    },
+    "timestamp": "2026-11-03T04:51:13.829Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/ISA.md",
+      "old_string": "- [DEFERRED-VERIFY] ISC-180: Live: after release, the revert button appears on a member-confirmed SMLSC request and the member email arrives (Interceptor)\n\n## Test Strategy",
+      "new_string": "- [DEFERRED-VERIFY] ISC-180: Live: after release, the revert button appears on a member-confirmed SMLSC request and the member email arrives (Interceptor)\n- [ ] ISC-181: `force-renew/route.ts` contains no direct write of `expiresAt` on a credential\n- [ ] ISC-182: For each credential owned by the member with status `active` or `expired`, force renew sets `pendingExpiresAt` = 1 Sep of the season's second year (tenant timezone), `programmingRequired: true`, `programmingReason` naming \"Force renewal\", the season and the new date, and `programmingRequestedAt`\n- [ ] ISC-183: An `expired` fob is staged by force renew (previously skipped) and its status stays `expired` until confirm-programming\n- [ ] ISC-184: An `active` fob whose `expiresAt` already equals the target and is not flagged is left untouched (no spurious programming row)\n- [ ] ISC-185: A fob already flagged for programming keeps its existing reason; only `pendingExpiresAt` moves to the target when it differs\n- [ ] ISC-186: Credentials in any other status (`deactivated`, `returned`, `lost`, `damaged`, `pending_programming`, `inactive_*`) are untouched by force renew\n- [ ] ISC-187: Staff and board-member credentials are untouched (existing exemption preserved)\n- [ ] ISC-188: One credential audit row per staged fob with `action: force_renew_expiry_update`, `season`, `reason`, `pendingExpiresAt`, `previousExpiresAt`, `programmingRequired: true`\n- [ ] ISC-189: Member-level `force_renew` audit and the force-completion of a pending attestation are unchanged\n- [ ] ISC-190: A force-renew-staged fob appears on the `/admin` credential updates list (query keyed on `programmingRequired = true`, unchanged)\n- [ ] ISC-191: confirm-programming on a force-renew-staged `expired` fob promotes the expiry, sets `active`, and sends one `credentialReactivated` email (route unchanged, test proves)\n- [ ] ISC-192: confirm-programming on a force-renew-staged `active` fob promotes the expiry and leaves status `active`\n- [ ] ISC-193: `audit-trail.tsx` labels `force_renew_expiry_update` as \"Force renewal (season) - expiry update staged for <date>, awaiting programming\" and `force_renew` as \"Membership force-renewed (season) by admin: <reason>\"\n- [ ] ISC-194: The admin audit page label map knows both actions\n- [ ] ISC-195: The Force Renew form copy says the member's fobs are sent to the programming queue; the words \"immediately renew credentials\" are gone\n- [ ] ISC-196: The route response carries `staged` (credential ids) and the UI confirms \"N fob(s) sent for programming\"\n- [ ] ISC-197: DB-gated `force-renew.test.ts` covers ISC-182..192 against the embedded Postgres\n- [ ] ISC-198: Anti: force renew never writes `status` on a credential\n- [ ] ISC-199: Anti: a second force renew for the same season creates no second flag, no second audit row for an already-staged fob, and keeps the reason\n- [ ] ISC-200: `bun run typecheck`, `bun run lint`, `bun run test` pass with 0 skipped on the embedded Postgres\n- [ ] ISC-201: Work lands as a `fix:` commit on `fix/force-renew-stages-expiry-update` with a PR open against `main`\n- [ ] ISC-202: Live: after release, Force Renew on the affected SMLSC member puts her fob on `/admin` credential updates (Interceptor)\n- [ ] ISC-203: Nick's report names the cause, which branch the member's fob hit today, and the one-step remediation\n\n## Test Strategy"
+    },
+    "timestamp": "2026-11-03T04:51:27.652Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/ISA.md",
+      "old_string": "| ISC-180 | live | post-release Interceptor screenshot | screenshot | Interceptor (deferred) |\n",
+      "new_string": "| ISC-180 | live | post-release Interceptor screenshot | screenshot | Interceptor (deferred) |\n| ISC-181, ISC-198 | code | `rg \"expiresAt:|status:\" force-renew/route.ts` inside `.set(` on credentials | no match | rg |\n| ISC-182, ISC-183, ISC-184, ISC-185, ISC-186, ISC-187, ISC-188, ISC-189, ISC-191, ISC-192, ISC-199 | test | `force-renew.test.ts` DB-gated cases | pass, 0 skipped | bun test |\n| ISC-190 | code | `admin/page.tsx` filter `eq(credentials.programmingRequired, true)` unchanged | match present | rg |\n| ISC-193, ISC-194 | code+test | labels in `audit-trail.tsx` and `admin/audit/page.tsx`; unit assertion | match present | rg / bun test |\n| ISC-195, ISC-196 | code | `attestation-section.tsx` copy and `staged` in route response | match present | rg |\n| ISC-197, ISC-200 | build | typecheck / lint / test exit 0 | exit 0 | Bash |\n| ISC-201 | process | `gh pr view` (via ssh mac) | PR exists | gh |\n| ISC-202 | live | post-release Interceptor screenshot of `/admin` | screenshot | Interceptor (deferred) |\n| ISC-203 | report | final message to Nick | present | ReReadCheck |\n"
+    },
+    "timestamp": "2026-11-03T04:51:33.283Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/ISA.md",
+      "old_string": "| Admin revert of a member-confirmed receipt (event, service guard, route, UI, member email, labels) | ISC-170, ISC-171, ISC-172, ISC-173, ISC-174, ISC-175, ISC-176, ISC-177, ISC-178, ISC-179, ISC-180 | \"I already have my fob\" report | no |\n",
+      "new_string": "| Admin revert of a member-confirmed receipt (event, service guard, route, UI, member email, labels) | ISC-170, ISC-171, ISC-172, ISC-173, ISC-174, ISC-175, ISC-176, ISC-177, ISC-178, ISC-179, ISC-180 | \"I already have my fob\" report | no |\n| Force renew stages the expiry update instead of writing expiresAt directly (route rewrite, audit labels, form copy, DB test) | ISC-181, ISC-182, ISC-183, ISC-184, ISC-185, ISC-186, ISC-187, ISC-188, ISC-189, ISC-190, ISC-191, ISC-192, ISC-193, ISC-194, ISC-195, ISC-196, ISC-197, ISC-198, ISC-199, ISC-200, ISC-201, ISC-202, ISC-203 | Member confirmation (shares confirm-programming) | no |\n"
+    },
+    "timestamp": "2026-11-03T04:51:37.773Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/ISA.md",
+      "old_string": "because they execute only on a release, so a PR's checks cannot exercise them. E2 delegation floor relaxed: three-file sed-level edit fully in-context; an infra-ops agent would only add latency.\n",
+      "new_string": "because they execute only on a release, so a PR's checks cannot exercise them. E2 delegation floor relaxed: three-file sed-level edit fully in-context; an infra-ops agent would only add latency.\n- 2026-11-03: Force renew bypasses the staged-expiry design (ISC-181..203). Trigger: Nick reported that today's force renew for an SMLSC member did not send her fob for an expiry update. Evidence: one `POST .../force-renew` at 00:28Z returned 200 (the only one in 30 days); `force-renew/route.ts` is untouched since 31 Mar 2026, before the 8 Apr change that made renewal stage `pendingExpiresAt` + `programmingRequired` for the programmer. It still writes `expiresAt` directly on `active` fobs (AccessBuddy then shows a date the door system never received) and skips `expired` fobs entirely, so nothing ever reaches `/admin` credential updates, whose only filter is `programmingRequired`. The 2026-09-04 decision already recorded \"force-renew skips already-expired fobs\" as a known gap; it was never actioned. Fix: force renew now does what the member's \"yes\" does, for `active` and `expired` fobs (the attestation GET's own filter), skipping a fob already at the target expiry so a renewal that was already programmed does not re-queue. Rejected: refusing force renew when a fob is already staged (idempotent re-run is the remediation path for the affected member). Delegation floor (E3 soft ≥2) relaxed to one: Forge needs the codex CLI, absent on this box (recorded gotcha); the route is one function fully read in-context; `accessbuddy-qa-verify` runs the independent gate. ISC count 23 < soft floor 32: a single route plus labels and copy; more criteria would be manufactured.\n"
+    },
+    "timestamp": "2026-11-03T04:51:44.235Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy && rg -n -i -B2 -A12 \"appendix c\" artifacts/reviews/2026-09-04-dinah-boswell-fobs.md | head -60; echo \"== state.md item\"; rg -n -i \"force.?renew\" context/state.md | head",
+      "description": "Read the September review's force-renew appendix and backlog item"
+    },
+    "timestamp": "2026-11-03T05:17:09.875Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ssh -o ConnectTimeout=15 mac '/opt/homebrew/bin/gcloud logging read \"resource.type=cloud_run_revision AND resource.labels.service_name=accessbuddy-production AND httpRequest.requestUrl:\\\"/t/south-melb-lsc/\\\" AND httpRequest.remoteIp=\\\"104.28.90.36\\\" AND timestamp>=\\\"2026-11-03T00:20:00Z\\\" AND timestamp<=\\\"2026-11-03T01:10:00Z\\\"\" --project accessbuddy-prod --format=\"value(timestamp,httpRequest.requestMethod,httpRequest.requestUrl,httpRequest.status)\" --limit 60' 2>&1 | rg -v \"_next|\\.(js|css|png|ico|svg)\" | sort | tail -40",
+      "description": "Rebuild the admin's page sequence around the force renew and the later confirm-programming"
+    },
+    "timestamp": "2026-11-03T05:17:13.794Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && echo \"== describeAttestationAction\"; rg -n \"describeAttestationAction\" --type ts --type-add 'tsx:*.tsx' --type tsx -g '!node_modules' . | head; echo \"== admin audit label map\"; rg -n \"attestation_resent|attestation_force_completed|force_renew\" \"apps/web/src/app/t/[slug]/admin/audit/page.tsx\" | head; echo \"== lib/confirm-programming\"; cat apps/web/src/lib/confirm-programming.ts; echo \"== CredentialStatus\"; rg -n -A14 \"export const CredentialStatus\" packages/shared/src/*.ts | head -20",
+      "description": "Find audit label helpers, confirm-programming promotion rules, and status enum"
+    },
+    "timestamp": "2026-11-03T05:17:44.574Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && sed -n 1,100p \"apps/web/src/app/t/[slug]/admin/members/[id]/attestation-section.tsx\"",
+      "description": "Show the force-renew client handler and state"
+    },
+    "timestamp": "2026-11-03T05:17:46.025Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && rg -n -B3 -A40 \"function describeAttestationAction\" apps/web/src/lib apps/web/src/components 2>/dev/null | head -80",
+      "description": "Show the shared attestation audit label helper"
+    },
+    "timestamp": "2026-11-03T05:17:47.496Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && git checkout -q -b fix/force-renew-stages-expiry-update && git branch --show-current && curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Build phase.\", \"voice_id\": \"pNInz6obpgDQGcFmaJgB\", \"voice_enabled\": true}' >/dev/null 2>&1; echo",
+      "description": "Create the fix branch from main"
+    },
+    "timestamp": "2026-11-03T05:18:14.574Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/lib/audit-labels.ts"
+    },
+    "timestamp": "2026-11-03T05:18:15.322Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/app/t/[slug]/admin/audit/page.tsx",
+      "offset": 118,
+      "limit": 20
+    },
+    "timestamp": "2026-11-03T05:18:16.455Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/app/t/[slug]/admin/members/[id]/attestation-section.tsx",
+      "offset": 44,
+      "limit": 36
+    },
+    "timestamp": "2026-11-03T05:18:17.644Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/app/t/[slug]/admin/members/[id]/attestation-section.tsx",
+      "offset": 222,
+      "limit": 12
+    },
+    "timestamp": "2026-11-03T05:18:18.795Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/app/api/v1/t/[slug]/members/[id]/force-renew/route.ts",
+      "content": "import { NextRequest, NextResponse } from \"next/server\";\nimport { eq, and, inArray } from \"drizzle-orm\";\nimport {\n  Permission,\n  forceRenewSchema,\n  AuditEntityType,\n  AuditAction,\n  CredentialStatus,\n} from \"@accessbuddy/shared\";\nimport {\n  tenantMemberships,\n  credentials,\n  credentialTypes,\n  attestationRequests,\n} from \"@accessbuddy/db\";\nimport { getAuthUser } from \"@/lib/auth\";\nimport { resolveTenant } from \"@/lib/tenant\";\nimport { checkPermission } from \"@/lib/permissions\";\nimport { withTenant } from \"@/lib/with-tenant\";\nimport { createAuditEntry } from \"@/lib/services/audit\";\nimport { scopedAttestationExpiry } from \"@/lib/scoped-attestation\";\nimport { formatExpiryDate } from \"@/lib/format-date\";\n\n/**\n * POST /api/v1/t/[slug]/members/[id]/force-renew\n *\n * Admin bypass of the member attestation: renews the membership for the\n * chosen season and does what the member's \"yes\" on the confirmation page\n * would do for each of their fobs. The new expiry is STAGED\n * (`pendingExpiresAt` + `programmingRequired`), never written to the live\n * `expiresAt`, because the access control system has not been updated yet:\n * the fob lands on the admin \"Credential updates\" list and the programmer's\n * confirm-programming promotes the expiry (and reactivates an expired fob).\n *\n * Covers `active` and `expired` fobs, the same set the attestation page\n * lists. A fob already at the target expiry with nothing pending is left\n * alone (it was programmed already); a fob already flagged keeps its reason\n * and only has its staged date moved when it differs. Re-running for the\n * same season is therefore a no-op on credentials.\n *\n * Every pending attestation for the member is completed, with the staged\n * fobs recorded as confirmed by the admin.\n */\nexport async function POST(\n  request: NextRequest,\n  { params }: { params: Promise<{ slug: string; id: string }> }\n) {\n  const auth = await getAuthUser();\n  if (!auth) {\n    return NextResponse.json({ error: \"Authentication required\" }, { status: 401 });\n  }\n\n  const { slug, id: userId } = await params;\n  const tenant = await resolveTenant(slug);\n  if (!tenant) {\n    return NextResponse.json({ error: \"Organisation not found\" }, { status: 404 });\n  }\n\n  const permResult = checkPermission(auth, tenant.id, Permission.RENEW);\n  if (!permResult.granted) {\n    return NextResponse.json({ error: permResult.reason }, { status: 403 });\n  }\n\n  const body = await request.json();\n  const parsed = forceRenewSchema.safeParse(body);\n  if (!parsed.success) {\n    return NextResponse.json(\n      { error: \"Validation failed\", details: parsed.error.flatten() },\n      { status: 400 }\n    );\n  }\n\n  const { season, reason } = parsed.data;\n\n  const result = await withTenant(tenant.id, async (tx) => {\n    const [membership] = await tx\n      .select()\n      .from(tenantMemberships)\n      .where(\n        and(\n          eq(tenantMemberships.userId, userId),\n          eq(tenantMemberships.tenantId, tenant.id)\n        )\n      )\n      .limit(1);\n\n    if (!membership) {\n      throw new Error(\"Member not found in this organisation\");\n    }\n\n    const now = new Date();\n\n    const [updated] = await tx\n      .update(tenantMemberships)\n      .set({\n        currentSeason: season,\n        status: \"active\",\n        updatedAt: now,\n      })\n      .where(eq(tenantMemberships.id, membership.id))\n      .returning();\n\n    await createAuditEntry(tx, {\n      tenantId: tenant.id,\n      entityType: AuditEntityType.MEMBER,\n      entityId: userId,\n      action: AuditAction.UPDATE,\n      actorId: auth.user.id,\n      metadata: { action: \"force_renew\", season, reason, previousSeason: membership.currentSeason },\n    });\n\n    const staged: string[] = [];\n    const skipped: string[] = [];\n    let newExpiresAt: Date | null = null;\n\n    // Stage the expiry update for the member's fobs. Staff and board members\n    // keep their own expiry rules, as before.\n    if (!membership.isStaff && !membership.isBoardMember) {\n      // Season end, falling forward to the current membership year if the\n      // chosen season has already rolled over (same rule as a scoped\n      // confirmation), so the programmer's confirm always reactivates.\n      newExpiresAt = scopedAttestationExpiry(season, tenant.timezone, now);\n      const expiryLabel = formatExpiryDate(newExpiresAt, tenant.timezone);\n\n      const rows = await tx\n        .select({\n          id: credentials.id,\n          status: credentials.status,\n          expiresAt: credentials.expiresAt,\n          pendingExpiresAt: credentials.pendingExpiresAt,\n          programmingRequired: credentials.programmingRequired,\n          serialNumber: credentials.serialNumber,\n          typeName: credentialTypes.name,\n        })\n        .from(credentials)\n        .leftJoin(credentialTypes, eq(credentials.credentialTypeId, credentialTypes.id))\n        .where(\n          and(\n            eq(credentials.ownerId, userId),\n            eq(credentials.tenantId, tenant.id),\n            inArray(credentials.status, [CredentialStatus.ACTIVE, CredentialStatus.EXPIRED])\n          )\n        );\n\n      for (const cred of rows) {\n        const targetMs = newExpiresAt.getTime();\n\n        if (cred.programmingRequired) {\n          // Already with the programmer. Keep the reason they are reading;\n          // only move the staged date if this renewal changes it.\n          if (cred.pendingExpiresAt && cred.pendingExpiresAt.getTime() === targetMs) {\n            skipped.push(cred.id);\n            continue;\n          }\n          await tx\n            .update(credentials)\n            .set({ pendingExpiresAt: newExpiresAt, updatedAt: now })\n            .where(and(eq(credentials.id, cred.id), eq(credentials.tenantId, tenant.id)));\n          await createAuditEntry(tx, {\n            tenantId: tenant.id,\n            entityType: AuditEntityType.CREDENTIAL,\n            entityId: cred.id,\n            action: AuditAction.UPDATE,\n            actorId: auth.user.id,\n            metadata: {\n              action: \"force_renew_expiry_update\",\n              season,\n              reason,\n              alreadyFlagged: true,\n              previousPendingExpiresAt: cred.pendingExpiresAt?.toISOString() ?? null,\n              previousExpiresAt: cred.expiresAt?.toISOString() ?? null,\n              pendingExpiresAt: newExpiresAt.toISOString(),\n              programmingRequired: true,\n            },\n          });\n          staged.push(cred.id);\n          continue;\n        }\n\n        if (\n          cred.status === CredentialStatus.ACTIVE &&\n          cred.expiresAt &&\n          cred.expiresAt.getTime() === targetMs\n        ) {\n          // The access system already holds this expiry; nothing to program.\n          skipped.push(cred.id);\n          continue;\n        }\n\n        const label = `${cred.typeName ?? \"credential\"}${cred.serialNumber ? ` #${cred.serialNumber}` : \"\"}`;\n        const reEnable = cred.status === CredentialStatus.EXPIRED ? \" and re-enable\" : \"\";\n        await tx\n          .update(credentials)\n          .set({\n            pendingExpiresAt: newExpiresAt,\n            programmingRequired: true,\n            programmingReason: `Force renewal (${season}) by admin: ${reason} - update expiry of this ${label} to ${expiryLabel} in the access system${reEnable}`,\n            programmingRequestedAt: now,\n            updatedAt: now,\n          })\n          .where(and(eq(credentials.id, cred.id), eq(credentials.tenantId, tenant.id)));\n\n        await createAuditEntry(tx, {\n          tenantId: tenant.id,\n          entityType: AuditEntityType.CREDENTIAL,\n          entityId: cred.id,\n          action: AuditAction.UPDATE,\n          actorId: auth.user.id,\n          metadata: {\n            action: \"force_renew_expiry_update\",\n            season,\n            reason,\n            previousExpiresAt: cred.expiresAt?.toISOString() ?? null,\n            pendingExpiresAt: newExpiresAt.toISOString(),\n            programmingRequired: true,\n          },\n        });\n        staged.push(cred.id);\n      }\n    }\n\n    // Every pending attestation for the member is now moot: the admin has\n    // answered for them. Record the staged fobs as confirmed on each.\n    const pendingAttestations = await tx\n      .select()\n      .from(attestationRequests)\n      .where(\n        and(\n          eq(attestationRequests.userId, userId),\n          eq(attestationRequests.tenantId, tenant.id),\n          eq(attestationRequests.status, \"pending\")\n        )\n      );\n\n    for (const pendingAttestation of pendingAttestations) {\n      const scope = pendingAttestation.credentialIds?.length\n        ? staged.filter((id) => pendingAttestation.credentialIds!.includes(id))\n        : staged;\n      await tx\n        .update(attestationRequests)\n        .set({\n          status: \"completed\",\n          completedAt: now,\n          credentialResponses: scope.map((credentialId) => ({\n            credentialId,\n            confirmed: true,\n            note: `Force-renewed by admin: ${reason}`,\n          })),\n          updatedAt: now,\n        })\n        .where(eq(attestationRequests.id, pendingAttestation.id));\n\n      await createAuditEntry(tx, {\n        tenantId: tenant.id,\n        entityType: AuditEntityType.MEMBER,\n        entityId: userId,\n        action: AuditAction.UPDATE,\n        actorId: auth.user.id,\n        metadata: {\n          action: \"attestation_force_completed\",\n          attestationId: pendingAttestation.id,\n          season: pendingAttestation.season,\n          reason: `Force-renewed by admin: ${reason}`,\n        },\n      });\n    }\n\n    return { membership: updated, staged, skipped, newExpiresAt };\n  });\n\n  return NextResponse.json({\n    membership: result.membership,\n    forceRenewed: true,\n    staged: result.staged,\n    skipped: result.skipped,\n    pendingExpiresAt: result.newExpiresAt?.toISOString() ?? null,\n  });\n}\n"
+    },
+    "timestamp": "2026-11-03T05:18:55.916Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/lib/audit-labels.ts",
+      "old_string": "    case \"attestation_admin_confirmed\":\n      return \"Fob confirmation answered by admin on the member's behalf\";\n    default:",
+      "new_string": "    case \"attestation_admin_confirmed\":\n      return \"Fob confirmation answered by admin on the member's behalf\";\n    case \"force_renew\": {\n      const reason = typeof meta.reason === \"string\" && meta.reason ? `: ${meta.reason}` : \"\";\n      return `Membership force-renewed${season} by admin${reason}`;\n    }\n    case \"force_renew_expiry_update\": {\n      const pending = typeof meta.pendingExpiresAt === \"string\" ? meta.pendingExpiresAt : null;\n      const when = pending\n        ? new Date(pending).toLocaleDateString(\"en-AU\", {\n            day: \"numeric\",\n            month: \"short\",\n            year: \"numeric\",\n            timeZone: \"Australia/Melbourne\",\n          })\n        : \"a new date\";\n      if (pending) {\n        return `Force renewal${season} - expiry update staged for ${when}, awaiting programming`;\n      }\n      // Rows written before Nov 2026 rewrote the live expiry with no programming step.\n      return `Force renewal${season} - expiry rewritten directly (no programming update staged)`;\n    }\n    default:"
+    },
+    "timestamp": "2026-11-03T05:19:00.855Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/app/t/[slug]/admin/audit/page.tsx",
+      "old_string": "      attestation_force_completed: \"Credential confirmation force-completed\",\n      permission_expiry_reprogramming:",
+      "new_string": "      attestation_force_completed: \"Credential confirmation force-completed\",\n      force_renew: \"Membership force-renewed by admin\",\n      force_renew_expiry_update: \"Force renewal - expiry update staged for programming\",\n      permission_expiry_reprogramming:"
+    },
+    "timestamp": "2026-11-03T05:19:03.073Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/app/t/[slug]/admin/members/[id]/attestation-section.tsx",
+      "old_string": "  const [error, setError] = useState<string | null>(null);\n\n  const pendings = attestations.filter((a) => a.status === \"pending\");",
+      "new_string": "  const [error, setError] = useState<string | null>(null);\n  const [notice, setNotice] = useState<string | null>(null);\n\n  const pendings = attestations.filter((a) => a.status === \"pending\");"
+    },
+    "timestamp": "2026-11-03T05:19:05.225Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/app/t/[slug]/admin/members/[id]/attestation-section.tsx",
+      "old_string": "      if (!res.ok) {\n        const data = await res.json();\n        throw new Error(data.error ?? \"Failed to force renew\");\n      }\n      setForceRenewOpen(false);",
+      "new_string": "      const data = (await res.json()) as {\n        error?: string;\n        staged?: string[];\n        skipped?: string[];\n      };\n      if (!res.ok) {\n        throw new Error(data.error ?? \"Failed to force renew\");\n      }\n      const stagedCount = data.staged?.length ?? 0;\n      const skippedCount = data.skipped?.length ?? 0;\n      setNotice(\n        stagedCount > 0\n          ? `Membership renewed. ${stagedCount} fob${stagedCount === 1 ? \"\" : \"s\"} sent to the programmer for an expiry update.`\n          : skippedCount > 0\n            ? \"Membership renewed. Their fobs are already at this expiry or already with the programmer, so nothing new was sent for programming.\"\n            : \"Membership renewed. No active or expired fobs on this member to send for programming.\"\n      );\n      setForceRenewOpen(false);"
+    },
+    "timestamp": "2026-11-03T05:19:09.776Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/app/t/[slug]/admin/members/[id]/attestation-section.tsx",
+      "old_string": "            <p className=\"text-sm font-medium\">Force Renew (Admin Bypass)</p>\n            <p className=\"text-xs text-muted-foreground\">\n              This will immediately renew credentials without waiting for member attestation.\n            </p>",
+      "new_string": "            <p className=\"text-sm font-medium\">Force Renew (Admin Bypass)</p>\n            <p className=\"text-xs text-muted-foreground\">\n              Renews the membership without waiting for the member to confirm, and sends\n              their active and expired fobs to the programmer for an expiry update. Fobs\n              are reactivated when the programmer confirms the access system is updated.\n            </p>"
+    },
+    "timestamp": "2026-11-03T05:19:12.935Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/app/t/[slug]/admin/members/[id]/attestation-section.tsx",
+      "old_string": "        {/* Show force renew button even without pending attestation */}\n        {!pending && !forceRenewOpen && canRenew && (",
+      "new_string": "        {notice && (\n          <p className=\"text-xs text-muted-foreground\" role=\"status\">\n            {notice}\n          </p>\n        )}\n\n        {/* Show force renew button even without pending attestation */}\n        {!pending && !forceRenewOpen && canRenew && ("
+    },
+    "timestamp": "2026-11-03T05:19:15.235Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/__tests__/force-renew.test.ts",
+      "content": "import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from \"vitest\";\nimport { and, eq, inArray } from \"drizzle-orm\";\nimport { NextRequest } from \"next/server\";\n\n/**\n * Force renew (POST /members/[id]/force-renew) stages the expiry update.\n *\n * Before Nov 2026 the admin bypass wrote `expiresAt` straight onto ACTIVE\n * fobs and ignored EXPIRED ones, so the programmer was never told and the\n * fob never appeared on the admin \"Credential updates\" list (its only filter\n * is `programmingRequired`). It now does what the member's \"yes\" on the\n * confirmation page does.\n *\n * Proves:\n *   (a) expired fob → staged (pendingExpiresAt = season end, flagged,\n *       reason names the fob and \"re-enable\"), status stays expired, live\n *       expiresAt untouched, one audit row, id in the response,\n *   (b) active fob with an old expiry → staged the same way, status active,\n *   (c) active fob already at the target expiry → untouched,\n *   (d) already-flagged fob keeps its reason; the staged date moves only when\n *       it differs,\n *   (e) a second run for the same season changes nothing and writes no new\n *       credential audit rows,\n *   (f) deactivated / returned / pending_programming fobs are untouched,\n *   (g) staff members' fobs are untouched,\n *   (h) every pending attestation (unscoped and scoped) is completed,\n *   (i) confirm-programming then promotes the expiry: an expired fob is\n *       reactivated with one credentialReactivated email, an active fob stays\n *       active.\n *\n * Auth, tenant and permissions are mocked so the handler runs directly;\n * everything below it hits the real database. Gated on DATABASE_URL.\n */\n\nconst hasDb = !!process.env.DATABASE_URL;\n\nconst ctx: { tenant: { id: string; slug: string } | null; actorId: string | null } = {\n  tenant: null,\n  actorId: null,\n};\n\nconst sentTemplates: string[] = [];\n\nvi.mock(\"@/lib/auth\", () => ({\n  getAuthUser: async () => ({\n    user: {\n      id: ctx.actorId,\n      firebaseUid: \"force-renew-fb\",\n      email: \"force-renew@example.com\",\n      firstName: \"Force\",\n      lastName: \"Admin\",\n      phone: null,\n    },\n    memberships: [],\n    isGlobalAdmin: false,\n  }),\n}));\n\nvi.mock(\"@/lib/tenant\", () => ({\n  resolveTenant: async (slug: string) =>\n    ctx.tenant && slug === ctx.tenant.slug\n      ? {\n          id: ctx.tenant.id,\n          name: \"Force Renew Club\",\n          slug: ctx.tenant.slug,\n          settings: {},\n          timezone: \"Australia/Melbourne\",\n          logoUrl: null,\n          stripeAccountId: null,\n        }\n      : null,\n}));\n\nvi.mock(\"@/lib/permissions\", () => ({\n  checkPermission: () => ({ granted: true }),\n  checkMembership: () => ({ granted: true }),\n}));\n\nvi.mock(\"@/lib/services/email\", async (importOriginal) => {\n  const actual = await importOriginal<typeof import(\"@/lib/services/email\")>();\n  return {\n    ...actual,\n    sendTemplatedEmail: vi.fn(async (_to: string, template: string) => {\n      sentTemplates.push(template);\n      return { sent: true } as never;\n    }),\n    sendEmail: vi.fn(async () => ({ sent: true }) as never),\n  };\n});\n\n// 1 Sep 2027 00:00 Australia/Melbourne (AEST, UTC+10)\nconst SEASON = \"2026/2027\";\nconst SEASON_END = new Date(\"2027-08-31T14:00:00.000Z\");\nconst OLD_EXPIRY = new Date(\"2026-08-31T14:00:00.000Z\");\n\ndescribe.skipIf(!hasDb)(\"force renew stages the expiry update\", () => {\n  let db: typeof import(\"@accessbuddy/db\").db;\n  let tenants: typeof import(\"@accessbuddy/db\").tenants;\n  let users: typeof import(\"@accessbuddy/db\").users;\n  let tenantMemberships: typeof import(\"@accessbuddy/db\").tenantMemberships;\n  let credentialTypes: typeof import(\"@accessbuddy/db\").credentialTypes;\n  let accessLevels: typeof import(\"@accessbuddy/db\").accessLevels;\n  let credentials: typeof import(\"@accessbuddy/db\").credentials;\n  let attestationRequests: typeof import(\"@accessbuddy/db\").attestationRequests;\n  let auditLog: typeof import(\"@accessbuddy/db\").auditLog;\n  let forceRenew: typeof import(\"@/app/api/v1/t/[slug]/members/[id]/force-renew/route\").POST;\n  let confirmProgramming: typeof import(\"@/app/api/v1/t/[slug]/credentials/[id]/confirm-programming/route\").POST;\n  let CredentialStatus: typeof import(\"@accessbuddy/shared\").CredentialStatus;\n\n  let tenant: { id: string; slug: string };\n  let admin: { id: string };\n  let member: { id: string };\n  let staffMember: { id: string };\n  let fobType: { id: string };\n  let level: { id: string };\n  let suffix: string;\n\n  async function post(userId: string, body: unknown = { season: SEASON, reason: \"Paid at the desk\" }) {\n    const request = new NextRequest(\n      `http://localhost/api/v1/t/${tenant.slug}/members/${userId}/force-renew`,\n      {\n        method: \"POST\",\n        headers: { \"Content-Type\": \"application/json\" },\n        body: JSON.stringify(body),\n      }\n    );\n    const res = await forceRenew(request, {\n      params: Promise.resolve({ slug: tenant.slug, id: userId }),\n    });\n    return { status: res.status, json: await res.json() };\n  }\n\n  async function confirm(credentialId: string) {\n    const request = new NextRequest(\n      `http://localhost/api/v1/t/${tenant.slug}/credentials/${credentialId}/confirm-programming`,\n      { method: \"POST\" }\n    );\n    const res = await confirmProgramming(request, {\n      params: Promise.resolve({ slug: tenant.slug, id: credentialId }),\n    });\n    return { status: res.status, json: await res.json() };\n  }\n\n  async function seedCredential(values: {\n    serial: string;\n    ownerId: string | null;\n    status: string;\n    expiresAt?: Date | null;\n    pendingExpiresAt?: Date | null;\n    programmingRequired?: boolean;\n    programmingReason?: string | null;\n  }) {\n    const [row] = await db\n      .insert(credentials)\n      .values({\n        tenantId: tenant.id,\n        ownerId: values.ownerId,\n        credentialTypeId: fobType.id,\n        serialNumber: values.serial,\n        status: values.status,\n        issuedAt: new Date(\"2025-09-01T00:00:00.000Z\"),\n        expiresAt: values.expiresAt === undefined ? OLD_EXPIRY : values.expiresAt,\n        pendingExpiresAt: values.pendingExpiresAt ?? null,\n        programmingRequired: values.programmingRequired ?? false,\n        programmingReason: values.programmingReason ?? null,\n        programmingRequestedAt: values.programmingRequired ? new Date() : null,\n      })\n      .returning({ id: credentials.id });\n    return row;\n  }\n\n  async function load(credentialId: string) {\n    const [row] = await db.select().from(credentials).where(eq(credentials.id, credentialId)).limit(1);\n    return row;\n  }\n\n  async function auditRows(credentialId: string, action?: string) {\n    const rows = await db\n      .select({ metadata: auditLog.metadata })\n      .from(auditLog)\n      .where(and(eq(auditLog.entityType, \"credential\"), eq(auditLog.entityId, credentialId)));\n    return action\n      ? rows.filter((r) => (r.metadata as Record<string, unknown> | null)?.action === action)\n      : rows;\n  }\n\n  async function membership(userId: string) {\n    const [m] = await db\n      .select()\n      .from(tenantMemberships)\n      .where(and(eq(tenantMemberships.tenantId, tenant.id), eq(tenantMemberships.userId, userId)));\n    return m;\n  }\n\n  async function clearMemberCredentials() {\n    await db.delete(credentials).where(eq(credentials.tenantId, tenant.id));\n    await db.delete(attestationRequests).where(eq(attestationRequests.tenantId, tenant.id));\n  }\n\n  beforeAll(async () => {\n    const dbPackage = await import(\"@accessbuddy/db\");\n    const shared = await import(\"@accessbuddy/shared\");\n    db = dbPackage.db;\n    tenants = dbPackage.tenants;\n    users = dbPackage.users;\n    tenantMemberships = dbPackage.tenantMemberships;\n    credentialTypes = dbPackage.credentialTypes;\n    accessLevels = dbPackage.accessLevels;\n    credentials = dbPackage.credentials;\n    attestationRequests = dbPackage.attestationRequests;\n    auditLog = dbPackage.auditLog;\n    CredentialStatus = shared.CredentialStatus;\n\n    suffix = `${Date.now()}`;\n    const [t] = await db\n      .insert(tenants)\n      .values({ name: `Force Renew Club ${suffix}`, slug: `force-renew-${suffix}` })\n      .returning({ id: tenants.id, slug: tenants.slug });\n    tenant = t;\n    ctx.tenant = tenant;\n\n    const mkUser = async (tag: string, first: string, last: string) => {\n      const [u] = await db\n        .insert(users)\n        .values({\n          firebaseUid: `force-renew-${tag}-${suffix}`,\n          email: `force-renew-${tag}-${suffix}@example.com`,\n          firstName: first,\n          lastName: last,\n        })\n        .returning({ id: users.id });\n      return u;\n    };\n    admin = await mkUser(\"admin\", \"Force\", \"Admin\");\n    member = await mkUser(\"member\", \"Mia\", \"Member\");\n    staffMember = await mkUser(\"staff\", \"Sam\", \"Staff\");\n    ctx.actorId = admin.id;\n\n    [fobType] = await db\n      .insert(credentialTypes)\n      .values({ tenantId: tenant.id, name: \"Fob\", priceCents: 0 })\n      .returning({ id: credentialTypes.id });\n    [level] = await db\n      .insert(accessLevels)\n      .values({ tenantId: tenant.id, name: \"Member access\" })\n      .returning({ id: accessLevels.id });\n\n    await db.insert(tenantMemberships).values([\n      { tenantId: tenant.id, userId: member.id, accessLevelId: level.id, status: \"active\", currentSeason: \"2025/2026\" },\n      { tenantId: tenant.id, userId: staffMember.id, accessLevelId: level.id, status: \"active\", isStaff: true },\n    ]);\n\n    ({ POST: forceRenew } = await import(\"@/app/api/v1/t/[slug]/members/[id]/force-renew/route\"));\n    ({ POST: confirmProgramming } = await import(\n      \"@/app/api/v1/t/[slug]/credentials/[id]/confirm-programming/route\"\n    ));\n  });\n\n  beforeEach(async () => {\n    sentTemplates.length = 0;\n    await clearMemberCredentials();\n  });\n\n  afterAll(async () => {\n    await db.delete(auditLog).where(eq(auditLog.tenantId, tenant.id));\n    await db.delete(attestationRequests).where(eq(attestationRequests.tenantId, tenant.id));\n    await db.delete(credentials).where(eq(credentials.tenantId, tenant.id));\n    await db.delete(tenantMemberships).where(eq(tenantMemberships.tenantId, tenant.id));\n    await db.delete(accessLevels).where(eq(accessLevels.tenantId, tenant.id));\n    await db.delete(credentialTypes).where(eq(credentialTypes.tenantId, tenant.id));\n    await db.delete(tenants).where(eq(tenants.id, tenant.id));\n    await db.delete(users).where(inArray(users.id, [admin.id, member.id, staffMember.id]));\n  });\n\n  it(\"stages an expired fob for the programmer instead of skipping it (ISC-182/183/188/189/196)\", async () => {\n    const cred = await seedCredential({ serial: `EXP-${suffix}`, ownerId: member.id, status: \"expired\" });\n\n    const { status, json } = await post(member.id);\n    expect(status).toBe(200);\n    expect(json.forceRenewed).toBe(true);\n    expect(json.staged).toEqual([cred.id]);\n    expect(json.skipped).toEqual([]);\n    expect(json.pendingExpiresAt).toBe(SEASON_END.toISOString());\n\n    const after = await load(cred.id);\n    expect(after.status).toBe(CredentialStatus.EXPIRED);\n    expect(after.expiresAt?.toISOString()).toBe(OLD_EXPIRY.toISOString());\n    expect(after.pendingExpiresAt?.toISOString()).toBe(SEASON_END.toISOString());\n    expect(after.programmingRequired).toBe(true);\n    expect(after.programmingRequestedAt).not.toBeNull();\n    expect(after.programmingReason).toContain(\"Force renewal (2026/2027)\");\n    expect(after.programmingReason).toContain(\"Paid at the desk\");\n    expect(after.programmingReason).toContain(`Fob #EXP-${suffix}`);\n    expect(after.programmingReason).toContain(\"re-enable\");\n\n    const rows = await auditRows(cred.id, \"force_renew_expiry_update\");\n    expect(rows).toHaveLength(1);\n    const meta = rows[0].metadata as Record<string, unknown>;\n    expect(meta.pendingExpiresAt).toBe(SEASON_END.toISOString());\n    expect(meta.previousExpiresAt).toBe(OLD_EXPIRY.toISOString());\n    expect(meta.programmingRequired).toBe(true);\n    expect(meta.season).toBe(SEASON);\n    expect(meta.reason).toBe(\"Paid at the desk\");\n\n    const m = await membership(member.id);\n    expect(m.currentSeason).toBe(SEASON);\n    expect(m.status).toBe(\"active\");\n  });\n\n  it(\"stages an active fob without touching its live expiry (ISC-181/182/198)\", async () => {\n    const cred = await seedCredential({ serial: `ACT-${suffix}`, ownerId: member.id, status: \"active\" });\n\n    const { json } = await post(member.id);\n    expect(json.staged).toEqual([cred.id]);\n\n    const after = await load(cred.id);\n    expect(after.status).toBe(CredentialStatus.ACTIVE);\n    expect(after.expiresAt?.toISOString()).toBe(OLD_EXPIRY.toISOString());\n    expect(after.pendingExpiresAt?.toISOString()).toBe(SEASON_END.toISOString());\n    expect(after.programmingRequired).toBe(true);\n    expect(after.programmingReason).not.toContain(\"re-enable\");\n  });\n\n  it(\"leaves an active fob already at the target expiry alone (ISC-184)\", async () => {\n    const cred = await seedCredential({\n      serial: `DONE-${suffix}`,\n      ownerId: member.id,\n      status: \"active\",\n      expiresAt: SEASON_END,\n    });\n\n    const { json } = await post(member.id);\n    expect(json.staged).toEqual([]);\n    expect(json.skipped).toEqual([cred.id]);\n\n    const after = await load(cred.id);\n    expect(after.programmingRequired).toBe(false);\n    expect(after.pendingExpiresAt).toBeNull();\n    expect(await auditRows(cred.id)).toHaveLength(0);\n  });\n\n  it(\"keeps the reason on an already-flagged fob and only moves the staged date when it differs (ISC-185/199)\", async () => {\n    const sameDate = await seedCredential({\n      serial: `FLAG-SAME-${suffix}`,\n      ownerId: member.id,\n      status: \"expired\",\n      programmingRequired: true,\n      programmingReason: \"Member confirmed they hold this Fob - update expiry\",\n      pendingExpiresAt: SEASON_END,\n    });\n    const otherDate = await seedCredential({\n      serial: `FLAG-OTHER-${suffix}`,\n      ownerId: member.id,\n      status: \"expired\",\n      programmingRequired: true,\n      programmingReason: \"Pending exchange removal\",\n      pendingExpiresAt: new Date(\"2026-12-31T13:00:00.000Z\"),\n    });\n\n    const { json } = await post(member.id);\n    expect(json.skipped).toEqual([sameDate.id]);\n    expect(json.staged).toEqual([otherDate.id]);\n\n    const same = await load(sameDate.id);\n    expect(same.programmingReason).toBe(\"Member confirmed they hold this Fob - update expiry\");\n    expect(same.pendingExpiresAt?.toISOString()).toBe(SEASON_END.toISOString());\n    expect(await auditRows(sameDate.id)).toHaveLength(0);\n\n    const other = await load(otherDate.id);\n    expect(other.programmingReason).toBe(\"Pending exchange removal\");\n    expect(other.pendingExpiresAt?.toISOString()).toBe(SEASON_END.toISOString());\n    const rows = await auditRows(otherDate.id, \"force_renew_expiry_update\");\n    expect(rows).toHaveLength(1);\n    expect((rows[0].metadata as Record<string, unknown>).alreadyFlagged).toBe(true);\n  });\n\n  it(\"is a no-op on credentials when run twice for the same season (ISC-199)\", async () => {\n    const cred = await seedCredential({ serial: `TWICE-${suffix}`, ownerId: member.id, status: \"expired\" });\n\n    await post(member.id);\n    const first = await load(cred.id);\n    const { json } = await post(member.id);\n    expect(json.staged).toEqual([]);\n    expect(json.skipped).toEqual([cred.id]);\n\n    const second = await load(cred.id);\n    expect(second.programmingReason).toBe(first.programmingReason);\n    expect(second.programmingRequestedAt?.toISOString()).toBe(first.programmingRequestedAt?.toISOString());\n    expect(second.pendingExpiresAt?.toISOString()).toBe(first.pendingExpiresAt?.toISOString());\n    expect(await auditRows(cred.id, \"force_renew_expiry_update\")).toHaveLength(1);\n  });\n\n  it(\"ignores fobs in any other status (ISC-186)\", async () => {\n    const deactivated = await seedCredential({ serial: `DEACT-${suffix}`, ownerId: member.id, status: \"deactivated\" });\n    const returned = await seedCredential({ serial: `RET-${suffix}`, ownerId: member.id, status: \"returned\" });\n    const pendingProg = await seedCredential({ serial: `PEND-${suffix}`, ownerId: member.id, status: \"pending_programming\", expiresAt: null });\n\n    const { json } = await post(member.id);\n    expect(json.staged).toEqual([]);\n    expect(json.skipped).toEqual([]);\n\n    for (const c of [deactivated, returned, pendingProg]) {\n      const row = await load(c.id);\n      expect(row.programmingRequired).toBe(false);\n      expect(row.pendingExpiresAt).toBeNull();\n      expect(await auditRows(c.id)).toHaveLength(0);\n    }\n  });\n\n  it(\"leaves staff members' fobs untouched (ISC-187)\", async () => {\n    const cred = await seedCredential({ serial: `STAFF-${suffix}`, ownerId: staffMember.id, status: \"expired\" });\n\n    const { status, json } = await post(staffMember.id);\n    expect(status).toBe(200);\n    expect(json.staged).toEqual([]);\n    expect(json.pendingExpiresAt).toBeNull();\n\n    const after = await load(cred.id);\n    expect(after.programmingRequired).toBe(false);\n    expect(after.pendingExpiresAt).toBeNull();\n    expect((await membership(staffMember.id)).currentSeason).toBe(SEASON);\n  });\n\n  it(\"completes every pending attestation, recording the staged fob as confirmed (ISC-189)\", async () => {\n    const cred = await seedCredential({ serial: `ATT-${suffix}`, ownerId: member.id, status: \"expired\" });\n    const [unscoped] = await db\n      .insert(attestationRequests)\n      .values({\n        tenantId: tenant.id,\n        userId: member.id,\n        season: SEASON,\n        token: `unscoped-${suffix}`,\n        tokenExpiresAt: new Date(Date.now() + 86_400_000),\n        status: \"pending\",\n        initiatedBy: admin.id,\n      })\n      .returning({ id: attestationRequests.id });\n    const [scoped] = await db\n      .insert(attestationRequests)\n      .values({\n        tenantId: tenant.id,\n        userId: member.id,\n        season: SEASON,\n        token: `scoped-${suffix}`,\n        tokenExpiresAt: new Date(Date.now() + 86_400_000),\n        status: \"pending\",\n        initiatedBy: admin.id,\n        credentialIds: [cred.id],\n      })\n      .returning({ id: attestationRequests.id });\n\n    await post(member.id);\n\n    const rows = await db\n      .select()\n      .from(attestationRequests)\n      .where(inArray(attestationRequests.id, [unscoped.id, scoped.id]));\n    expect(rows).toHaveLength(2);\n    for (const row of rows) {\n      expect(row.status).toBe(\"completed\");\n      expect(row.completedAt).not.toBeNull();\n      expect(row.credentialResponses).toEqual([\n        { credentialId: cred.id, confirmed: true, note: \"Force-renewed by admin: Paid at the desk\" },\n      ]);\n    }\n\n    const memberAudit = await db\n      .select({ metadata: auditLog.metadata })\n      .from(auditLog)\n      .where(and(eq(auditLog.entityType, \"member\"), eq(auditLog.entityId, member.id)));\n    const forced = memberAudit.filter(\n      (r) => (r.metadata as Record<string, unknown>).action === \"attestation_force_completed\"\n    );\n    expect(forced).toHaveLength(2);\n  });\n\n  it(\"hands off to confirm-programming: expired fob reactivated with one email, active fob stays active (ISC-190/191/192)\", async () => {\n    const expired = await seedCredential({ serial: `HAND-EXP-${suffix}`, ownerId: member.id, status: \"expired\" });\n    const active = await seedCredential({ serial: `HAND-ACT-${suffix}`, ownerId: member.id, status: \"active\" });\n\n    const { json } = await post(member.id);\n    expect(json.staged.sort()).toEqual([expired.id, active.id].sort());\n\n    // Both rows now carry the only flag the /admin credential updates list filters on.\n    const flagged = await db\n      .select({ id: credentials.id })\n      .from(credentials)\n      .where(and(eq(credentials.tenantId, tenant.id), eq(credentials.programmingRequired, true)));\n    expect(flagged.map((r) => r.id).sort()).toEqual([expired.id, active.id].sort());\n\n    const r1 = await confirm(expired.id);\n    expect(r1.status).toBe(200);\n    const e = await load(expired.id);\n    expect(e.status).toBe(CredentialStatus.ACTIVE);\n    expect(e.expiresAt?.toISOString()).toBe(SEASON_END.toISOString());\n    expect(e.pendingExpiresAt).toBeNull();\n    expect(e.programmingRequired).toBe(false);\n    expect(sentTemplates).toEqual([\"credentialReactivated\"]);\n\n    const r2 = await confirm(active.id);\n    expect(r2.status).toBe(200);\n    const a = await load(active.id);\n    expect(a.status).toBe(CredentialStatus.ACTIVE);\n    expect(a.expiresAt?.toISOString()).toBe(SEASON_END.toISOString());\n    expect(a.programmingRequired).toBe(false);\n    expect(sentTemplates).toEqual([\"credentialReactivated\"]);\n  });\n});\n"
+    },
+    "timestamp": "2026-11-03T05:20:35.223Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code/apps/web && export DATABASE_URL=postgres://accessbuddy:testpassword@127.0.0.1:54329/accessbuddy_test && (bunx tsc --noEmit 2>&1 | tail -15; echo \"TYPECHECK_EXIT=${PIPESTATUS[0]}\") && bunx vitest run src/__tests__/force-renew.test.ts src/__tests__/member-update-audit.test.ts 2>&1 | tail -40",
+      "description": "Typecheck the web app and run the new force-renew test against the embedded Postgres",
+      "timeout": 300000
+    },
+    "timestamp": "2026-11-03T05:20:37.874Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cat /tmp/ab-pg-scratch/run.ts 2>/dev/null | head -60; echo \"== log tail\"; tail -5 /tmp/ab-pg-scratch/pg.log 2>/dev/null; echo \"== procs\"; pgrep -af \"ab-pg-scratch|postgres\" | head; echo \"== data\"; ls /tmp/ab-pg-scratch/data 2>/dev/null | head",
+      "description": "Inspect the embedded Postgres wrapper, log, process, and data dir"
+    },
+    "timestamp": "2026-11-03T05:21:03.786Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n -i \"embedded|54329|ab-pg-scratch|run.ts\" ~/.claude/projects/-home-nicholas-wood--claude/memory/project-accessbuddy-pr106-old-fob-retirement.md | head -20",
+      "description": "Read the recorded embedded Postgres recipe"
+    },
+    "timestamp": "2026-11-03T05:21:05.484Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "kill 1455723 2>/dev/null; sleep 2; pgrep -af \"ab-pg-scratch\" | rg -v pgrep | head -3; echo \"== pkg\"; ls /tmp/ab-pg-scratch/node_modules | head; cat /tmp/ab-pg-scratch/node_modules/embedded-postgres/package.json 2>/dev/null | rg '\"version\"'; echo \"== migrate scripts\"; cd ~/Documents/workspace/projects/accessbuddy/code && rg -n \"db:migrate|\\\"migrate|db:push|test\\\"\" package.json packages/db/package.json | head; rg -n \"DATABASE_URL\" packages/db/src/migrate.ts 2>/dev/null | head -3; ls packages/db/src | head -20",
+      "description": "Stop the orphan Postgres, check the embedded-postgres package, and find the migrate script"
+    },
+    "timestamp": "2026-11-03T05:21:16.335Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls /tmp/ab-pg-scratch/node_modules/@embedded-postgres/linux-x64/native/bin/ 2>/dev/null; echo \"== migrate.ts\"; sed -n 1,30p ~/Documents/workspace/projects/accessbuddy/code/packages/db/src/migrate.ts",
+      "description": "Check surviving Postgres binaries and how migrate.ts connects"
+    },
+    "timestamp": "2026-11-03T05:21:24.935Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "which initdb pg_ctl postgres psql 2>&1; ls /usr/lib/postgresql 2>/dev/null; docker ps 2>&1 | head -2",
+      "description": "Check for a system or Docker Postgres"
+    },
+    "timestamp": "2026-11-03T05:21:30.735Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "mkdir -p /home/nicholas-wood/.claude/jobs/2e24043d/tmp/ab-pg && cd /home/nicholas-wood/.claude/jobs/2e24043d/tmp/ab-pg && [ -f package.json ] || bun init -y >/dev/null 2>&1; bun add embedded-postgres@17.5.0-beta.15 2>&1 | tail -3; ls node_modules/@embedded-postgres/linux-x64/native/bin/ 2>/dev/null | head",
+      "description": "Install embedded-postgres into the job tmp dir",
+      "timeout": 240000
+    },
+    "timestamp": "2026-11-03T05:21:33.365Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/jobs/2e24043d/tmp/ab-pg/run.ts",
+      "content": "// Embedded Postgres for AccessBuddy DB-gated tests on the Linux box.\n// DATABASE_URL=postgres://accessbuddy:testpassword@127.0.0.1:54329/accessbuddy_test\nimport EmbeddedPostgres from \"embedded-postgres\";\n\nconst pg = new EmbeddedPostgres({\n  databaseDir: `${import.meta.dir}/data`,\n  user: \"accessbuddy\",\n  password: \"testpassword\",\n  port: 54329,\n  persistent: true,\n});\n\nawait pg.initialise();\nawait pg.start();\ntry {\n  await pg.createDatabase(\"accessbuddy_test\");\n} catch (err) {\n  console.log(\"createDatabase:\", err instanceof Error ? err.message : err);\n}\nconsole.log(\"READY accessbuddy_test on 54329\");\n\nconst stop = async () => {\n  await pg.stop();\n  process.exit(0);\n};\nprocess.on(\"SIGINT\", stop);\nprocess.on(\"SIGTERM\", stop);\nsetInterval(() => {}, 1 << 30);\n"
+    },
+    "timestamp": "2026-11-03T05:21:45.934Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rm -rf data && (nohup bun run.ts > pg.out 2>&1 &) ; for i in $(seq 1 40); do grep -q READY pg.out 2>/dev/null && break; sleep 1; done; cat pg.out | tail -3; export DATABASE_URL=postgres://accessbuddy:testpassword@127.0.0.1:54329/accessbuddy_test; cd ~/Documents/workspace/projects/accessbuddy/code/packages/db && bun run db:migrate 2>&1 | tail -4 && cd ../../apps/web && bunx vitest run src/__tests__/force-renew.test.ts 2>&1 | tail -30",
+      "description": "Start embedded Postgres, migrate the test database, and run the force-renew test",
+      "timeout": 300000
+    },
+    "timestamp": "2026-11-03T05:21:49.184Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd /home/nicholas-wood/.claude/jobs/2e24043d/tmp/ab-pg && cat pg.out | head -5; bun pm trust --all 2>&1 | tail -2; B=node_modules/@embedded-postgres/linux-x64/native/bin; ls -l $B/initdb | head -1; $B/initdb --version 2>&1 | head -2; ls node_modules/@embedded-postgres/linux-x64/native/ | head",
+      "description": "Trust the embedded-postgres postinstall and check initdb runs",
+      "timeout": 120000
+    },
+    "timestamp": "2026-11-03T05:22:38.503Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rm -rf data && (nohup bun run.ts > pg.out 2>&1 &) ; for i in $(seq 1 40); do grep -q READY pg.out 2>/dev/null && break; sleep 1; done; tail -2 pg.out; export DATABASE_URL=postgres://accessbuddy:testpassword@127.0.0.1:54329/accessbuddy_test; cd ~/Documents/workspace/projects/accessbuddy/code/packages/db && bun run db:migrate 2>&1 | tail -3 && cd ../../apps/web && bunx vitest run src/__tests__/force-renew.test.ts 2>&1 | tail -30",
+      "description": "Start embedded Postgres, migrate, and run the force-renew test",
+      "timeout": 300000
+    },
+    "timestamp": "2026-11-03T05:22:43.484Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/__tests__/member-update-audit.test.ts",
+      "offset": 122,
+      "limit": 14
+    },
+    "timestamp": "2026-11-03T05:22:52.824Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/__tests__/member-update-audit.test.ts",
+      "old_string": "  it(\"returns null for other member updates so existing labels still apply\", () => {",
+      "new_string": "  it(\"labels a force renew on the member and the staged expiry update on the fob\", () => {\n    expect(\n      describeAttestationAction({ action: \"force_renew\", season: \"2026/2027\", reason: \"Paid at the desk\" })\n    ).toBe(\"Membership force-renewed (2026/2027) by admin: Paid at the desk\");\n    expect(\n      describeAttestationAction({\n        action: \"force_renew_expiry_update\",\n        season: \"2026/2027\",\n        pendingExpiresAt: \"2027-08-31T14:00:00.000Z\",\n      })\n    ).toBe(\"Force renewal (2026/2027) - expiry update staged for 1 Sept 2027, awaiting programming\");\n    // Rows from before the fix rewrote the live expiry and staged nothing.\n    expect(\n      describeAttestationAction({\n        action: \"force_renew_expiry_update\",\n        season: \"2026/2027\",\n        newExpiresAt: \"2027-08-31T14:00:00.000Z\",\n      })\n    ).toBe(\"Force renewal (2026/2027) - expiry rewritten directly (no programming update staged)\");\n  });\n\n  it(\"returns null for other member updates so existing labels still apply\", () => {"
+    },
+    "timestamp": "2026-11-03T05:22:58.895Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && export DATABASE_URL=postgres://accessbuddy:testpassword@127.0.0.1:54329/accessbuddy_test && echo \"== typecheck\" && bun run typecheck -- --force 2>&1 | tail -3 && echo \"== lint\" && bun run lint -- --force 2>&1 | rg -i \"error|warning|Tasks:\" | tail -5 && echo \"== test\" && bun run test -- --force 2>&1 | rg \"Test Files|Tests |skipped|FAIL|Tasks:\" | tail -12; echo \"== diff\"; git status --short; git diff --stat | tail -8",
+      "description": "Run typecheck, lint, and the full test suite against the embedded Postgres, then show the diff",
+      "timeout": 600000
+    },
+    "timestamp": "2026-11-03T05:23:02.074Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && git add -A apps/web/src && git -c user.useConfigOnly=false commit -q -m \"fix(members): force renew stages the expiry update for the programmer instead of rewriting expiresAt\n\nThe admin bypass wrote expiresAt straight onto active fobs and ignored\nexpired ones, so the programmer was never told and the fob never reached\nthe /admin credential updates list (its only filter is programmingRequired).\nIt now does what the member's \\\"yes\\\" on the confirmation page does: stages\npendingExpiresAt + programmingRequired for active and expired fobs, skips a\nfob already at the target expiry or already staged for it, keeps the reason\non an already-flagged fob, completes every pending attestation, and reports\nthe staged ids so the form can say what was sent. Audit labels for\nforce_renew and force_renew_expiry_update; form copy no longer promises an\nimmediate renewal of credentials.\" && git log --oneline -1 && git push -q -u origin fix/force-renew-stages-expiry-update 2>&1 | tail -2; git status -sb | head -1",
+      "description": "Commit the fix and push the branch"
+    },
+    "timestamp": "2026-11-03T05:24:01.695Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/.claude && timeout 200 bun PAI/TOOLS/Inference.ts --mode advisor --auto-state \"TASK: AccessBuddy force-renew route rewritten to stage pendingExpiresAt + programmingRequired on a member's active and expired fobs (mirroring the attestation yes-path and confirm-on-behalf), skipping a fob already at the target expiry or already staged with the same pending date, keeping the reason on an already-flagged fob, completing every pending attestation with the staged fobs recorded as confirmed, and returning staged/skipped ids. Replaces a route that wrote expiresAt directly on ACTIVE fobs only and skipped EXPIRED ones. DB-gated tests (9) pass, full suite 377 green.\" \"QUESTION: any gaps or risks before opening the PR? Specifically: (1) is skipping an active fob already at the target expiry safe given expiresAt is only promoted by confirm-programming, (2) completing all pending attestations including scoped ones, (3) using scopedAttestationExpiry (season end, falling forward if past) as the staged date.\" 2>&1 | tail -40",
+      "description": "Ask the advisor for gaps before opening the PR",
+      "timeout": 240000
+    },
+    "timestamp": "2026-11-03T05:24:07.162Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/app/api/v1/t/[slug]/members/[id]/force-renew/route.ts",
+      "old_string": "          updatedAt: now,\n        })\n        .where(eq(attestationRequests.id, pendingAttestation.id));\n\n      await createAuditEntry(tx, {",
+      "new_string": "          updatedAt: now,\n        })\n        .where(\n          and(\n            eq(attestationRequests.id, pendingAttestation.id),\n            // Guard against the member answering in the same instant.\n            eq(attestationRequests.status, \"pending\")\n          )\n        );\n\n      await createAuditEntry(tx, {"
+    },
+    "timestamp": "2026-11-03T05:24:57.464Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && export DATABASE_URL=postgres://accessbuddy:testpassword@127.0.0.1:54329/accessbuddy_test && (cd apps/web && bunx tsc --noEmit && bunx vitest run src/__tests__/force-renew.test.ts src/__tests__/member-update-audit.test.ts 2>&1 | rg \"Test Files|Tests \") && git add -A apps/web/src && git -c user.useConfigOnly=false commit -q --amend --no-edit && git push -q --force-with-lease origin fix/force-renew-stages-expiry-update 2>&1 | tail -1; git log --oneline -1; git status -sb | head -1",
+      "description": "Re-run typecheck and tests, amend the commit, and push",
+      "timeout": 300000
+    },
+    "timestamp": "2026-11-03T05:25:00.534Z"
+  },
+  {
+    "name": "Agent",
+    "input": {
+      "subagent_type": "accessbuddy-qa-verify",
+      "description": "QA gate on force-renew fix branch",
+      "prompt": "Independent QA gate on AccessBuddy branch `fix/force-renew-stages-expiry-update` (commit 895a8ae, one commit over origin/main 9b39bb1) in the checkout at /home/nicholas-wood/Documents/workspace/projects/accessbuddy/code. Do not modify files; report PASS/FAIL with evidence.\n\nContext: the admin \"Force Renew\" route (apps/web/src/app/api/v1/t/[slug]/members/[id]/force-renew/route.ts) used to write `expiresAt` directly onto ACTIVE fobs and ignore EXPIRED ones, so the programmer was never told and the fob never appeared on `/admin` credential updates (whose only filter is `programmingRequired = true`, see apps/web/src/app/t/[slug]/admin/page.tsx ~line 120). The fix makes it stage `pendingExpiresAt` + `programmingRequired` + reason for `active` and `expired` fobs, mirroring the member \"yes\" path in apps/web/src/app/api/v1/t/[slug]/attestations/[token]/route.ts (~lines 326-336) and members/[id]/confirm-on-behalf/route.ts. Skips a fob already at the target expiry (active, unflagged) or already staged with the same pending date; an already-flagged fob keeps its reason and only its pending date moves; every pending attestation is completed (status guard `pending`) with in-scope staged fobs recorded as confirmed. Labels added in apps/web/src/lib/audit-labels.ts and apps/web/src/app/t/[slug]/admin/audit/page.tsx; form copy and a success notice in apps/web/src/app/t/[slug]/admin/members/[id]/attestation-section.tsx; DB-gated test apps/web/src/__tests__/force-renew.test.ts (9 cases) and label assertions in member-update-audit.test.ts.\n\nRun the gates yourself on the final tree: `bun run typecheck -- --force`, `bun run lint -- --force`, and `DATABASE_URL=postgres://accessbuddy:testpassword@127.0.0.1:54329/accessbuddy_test bun run test -- --force` (embedded Postgres is already running on 54329 and migrated; confirm 0 skipped in the web package). Then review the diff (`git diff origin/main...HEAD`) for: tenant scoping on every credential/attestation write; the `expiresAt` column never written on credentials; the skip rule's interaction with `resolveConfirmProgramming` in apps/web/src/lib/confirm-programming.ts; whether completing a scoped attestation from this route can strand anything (the expiry_update stage in credentials/route.ts creates no fob_requests row, verify that); the UI response-shape change; and whether the daily summary / dashboard queries (programmingRequired-keyed) pick the staged rows up unchanged. Report severity-ranked findings with file:line, and a MERGE-READY / NOT-READY verdict. Keep the report under 60 lines.",
+      "run_in_background": "true"
+    },
+    "timestamp": "2026-11-03T05:25:34.555Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/jobs/2e24043d/tmp/pr-body.md",
+      "content": "## Why\n\nToday's Force Renew on an SMLSC member (3 Nov, 11:28 AEDT) returned 200 but her fob never reached the programmer. `force-renew/route.ts` dates from 31 Mar, before renewal moved to the staged-expiry model on 8 Apr, and was never migrated: it wrote `expiresAt` straight onto ACTIVE fobs (AccessBuddy then shows a date the access system never received) and skipped EXPIRED fobs entirely. Nothing it did could put a fob on the `/admin` credential updates list, whose only filter is `programmingRequired`. The 4 Sep review (defect 2, `context/state.md` item 8) had already recorded this; this PR actions it.\n\n## What\n\n- Force Renew now does what the member's \"yes\" on the confirmation page does, for `active` and `expired` fobs: stages `pendingExpiresAt` (season end, falling forward if the chosen season has rolled over, same rule as a scoped confirmation), sets `programmingRequired`, a reason naming the fob and the admin's reason, `programmingRequestedAt`. The live `expiresAt` is never written; confirm-programming promotes it and reactivates an expired fob exactly as it does after an attestation.\n- Skips a fob already at the target expiry with nothing pending (already programmed) and a fob already staged for the same date; an already-flagged fob keeps the reason the programmer is reading and only has its staged date moved. A second Force Renew for the same season is a no-op on credentials.\n- Completes every pending attestation for the member (unscoped and scoped) with the in-scope staged fobs recorded as confirmed, guarded on `status = pending`.\n- Response carries `staged`, `skipped` and `pendingExpiresAt`; the form says \"N fobs sent to the programmer for an expiry update\" (or why nothing was). Form copy no longer promises an immediate renewal of credentials.\n- Audit labels for `force_renew` and `force_renew_expiry_update` in both renderers. Rows written by the old route (no `pendingExpiresAt`) render as \"expiry rewritten directly (no programming update staged)\" so they can be found.\n- Tests: `force-renew.test.ts` (DB-gated, 9 cases: expired staged, active staged, already-at-target skipped, already-flagged keeps reason, idempotent re-run, other statuses untouched, staff untouched, attestations completed, hand-off to confirm-programming with one `credentialReactivated` email) and label assertions.\n\n## Gates\n\ntypecheck 5/5, lint 0 errors, tests shared 27 / db 16 / web 377 with the DB-gated suites running (0 skipped) on the embedded Postgres.\n\n## After merge\n\nRe-run Force Renew on the affected member: her fob is `expired`, so the new route stages it and it appears on `/admin` credential updates. Members whose active fobs were force-renewed by the old route before 1 Sep (if any) now look \"already programmed\" to the skip rule; find them with the `force_renew_expiry_update` audit rows that carry `newExpiresAt` but no `pendingExpiresAt` and flag them by hand.\n"
+    },
+    "timestamp": "2026-11-03T05:25:48.272Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/artifacts/sql/2026-11-03-force-renew-probe.sql",
+      "content": "-- Force renew probe, 3 Nov 2026. Read-only. Run inside a prod DB window\n-- (audit_log is FORCE RLS, so the tenant must be set first).\n--\n-- Q1: the member force-renewed today (ffa19098-...): fob state and whether\n--     anything is staged for the programmer.\n-- Q2: every force_renew_expiry_update row ever written by the OLD route\n--     (it rewrote the live expiry: metadata has newExpiresAt and no\n--     pendingExpiresAt). Each such ACTIVE fob was never programmed and the\n--     new route's skip rule will leave it alone; flag those by hand.\n-- Q3: all force_renew member events, to size the blast radius.\n\nSELECT set_config('app.current_tenant_id',\n  (SELECT id::text FROM tenants WHERE slug = 'south-melb-lsc'), false);\n\n-- Q1\nSELECT c.id, c.serial_number, c.status, c.expires_at, c.pending_expires_at,\n       c.programming_required, c.programming_reason, c.programming_requested_at\nFROM credentials c\nWHERE c.owner_id = 'ffa19098-64b5-4802-95a2-3137ce1ee3e0'\nORDER BY c.status, c.serial_number;\n\nSELECT a.id, a.season, a.status, a.credential_ids, a.created_at, a.completed_at\nFROM attestation_requests a\nWHERE a.user_id = 'ffa19098-64b5-4802-95a2-3137ce1ee3e0'\nORDER BY a.created_at DESC;\n\n-- Q2\nSELECT al.created_at, al.entity_id AS credential_id, c.serial_number, c.status,\n       c.expires_at, c.programming_required,\n       al.metadata->>'season' AS season,\n       al.metadata->>'newExpiresAt' AS rewritten_to,\n       u.first_name || ' ' || u.last_name AS owner\nFROM audit_log al\nJOIN credentials c ON c.id = al.entity_id\nLEFT JOIN users u ON u.id = c.owner_id\nWHERE al.entity_type = 'credential'\n  AND al.metadata->>'action' = 'force_renew_expiry_update'\n  AND al.metadata->>'pendingExpiresAt' IS NULL\nORDER BY al.created_at;\n\n-- Q3\nSELECT al.created_at, al.entity_id AS user_id,\n       u.first_name || ' ' || u.last_name AS member,\n       al.metadata->>'season' AS season, al.metadata->>'reason' AS reason\nFROM audit_log al\nLEFT JOIN users u ON u.id = al.entity_id\nWHERE al.entity_type = 'member'\n  AND al.metadata->>'action' = 'force_renew'\nORDER BY al.created_at;\n"
+    },
+    "timestamp": "2026-11-03T05:25:59.452Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "scp -q /home/nicholas-wood/.claude/jobs/2e24043d/tmp/pr-body.md mac:~/pai-tmp/force-renew-pr-body.md && ssh -o ConnectTimeout=20 mac 'export GH_TOKEN=$(cat ~/.gh-token) && /opt/homebrew/bin/gh pr create --repo nicholas-wood/accessbuddy --base main --head fix/force-renew-stages-expiry-update --title \"fix(members): force renew stages the expiry update for the programmer\" --body-file ~/pai-tmp/force-renew-pr-body.md' 2>&1 | tail -3",
+      "description": "Open the pull request from the Mac with its gh token",
+      "timeout": 90000
+    },
+    "timestamp": "2026-11-03T05:26:02.512Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ssh -o ConnectTimeout=20 mac 'export GH_TOKEN=$(cat ~/.gh-token) && /opt/homebrew/bin/gh pr checks 125 --repo nicholas-wood/accessbuddy --watch' 2>&1 | tail -8",
+      "description": "Watch CI checks on PR 125 until they finish",
+      "timeout": 600000,
+      "run_in_background": true
+    },
+    "timestamp": "2026-11-03T05:26:15.982Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy && rg -n \"^## Verification\" ISA.md && sed -n \"$(rg -n '^## Verification' ISA.md | cut -d: -f1),+2p\" ISA.md; echo \"== probes\"; cd code && echo \"ISC-181/198:\"; rg -n \"expiresAt:|status:\" \"apps/web/src/app/api/v1/t/[slug]/members/[id]/force-renew/route.ts\" | rg -v \"status: \\\"active\\\"|status: \\\"completed\\\"|status: credentials|previousExpiresAt|pendingExpiresAt|eq\\(\" ; echo \"(end)\"; echo \"ISC-190:\"; rg -n \"eq\\(credentials.programmingRequired, true\\)\" \"apps/web/src/app/t/[slug]/admin/page.tsx\"; echo \"ISC-193/194:\"; rg -n \"force_renew\" apps/web/src/lib/audit-labels.ts \"apps/web/src/app/t/[slug]/admin/audit/page.tsx\" | head; echo \"ISC-195/196:\"; rg -n \"immediately renew|sent to the programmer|staged\" \"apps/web/src/app/t/[slug]/admin/members/[id]/attestation-section.tsx\" | head -5",
+      "description": "Locate the ISA Verification section and run the grep probes for the code ISCs"
+    },
+    "timestamp": "2026-11-03T05:26:20.874Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy && sed -i -E 's/^- \\[ \\] (ISC-(18[1-9]|19[0-9]|20[01])):/- [x] \\1:/; s/^- \\[ \\] (ISC-202):/- [DEFERRED-VERIFY] \\1:/' ISA.md && sed -i -E 's/^updated: .*/updated: 2026-11-03/' ISA.md && rg -c \"^- \\[x\\] ISC-(18[1-9]|19[0-9]|20[01]):\" ISA.md && rg -n \"ISC-202|ISC-203\" ISA.md | head -3",
+      "description": "Tick the passed ISCs and defer the live probe in the ISA"
+    },
+    "timestamp": "2026-11-03T05:26:31.813Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/ISA.md",
+      "old_string": "## Verification\n\n",
+      "new_string": "## Verification\n\n- ISC-181..201 (2026-11-03, branch `fix/force-renew-stages-expiry-update`, commit 895a8ae, PR https://github.com/nicholas-wood/accessbuddy/pull/125): reproduction `gcloud logging read` → one `POST …/members/ffa19098…/force-renew` 200 at 2026-11-03T00:28:12Z, the only force-renew in 30 days; `git log` on the route shows a single commit f0b9923 (31 Mar) vs 6eccea9 (8 Apr) introducing staging in the attestation route. Gates on the final tree: `bun run typecheck -- --force` 5/5; `bun run lint -- --force` 0 errors (5 pre-existing unused-disable warnings in untouched files); `bun run test -- --force` with `DATABASE_URL` on the embedded Postgres (rebuilt this session at `$CLAUDE_JOB_DIR/tmp/ab-pg`, migrated \"25 journal-expected tables all present\") → shared 27 / db 16 / web 377 passed, 0 skipped. 181/198 rg: the only `expiresAt:` in the route is the select column (line 129), no `status:` write on credentials; 182/183/188/189/196 `force-renew.test.ts` \"stages an expired fob\" (pendingExpiresAt 2027-08-31T14:00Z, flagged, reason names \"Force renewal (2026/2027)\", the admin reason, `Fob #<serial>` and \"re-enable\", status still expired, live expiry untouched, one `force_renew_expiry_update` row, membership season/status updated, response `staged`/`skipped`/`pendingExpiresAt`); 181/182 \"stages an active fob\" (status active, expiry untouched, no \"re-enable\"); 184 \"leaves an active fob already at the target\" (skipped, no audit row); 185/199 \"keeps the reason on an already-flagged fob\" (same date skipped with no row; other date moved, reason kept, `alreadyFlagged: true`); 199 \"no-op when run twice\" (reason, requestedAt, pending unchanged, one audit row); 186 deactivated/returned/pending_programming untouched; 187 staff membership renewed, fob untouched, `pendingExpiresAt: null`; 189 unscoped + scoped pending attestations both completed with `credentialResponses` naming the staged fob, two `attestation_force_completed` member rows; 190/191/192 both staged rows are the only `programmingRequired = true` rows in the tenant, confirm-programming reactivates the expired fob with `[\"credentialReactivated\"]` and leaves the active fob active, both promoted to the season end; 190 rg `eq(credentials.programmingRequired, true)` admin/page.tsx:120 unchanged; 193/194 rg `force_renew` in audit-labels.ts:25,29 and admin/audit/page.tsx:131-132, `member-update-audit.test.ts` asserts the three label strings; 195/196 rg: \"immediately renew\" gone, success notice \"N fobs sent to the programmer for an expiry update\"; 197/200 as the gate run above; 201 `gh pr create` returned PR 125. Advisor consulted after build: added the `status = pending` guard on the attestation completion; flagged that active fobs rewritten by the old route now satisfy the skip rule, handled as a data task (`artifacts/sql/2026-11-03-force-renew-probe.sql` Q2) rather than code.\n- ISC-202: DEFERRED-VERIFY - needs the release. Follow-up: after Nick merges #125 and release-please ships, Force Renew on the affected member (fob `expired`), then `interceptor open https://accessbuddy.com.au/t/south-melb-lsc/admin` → her fob on the credential updates list with the \"Force renewal (2026/2027)\" reason.\n\n"
+    },
+    "timestamp": "2026-11-03T05:26:47.849Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/project-accessbuddy-pr125-force-renew-staging.md",
+      "content": "---\nname: project-accessbuddy-pr125-force-renew-staging\ndescription: \"AccessBuddy PR #125 (3 Nov 2026): Force Renew used to rewrite expiresAt on active fobs and skip expired ones, never flagging the programmer; now stages like the attestation yes-path. Christine Cardwell was the trigger; her fob is expired so re-running Force Renew after release stages it.\"\nmetadata:\n  type: project\n---\n\nForce Renew (`members/[id]/force-renew/route.ts`) dated from 31 Mar 2026 and was never migrated to the 8 Apr staged-expiry model: it wrote `expiresAt` straight onto ACTIVE fobs and ignored EXPIRED ones, so nothing ever set `programmingRequired`, the only filter on `/admin` credential updates. Trigger: Nick, 3 Nov 2026, \"Force renew was done today for Christine Cardwell, but her fob was not sent for expiry update\". Prod logs: one force-renew POST 00:28Z, the only one in 30 days. The 4 Sep Dinah Boswell review had already recorded the defect (state.md item 8) and three members force-renewed 2-3 Sep; it sat unactioned.\n\nFix on branch `fix/force-renew-stages-expiry-update` (895a8ae), PR https://github.com/nicholas-wood/accessbuddy/pull/125, ISC-181..203 in the project ISA: stages `pendingExpiresAt` + `programmingRequired` for active and expired fobs via `scopedAttestationExpiry`, skips a fob already at the target or already staged for it, keeps the reason on an already-flagged fob, completes every pending attestation (guarded on `pending`), returns `staged`/`skipped`, labels in both audit renderers, form copy fixed. DB-gated `force-renew.test.ts` (9 cases).\n\n**Why:** the programmer only sees the staged flag; a direct expiry write leaves AccessBuddy claiming a date the door system never got.\n\n**How to apply:**\n- Merge is Nick's. After release, re-run Force Renew on the member (her fob is `expired`, so the old code did nothing to it) and probe `/admin` with Interceptor (ISC-202).\n- Pre-release workaround that needs no deploy: Add Credential → her expired fob under \"This member's previous fobs\" → expiry-update stage → \"Member confirmed in person\" stages it immediately.\n- Old-route rows: `force_renew_expiry_update` audit rows with `newExpiresAt` and no `pendingExpiresAt` mark active fobs that were rewritten but never programmed; the new skip rule leaves them alone. Probe SQL at `projects/accessbuddy/artifacts/sql/2026-11-03-force-renew-probe.sql` (Q2) for Nick's DB window.\n- Embedded test Postgres: `/tmp/ab-pg-scratch` was wiped by tmp cleanup while its server kept running on an empty data dir (tests \"pass\" with every DB suite skipped). Rebuilt at `~/.claude/jobs/2e24043d/tmp/ab-pg/run.ts` (`bun add embedded-postgres@17.5.0-beta.15`, then `bun pm trust --all` or initdb exits 127). Always check \"0 skipped\" and that `ss -ltn | grep 54329` is backed by a live data dir. See [[project-accessbuddy-pr111-expiry-update-stage]].\n- Refactor still owed: attestation yes-path, confirm-on-behalf, manual stage and force-renew each inline the same staging block; a shared `stageExpiryUpdate(tx, …)` helper would have prevented this class of drift (RCA root cause).\n"
+    },
+    "timestamp": "2026-11-03T05:27:04.875Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/memory/MEMORY.md",
+      "old_string": "- [AccessBuddy PR #112/#113 pickup member message]",
+      "new_string": "- [AccessBuddy PR #125 force renew staging](project-accessbuddy-pr125-force-renew-staging.md) — Force Renew rewrote expiresAt / skipped expired fobs, never flagged programmer; fixed 3 Nov, PR open; Christine's fob expired → re-run after release; embedded pg rebuild recipe\n- [AccessBuddy PR #112/#113 pickup member message]"
+    },
+    "timestamp": "2026-11-03T05:27:07.585Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/context/state.md",
+      "offset": 49,
+      "limit": 6
+    },
+    "timestamp": "2026-11-03T05:27:12.512Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/app/api/v1/t/[slug]/members/[id]/force-renew/route.ts",
+      "old_string": "          programmingRequired: credentials.programmingRequired,\n          serialNumber: credentials.serialNumber,\n          typeName: credentialTypes.name,\n        })",
+      "new_string": "          programmingRequired: credentials.programmingRequired,\n          serialNumber: credentials.serialNumber,\n          deactivationReason: credentials.deactivationReason,\n          typeName: credentialTypes.name,\n        })"
+    },
+    "timestamp": "2026-11-03T05:27:24.923Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/app/api/v1/t/[slug]/members/[id]/force-renew/route.ts",
+      "old_string": "        const reEnable = cred.status === CredentialStatus.EXPIRED ? \" and re-enable\" : \"\";\n        await tx\n          .update(credentials)\n          .set({\n            pendingExpiresAt: newExpiresAt,\n            programmingRequired: true,\n            programmingReason: `Force renewal (${season}) by admin: ${reason} - update expiry of this ${label} to ${expiryLabel} in the access system${reEnable}`,\n            programmingRequestedAt: now,\n            updatedAt: now,\n          })",
+      "new_string": "        const reEnable = cred.status === CredentialStatus.EXPIRED ? \" and re-enable\" : \"\";\n        // A fob re-added after a revocation still carries that reason: the\n        // programmer must see it (a lost or stolen fob is not quietly\n        // re-enabled), and it is cleared the same way the member's own \"yes\"\n        // clears it.\n        const history = cred.deactivationReason\n          ? ` (previously deactivated: ${cred.deactivationReason})`\n          : \"\";\n        await tx\n          .update(credentials)\n          .set({\n            pendingExpiresAt: newExpiresAt,\n            programmingRequired: true,\n            programmingReason: `Force renewal (${season}) by admin: ${reason} - update expiry of this ${label}${history} to ${expiryLabel} in the access system${reEnable}`,\n            programmingRequestedAt: now,\n            ...(cred.deactivationReason ? { deactivatedBy: null, deactivationReason: null } : {}),\n            updatedAt: now,\n          })"
+    },
+    "timestamp": "2026-11-03T05:27:30.825Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/app/api/v1/t/[slug]/members/[id]/force-renew/route.ts",
+      "old_string": "    for (const pendingAttestation of pendingAttestations) {\n      const scope = pendingAttestation.credentialIds?.length",
+      "new_string": "    const exemptFromStaging = !!membership.isStaff || !!membership.isBoardMember;\n    for (const pendingAttestation of pendingAttestations) {\n      // A scoped fob confirmation on a staff or board member is left for the\n      // member: nothing was staged for it here, so closing it would drop the\n      // fob with no flag and no answer.\n      if (exemptFromStaging && pendingAttestation.credentialIds?.length) continue;\n      const scope = pendingAttestation.credentialIds?.length"
+    },
+    "timestamp": "2026-11-03T05:27:34.356Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/__tests__/force-renew.test.ts",
+      "old_string": "    programmingRequired?: boolean;\n    programmingReason?: string | null;\n  }) {",
+      "new_string": "    programmingRequired?: boolean;\n    programmingReason?: string | null;\n    deactivationReason?: string | null;\n  }) {"
+    },
+    "timestamp": "2026-11-03T05:27:36.325Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/__tests__/force-renew.test.ts",
+      "old_string": "        programmingRequestedAt: values.programmingRequired ? new Date() : null,\n      })",
+      "new_string": "        programmingRequestedAt: values.programmingRequired ? new Date() : null,\n        deactivatedBy: values.deactivationReason ? admin.id : null,\n        deactivationReason: values.deactivationReason ?? null,\n      })"
+    },
+    "timestamp": "2026-11-03T05:27:38.417Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/apps/web/src/__tests__/force-renew.test.ts",
+      "old_string": "  it(\"leaves staff members' fobs untouched (ISC-187)\", async () => {\n    const cred = await seedCredential({ serial: `STAFF-${suffix}`, ownerId: staffMember.id, status: \"expired\" });\n\n    const { status, json } = await post(staffMember.id);\n    expect(status).toBe(200);\n    expect(json.staged).toEqual([]);\n    expect(json.pendingExpiresAt).toBeNull();\n\n    const after = await load(cred.id);\n    expect(after.programmingRequired).toBe(false);\n    expect(after.pendingExpiresAt).toBeNull();\n    expect((await membership(staffMember.id)).currentSeason).toBe(SEASON);\n  });",
+      "new_string": "  it(\"tells the programmer a re-added fob's old deactivation reason and clears it (QA finding 2)\", async () => {\n    const cred = await seedCredential({\n      serial: `READD-${suffix}`,\n      ownerId: member.id,\n      status: \"expired\",\n      deactivationReason: \"Revoked - reported lost\",\n    });\n\n    const { json } = await post(member.id);\n    expect(json.staged).toEqual([cred.id]);\n\n    const after = await load(cred.id);\n    expect(after.programmingReason).toContain(\"(previously deactivated: Revoked - reported lost)\");\n    expect(after.deactivationReason).toBeNull();\n    expect(after.deactivatedBy).toBeNull();\n  });\n\n  it(\"leaves staff members' fobs untouched and their scoped confirmation pending (ISC-187, QA finding 1)\", async () => {\n    const cred = await seedCredential({ serial: `STAFF-${suffix}`, ownerId: staffMember.id, status: \"expired\" });\n    const [scoped] = await db\n      .insert(attestationRequests)\n      .values({\n        tenantId: tenant.id,\n        userId: staffMember.id,\n        season: SEASON,\n        token: `staff-scoped-${suffix}`,\n        tokenExpiresAt: new Date(Date.now() + 86_400_000),\n        status: \"pending\",\n        initiatedBy: admin.id,\n        credentialIds: [cred.id],\n      })\n      .returning({ id: attestationRequests.id });\n\n    const { status, json } = await post(staffMember.id);\n    expect(status).toBe(200);\n    expect(json.staged).toEqual([]);\n    expect(json.pendingExpiresAt).toBeNull();\n\n    const after = await load(cred.id);\n    expect(after.programmingRequired).toBe(false);\n    expect(after.pendingExpiresAt).toBeNull();\n    expect((await membership(staffMember.id)).currentSeason).toBe(SEASON);\n\n    const [att] = await db.select().from(attestationRequests).where(eq(attestationRequests.id, scoped.id));\n    expect(att.status).toBe(\"pending\");\n  });"
+    },
+    "timestamp": "2026-11-03T05:27:47.845Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/context/state.md",
+      "old_string": "   like the attestation route and include EXPIRED credentials. Three members force-renewed 2-3 Sep are affected.",
+      "new_string": "   like the attestation route and include EXPIRED credentials. Three members force-renewed 2-3 Sep are affected.\n   **Fixed 2026-11-03 in PR #125** (`fix/force-renew-stages-expiry-update`, ISC-181..203) after Christine Cardwell's\n   force renew (3 Nov) left her expired fob unstaged. After release: re-run Force Renew on her; probe old-route rows\n   with `artifacts/sql/2026-11-03-force-renew-probe.sql`."
+    },
+    "timestamp": "2026-11-03T05:27:51.176Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && export DATABASE_URL=postgres://accessbuddy:testpassword@127.0.0.1:54329/accessbuddy_test && (cd apps/web && bunx tsc --noEmit && bunx eslint \"src/app/api/v1/t/[slug]/members/[id]/force-renew/route.ts\" src/__tests__/force-renew.test.ts && bunx vitest run src/__tests__/force-renew.test.ts src/__tests__/manual-add-expiry-update.test.ts src/__tests__/member-update-audit.test.ts 2>&1 | rg \"Test Files|Tests |FAIL|✓|×\" | head -8) && git add -A apps/web/src && git -c user.useConfigOnly=false commit -q -m \"fix(members): force renew surfaces and clears a re-added fob's deactivation reason; leaves a staff member's scoped confirmation pending\" && git push -q origin fix/force-renew-stages-expiry-update 2>&1 | tail -1; git log --oneline -2",
+      "description": "Typecheck, lint, re-run the related tests, commit and push the QA follow-ups",
+      "timeout": 300000
+    },
+    "timestamp": "2026-11-03T05:27:55.933Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sleep 20; ssh -o ConnectTimeout=20 mac 'export GH_TOKEN=$(cat ~/.gh-token) && /opt/homebrew/bin/gh pr checks 125 --repo nicholas-wood/accessbuddy --watch' 2>&1 | tail -8; ssh -o ConnectTimeout=20 mac 'export GH_TOKEN=$(cat ~/.gh-token) && /opt/homebrew/bin/gh pr view 125 --repo nicholas-wood/accessbuddy --json headRefOid,statusCheckRollup --jq \".headRefOid, (.statusCheckRollup[] | \\\"\\(.name // .context): \\(.conclusion // .state)\\\")\"' 2>&1 | tail -8",
+      "description": "Watch CI on PR 125 for the latest commit and print the per-check result",
+      "timeout": 600000,
+      "run_in_background": true
+    },
+    "timestamp": "2026-11-03T05:28:19.312Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "echo '{\"timestamp\":\"2026-11-03T06:00:00+11:00\",\"effort_level\":\"E3\",\"effort_source\":\"classifier\",\"task_description\":\"AccessBuddy force renew did not stage expiry update for Christine Cardwell\",\"criteria_count\":23,\"criteria_passed\":21,\"criteria_failed\":0,\"prd_id\":\"accessbuddy-force-renew-staging\",\"implied_sentiment\":3,\"satisfaction_prediction\":7,\"reflection_q1\":\"Should have checked the Sep review backlog first; it named the defect\",\"reflection_q2\":\"A shared staging helper would have made the drift impossible\",\"reflection_q3\":\"Gate A reproduction via request logs worked without the DB\",\"knowledge_flags\":1,\"within_budget\":false,\"living_doc_refinements\":1,\"doctrine_fired\":{\"live_probe\":false,\"advisor\":true,\"cato\":false,\"conflict\":false,\"thinking_floor_met\":true,\"completeness_gate_met\":true}}' >> ~/.claude/PAI/MEMORY/LEARNING/REFLECTIONS/algorithm-reflections.jsonl && echo ok",
+      "description": "Append the Algorithm run reflection"
+    },
+    "timestamp": "2026-11-03T05:28:24.685Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cat /tmp/claude-1000/-home-nicholas-wood--claude/2e24043d-57c6-4e57-bc9b-ac59de31bfef/tasks/bxdytatrr.output | tail -12",
+      "description": "Read the CI check results for the latest commit"
+    },
+    "timestamp": "2026-11-03T05:40:00.064Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "tail -6 /tmp/claude-1000/-home-nicholas-wood--claude/2e24043d-57c6-4e57-bc9b-ac59de31bfef/tasks/boh72crgu.output; echo \"== now\"; ssh -o ConnectTimeout=20 mac 'export GH_TOKEN=$(cat ~/.gh-token) && /opt/homebrew/bin/gh pr checks 125 --repo nicholas-wood/accessbuddy' 2>&1 | tail -6",
+      "description": "Show CI results for both commits on PR 125",
+      "timeout": 60000
+    },
+    "timestamp": "2026-11-03T05:40:07.495Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy && sed -i -E 's/^- \\[ \\] (ISC-203):/- [x] \\1:/' ISA.md && sed -i 's|^- ISC-202: DEFERRED-VERIFY - needs the release.|- ISC-181..203 addendum: QA agent (accessbuddy-qa-verify) verdict MERGE-READY on 895a8ae; its two low findings folded into 2492cf9 (re-added fob deactivation reason surfaced in the programmer reason and cleared; scoped confirmation left pending for an exempt staff/board member), tests 11 cases + labels. CI on 2492cf9: Build pass 3m14s, Lint \\& Type Check pass 1m11s, Test pass 1m23s, Claude Code Review pass. ISC-203 is the final report of this run.\\n- ISC-202: DEFERRED-VERIFY - needs the release.|' ISA.md && rg -n \"ISC-203\" ISA.md | head -3; curl -s -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Learn phase.\", \"voice_id\": \"pNInz6obpgDQGcFmaJgB\", \"voice_enabled\": true}' >/dev/null 2>&1; echo done",
+      "description": "Record QA and CI evidence in the ISA and tick the report criterion"
+    },
+    "timestamp": "2026-11-03T05:40:21.363Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ssh -o ConnectTimeout=20 mac 'export GH_TOKEN=$(cat ~/.gh-token) && /opt/homebrew/bin/gh pr merge 125 --repo nicholas-wood/accessbuddy --merge --delete-branch=false 2>&1 | tail -3; /opt/homebrew/bin/gh pr view 125 --repo nicholas-wood/accessbuddy --json state,mergeCommit --jq \".state, .mergeCommit.oid\"'",
+      "description": "Merge PR 125 into main and confirm its state",
+      "timeout": 90000
+    },
+    "timestamp": "2026-11-03T05:48:21.645Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ssh -o ConnectTimeout=20 mac 'export GH_TOKEN=$(cat ~/.gh-token); for i in 1 2 3 4 5 6 7 8 9 10 11 12; do out=$(/opt/homebrew/bin/gh pr list --repo nicholas-wood/accessbuddy --head release-please--branches--main --state open --json number,title,headRefOid --jq \".[] | \\\"\\(.number) \\(.title) \\(.headRefOid)\\\"\"); if [ -n \"$out\" ]; then echo \"$out\"; break; fi; sleep 10; done; /opt/homebrew/bin/gh run list --repo nicholas-wood/accessbuddy --limit 4 --json workflowName,status,conclusion,headSha --jq \".[] | \\\"\\(.workflowName): \\(.status) \\(.conclusion // \\\"\\\") \\(.headSha[0:7])\\\"\"'",
+      "description": "Wait for the release-please PR to appear and list recent workflow runs",
+      "timeout": 180000
+    },
+    "timestamp": "2026-11-03T05:48:36.387Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ssh -o ConnectTimeout=20 mac 'export GH_TOKEN=$(cat ~/.gh-token) && /opt/homebrew/bin/gh pr merge 126 --repo nicholas-wood/accessbuddy --merge 2>&1 | tail -3; /opt/homebrew/bin/gh pr view 126 --repo nicholas-wood/accessbuddy --json state,mergeCommit --jq \".state, .mergeCommit.oid\"'",
+      "description": "Merge the release PR 126 and confirm its state",
+      "timeout": 90000
+    },
+    "timestamp": "2026-11-03T05:49:09.305Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ssh -o ConnectTimeout=20 mac 'export GH_TOKEN=$(cat ~/.gh-token); for i in $(seq 1 90); do runs=$(/opt/homebrew/bin/gh run list --repo nicholas-wood/accessbuddy --commit 9e3dc1f0947d3395ba31a71d2a784a1bdf39d2a5 --json workflowName,status,conclusion,databaseId --jq \".[] | \\\"\\(.workflowName): \\(.status) \\(.conclusion // \\\"\\\") \\(.databaseId)\\\"\"); echo \"$runs\"; if echo \"$runs\" | grep -q \"Release Please: completed\"; then if ! echo \"$runs\" | grep -q \"in_progress\\|queued\"; then break; fi; fi; sleep 15; done; echo \"== jobs\"; id=$(echo \"$runs\" | grep \"Release Please\" | awk \"{print \\$NF}\"); /opt/homebrew/bin/gh run view $id --repo nicholas-wood/accessbuddy --json jobs --jq \".jobs[] | \\\"\\(.name): \\(.conclusion)\\\"\"; /opt/homebrew/bin/gh release list --repo nicholas-wood/accessbuddy --limit 1' 2>&1 | tail -12; echo \"== live\"; curl -s https://accessbuddy.com.au/ | rg -o \"1\\.2[0-9]\\.[0-9]+\" | sort -u; curl -s -o /dev/null -w \"health %{http_code}\\n\" https://accessbuddy.com.au/api/health",
+      "description": "Wait for the Release Please workflow and deploy to finish, then probe the live version",
+      "timeout": 1500000,
+      "run_in_background": true
+    },
+    "timestamp": "2026-11-03T05:49:31.284Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "tail -5 /tmp/claude-1000/-home-nicholas-wood--claude/2e24043d-57c6-4e57-bc9b-ac59de31bfef/tasks/bq0iwq0v6.output; echo \"== live now\"; curl -s https://accessbuddy.com.au/ | rg -o \"1\\.2[0-9]\\.[0-9]+\" | sort -u",
+      "description": "Check deploy progress and the live site version"
+    },
+    "timestamp": "2026-11-03T05:51:01.346Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && git checkout -q main && git pull -q --ff-only origin main && git log --oneline -1 && rg -n -i \"attestation\" \"apps/web/src/app/t/[slug]/admin/members/[id]/attestation-section.tsx\" | rg -v \"AttestationRecord|attestations\\.|AttestationSection|resend-attestation|/attest\" | head -20; echo \"== page.tsx heading\"; rg -n -i \"attestation\" \"apps/web/src/app/t/[slug]/admin/members/[id]/page.tsx\" | rg -i \"title|heading|>Attest|\\\"Attest\" | head",
+      "description": "Update main and find the user-facing attestation wording on the member page"
+    },
+    "timestamp": "2026-11-03T05:57:39.504Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && sed -n 160,200p \"apps/web/src/app/t/[slug]/admin/members/[id]/attestation-section.tsx\" | rg -n \"Attest|attest|>[A-Z][^<{]*<\" ; echo \"== completed/history\"; sed -n 306,350p \"apps/web/src/app/t/[slug]/admin/members/[id]/attestation-section.tsx\" | rg -n \"Attest|attest|>[A-Z][^<{]*<|\\\"[A-Z][^\\\"]*\\\"\"",
+      "description": "List the visible copy in the attestation section"
+    },
+    "timestamp": "2026-11-03T05:57:50.023Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && git checkout -q -b chore/member-page-confirmations-title && F=\"apps/web/src/app/t/[slug]/admin/members/[id]/attestation-section.tsx\" && sed -i 's|<CardTitle className=\"text-base\">Attestations</CardTitle>|<CardTitle className=\"text-base\">Confirmations</CardTitle>|; s|No attestation history|No confirmation history|; s|Failed to re-send attestation|Failed to re-send confirmation|' \"$F\" && rg -n \"Confirmations</CardTitle>|No confirmation history|re-send confirmation\" \"$F\" && (cd apps/web && bunx tsc --noEmit && echo TYPECHECK_OK) && git add \"$F\" && git -c user.useConfigOnly=false commit -q -m \"chore(members): rename the member page Attestations card to Confirmations\" && git push -q -u origin chore/member-page-confirmations-title 2>&1 | tail -1; ssh -o ConnectTimeout=20 mac 'export GH_TOKEN=$(cat ~/.gh-token) && /opt/homebrew/bin/gh pr create --repo nicholas-wood/accessbuddy --base main --head chore/member-page-confirmations-title --title \"chore(members): rename the member page Attestations card to Confirmations\" --body \"Member page: the card heading reads Confirmations (was Attestations); empty state and the re-send error say confirmation too. Copy only, no behaviour change. Requested by Nick 3 Nov 2026.\"' 2>&1 | tail -1",
+      "description": "Rename the card copy, typecheck, commit, push, and open the PR",
+      "timeout": 300000
+    },
+    "timestamp": "2026-11-03T05:57:58.936Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "tail -10 /tmp/claude-1000/-home-nicholas-wood--claude/2e24043d-57c6-4e57-bc9b-ac59de31bfef/tasks/bq0iwq0v6.output",
+      "description": "Read the deploy watch result"
+    },
+    "timestamp": "2026-11-03T06:01:36.956Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/.claude/projects/-home-nicholas-wood--claude/memory && sed -i 's|PR https://github.com/nicholas-wood/accessbuddy/pull/125, ISC-181..203 in the project ISA:|PR https://github.com/nicholas-wood/accessbuddy/pull/125 (merged 3 Nov on Nick'\"'\"'s instruction, release PR #126 → v1.23.3 live 05:49Z, health 200), ISC-181..203 in the project ISA:|; s|Merge is Nick'\"'\"'s. After release, re-run Force Renew|v1.23.3 is live. Re-run Force Renew|' project-accessbuddy-pr125-force-renew-staging.md && rg -c \"v1.23.3\" project-accessbuddy-pr125-force-renew-staging.md",
+      "description": "Record the live release in the memory note"
+    },
+    "timestamp": "2026-11-03T06:01:44.376Z"
+  }
+]

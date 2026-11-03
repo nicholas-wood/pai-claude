@@ -1,0 +1,20 @@
+## Why
+
+Today's Force Renew on an SMLSC member (3 Nov, 11:28 AEDT) returned 200 but her fob never reached the programmer. `force-renew/route.ts` dates from 31 Mar, before renewal moved to the staged-expiry model on 8 Apr, and was never migrated: it wrote `expiresAt` straight onto ACTIVE fobs (AccessBuddy then shows a date the access system never received) and skipped EXPIRED fobs entirely. Nothing it did could put a fob on the `/admin` credential updates list, whose only filter is `programmingRequired`. The 4 Sep review (defect 2, `context/state.md` item 8) had already recorded this; this PR actions it.
+
+## What
+
+- Force Renew now does what the member's "yes" on the confirmation page does, for `active` and `expired` fobs: stages `pendingExpiresAt` (season end, falling forward if the chosen season has rolled over, same rule as a scoped confirmation), sets `programmingRequired`, a reason naming the fob and the admin's reason, `programmingRequestedAt`. The live `expiresAt` is never written; confirm-programming promotes it and reactivates an expired fob exactly as it does after an attestation.
+- Skips a fob already at the target expiry with nothing pending (already programmed) and a fob already staged for the same date; an already-flagged fob keeps the reason the programmer is reading and only has its staged date moved. A second Force Renew for the same season is a no-op on credentials.
+- Completes every pending attestation for the member (unscoped and scoped) with the in-scope staged fobs recorded as confirmed, guarded on `status = pending`.
+- Response carries `staged`, `skipped` and `pendingExpiresAt`; the form says "N fobs sent to the programmer for an expiry update" (or why nothing was). Form copy no longer promises an immediate renewal of credentials.
+- Audit labels for `force_renew` and `force_renew_expiry_update` in both renderers. Rows written by the old route (no `pendingExpiresAt`) render as "expiry rewritten directly (no programming update staged)" so they can be found.
+- Tests: `force-renew.test.ts` (DB-gated, 9 cases: expired staged, active staged, already-at-target skipped, already-flagged keeps reason, idempotent re-run, other statuses untouched, staff untouched, attestations completed, hand-off to confirm-programming with one `credentialReactivated` email) and label assertions.
+
+## Gates
+
+typecheck 5/5, lint 0 errors, tests shared 27 / db 16 / web 377 with the DB-gated suites running (0 skipped) on the embedded Postgres.
+
+## After merge
+
+Re-run Force Renew on the affected member: her fob is `expired`, so the new route stages it and it appears on `/admin` credential updates. Members whose active fobs were force-renewed by the old route before 1 Sep (if any) now look "already programmed" to the skip rule; find them with the `force_renew_expiry_update` audit rows that carry `newExpiresAt` but no `pendingExpiresAt` and flag them by hand.

@@ -1,0 +1,298 @@
+import { NextRequest, NextResponse } from "next/server";
+import { eq, and, inArray } from "drizzle-orm";
+import {
+  Permission,
+  forceRenewSchema,
+  AuditEntityType,
+  AuditAction,
+  CredentialStatus,
+} from "@accessbuddy/shared";
+import {
+  tenantMemberships,
+  credentials,
+  credentialTypes,
+  attestationRequests,
+} from "@accessbuddy/db";
+import { getAuthUser } from "@/lib/auth";
+import { resolveTenant } from "@/lib/tenant";
+import { checkPermission } from "@/lib/permissions";
+import { withTenant } from "@/lib/with-tenant";
+import { createAuditEntry } from "@/lib/services/audit";
+import { scopedAttestationExpiry } from "@/lib/scoped-attestation";
+import { formatExpiryDate } from "@/lib/format-date";
+
+/**
+ * POST /api/v1/t/[slug]/members/[id]/force-renew
+ *
+ * Admin bypass of the member attestation: renews the membership for the
+ * chosen season and does what the member's "yes" on the confirmation page
+ * would do for each of their fobs. The new expiry is STAGED
+ * (`pendingExpiresAt` + `programmingRequired`), never written to the live
+ * `expiresAt`, because the access control system has not been updated yet:
+ * the fob lands on the admin "Credential updates" list and the programmer's
+ * confirm-programming promotes the expiry (and reactivates an expired fob).
+ *
+ * Covers `active` and `expired` fobs, the same set the attestation page
+ * lists. A fob already at the target expiry with nothing pending is left
+ * alone (it was programmed already); a fob already flagged keeps its reason
+ * and only has its staged date moved when it differs. Re-running for the
+ * same season is therefore a no-op on credentials.
+ *
+ * Every pending attestation for the member is completed, with the staged
+ * fobs recorded as confirmed by the admin.
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string; id: string }> }
+) {
+  const auth = await getAuthUser();
+  if (!auth) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
+  const { slug, id: userId } = await params;
+  const tenant = await resolveTenant(slug);
+  if (!tenant) {
+    return NextResponse.json({ error: "Organisation not found" }, { status: 404 });
+  }
+
+  const permResult = checkPermission(auth, tenant.id, Permission.RENEW);
+  if (!permResult.granted) {
+    return NextResponse.json({ error: permResult.reason }, { status: 403 });
+  }
+
+  const body = await request.json();
+  const parsed = forceRenewSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Validation failed", details: parsed.error.flatten() },
+      { status: 400 }
+    );
+  }
+
+  const { season, reason } = parsed.data;
+
+  const result = await withTenant(tenant.id, async (tx) => {
+    const [membership] = await tx
+      .select()
+      .from(tenantMemberships)
+      .where(
+        and(
+          eq(tenantMemberships.userId, userId),
+          eq(tenantMemberships.tenantId, tenant.id)
+        )
+      )
+      .limit(1);
+
+    if (!membership) {
+      throw new Error("Member not found in this organisation");
+    }
+
+    const now = new Date();
+
+    const [updated] = await tx
+      .update(tenantMemberships)
+      .set({
+        currentSeason: season,
+        status: "active",
+        updatedAt: now,
+      })
+      .where(eq(tenantMemberships.id, membership.id))
+      .returning();
+
+    await createAuditEntry(tx, {
+      tenantId: tenant.id,
+      entityType: AuditEntityType.MEMBER,
+      entityId: userId,
+      action: AuditAction.UPDATE,
+      actorId: auth.user.id,
+      metadata: { action: "force_renew", season, reason, previousSeason: membership.currentSeason },
+    });
+
+    const staged: string[] = [];
+    const skipped: string[] = [];
+    let newExpiresAt: Date | null = null;
+
+    // Stage the expiry update for the member's fobs. Staff and board members
+    // keep their own expiry rules, as before.
+    if (!membership.isStaff && !membership.isBoardMember) {
+      // Season end, falling forward to the current membership year if the
+      // chosen season has already rolled over (same rule as a scoped
+      // confirmation), so the programmer's confirm always reactivates.
+      newExpiresAt = scopedAttestationExpiry(season, tenant.timezone, now);
+      const expiryLabel = formatExpiryDate(newExpiresAt, tenant.timezone);
+
+      const rows = await tx
+        .select({
+          id: credentials.id,
+          status: credentials.status,
+          expiresAt: credentials.expiresAt,
+          pendingExpiresAt: credentials.pendingExpiresAt,
+          programmingRequired: credentials.programmingRequired,
+          serialNumber: credentials.serialNumber,
+          deactivationReason: credentials.deactivationReason,
+          typeName: credentialTypes.name,
+        })
+        .from(credentials)
+        .leftJoin(credentialTypes, eq(credentials.credentialTypeId, credentialTypes.id))
+        .where(
+          and(
+            eq(credentials.ownerId, userId),
+            eq(credentials.tenantId, tenant.id),
+            inArray(credentials.status, [CredentialStatus.ACTIVE, CredentialStatus.EXPIRED])
+          )
+        );
+
+      for (const cred of rows) {
+        const targetMs = newExpiresAt.getTime();
+
+        if (cred.programmingRequired) {
+          // Already with the programmer. Keep the reason they are reading;
+          // only move the staged date if this renewal changes it.
+          if (cred.pendingExpiresAt && cred.pendingExpiresAt.getTime() === targetMs) {
+            skipped.push(cred.id);
+            continue;
+          }
+          await tx
+            .update(credentials)
+            .set({ pendingExpiresAt: newExpiresAt, updatedAt: now })
+            .where(and(eq(credentials.id, cred.id), eq(credentials.tenantId, tenant.id)));
+          await createAuditEntry(tx, {
+            tenantId: tenant.id,
+            entityType: AuditEntityType.CREDENTIAL,
+            entityId: cred.id,
+            action: AuditAction.UPDATE,
+            actorId: auth.user.id,
+            metadata: {
+              action: "force_renew_expiry_update",
+              season,
+              reason,
+              alreadyFlagged: true,
+              previousPendingExpiresAt: cred.pendingExpiresAt?.toISOString() ?? null,
+              previousExpiresAt: cred.expiresAt?.toISOString() ?? null,
+              pendingExpiresAt: newExpiresAt.toISOString(),
+              programmingRequired: true,
+            },
+          });
+          staged.push(cred.id);
+          continue;
+        }
+
+        if (
+          cred.status === CredentialStatus.ACTIVE &&
+          cred.expiresAt &&
+          cred.expiresAt.getTime() === targetMs
+        ) {
+          // The access system already holds this expiry; nothing to program.
+          skipped.push(cred.id);
+          continue;
+        }
+
+        const label = `${cred.typeName ?? "credential"}${cred.serialNumber ? ` #${cred.serialNumber}` : ""}`;
+        const reEnable = cred.status === CredentialStatus.EXPIRED ? " and re-enable" : "";
+        // A fob re-added after a revocation still carries that reason: the
+        // programmer must see it (a lost or stolen fob is not quietly
+        // re-enabled), and it is cleared the same way the member's own "yes"
+        // clears it.
+        const history = cred.deactivationReason
+          ? ` (previously deactivated: ${cred.deactivationReason})`
+          : "";
+        await tx
+          .update(credentials)
+          .set({
+            pendingExpiresAt: newExpiresAt,
+            programmingRequired: true,
+            programmingReason: `Force renewal (${season}) by admin: ${reason} - update expiry of this ${label}${history} to ${expiryLabel} in the access system${reEnable}`,
+            programmingRequestedAt: now,
+            ...(cred.deactivationReason ? { deactivatedBy: null, deactivationReason: null } : {}),
+            updatedAt: now,
+          })
+          .where(and(eq(credentials.id, cred.id), eq(credentials.tenantId, tenant.id)));
+
+        await createAuditEntry(tx, {
+          tenantId: tenant.id,
+          entityType: AuditEntityType.CREDENTIAL,
+          entityId: cred.id,
+          action: AuditAction.UPDATE,
+          actorId: auth.user.id,
+          metadata: {
+            action: "force_renew_expiry_update",
+            season,
+            reason,
+            previousExpiresAt: cred.expiresAt?.toISOString() ?? null,
+            pendingExpiresAt: newExpiresAt.toISOString(),
+            programmingRequired: true,
+          },
+        });
+        staged.push(cred.id);
+      }
+    }
+
+    // Every pending attestation for the member is now moot: the admin has
+    // answered for them. Record the staged fobs as confirmed on each.
+    const pendingAttestations = await tx
+      .select()
+      .from(attestationRequests)
+      .where(
+        and(
+          eq(attestationRequests.userId, userId),
+          eq(attestationRequests.tenantId, tenant.id),
+          eq(attestationRequests.status, "pending")
+        )
+      );
+
+    const exemptFromStaging = !!membership.isStaff || !!membership.isBoardMember;
+    for (const pendingAttestation of pendingAttestations) {
+      // A scoped fob confirmation on a staff or board member is left for the
+      // member: nothing was staged for it here, so closing it would drop the
+      // fob with no flag and no answer.
+      if (exemptFromStaging && pendingAttestation.credentialIds?.length) continue;
+      const scope = pendingAttestation.credentialIds?.length
+        ? staged.filter((id) => pendingAttestation.credentialIds!.includes(id))
+        : staged;
+      await tx
+        .update(attestationRequests)
+        .set({
+          status: "completed",
+          completedAt: now,
+          credentialResponses: scope.map((credentialId) => ({
+            credentialId,
+            confirmed: true,
+            note: `Force-renewed by admin: ${reason}`,
+          })),
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(attestationRequests.id, pendingAttestation.id),
+            // Guard against the member answering in the same instant.
+            eq(attestationRequests.status, "pending")
+          )
+        );
+
+      await createAuditEntry(tx, {
+        tenantId: tenant.id,
+        entityType: AuditEntityType.MEMBER,
+        entityId: userId,
+        action: AuditAction.UPDATE,
+        actorId: auth.user.id,
+        metadata: {
+          action: "attestation_force_completed",
+          attestationId: pendingAttestation.id,
+          season: pendingAttestation.season,
+          reason: `Force-renewed by admin: ${reason}`,
+        },
+      });
+    }
+
+    return { membership: updated, staged, skipped, newExpiresAt };
+  });
+
+  return NextResponse.json({
+    membership: result.membership,
+    forceRenewed: true,
+    staged: result.staged,
+    skipped: result.skipped,
+    pendingExpiresAt: result.newExpiresAt?.toISOString() ?? null,
+  });
+}

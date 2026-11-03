@@ -1,0 +1,48 @@
+/**
+ * Labels for attestation ("credential confirmation") events. These are stored
+ * as generic member `update` entries with the real event in `metadata.action`,
+ * so without a label they render as "Member details updated".
+ */
+export function describeAttestationAction(
+  meta: Record<string, unknown> | null | undefined
+): string | null {
+  if (!meta || typeof meta.action !== "string") return null;
+  const season = typeof meta.season === "string" && meta.season ? ` (${meta.season})` : "";
+
+  switch (meta.action) {
+    case "attestation_resent":
+      return `Credential confirmation resent${season}`;
+    case "attestation_auto_resent": {
+      const cycle = typeof meta.cycle === "number" ? ` #${meta.cycle - 1}` : "";
+      return `Credential confirmation reminder${cycle} sent automatically${season}`;
+    }
+    case "attestation_force_completed":
+      return `Credential confirmation force-completed${season}`;
+    case "attestation_cancelled":
+      return `Fob confirmation cancelled by admin${typeof meta.reason === "string" && meta.reason ? `: ${meta.reason}` : ""}`;
+    case "attestation_admin_confirmed":
+      return "Fob confirmation answered by admin on the member's behalf";
+    case "force_renew": {
+      const reason = typeof meta.reason === "string" && meta.reason ? `: ${meta.reason}` : "";
+      return `Membership force-renewed${season} by admin${reason}`;
+    }
+    case "force_renew_expiry_update": {
+      const pending = typeof meta.pendingExpiresAt === "string" ? meta.pendingExpiresAt : null;
+      const when = pending
+        ? new Date(pending).toLocaleDateString("en-AU", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+            timeZone: "Australia/Melbourne",
+          })
+        : "a new date";
+      if (pending) {
+        return `Force renewal${season} - expiry update staged for ${when}, awaiting programming`;
+      }
+      // Rows written before Nov 2026 rewrote the live expiry with no programming step.
+      return `Force renewal${season} - expiry rewritten directly (no programming update staged)`;
+    }
+    default:
+      return null;
+  }
+}

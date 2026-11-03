@@ -1,0 +1,167 @@
+import { NextRequest, NextResponse } from "next/server";
+import { eq, and } from "drizzle-orm";
+import {
+  Permission,
+  forceRenewSchema,
+  AuditEntityType,
+  AuditAction,
+  CredentialStatus,
+} from "@accessbuddy/shared";
+import { tenantMemberships, credentials, attestationRequests } from "@accessbuddy/db";
+import { getAuthUser } from "@/lib/auth";
+import { resolveTenant } from "@/lib/tenant";
+import { checkPermission } from "@/lib/permissions";
+import { withTenant } from "@/lib/with-tenant";
+import { createAuditEntry } from "@/lib/services/audit";
+import { midnightInTimezone } from "@/lib/timezone";
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string; id: string }> }
+) {
+  const auth = await getAuthUser();
+  if (!auth) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
+  const { slug, id: userId } = await params;
+  const tenant = await resolveTenant(slug);
+  if (!tenant) {
+    return NextResponse.json({ error: "Organisation not found" }, { status: 404 });
+  }
+
+  const permResult = checkPermission(auth, tenant.id, Permission.RENEW);
+  if (!permResult.granted) {
+    return NextResponse.json({ error: permResult.reason }, { status: 403 });
+  }
+
+  const body = await request.json();
+  const parsed = forceRenewSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Validation failed", details: parsed.error.flatten() },
+      { status: 400 }
+    );
+  }
+
+  const { season, reason } = parsed.data;
+
+  const updated = await withTenant(tenant.id, async (tx) => {
+    const [membership] = await tx
+      .select()
+      .from(tenantMemberships)
+      .where(
+        and(
+          eq(tenantMemberships.userId, userId),
+          eq(tenantMemberships.tenantId, tenant.id)
+        )
+      )
+      .limit(1);
+
+    if (!membership) {
+      throw new Error("Member not found in this organisation");
+    }
+
+    const [result] = await tx
+      .update(tenantMemberships)
+      .set({
+        currentSeason: season,
+        status: "active",
+        updatedAt: new Date(),
+      })
+      .where(eq(tenantMemberships.id, membership.id))
+      .returning();
+
+    await createAuditEntry(tx, {
+      tenantId: tenant.id,
+      entityType: AuditEntityType.MEMBER,
+      entityId: userId,
+      action: AuditAction.UPDATE,
+      actorId: auth.user.id,
+      metadata: { action: "force_renew", season, reason, previousSeason: membership.currentSeason },
+    });
+
+    // Update credential expiry dates (same logic as old renewal)
+    if (!membership.isStaff && !membership.isBoardMember) {
+      const seasonMatch = season.match(/^\d{4}\/(\d{4})$/);
+      if (seasonMatch) {
+        const endYear = parseInt(seasonMatch[1], 10);
+        const newExpiresAt = midnightInTimezone(endYear, 8, 1, tenant.timezone);
+
+        const activeCredentials = await tx
+          .select()
+          .from(credentials)
+          .where(
+            and(
+              eq(credentials.ownerId, userId),
+              eq(credentials.tenantId, tenant.id),
+              eq(credentials.status, CredentialStatus.ACTIVE)
+            )
+          );
+
+        for (const cred of activeCredentials) {
+          await tx
+            .update(credentials)
+            .set({ expiresAt: newExpiresAt, updatedAt: new Date() })
+            .where(eq(credentials.id, cred.id));
+
+          await createAuditEntry(tx, {
+            tenantId: tenant.id,
+            entityType: AuditEntityType.CREDENTIAL,
+            entityId: cred.id,
+            action: AuditAction.UPDATE,
+            actorId: auth.user.id,
+            metadata: {
+              action: "force_renew_expiry_update",
+              season,
+              reason,
+              previousExpiresAt: cred.expiresAt?.toISOString() ?? null,
+              newExpiresAt: newExpiresAt.toISOString(),
+            },
+          });
+        }
+      }
+    }
+
+    // Mark any pending attestation as completed
+    const [pendingAttestation] = await tx
+      .select()
+      .from(attestationRequests)
+      .where(
+        and(
+          eq(attestationRequests.userId, userId),
+          eq(attestationRequests.tenantId, tenant.id),
+          eq(attestationRequests.status, "pending")
+        )
+      )
+      .limit(1);
+
+    if (pendingAttestation) {
+      await tx
+        .update(attestationRequests)
+        .set({
+          status: "completed",
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(attestationRequests.id, pendingAttestation.id));
+
+      await createAuditEntry(tx, {
+        tenantId: tenant.id,
+        entityType: AuditEntityType.MEMBER,
+        entityId: userId,
+        action: AuditAction.UPDATE,
+        actorId: auth.user.id,
+        metadata: {
+          action: "attestation_force_completed",
+          attestationId: pendingAttestation.id,
+          reason: `Force-renewed by admin: ${reason}`,
+        },
+      });
+    }
+
+    return result;
+  });
+
+  return NextResponse.json({ membership: updated, forceRenewed: true });
+}
