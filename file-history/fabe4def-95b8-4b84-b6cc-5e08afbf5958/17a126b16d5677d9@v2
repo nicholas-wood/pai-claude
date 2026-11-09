@@ -1,0 +1,100 @@
+import { describe, it, expect } from "vitest";
+import { getValidEvents, RequestStatus } from "@accessbuddy/shared";
+
+describe("Workflow Action Validation", () => {
+  describe("valid actions per state", () => {
+    it("submitted: can require payment, exempt payment, hold, or cancel", () => {
+      const events = getValidEvents(RequestStatus.SUBMITTED);
+      expect(events).toEqual(
+        expect.arrayContaining(["PAYMENT_REQUIRED", "PAYMENT_EXEMPT", "HOLD", "CANCEL"])
+      );
+      expect(events).not.toContain("APPROVE");
+      expect(events).not.toContain("ISSUE");
+    });
+
+    it("awaiting_payment: can receive payment, hold, or cancel", () => {
+      const events = getValidEvents(RequestStatus.AWAITING_PAYMENT);
+      expect(events).toContain("PAYMENT_RECEIVED");
+      expect(events).toContain("HOLD");
+      expect(events).toContain("CANCEL");
+      expect(events).not.toContain("APPROVE");
+    });
+
+    it("awaiting_approval: can approve, reject, hold, or cancel", () => {
+      const events = getValidEvents(RequestStatus.AWAITING_APPROVAL);
+      expect(events).toContain("APPROVE");
+      expect(events).toContain("REJECT");
+      expect(events).toContain("HOLD");
+      expect(events).toContain("CANCEL");
+    });
+
+    it("awaiting_programming: can program, hold, or cancel", () => {
+      const events = getValidEvents(RequestStatus.AWAITING_PROGRAMMING);
+      expect(events).toContain("PROGRAM");
+      expect(events).toContain("HOLD");
+      expect(events).toContain("CANCEL");
+      expect(events).not.toContain("APPROVE");
+    });
+
+    it("programmed: can set pickup, hold, or cancel", () => {
+      const events = getValidEvents(RequestStatus.PROGRAMMED);
+      expect(events).toContain("SET_PICKUP");
+      expect(events).toContain("HOLD");
+      expect(events).toContain("CANCEL");
+    });
+
+    it("awaiting_pickup: can issue, hold, or cancel", () => {
+      const events = getValidEvents(RequestStatus.AWAITING_PICKUP);
+      expect(events).toContain("ISSUE");
+      expect(events).toContain("HOLD");
+      expect(events).toContain("CANCEL");
+    });
+
+    it("on_hold: can resume or cancel", () => {
+      const events = getValidEvents(RequestStatus.ON_HOLD);
+      expect(events).toContain("RESUME");
+      expect(events).toContain("CANCEL");
+      expect(events).not.toContain("APPROVE");
+      expect(events).not.toContain("ISSUE");
+    });
+
+    it("issued: only a post-issue payment demand or a revert of a member report is available", () => {
+      expect(getValidEvents(RequestStatus.ISSUED)).toEqual(["PAYMENT_REQUIRED", "REVERT_ISSUE"]);
+    });
+
+    it("rejected: can reopen", () => {
+      expect(getValidEvents(RequestStatus.REJECTED)).toContain("REOPEN");
+      expect(getValidEvents(RequestStatus.REJECTED)).not.toContain("APPROVE");
+    });
+
+    it("cancelled: can reopen", () => {
+      expect(getValidEvents(RequestStatus.CANCELLED)).toContain("REOPEN");
+      expect(getValidEvents(RequestStatus.CANCELLED)).not.toContain("APPROVE");
+    });
+  });
+
+  describe("permission mapping for actions", () => {
+    // Documents which permission each action requires
+    const actionPermissionMap: Record<string, string> = {
+      APPROVE: "approve",
+      REJECT: "approve",
+      HOLD: "approve",
+      RESUME: "approve",
+      PROGRAM: "program",
+      SET_PICKUP: "issue",
+      ISSUE: "issue",
+      CANCEL: "cancel",
+      REOPEN: "reopen",
+    };
+
+    it("every workflow action maps to a permission", () => {
+      const allActions = [
+        "APPROVE", "REJECT", "HOLD", "RESUME",
+        "PROGRAM", "SET_PICKUP", "ISSUE", "CANCEL", "REOPEN",
+      ];
+      for (const action of allActions) {
+        expect(actionPermissionMap[action]).toBeDefined();
+      }
+    });
+  });
+});

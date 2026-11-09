@@ -1,0 +1,24 @@
+---
+name: project-accessbuddy-pr125-force-renew-staging
+description: "AccessBuddy PR #125 (3 Nov 2026): Force Renew used to rewrite expiresAt on active fobs and skip expired ones, never flagging the programmer; now stages like the attestation yes-path. Christine Cardwell was the trigger; her fob is expired so re-running Force Renew after release stages it."
+metadata:
+  node_type: memory
+  type: project
+  originSessionId: 2e24043d-57c6-4e57-bc9b-ac59de31bfef
+  modified: 2026-11-03T05:27:04.990Z
+---
+
+Force Renew (`members/[id]/force-renew/route.ts`) dated from 31 Mar 2026 and was never migrated to the 8 Apr staged-expiry model: it wrote `expiresAt` straight onto ACTIVE fobs and ignored EXPIRED ones, so nothing ever set `programmingRequired`, the only filter on `/admin` credential updates. Trigger: Nick, 3 Nov 2026, "Force renew was done today for Christine Cardwell, but her fob was not sent for expiry update". Prod logs: one force-renew POST 00:28Z, the only one in 30 days. The 4 Sep Dinah Boswell review had already recorded the defect (state.md item 8) and three members force-renewed 2-3 Sep; it sat unactioned.
+
+Fix on branch `fix/force-renew-stages-expiry-update` (895a8ae), PR https://github.com/nicholas-wood/accessbuddy/pull/125 (merged 3 Nov on Nick's instruction, release PR #126 → v1.23.3 live 05:49Z, health 200), ISC-181..203 in the project ISA: stages `pendingExpiresAt` + `programmingRequired` for active and expired fobs via `scopedAttestationExpiry`, skips a fob already at the target or already staged for it, keeps the reason on an already-flagged fob, completes every pending attestation (guarded on `pending`), returns `staged`/`skipped`, labels in both audit renderers, form copy fixed. DB-gated `force-renew.test.ts` (9 cases).
+
+**Why:** the programmer only sees the staged flag; a direct expiry write leaves AccessBuddy claiming a date the door system never got.
+
+**How to apply:**
+- v1.23.3 is live. Re-run Force Renew on the member (her fob is `expired`, so the old code did nothing to it) and probe `/admin` with Interceptor (ISC-202).
+- Pre-release workaround that needs no deploy: Add Credential → her expired fob under "This member's previous fobs" → expiry-update stage → "Member confirmed in person" stages it immediately.
+- Old-route rows: `force_renew_expiry_update` audit rows with `newExpiresAt` and no `pendingExpiresAt` mark active fobs that were rewritten but never programmed; the new skip rule leaves them alone. Probe SQL at `projects/accessbuddy/artifacts/sql/2026-11-03-force-renew-probe.sql` (Q2) for Nick's DB window.
+- Embedded test Postgres: `/tmp/ab-pg-scratch` was wiped by tmp cleanup while its server kept running on an empty data dir (tests "pass" with every DB suite skipped). Rebuilt at `~/.claude/jobs/2e24043d/tmp/ab-pg/run.ts` (`bun add embedded-postgres@17.5.0-beta.15`, then `bun pm trust --all` or initdb exits 127). Always check "0 skipped" and that `ss -ltn | grep 54329` is backed by a live data dir. See [[project-accessbuddy-pr111-expiry-update-stage]].
+- Refactor still owed: attestation yes-path, confirm-on-behalf, manual stage and force-renew each inline the same staging block; a shared `stageExpiryUpdate(tx, …)` helper would have prevented this class of drift (RCA root cause).
+- Follow-ups 3 Nov: PR #127 (chore) renames the member-page card Attestations → Confirmations; PR #128 (fix) reloads the page after Force Renew / re-send / confirmation actions because a soft refresh left the cards stale for Nick (RSC fetch did fire; cause unproven, Interceptor unreachable from bg). Other components on the page still soft-refresh.
+- 8 Nov: #127 and #128 merged (128 rebased onto 127 cleanly), release PR #129 → v1.23.4 live after three reruns of the Release Please deploy; the first two attempts died in setup-bun with GitHub 504s downloading Bun 1.4.4 (infrastructure, not code). Gotcha: `gh pr merge` succeeded on #128 despite a failed Build check, so branch protection does not require Build; `gh run rerun <id> --failed` is the recovery.

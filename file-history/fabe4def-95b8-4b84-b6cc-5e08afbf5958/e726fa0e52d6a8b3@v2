@@ -1,0 +1,256 @@
+import { setup, createActor } from "xstate";
+import { CredentialStatus, RequestStatus, RequestType } from "./enums";
+
+// Events that drive the request workflow
+type RequestEvent =
+  | { type: "PAYMENT_REQUIRED" }
+  | { type: "WITHDRAW_PAYMENT_REQUEST"; withdrawnBy: string; reason?: string }
+  | { type: "PAYMENT_EXEMPT" }
+  | { type: "PAYMENT_RECEIVED" }
+  | { type: "REQUEST_EXEMPTION"; reason: string }
+  | { type: "APPROVE_EXEMPTION"; approvedBy: string }
+  | { type: "REJECT_EXEMPTION"; rejectedBy: string; reason: string }
+  | { type: "APPROVE"; approvedBy: string; accessLevelId?: string }
+  | { type: "REJECT"; rejectedBy: string; reason: string }
+  | { type: "HOLD"; heldBy: string; reason: string }
+  | { type: "RESUME"; resumedBy: string }
+  | { type: "PROGRAM"; programmedBy: string; serialNumber: string }
+  | { type: "SET_PICKUP"; pickupLocationId: string }
+  | { type: "ISSUE"; issuedBy: string }
+  | { type: "REVERT_ISSUE"; revertedBy: string; reason: string }
+  | { type: "CANCEL"; cancelledBy: string; reason: string }
+  | { type: "REOPEN"; reopenedBy: string; reason: string };
+
+// States that support HOLD (all non-final, non-hold states)
+const HOLDABLE_STATES = [
+  RequestStatus.SUBMITTED,
+  RequestStatus.AWAITING_PAYMENT,
+  RequestStatus.AWAITING_EXEMPTION_REVIEW,
+  RequestStatus.AWAITING_APPROVAL,
+  RequestStatus.AWAITING_PROGRAMMING,
+  RequestStatus.PROGRAMMED,
+  RequestStatus.AWAITING_PICKUP,
+] as const;
+
+// Build HOLD transition for a given state
+function holdTransition(fromState: RequestStatus) {
+  return {
+    target: RequestStatus.ON_HOLD,
+    actions: ({ context }: { context: { previousState: string | null } }) => {
+      context.previousState = fromState;
+    },
+  };
+}
+
+// Build RESUME transitions for ON_HOLD - one per possible previous state
+function buildResumeTransitions() {
+  return HOLDABLE_STATES.map((state) => ({
+    target: state,
+    guard: ({ context }: { context: { previousState: string | null } }) =>
+      context.previousState === state,
+  }));
+}
+
+export const requestMachine = setup({
+  types: {
+    context: {} as {
+      requestId: string;
+      previousState: string | null;
+    },
+    events: {} as RequestEvent,
+  },
+}).createMachine({
+  id: "fobRequest",
+  initial: RequestStatus.SUBMITTED,
+  context: {
+    requestId: "",
+    previousState: null,
+  },
+  states: {
+    [RequestStatus.SUBMITTED]: {
+      on: {
+        PAYMENT_REQUIRED: { target: RequestStatus.AWAITING_PAYMENT },
+        PAYMENT_EXEMPT: { target: RequestStatus.AWAITING_APPROVAL },
+        PAYMENT_RECEIVED: { target: RequestStatus.AWAITING_APPROVAL },
+        REQUEST_EXEMPTION: { target: RequestStatus.AWAITING_EXEMPTION_REVIEW },
+        HOLD: holdTransition(RequestStatus.SUBMITTED),
+        CANCEL: { target: RequestStatus.CANCELLED },
+      },
+    },
+    [RequestStatus.AWAITING_PAYMENT]: {
+      on: {
+        // When the demand was raised on an already-issued request (see
+        // ISSUED.PAYMENT_REQUIRED below), the service layer overrides these
+        // targets back to ISSUED using fob_requests.payment_return_status.
+        PAYMENT_RECEIVED: { target: RequestStatus.AWAITING_APPROVAL },
+        // Admin override: skip the payment requirement directly. Reason is
+        // recorded in exemption_reason and captured in the audit trail.
+        PAYMENT_EXEMPT: { target: RequestStatus.AWAITING_APPROVAL },
+        // Admin withdraws a post-issue payment demand. Only meaningful when
+        // payment_return_status is set; the service layer rejects it otherwise.
+        WITHDRAW_PAYMENT_REQUEST: { target: RequestStatus.ISSUED },
+        REQUEST_EXEMPTION: { target: RequestStatus.AWAITING_EXEMPTION_REVIEW },
+        HOLD: holdTransition(RequestStatus.AWAITING_PAYMENT),
+        CANCEL: { target: RequestStatus.CANCELLED },
+      },
+    },
+    [RequestStatus.AWAITING_EXEMPTION_REVIEW]: {
+      on: {
+        APPROVE_EXEMPTION: { target: RequestStatus.AWAITING_APPROVAL },
+        REJECT_EXEMPTION: { target: RequestStatus.AWAITING_PAYMENT },
+        HOLD: holdTransition(RequestStatus.AWAITING_EXEMPTION_REVIEW),
+        CANCEL: { target: RequestStatus.CANCELLED },
+      },
+    },
+    [RequestStatus.AWAITING_APPROVAL]: {
+      on: {
+        APPROVE: { target: RequestStatus.AWAITING_PROGRAMMING },
+        REJECT: { target: RequestStatus.REJECTED },
+        // Admin override: send an unpaid request back for payment (for
+        // example an exemption granted in error, or a request that was
+        // created as free and should have been charged). Creates the Stripe
+        // intent and emails the member a payment link.
+        PAYMENT_REQUIRED: { target: RequestStatus.AWAITING_PAYMENT },
+        HOLD: holdTransition(RequestStatus.AWAITING_APPROVAL),
+        CANCEL: { target: RequestStatus.CANCELLED },
+      },
+    },
+    [RequestStatus.AWAITING_PROGRAMMING]: {
+      on: {
+        PROGRAM: { target: RequestStatus.PROGRAMMED },
+        HOLD: holdTransition(RequestStatus.AWAITING_PROGRAMMING),
+        CANCEL: { target: RequestStatus.CANCELLED },
+      },
+    },
+    [RequestStatus.PROGRAMMED]: {
+      on: {
+        SET_PICKUP: { target: RequestStatus.AWAITING_PICKUP },
+        HOLD: holdTransition(RequestStatus.PROGRAMMED),
+        CANCEL: { target: RequestStatus.CANCELLED },
+      },
+    },
+    [RequestStatus.AWAITING_PICKUP]: {
+      on: {
+        ISSUE: { target: RequestStatus.ISSUED },
+        HOLD: holdTransition(RequestStatus.AWAITING_PICKUP),
+        CANCEL: { target: RequestStatus.CANCELLED },
+      },
+    },
+    [RequestStatus.ON_HOLD]: {
+      on: {
+        RESUME: buildResumeTransitions(),
+        CANCEL: { target: RequestStatus.CANCELLED },
+      },
+    },
+    [RequestStatus.ISSUED]: {
+      on: {
+        // Demand payment on a credential that was issued free (category
+        // exemption, or an exemption granted in error). The request returns
+        // to ISSUED once paid, exempted again, or the demand is withdrawn.
+        PAYMENT_REQUIRED: { target: RequestStatus.AWAITING_PAYMENT },
+        // Undo a member-confirmed receipt ("I already have my fob") that
+        // turned out to be wrong. The service only allows it when the ISSUE
+        // was recorded by the member, never for an issuer's own hand-over.
+        REVERT_ISSUE: { target: RequestStatus.AWAITING_PICKUP },
+      },
+    },
+    [RequestStatus.REJECTED]: {
+      on: {
+        REOPEN: { target: RequestStatus.AWAITING_APPROVAL },
+      },
+    },
+    [RequestStatus.CANCELLED]: {
+      on: {
+        REOPEN: { target: RequestStatus.AWAITING_APPROVAL },
+      },
+    },
+  },
+});
+
+/**
+ * Get all valid events from the current state
+ */
+export function getValidEvents(currentStatus: string): string[] {
+  const stateConfig =
+    requestMachine.config.states?.[currentStatus as RequestStatus];
+  if (!stateConfig || !("on" in stateConfig)) return [];
+  return Object.keys(stateConfig.on ?? {});
+}
+
+/**
+ * Request types that require payment (unless exempted by club config)
+ */
+export const PAYMENT_REQUIRED_REQUEST_TYPES: readonly RequestType[] = [
+  RequestType.NEW,
+  RequestType.REPLACEMENT_LOST,
+  RequestType.REPLACEMENT_DAMAGED,
+  RequestType.ADDITIONAL,
+];
+
+/**
+ * Request types that are auto-approved
+ */
+export const AUTO_APPROVED_REQUEST_TYPES: readonly RequestType[] = [
+  RequestType.RETURN,
+];
+
+/**
+ * Request types that never produce (or modify) a credential record.
+ * - access_update: only the member's access level changes (on the membership,
+ *   never the credential). Credential expiry is driven solely by the membership
+ *   season and must not be touched by this flow.
+ * - replacement_lost / replacement_damaged: deactivation requests for an
+ *   existing fob; the paired replacement is a separate "new" request.
+ * - return: retires the member's existing fob (one request per fob, each
+ *   carrying replacesCredentialId). It must never allocate a credential, even
+ *   if a programmer types a serial or the request carries a type.
+ */
+const NON_CREDENTIAL_REQUEST_TYPES: readonly RequestType[] = [
+  RequestType.ACCESS_UPDATE,
+  RequestType.REPLACEMENT_LOST,
+  RequestType.REPLACEMENT_DAMAGED,
+  RequestType.RETURN,
+];
+
+/**
+ * Request types whose ISSUE step is a physical handback of the member's old
+ * fob, so the issuer must confirm collection before the request can close.
+ * - return: the fob is surrendered (credential deactivated -> returned).
+ * - change_type: the old fob is exchanged for the new one (active -> returned,
+ *   then flagged for removal from the access system).
+ */
+const COLLECTION_REQUEST_TYPES: readonly RequestType[] = [
+  RequestType.RETURN,
+  RequestType.CHANGE_TYPE,
+];
+
+export function requestRequiresCollection(requestType: string): boolean {
+  return COLLECTION_REQUEST_TYPES.includes(requestType as RequestType);
+}
+
+/**
+ * Whether a request type produces a credential, and therefore carries a
+ * credential expiry through the request pipeline. False for access_update:
+ * an access change can never set or alter a credential's expiry date.
+ */
+export function requestProducesCredential(requestType: string): boolean {
+  return !NON_CREDENTIAL_REQUEST_TYPES.includes(requestType as RequestType);
+}
+
+/**
+ * Request types that retire an existing fob rather than allocate one: the
+ * programmer only confirms the fob is off the access system, so no serial is
+ * entered. Lost/damaged are deactivate-and-done; a return then awaits collection.
+ */
+export function requestIsDeactivation(requestType: string): boolean {
+  return (
+    requestType === RequestType.REPLACEMENT_LOST ||
+    requestType === RequestType.REPLACEMENT_DAMAGED ||
+    requestType === RequestType.RETURN
+  );
+}
+
+/** A credential that may still be live in the access system. */
+export function isLiveCredentialStatus(status: string): boolean {
+  return status === CredentialStatus.ACTIVE || status === CredentialStatus.EXPIRED;
+}

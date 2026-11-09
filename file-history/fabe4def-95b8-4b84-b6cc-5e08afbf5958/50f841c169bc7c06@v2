@@ -1,0 +1,74 @@
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { Permission } from "@accessbuddy/shared";
+import { getAuthUser } from "@/lib/auth";
+import { resolveTenant } from "@/lib/tenant";
+import { checkPermission } from "@/lib/permissions";
+import { withTenant } from "@/lib/with-tenant";
+import { revertMemberConfirmedIssue, RevertIssueError } from "@/lib/services/confirm-receipt";
+
+const bodySchema = z.object({
+  reason: z.string().trim().min(1, "Reason is required").max(500),
+});
+
+/**
+ * Admin undo for a member-confirmed receipt that turned out to be wrong.
+ * Puts the request back to awaiting_pickup, clears the issue stamps, and
+ * tells the member. Only valid when the ISSUE was recorded by the member via
+ * the "I already have my fob" link; an issuer's own hand-over cannot be
+ * reverted this way.
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string; id: string }> }
+) {
+  try {
+    const auth = await getAuthUser();
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    const { slug, id: requestId } = await params;
+    const tenant = await resolveTenant(slug);
+    if (!tenant) {
+      return NextResponse.json({ error: "Organisation not found" }, { status: 404 });
+    }
+
+    // Same audience as issuing: whoever can hand a fob over can correct a
+    // wrongly recorded hand-over.
+    const permResult = checkPermission(auth, tenant.id, Permission.ISSUE);
+    if (!permResult.granted) {
+      return NextResponse.json({ error: permResult.reason }, { status: 403 });
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const parsed = bodySchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.errors[0]?.message ?? "Invalid input" },
+        { status: 400 }
+      );
+    }
+
+    const updated = await withTenant(tenant.id, (tx) =>
+      revertMemberConfirmedIssue(tx, {
+        tenantId: tenant.id,
+        requestId,
+        actorId: auth.user.id,
+        reason: parsed.data.reason,
+      })
+    );
+
+    return NextResponse.json({ request: updated });
+  } catch (err: unknown) {
+    if (err instanceof RevertIssueError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    const message = err instanceof Error ? err.message : "Internal server error";
+    if (message.includes("Cannot") || message.includes("not found")) {
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+    console.error("Revert issue error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}

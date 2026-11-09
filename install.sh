@@ -180,8 +180,29 @@ if [ -x "$HOME/.bun/bin/bun" ]; then
   # .bash_profile for bash login. We cover all four to be robust.
   BUN_EXPORT='export PATH="$HOME/.bun/bin:$PATH"'
   for rc in "$HOME/.zshenv" "$HOME/.zprofile" "$HOME/.zshrc" "$HOME/.bash_profile"; do
-    # Create the file if it doesn't exist (touch is harmless).
-    [ -f "$rc" ] || touch "$rc"
+    # Create the file if it doesn't exist.
+    #
+    # CAUTION for ~/.bash_profile: bash login shells read ONLY the first of
+    # ~/.bash_profile, ~/.bash_login, ~/.profile. Creating ~/.bash_profile from
+    # scratch therefore silently disables ~/.profile (and the ~/.bashrc it
+    # sources on Debian/Ubuntu), which drops ~/.local/bin from PATH and breaks
+    # `claude` in login shells. A freshly created ~/.bash_profile must chain to
+    # ~/.profile before anything else. zsh has no such rule (.zshenv, .zprofile
+    # and .zshrc are all read), so plain touch is fine there.
+    if [ ! -f "$rc" ]; then
+      if [ "$rc" = "$HOME/.bash_profile" ]; then
+        cat > "$rc" <<'EOF'
+# Bash login shells read this file INSTEAD of ~/.profile. Chain to ~/.profile so
+# ~/.bashrc and ~/.local/bin (where `claude` lives) load in login shells too.
+if [ -f "$HOME/.profile" ]; then
+    . "$HOME/.profile"
+fi
+EOF
+        success "Created .bash_profile (chained to ~/.profile)"
+      else
+        touch "$rc"
+      fi
+    fi
     if ! grep -q '\.bun/bin' "$rc" 2>/dev/null; then
       echo "" >> "$rc"
       echo "# Added by PAI installer — make bun reachable for hook subprocesses" >> "$rc"
