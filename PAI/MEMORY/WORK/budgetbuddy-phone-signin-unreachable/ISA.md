@@ -2,11 +2,11 @@
 task: Diagnose why BudgetBuddy sign-in is unreachable from Nick's phone but fine from the laptop
 slug: budgetbuddy-phone-signin-unreachable
 effort: E3
-phase: verify
-progress: 18/32
+phase: complete
+progress: 18/32 (closed by principal)
 mode: standard
 started: 2026-11-09T20:20:00+11:00
-updated: 2026-11-09T20:26:00+11:00
+updated: 2026-11-16T00:00:00+11:00
 ---
 
 ## Problem
@@ -115,3 +115,5 @@ Identify, with box-side evidence, the layer at which the iPhone's request to Bud
 - ISC-16: Bash — tailscaled 48h journal: only disco/netcheck lines, no serve/cert/ACL errors
 - ISC-17: Bash — penny 7d journal: no entries
 - ISC-18: Bash — `ss`: 127.0.0.1:8787 (bun), 100.76.43.94%tailscale0:443 (tailscaled)
+
+- 2026-11-16 Closed by Nick: "Resolved, mark complete." Diagnosis (phone-side name resolution / request origination, tunnel proven healthy) stood; Nick resolved it on the phone before the final reply shipped. ISC-19..32 not individually marked — overtaken by principal confirmation; no server-side change was made (ISC-28/29 hold by inspection).

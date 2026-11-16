@@ -1,0 +1,61 @@
+// Minimal xlsx dumper: reads unzipped workbook XML, prints each sheet as TSV-ish rows.
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+
+const root = process.argv[2];
+const maxRows = Number(process.argv[3] ?? 400);
+const decode = (s: string) =>
+  s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+
+const ssXml = readFileSync(join(root, "xl/sharedStrings.xml"), "utf8");
+const shared: string[] = [];
+for (const m of ssXml.matchAll(/<si>([\s\S]*?)<\/si>/g)) {
+  const parts = [...m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((t) => decode(t[1]));
+  shared.push(parts.join(""));
+}
+
+const wb = readFileSync(join(root, "xl/workbook.xml"), "utf8");
+const rels = readFileSync(join(root, "xl/_rels/workbook.xml.rels"), "utf8");
+const relMap = new Map<string, string>();
+for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) {
+  const id = /Id="([^"]+)"/.exec(m[0])?.[1];
+  const target = /Target="([^"]+)"/.exec(m[0])?.[1];
+  if (id && target) relMap.set(id, target);
+}
+
+const colIdx = (ref: string) => {
+  const letters = ref.replace(/\d+/g, "");
+  let n = 0;
+  for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64);
+  return n - 1;
+};
+
+for (const m of wb.matchAll(/<sheet\b[^>]*>/g)) {
+  const name = decode(/name="([^"]+)"/.exec(m[0])?.[1] ?? "?");
+  const rid = /r:id="([^"]+)"/.exec(m[0])?.[1] ?? "";
+  const target = relMap.get(rid);
+  if (!target) continue;
+  const xml = readFileSync(join(root, "xl", target), "utf8");
+  const rows = [...xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)];
+  console.log(`\n######## SHEET: ${name} (${rows.length} rows with data)`);
+  let printed = 0;
+  for (const r of rows) {
+    const cells: string[] = [];
+    for (const c of r[1].matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+      const attrs = c[1];
+      const ref = /r="([A-Z]+\d+)"/.exec(attrs)?.[1] ?? "A1";
+      const t = /t="([^"]+)"/.exec(attrs)?.[1];
+      const body = c[2] ?? "";
+      let v = /<v>([\s\S]*?)<\/v>/.exec(body)?.[1] ?? "";
+      if (t === "s") v = shared[Number(v)] ?? "";
+      else if (t === "inlineStr") v = decode(/<t[^>]*>([\s\S]*?)<\/t>/.exec(body)?.[1] ?? "");
+      else v = decode(v);
+      cells[colIdx(ref)] = v.replace(/\s+/g, " ").trim();
+    }
+    const line = Array.from(cells, (x) => x ?? "").join(" | ");
+    if (line.replace(/[| ]/g, "") === "") continue;
+    if (printed++ < maxRows) console.log(line);
+  }
+  if (printed > maxRows) console.log(`... (${printed - maxRows} more rows)`);
+}
+void readdirSync;

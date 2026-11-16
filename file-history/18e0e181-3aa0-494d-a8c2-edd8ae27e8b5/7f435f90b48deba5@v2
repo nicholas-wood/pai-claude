@@ -1,0 +1,222 @@
+# PAI to native Claude Code: repo migration report
+
+Date: 2026-10-10
+Scope: make every code repo self-sufficient for a fresh Claude Code session, with no dependency on PAI or the life-os workspace.
+Branch in every repo: `chore/native-claude-context`. Nothing pushed, nothing merged, nothing deleted.
+
+## Action needed first: exposed credential
+
+`~/dev/linear-tracking/scripts/regenerate_summary.py` line 26 hardcodes a live-looking Anthropic API key (`sk-ant-api03-...`). It has been in the `nicholas-wood/lsv` repository on GitHub since the initial commit, so treat it as compromised. Rotate it at console.anthropic.com, then replace the literal with an environment variable read. The file was not edited by this job, because secrets were out of bounds. The Mac's untracked `backend/gcp-credentials.json` in limsoc brief-poc is a second key worth checking and rotating if live.
+
+## Where the repos actually live
+
+`~/dev` did not exist on this machine or the Mac at the start. The repos were nested inside the life-os workspace (`~/Documents/workspace`) under gitignored `code/` folders, and two existed only on the Mac. `~/dev` now exists and is the single entry point:
+
+| ~/dev entry | Kind | Real location | Base for the branch |
+|---|---|---|---|
+| accessbuddy | symlink | `~/Documents/workspace/projects/accessbuddy/code` | origin/main (4a5e558, 2026-09-20). Branch lives in worktree `~/dev/_wt/accessbuddy` |
+| lifesaveroncall | symlink | `~/Documents/workspace/projects/lifesaveroncall/code` | local origin/dev (693cfc7, 2026-05-08). Branch lives in worktree `~/dev/_wt/lifesaveroncall` |
+| life-os-console | symlink | `~/Documents/workspace/projects/life-os-console/code` (no remote) | main (22643a6, 2026-06-26). Branch lives in worktree `~/dev/_wt/life-os-console` |
+| envelope-os | real directory, new repo | moved here from `~/Documents/workspace/projects/envelope-os` | new `main` (initial commit b4030ef) |
+| limsoc/brief-poc | fresh clone | github nicholas-wood/limsoc-poc | origin/ai-brief-poc (d7fa267, 2025-07-21), matches the Mac |
+| linear-tracking | fresh clone | github nicholas-wood/lsv | Mac's local main (01477ba, 2026-05-30), 3 commits not yet on GitHub, fetched read-only from the Mac |
+
+Worktrees were used for the three in-place checkouts so their checked-out branches and uncommitted files were not disturbed. Remove a worktree after merging with `git worktree remove ~/dev/_wt/<name>`.
+
+Left out by decision: `projects/helm` (local-only trading engine repo). Document-only workspace projects with no repo (inkwell, byd-shark-6, oc-ev-energy, virgin-australia, lsv-first-aid-form, lsv-notifications) were not touched.
+
+## envelope-os extraction
+
+- Directory moved with `mv` to `~/dev/envelope-os`; a symlink was left at the old workspace path so existing scripts keep resolving.
+- New repo initialised with `main` at a single initial commit holding the 304 tracked files plus a `.gitignore` (node_modules, .env*, keys, *.db, build output). Pre-extraction history remains in the life-os repo.
+- life-os workspace repo: commit 17efda3 on `main` removes the 304 files from tracking and adds `projects/envelope-os` to the embedded-repo section of `.gitignore`. Not pushed.
+- systemd user units `penny.service`, `penny-sync.service`, `penny-backup.service` had their WorkingDirectory repointed to `/home/nicholas-wood/dev/envelope-os`, followed by `daemon-reload` only. The running `penny.service` process was not restarted and reported active afterwards. Live data is unaffected (it lives in `~/.penny`).
+
+## Pre-existing uncommitted work (not touched)
+
+| Repo | Machine | State |
+|---|---|---|
+| lifesaveroncall | Linux and Mac | deleted brand logo PNGs, modified `apps/mobile/tsconfig.json`, deleted `apps/mobile/expo-env.d.ts`, untracked `flag-non-op.png` |
+| accessbuddy | Mac | modified `infra/terraform/main.tf` and `variables.tf` on `feat/landing-copy-marketing-refresh` |
+| limsoc brief-poc | Mac | modified `frontend/src/App.js`, `.claude/settings.local.json`; untracked `backend/gcp-credentials.json`, `backend/package-lock.json`, a gif |
+| linear-tracking | Mac | 11 modified files, mostly the markdown guides |
+
+These predate this job and were left exactly as found. The Mac credentials file was never copied anywhere.
+
+## Verification (run 2026-10-14 across all six repos)
+
+| Repo | Commit | CLAUDE.md lines | Session protocol verbatim | Subagents | New em dashes | Secret shapes in diff | Tree clean |
+|---|---|---|---|---|---|---|---|
+| accessbuddy | 62c3a1d | 110 | yes | 4 | 0 | 0 | yes |
+| lifesaveroncall | a2ef04d | 96 | yes | 4 | 0 | 0 | yes |
+| life-os-console | 7126389 | 83 | yes | 2 | 0 | 0 | yes |
+| envelope-os | 1b1051b + 69691ec | 70 | yes | none existed | 0 after follow-up | 0 | yes |
+| limsoc/brief-poc | 64442ec | 69 | yes | none existed | 0 | 0 | yes |
+| linear-tracking | cdb711d | 102 | yes | none existed | 0 | 0 | yes |
+
+Checks: branch name, commit present, CLAUDE.md under 150 lines, both protocol bullets present verbatim, every subagent file has name, description and tools frontmatter, no em dashes in added lines, no PAI process jargon in added lines outside two deliberate cases (criteria IDs kept inside copied ISA specs because their test strategies cross-reference them, and life-os-console's factual list of the PAI paths its code depends on), no API key, token or private-key shapes in any staged diff. `penny.service` and both timers active after the move. Carried-over ISA bodies keep their original punctuation; only text written by this job was held to the no-em-dash rule.
+
+## Observed but not touched
+
+- `~/.claude` shows modified runtime files (daemon lock and status, caches, Pulse aggregator state, PAI work memory). These are written by PAI hooks that run in every session. This job made no edits under `~/.claude`.
+- The workspace repo has two newer "daily auto-commit" commits above the extraction commit, one from this box and one from the Mac. Separately, as of 2026-10-14 20:41 to 20:44 `projects/accessbuddy/ISA.md` is modified and two untracked folders (`.worktrees/credential-type-edit`, `code-old-fob-retirement`) appeared. That is another live session's work, not this job's.
+
+## Merge checklist (your call, nothing pushed)
+
+```
+# review a branch
+git -C ~/dev/_wt/accessbuddy diff origin/main...HEAD --stat
+# merge locally when happy, then remove the worktree
+git -C ~/dev/accessbuddy merge chore/native-claude-context   # after checking out the target branch
+git -C ~/dev/accessbuddy worktree remove ~/dev/_wt/accessbuddy
+# envelope-os has no remote yet; create one and push main plus the branch when ready
+# linear-tracking's main carries 3 commits the Mac never pushed; push main before or with the branch
+```
+
+## Per-repo results
+
+### accessbuddy (`~/dev/accessbuddy`, worktree `~/dev/_wt/accessbuddy`)
+
+Branch `chore/native-claude-context`, commit 62c3a1d, based on origin/main at v1.18.2. Docs only, so the `chore:` prefix will not trigger a release-please release.
+
+What moved:
+- `CLAUDE.md` (110 lines): stack, run, test and deploy derived from package.json, turbo.json, the three workflows, the entrypoint script and compose; every hard rule from the workspace brief and the auto-memory incidents; how Nick works; subagent roster; repo map; session protocol.
+- `docs/context/facts.md`: stack, data model, a new "Tenant isolation reality" section, conventions, email system. Corrected against the repo: nine `NEXT_PUBLIC_*` build args not eight, workflow is `deploy.yml` not `deploy-prod.yml`, migration ledger ends at 0016, contact-form fallback.
+- `docs/context/state.md`: v1.18.2 current, PR #102 open, Terraform drift as a named blocker, an RLS role cutover checklist, 17-item backlog merged from workspace state, agent memories and the v1.18.x incidents.
+- `docs/context/feedback.md`: existing feedback plus Architect, Feature-dev, Infra-ops and QA-verify learnings as dated bullets. The architect memory was an empty template, so its heading carries the 2026-06-02 tooling decision and 2026-07-02 review instead.
+- `docs/context/references.md`: CI/CD corrected to the actual workload-identity secret names, infra posture, cost-optimisation action table, key docs.
+- `docs/context/prod-access.md` (new): the Mac-based production runbook from the auto-memories (gcloud, psql, gh and terraform paths, Cloud SQL IP window rules, merge recipe, read-only forensics, Terraform import gotchas). Marked machine-specific.
+- `docs/context/overview.md`, `docs/context/ISA.md` (spec intact with all ISC IDs; header rewritten; tier labels, delegation floor, Advisor and Cato and Forge, task-ISA paths removed).
+- `.claude/agents/architect.md`, `feature-dev.md`, `infra-ops.md`, `qa-verify.md` with name, description and tools frontmatter.
+
+Dropped as PAI-only or stale: the ten `feedback_*.md` topic files (all already summarised in feedback.md or facts.md; unique details folded in); `project_accessbuddy_next_session.md` (v1.4.1 era, superseded by state.md); `project_club_access_saas.md` (stale header, history lives in CHANGELOG.md); `project_accessbuddy_cost_optimisation.md` (duplicates docs/COST_OPTIMISATION.md); `reference_accessbuddy_cicd.md` (wrong workflow and secret names, corrected content folded into references.md); `reference_accessbuddy_cutover_plan.md` (pointer file); workspace delegation, agent-onboarder and AGENT_STANDARD text; "inherits base" framing, voice curls, model and colour frontmatter; empty agents/*/context scaffolding.
+
+Secrets: staged diff clean. The static egress IP is retained as permitted. The placeholder local Postgres password in `.env.example` was already there and untouched.
+
+Open questions:
+1. Does `email_configurations` still need a migration? It has been a backlog item since April, but migration 0010 on main appears to cover it. Left with a "confirm first" note.
+2. Cutover Phases F to H were never formally run while SMLSC has been live since April. Close as moot or run them?
+3. `.env.example` is stale (Clerk, Inngest, Redis), and `REDIS_URL` still appears in compose, CI and turbo.json although Memorystore was removed. Flagged, not changed.
+4. A `dev` branch exists on origin, but all recent work went feature branch to main. The docs describe the latter.
+5. PR #102 remains unmerged; facts.md references a diff helper that only exists on that branch.
+6. Version drift across sources (qa-verify memory v1.11.0, state v1.10.2, manifest 1.18.2). The manifest was used.
+7. The 2026-07-02 review and 2026-09-04 investigation reports live only in the workspace `artifacts/reviews/`; only their conclusions are in the repo.
+8. prod-access.md references `~/pai-tmp` on the Mac literally because that is where the scripts live. Rename if you want the PAI name gone entirely.
+
+### lifesaveroncall (`~/dev/lifesaveroncall`, worktree `~/dev/_wt/lifesaveroncall`)
+
+Branch `chore/native-claude-context`, commit a2ef04d, based on `dev` at 693cfc7. Thirteen files, no code changes. CLAUDE.md passes the repo's own `lint:au` and prettier checks (prettier inserted one blank line after the session protocol heading; bullet text unchanged).
+
+What moved:
+- `CLAUDE.md` (96 lines): stack and conventions re-derived from package.json, compose and CI; hard rules; subagent roster; links into the existing docs folder; session protocol.
+- `docs/context/overview.md`, `facts.md` (merged facts and project note, plus a summarised "Domain context from LSV operational feedback" section), `state.md` (branch situation, the unverified 12-PR landing, verified test baseline, backlog, blockers), `feedback.md` (working style, stack traps, four role learning sections dated 2026-06-18; the architect memory was an empty template), `gotchas.md` (containerised-stack traps kept separate so feedback.md stays scannable), `references.md`, `ISA.md` (spec intact; tier removed; criteria IDs renamed from ISC-n to C-n throughout; PAI wording rewritten; dated note on the unverified 2026-06-10 entries), `replacement-paging-spec.md`.
+- `.claude/agents/architect.md`, `feature-dev.md`, `infra-ops.md`, `security-redteam.md`.
+
+Dropped as PAI-only or stale: voice IDs and notify curls, model and colour frontmatter, base-agent methodology pointers, agent-onboarder and AGENT_STANDARD references; `project_lifesaveroncall.md` and `project_lifesaveroncall_next_session.md` (superseded by facts and state); the `lsoc-feedback/` emails (governance documents, not product input; the SOP 5.11 points that inform the product were summarised into facts.md, the CLT material dropped); the logo-generation script under ~/.claude referenced as external only.
+
+Secrets: staged diff clean. The only hits were the local dev Postgres URL already committed in `.env.example`, compose and CI.
+
+Open questions:
+1. The 2026-06-10 "12-PR landing" does not exist in any clone visible here. State and ISA recorded `dev` advancing to bc2a0a7 with 64 commits and 1213 passing tests via twelve feature branches, but neither that commit nor those branches exist locally or in known origin refs; `dev` is 693cfc7 from 2026-05-08. Either it lives in an unpushed clone or the record is wrong. Kept in state.md labelled unverified.
+2. Branch base. This lands on `dev`; `feat/replacement-paging` (8 commits, unmerged, unpushed) carries migration 0030 and the eligibility-override permission. If it merges first, the migrations line in facts.md needs updating.
+3. The uncommitted deletions in the main checkout (brand logos, expo-env.d.ts, mobile tsconfig, untracked images). Intentional?
+4. `docs/MAP_FIRST_DELTA.md` is referenced by other docs but does not exist on `dev`.
+5. README.md still says "No implementation yet". Flagged as stale, not edited.
+6. KICKOFF.md section 6 carries two AccessBuddy-inherited rules with no matching code here. Consider pruning.
+7. No Docker or Postgres on the Linux box as of June, so the eight replacement-paging integration tests remain unrun. Phase 4 hard blockers (domain, GCP projects, Apple enrolment, legal entity, LSV org mapping, LIMSOC staging account) all unconfirmed.
+
+### limsoc / brief-poc (`~/dev/limsoc/brief-poc`)
+
+Branch `chore/native-claude-context`, commit 64442ec, one ahead of `origin/ai-brief-poc`.
+
+What moved:
+- `CLAUDE.md` (69 lines): shadow LIMSOC console plus Gemini brief assistant (Vertex AI gemini-2.5-flash, us-central1), stack (React 18 CRA + Tailwind, Express 4 + pg, Postgres 15 via compose, plain JS), layout, run instructions, hard rules (never commit credentials, `ai-brief-poc` is the active branch, `main` is stale, never point at real LIMSOC data), session protocol.
+- `docs/context/{facts,state,feedback,references}.md`, headed as seeded 2026-10-10 from the repo and memory because no workspace brief existed. feedback.md carries dated learnings from the commit history (marker timing, no full refresh, prompt backup, AI-log feedback-loop filter, UTC to AEST bug, focus protection) and code-read findings.
+- `.gitignore`: now ignores `backend/gcp-credentials.json`, `*credentials*.json`, `application_default_credentials.json`.
+
+Dropped as PAI-only or not applicable: nothing to drop, there was no workspace brief and no agents. No subagents created.
+
+Secrets: staged diff clean. `docker-compose.yml` carries the Postgres image default password for local dev, already committed, acceptable and noted in facts.md.
+
+Code-read findings (recorded in feedback.md): model cache reset on every request so it never works; dead mock-response code; full prompt and raw Gemini response logged to stdout; commit message claims 8192 output tokens but code says 2048; compose bind-mounts a Mac-only gcloud path so the AI path cannot run on Linux without editing; `.env.example` database name disagrees with compose.
+
+Open questions:
+1. Keep, archive or revive this POC against the current LIMSOC feature-brief work?
+2. The Mac's uncommitted `frontend/src/App.js` edit: commit, discard or bring over?
+3. Does the Google Cloud project still exist, and is the Mac's `gcp-credentials.json` a live service-account key? If so, rotate it.
+4. Merge the branch into `ai-brief-poc`, and fast-forward `main` or leave it stale?
+
+### linear-tracking (`~/dev/linear-tracking`)
+
+Branch `chore/native-claude-context`, commit cdb711d, parent 01477ba (the Mac's local main). Only the five new files are in the commit.
+
+Correction to the brief: the tool syncs Linear CSV exports (LIMSOC team in the vendor's Linear workspace) into GitHub issues in `nicholas-wood/lsv` and GitHub Project #5, then generates LSV-branded status reports from that project. The docs describe what the code does, not the direction the task assumed.
+
+What moved:
+- `CLAUDE.md` (102 lines): purpose, stack (Python 3 stdlib sync; jinja2, matplotlib, python-docx and optional anthropic for the report; `gh` CLI for every GitHub call; GitHub Actions removed in a5aa51d, `.github/scripts/` reference only), run steps, state-file anchoring and reconcile semantics, hard rules, repo map, session protocol.
+- `docs/context/facts.md`: tool model (title-prefix identity, body format, project fields, labels), CSV export schema, history, minimal LSV, LIMSOC and vendor stakeholder slice, explicit out-of-scope list.
+- `docs/context/state.md`: last sync 2026-02-05 (691 issues), the three unpushed commits, the Mac's eleven uncommitted guide edits, next steps, blockers.
+- `docs/context/feedback.md`: 17 dated learnings (dead API path, string-compared ISO dates, the January Linear Done defect and repair, duplicate issues, state-file divergence, stale README).
+- `docs/context/references.md`: Linear and GitHub URLs, labels, fields, file locations. No keys.
+
+Dropped as out of scope: everything in the LSV comms-officer role hub that is not about this tool (operational comms, pager workbooks, LSOCE SOP feedback, annual report, National IMS engagement, LifesaverOnCall, SLSA Deputy Chair). Named in facts.md so sessions do not pull them in. No subagents created.
+
+Secrets and personal data found and left in place:
+- Hardcoded Anthropic API key (see the top of this report).
+- The only `lin_api_` hit is a placeholder in a guide. No GitHub tokens, no tracked `.env`.
+- The CSV exports contain roughly 70 unique email addresses, a few phone-number-like strings and names of LSV staff, volunteers and vendor engineers.
+- `email_signature.eml` is Nick's own LSV signature with work email and mobile. The club-mail `.eml` is a newsletter addressed to Nick's LSV address. Both were committed as styling references in the initial commit.
+- Three `.DS_Store` files are tracked.
+
+Open questions:
+1. Push the three local main commits to origin? Origin is still at a5aa51d.
+2. Commit and push the Mac's eleven uncommitted guide edits before trusting the guides in this clone.
+3. Should the raw CSVs, `backfill/` and the two `.eml` files stay in git given the personal data? Options: keep, move to ignored storage, or rewrite history.
+4. Rotate and remove the Anthropic key.
+5. `scripts/linear_sync_state.json` is a stale duplicate of the root state file; archive or remove?
+
+### envelope-os / BudgetBuddy (`~/dev/envelope-os`)
+
+Branch `chore/native-claude-context`, commit 1b1051b, parent b4030ef (the new initial commit). `penny.service` stayed active throughout.
+
+What moved:
+- `CLAUDE.md` (70 lines): what the project is, stack (Bun and TypeScript, Hono on 127.0.0.1:8787, SQLite at `~/.penny`, Vite + React + Tailwind + Radix PWA), run, test, build, isolated-instance recipe, systemd deploy procedure, 13 hard rules from past incidents, conventions, Pulse as a former optional consumer, session protocol.
+- `docs/context/facts.md`: version 1.28.1 (package.json and live health endpoint agree), data files, 19 schema tables, three systemd units and timers (sync hourly, backup 02:00 to the `penny-crypt:` remote), tailnet hostname, env vars, honest provider status.
+- `docs/context/state.md`: version and release sequence, the extraction and systemd repoint, next step gated on the Basiq decision, open items, blockers.
+- `docs/context/feedback.md`: 45 dated bullets (2026-06-26 to 2026-09-14) grouped by checkout hygiene, engine facts, reconciliation and the Why? sheet, moves and schedules, Radix verification, tests, the headless claude recipe, backups, communication.
+- `docs/context/references.md`, `docs/context/overview.md`.
+- `ISA.md` moved with `git mv` to `docs/context/ISA.md`; process frontmatter replaced with a plain project and status header; all 411 criteria, decisions, changelog and verification log kept byte for byte. README repointed.
+- No subagents (none existed).
+
+Dropped as PAI-only or stale: effort tiers, phase and progress tracking, Interceptor (translated to "verify in a real browser"), voice, Algorithm references, task-ISA paths. The Pulse daemon and ElevenLabs quota memory contributed nothing penny-specific. Superseded rules replaced rather than kept: the v1.4 "pendings never count" note (the v1.20 grid charges pendings), the pre-v1.4 "vite build only, no restart" deploy rule, and the monorepo staging incantation, now plain `git add -p`.
+
+Secrets: unstaged diff empty; staged content held only the eight intended files. The one grep hit was the public PocketSmith OpenAPI commit SHA already in README. No PocketSmith or Basiq key, rclone credential, PIN or session key anywhere. The backup remote is named without its configuration.
+
+Open questions:
+1. PocketSmith versus Basiq. The June PROJECTS.md entry says the next step is the Basiq build, but every release from v1.4 to v1.28.1 built on PocketSmith, there is no Basiq code anywhere, and the hourly sync is PocketSmith. ISC-1 to 3 are marked superseded while being the live behaviour. Does the pivot still stand? If not, reinstate those criteria and retire ISC-105 to 128. If yes, the Basiq developer account is still the external blocker.
+2. PROJECTS.md in the workspace is stale ("parked 2026-06-29"; roughly 25 releases shipped after that). Not edited, read-only source.
+3. Deferred live UI probes ISC-351, ISC-392 and ISC-410 were never verified in a real browser.
+4. The sync script header still cites a 05:30 daily cron at the old workspace path; the systemd timer is hourly. Code untouched.
+5. The tailnet hostname is recorded in facts.md. It is not a credential, but say if you would rather it stay out of git.
+
+### life-os-console (`~/dev/life-os-console`, worktree `~/dev/_wt/life-os-console`)
+
+Branch `chore/native-claude-context`, commit 7126389, based on `main` at 22643a6. Ten files, no product code touched. The repo has no remote.
+
+What moved:
+- `CLAUDE.md` (83 lines): what it is, PAUSED status with the PAI-retirement explanation, stack, run and typecheck commands from package.json, layout, conventions, hard rules from past incidents, subagent pointers, resumption order, session protocol.
+- `docs/context/state.md`: rewritten around the pause. Blocker 1 is PAI retirement, with a 12-row table of the exact code paths that depend on `~/.claude/PAI` or the workspace and what breaks when each is gone. Blocker 2 is Discord provisioning (1 of 20 bots). Blocker 3 is token rotation. Condensed history 2026-06-01 to 2026-06-26.
+- `docs/context/facts.md`, `references.md` (with an "external, now absent" section), `overview.md`, `HANDOFF.md`, `ISA.md` (full spec kept, header stripped of tier and mode, paths made repo-relative, post-pause addendum).
+- `docs/context/feedback.md`: standing rules plus Feature-dev and QA-verify learnings as dated bullets, de-duplicated, npm references corrected to bun.
+- `.claude/agents/feature-dev.md` and `.claude/agents/qa-verify.md`, bodies merged from the per-project overlay and the shared base role definitions, startup routines pointed at docs/context.
+
+Dropped as PAI-only or stale: voice-notification curl blocks and ElevenLabs voice IDs; Engineer and QATester base pointers, model and colour frontmatter; effort tier, mode, "PAI doctrine", "represented agents", "Chief of Staff" as a label (kept only where it names code); OneDrive finals convention and AGENT_STANDARD process rules; delegation soft-floor reasoning; Interceptor generalised to "browser-automation tool". `package-lock.json` noted as a leftover with `bun.lock` authoritative, not deleted.
+
+Secrets: staged diff clean for Slack, Discord, Anthropic, OpenAI, AWS and GitHub key shapes. The only identifier carried over is the Jarvis Discord application id, a public client id. `.env` and `.data/` remain gitignored and untouched.
+
+Open questions:
+1. Orphaned by PAI retirement, in order of severity: the roster scanner reads the agent tree from the workspace, so with it gone the fleet starts zero bots; Agent SDK tasks run with cwd set to workspace project dirs; the memory tool writes to workspace memory.md files; the inference shell-out to the PAI Inference tool is used only by the legacy Slack /ask path; the onboarding script scaffolds into the workspace. Decision needed: new agent-definitions root, ship definitions in-repo, or archive the project.
+2. `COS_REGISTER_PATH` points at the `life` project retired 2026-06-02. Remove or redirect?
+3. The live `.env` and `.data/` (Jarvis token, sessions, run-fleet script) exist only in the main checkout at `~/Documents/workspace/projects/life-os-console/code/`. That checkout is the repo itself and is not going anywhere unless you move it, but copy them out before any relocation.
+4. Is the 20-bot Discord fleet still wanted? Nineteen apps need manual portal creation with captcha and 2FA each.
+5. README.md still documents the old workspace layout under "Agent definitions". Left untouched as product documentation. Rewrite on resumption?
