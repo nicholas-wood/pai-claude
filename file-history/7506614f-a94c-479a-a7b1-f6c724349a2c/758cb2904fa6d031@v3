@@ -1,0 +1,177 @@
+# Lockers module for AccessBuddy: build spec
+
+Worktree: `/home/nicholas-wood/Documents/workspace/projects/accessbuddy/.worktrees/lockers`, branch `feat/lockers` (off `origin/main`, v1.23.4). Work ONLY in this worktree.
+
+Source being replaced (read it, it is short): legacy Google Apps Script at
+`/home/nicholas-wood/Documents/workspace/lifesaving/smlsc/club-renewal/artifacts/legacy-lockers/lockers/` (Allocations.js, Revoke.js, EmailService.js, the three `*Email.html` templates).
+Legacy data: `/home/nicholas-wood/.claude/jobs/7506614f/tmp/lockers/lockers.xlsx` (REAL MEMBER PII: never commit it, never copy rows into tests, fixtures, commit messages or the PR).
+
+Nick (product owner) confirmed the journey and these decisions on 2026-11-16. Do not re-litigate them.
+
+## 1. Confirmed product decisions
+
+1. Lockers is a per-tenant module switched by `settings.lockersEnabled`, which ONLY a global admin can change. Club admins cannot see or set it.
+2. Two new permissions, separate from all existing ones:
+   - `approve_lockers` ("Approve lockers"): approve (which allocates in the same step), decline, revoke, assign a locker directly to a member.
+   - `update_lockers` ("Update lockers"): locker areas and inventory, move a member between lockers, mark label / clean-out tasks done; receives the clean-out notifications.
+   Club admins and global admins hold both (existing behaviour of `checkPermission`).
+3. Approve and allocate are ONE step. Revoke sits under `approve_lockers`.
+4. Lockers are requested through the SAME public request form as fobs, so a person enters their details once. A locker can be requested alone, or added to a "new fob" request.
+5. A QR code for the locker request exists the same way the Front Door QR does today.
+6. A member's locker shows on the admin member page and on the member dashboard, in the same style credentials do.
+7. No hard limit on lockers per member. The approver sees a warning if the member already holds one.
+8. Season confirmation (attestation): a member holding a locker is asked whether they want to keep it. "No" releases the locker.
+9. Renewal cutoff: a club-admin setting (month + day; SMLSC will use 1 December). After that date each season, lockers held by members who have not renewed for the current season are released and sent to the `update_lockers` holders to clean out and clear the label.
+10. Emails MUST be sent for allocation, decline and revoke (legacy behaviour), with the tenant's locker policy attached when one is uploaded. This must be proven by tests.
+11. No fees. Areas are generic and tenant-defined ("Male Changeroom", "Female Changeroom" are SMLSC data, never hard-coded).
+12. Import SMLSC's spreadsheet with a dry-run-first importer. Do NOT run it against production; local dry-run only.
+
+## 2. Data model (migration `0021_lockers.sql`, hand-written, plus journal entry and Drizzle schema `packages/db/src/schema/lockers.ts` exported from `schema/index.ts`)
+
+All four tables: `tenant_id uuid not null references tenants`, RLS ENABLE + FORCE, the two policies used in `0013_email_queue.sql` (isolation + insert check), and the table names added to `RLS_TABLES` in `packages/db/src/rls.ts`. Statuses are text columns (repo convention), values enumerated in `packages/shared/src/enums.ts`.
+
+- `locker_areas`: `id`, `tenant_id`, `name`, `sort_order int default 0`, `active bool default true`, timestamps. Unique `(tenant_id, name)`.
+- `lockers`: `id`, `tenant_id`, `area_id` fk, `number int`, `level text null` (free text, e.g. Top/Middle/Bottom), `status text default 'available'` (`available | single_use | out_of_service`), `label_update_required bool default false`, `cleanout_required bool default false`, `notes text null`, timestamps. Unique `(area_id, number)`. Only `available` lockers can be allocated. `single_use` = day-use locker, never allocated (legacy "SINGLE USE" rows).
+- `locker_requests`: `id`, `tenant_id`, `user_id uuid null` fk users, `area_id` fk, `requested_number int null`, `status text default 'pending'` (`pending | allocated | declined | cancelled`), `policy_accepted_at timestamptz null`, requester snapshot `email`, `first_name`, `last_name`, `phone` (always stored, lower-cased email), `related_fob_request_id uuid null` fk fob_requests, `decided_by uuid null`, `decided_at`, `decline_reason text null`, `allocation_id uuid null`, timestamps. Index `(tenant_id, status)`.
+- `locker_allocations`: `id`, `tenant_id`, `locker_id` fk, `user_id uuid null` fk users, holder snapshot `holder_email`, `holder_first_name`, `holder_last_name`, `holder_phone`, `request_id uuid null`, `allocated_at`, `allocated_by uuid null`, `kept_for_season text null`, `ended_at timestamptz null`, `ended_by uuid null`, `end_type text null` (`revoked | released | not_renewed | moved`), `end_reason text null`, timestamps. PARTIAL UNIQUE index on `(locker_id) where ended_at is null` (one active holder per locker). Index `(tenant_id, user_id)`.
+  `user_id` is nullable only so imported legacy holders whose email matches no member can be carried; every allocation created through the app has a `user_id`.
+- `attestation_requests`: add `locker_responses jsonb null` (`{ allocationId: string; keep: boolean }[]`).
+
+Add `AuditEntityType` values `locker` and `locker_request`.
+
+## 3. Settings
+
+In `tenantSettingsSchema` (`packages/shared/src/schemas.ts`), all optional on read (stored JSON is never parsed through the schema; every reader must treat `undefined` as off / unset):
+- `lockersEnabled: boolean` (default false).
+- `lockerCutoffMonth: 1..12`, `lockerCutoffDay: 1..31` (both unset = cutoff rule off).
+- `lockerPolicy: { name: string; path: string; uploadedAt: string } | undefined` (set only by the upload route).
+
+Guarding `lockersEnabled` (CRITICAL): `PUT /api/v1/t/[slug]/config/settings` ends in `.passthrough()` and shallow-merges, and the settings page posts the whole settings object back. That route must ALWAYS preserve the stored `lockersEnabled` and `lockerPolicy` regardless of the body (strip both keys from the incoming body before merging), for every caller including global admins. The flag is changed only by a new `PATCH /api/v1/platform/tenants/[id]` (`isGlobalAdmin` or 403; body `{ lockersEnabled: boolean }`; merges into settings; audit entry `action: "tenant_feature_update"` with before/after). UI: a "Lockers" switch/checkbox per tenant on `app/admin/tenants/page.tsx` (the platform page; leave the orphan `t/[slug]/admin/tenants` page alone). The platform GET must return each tenant's `lockersEnabled`.
+
+Club-admin settings page (`admin/config/settings/page.tsx`), shown only when `lockersEnabled`: a "Lockers" card with cutoff month + day number inputs (validate real dates, e.g. reject 31 for a 30-day month; allow clearing both), the policy PDF upload (new route `config/locker-policy`: POST multipart `policy`, PDF only by magic bytes `%PDF`, 5 MB max, `CONFIGURE`; DELETE to remove; storage mirrors `config/logo/route.ts`: GCS `tenants/${slug}-locker-policy.pdf` in `GCS_ASSETS_BUCKET`, `public/tenants/` fallback in dev, refuse on Cloud Run without a bucket; public GET streams the PDF so the request form can link it), and a second QR code (reuse the existing `QRCode` component) encoding `${origin}/t/${slug}/request?type=locker`, captioned for lockers.
+
+Extract the season-label rule into one pure helper (e.g. `seasonForDate(date, tz)` in `apps/web/src/lib/timezone.ts`: on or after 1 July of year Y it is `"Y/Y+1"`, else `"Y-1/Y"`), consistent with `membershipYearExpiry`. Unit test it.
+
+## 4. Lifecycle (every transition; implement in ONE service module `apps/web/src/lib/services/lockers.ts`, called by thin routes)
+
+Request states: `pending -> allocated | declined | cancelled`. No other transitions. A request that is not `pending` cannot be approved, declined or cancelled (409).
+
+- SUBMIT (public): creates `locker_requests` pending. Refuse (409, friendly message) a second pending request from the same email for the same tenant. Resolve `user_id` by lower-cased email at submit time when a user with a membership in this tenant exists. Emails: `lockerRequestReceived` to the requester; admin notification `lockerRequestNeedsApproval` to holders of `approve_lockers` via `sendAdminNotification`. Audit on the request.
+- APPROVE (`approve_lockers`, body `{ lockerId }`): re-resolve the requester by email if `user_id` is null. If they are still not a user with a membership in this tenant, refuse 409 "This person is not a member yet. Approve their access request first." Locker must be in the request's tenant, `available`, with no active allocation (also rely on the partial unique index; translate the violation to 409 "That locker has just been allocated"). In one transaction: insert allocation, set request `allocated` + `allocation_id` + decided fields, set `lockers.label_update_required = true`, audit on request AND locker. After commit: email `lockerAllocated` (number, area, level) with the policy PDF attached if uploaded. The approver may pick ANY available locker in ANY area (the requested area/number is a preference).
+- DECLINE (`approve_lockers`, body `{ reason }` required, 1..500 chars): request `declined`, email `lockerDeclined` with the reason (policy attached if uploaded), audit.
+- CANCEL: the requester (signed in, own request) or an `approve_lockers` holder cancels a pending request. No email.
+- ASSIGN DIRECT (`approve_lockers`, body `{ lockerId, userId }`): allocation with no request, for a member of this tenant. Same checks, same email + label flag as approve.
+- REVOKE (`approve_lockers`, body `{ reason }` required): ends the active allocation (`end_type: revoked`), sets the locker `label_update_required` and `cleanout_required` true, emails the holder `lockerRevoked` (reason, 7 days to remove belongings; policy attached if uploaded), notifies `update_lockers` holders (`lockerCleanoutRequired`, one locker), audit on locker (and member where the audit trail is keyed by user).
+- MOVE (`update_lockers`, body `{ lockerId }`): ends the allocation (`moved`, no clean-out flag on the old locker but `label_update_required` true on BOTH lockers) and creates a new one for the same holder in the target locker, one transaction; emails the holder `lockerAllocated` for the new locker with wording that it replaces the old one.
+- TASKS (`update_lockers`): mark `label_update_required` false and/or `cleanout_required` false on a locker. Audit.
+- INVENTORY (`update_lockers`): areas CRUD; lockers create single, bulk-create a number range in an area (skip numbers that exist, report them), edit level/notes/status, delete only when the locker has no allocation rows at all (otherwise refuse and suggest `out_of_service`). A locker with an active allocation cannot be set to `single_use` or `out_of_service` (409).
+- KEEP / RELEASE via season confirmation (section 7).
+- CUTOFF release (section 8).
+- LINK: helper `linkLockerHoldersByEmail(tx, tenantId)` sets `user_id` on allocations and pending requests where it is null and the snapshot email matches a user with a membership in the tenant. Called at approve, by the daily cron per tenant, and by the importer.
+
+Suggested locker (pure function, unit tested, shown pre-selected to the approver): the requested number in the requested area if it is free; otherwise the middle of the longest run of consecutive free `available` lockers in that area (numbers ordered ascending; `single_use`, `out_of_service` and occupied lockers break runs); `null` when the area has none free. This is the legacy rule with its bugs removed (legacy scanned only 1..41 and compared names loosely; do not reproduce those).
+
+Members without a locker: nothing changes for them anywhere.
+
+Module gate: EVERY lockers API route (public and admin) returns 404 when `lockersEnabled` is not true for the tenant. Every UI entry point is hidden when it is off.
+
+## 5. API routes (under `apps/web/src/app/api/v1/t/[slug]/lockers/`; follow existing helpers `withTenantAuth`, `checkPermission`/`checkAnyPermission`, `withTenant`, `resolveTenant`)
+
+- `GET lockers` (either locker permission): areas with lockers, active holder (name, email, phone, since, kept_for_season, linked user id), task flags.
+- `GET lockers/requests?status=` (either permission), each pending row carries `suggestedLockerId`, the requester's membership state (member / not yet a member), and how many active lockers they already hold.
+- `POST lockers/requests/submit` (public, per-IP rate limit like the fob submit route): locker-only request.
+- `POST lockers/requests/[id]/approve | decline | cancel`.
+- `POST lockers/allocations` (assign direct), `POST lockers/allocations/[id]/revoke`, `POST lockers/allocations/[id]/move`.
+- `POST|PUT|DELETE lockers/areas[/id]`, `POST lockers/items` (single or `{ areaId, from, to, levels?: string[] }` bulk: levels cycle in order, e.g. Top, Middle, Bottom), `PUT|DELETE lockers/items/[id]`, `POST lockers/items/[id]/tasks`.
+- `GET lockers/cutoff-preview` (either permission): the allocations the cutoff rule would release if it ran today, and holders it cannot evaluate (unlinked).
+- Fob submit route `requests/submit/route.ts`: optional body field `locker: { areaId: uuid, requestedNumber?: int, policyAccepted: true }`, accepted ONLY when `requestType === "new"` and the module is on. The locker request is created in the same transaction with `related_fob_request_id`. If the module is off, ignore the field silently is NOT acceptable: reject 400.
+
+zod schemas for all bodies live in `packages/shared/src/schemas.ts`. The admins API currently accepts any string as a permission; leave that as is.
+
+## 6. UI
+
+Journey to preserve exactly:
+1. Global admin ticks "Lockers" for the club on the platform Tenants page.
+2. Member opens the request form (button on the club landing page `t/[slug]/page.tsx` "Request a locker", or the locker QR, both -> `/t/{slug}/request?type=locker`). The request page reads `?type=locker` and preselects the new "Locker" type card (only offered when the module is on and at least one active area has lockers). Steps for type `locker`: Type -> Details (first name, last name, email, phone; prefilled and read-only identity when signed in) -> Locker (area select using the base-ui Select explicit-children pattern, optional preferred number, policy checkbox "I agree to follow the locker policy" with a link to the policy PDF when uploaded; checkbox is required) -> Review -> success screen "Locker request submitted".
+   For type `new` (new fob): an extra optional "Locker" step before Review: "Would you also like to request a locker?" Off by default; when ticked it shows the same area / preferred number / policy controls and the Review step lists it. One submit creates both.
+3. Admin nav gets a "Lockers" item (shown when module on AND the admin holds either locker permission). Page `t/[slug]/admin/lockers/page.tsx` with three parts:
+   - Requests: pending requests, each with the suggested locker preselected in a locker picker (area + number, any available locker), badges "Already holds locker X" / "Not a member yet", buttons Approve and Decline (decline asks for a reason). Shown/enabled only with `approve_lockers`.
+   - Lockers: per-area grid/list of every locker: number, level, status, holder, since; actions Revoke (`approve_lockers`, asks reason), Move (`update_lockers`), Assign (`approve_lockers`, member picker), and inventory controls (`update_lockers`): add area, bulk-add lockers, edit status/level/notes.
+   - To do: lockers with `label_update_required` or `cleanout_required`, each with "Label done" / "Cleaned out" buttons (`update_lockers`). When a cutoff is configured, a "At the cutoff (D Month)" panel listing what `cutoff-preview` returns.
+4. Admin member page: a "Lockers" card between `CredentialActions` and `AttestationSection`, only when the module is on: active lockers (area, number, level, since, kept-for-season), pending request, history (ended allocations with end type + reason), Revoke / Assign (`approve_lockers`) and Move (`update_lockers`). Locker and locker-request ids join the page's audit trail. Members list: a small "Locker" chip next to the fob breakdown for members holding one.
+5. Member dashboard: a "My Locker" section (module on only): active locker(s), a pending request with a Cancel button, otherwise a "Request a locker" link.
+6. Admins page: `PERMISSION_LABELS` gets "Approve lockers" and "Update lockers". The two locker checkboxes are listed only when the tenant has the module on (the page needs the flag from the API).
+7. Audit: labels for every new `metadata.action` in BOTH renderers (`components/audit-trail.tsx` and `admin/audit/page.tsx`), entity type labels + filter options + the `entityLabel` SQL CASE for `locker` ("Area N") and `locker_request`.
+
+Copy rules: Australian English, plain language, no em dashes, first-name-only email greetings. Follow the existing shadcn-on-base-ui components; base-ui `SelectValue` needs explicit children.
+
+## 7. Season confirmation
+
+- `GET attestations/[token]`: for a whole-membership renewal (`credentialIds` null) when the module is on, also return `lockers: [{ allocationId, areaName, number, level }]` for the member's active allocations. Never for scoped confirmations.
+- Attest page: under the fobs, a "Your locker" block per locker with a checkbox, checked by default, "I want to keep locker {area} {number} for {season}". Unchecked shows "This locker will be released. Please remove your belongings and lock within 7 days." The Confirm button must render when the member has fobs OR lockers (today it renders only with fobs).
+- `POST`: body gains optional `lockerResponses: [{ allocationId, keep }]`. Reject allocation ids that are not this member's active allocations in this tenant. Persist to `attestation_requests.locker_responses`. `keep: true` sets `kept_for_season = season`. `keep: false` ends the allocation (`released`, reason "Member chose not to keep the locker for {season}"), flags label + clean-out, emails the member `lockerRevoked` with that reason, notifies `update_lockers` holders, audits. A locker the member holds but that is missing from the body is treated as keep (old clients).
+- Admin `AttestationSection` history line mentions locker answers ("locker kept" / "locker released").
+- `force-renew` and `confirm-on-behalf` do not touch lockers.
+
+## 8. Cutoff rule (daily cron, new step after 1b2, per tenant, inside `withTenant`)
+
+For each tenant with `lockersEnabled` and both cutoff fields set: compute the current season with `seasonForDate(now, tz)` and the cutoff instant = tenant-local midnight of the first occurrence of (month, day) on or after 1 July of the season's start year (1 December -> December of the start year; 1 February -> February of the end year). If `now >= cutoff`: every ACTIVE allocation with a linked `user_id` whose membership in this tenant is missing, not `active`, or has `current_season !== currentSeason` is ended (`not_renewed`, reason "Membership not renewed for {season} by {cutoff date}"), its locker flagged label + clean-out, and the member emailed `lockerRevoked` with that reason. ONE `lockerCleanoutRequired` notification per tenant per run lists every locker released in that run and goes to `update_lockers` holders. Idempotent: a second run the same day releases nothing and sends nothing. Unlinked allocations are never auto-released. The step also calls `linkLockerHoldersByEmail` first. A failure in one tenant must not stop the others (match the existing try/catch style of step 1b).
+
+## 9. Emails
+
+New templates in `lib/email-templates.ts` + wiring in `lib/services/email.ts` (`TemplateVariables`, `renderTemplate` cases) + registry entries in `packages/shared/src/email-events.ts`: `lockerRequestReceived`, `lockerAllocated`, `lockerDeclined`, `lockerRevoked` (member), `lockerRequestNeedsApproval`, `lockerCleanoutRequired` (admin). Content follows the three legacy templates (read them) but tenant-branded via the existing layout, never mentioning SMLSC by name, and using the tenant's reply/support address the way other templates do.
+- Member emails with a policy attachment are sent directly with `sendTemplatedEmail(..., attachments, audit)` (the queue cannot carry attachments). Read the PDF bytes straight from storage (GCS or the dev fallback); do NOT go through `fetchAttachments` (it needs an absolute public URL). A missing or unreadable policy must not block the email: send without it and log.
+- Respect `sendEmails` exactly as other templates do; every send carries the audit context so the audit entry has `subject`.
+- Send after the DB transaction commits (or follow the pattern the revoke-credential route uses) so a rolled-back approve never emails.
+
+## 10. Importer `packages/db/src/import-lockers.ts`
+
+Modelled on `migrate-smlsc.ts`: `--file <xlsx> --tenant <slug>`, `--dry-run` default, `--commit` to write, JSON report to `packages/db/migrations-out/` (gitignored), idempotent (re-running changes nothing). Sheets: "Male Changeroom Allocations" / "Female Changeroom Allocations" (columns Locker Number, Level, First Name, Last Name, Date Allocated, Notes, Contact Number, Email Address, Request Number, ...) and "Locker Requests".
+- Areas: one per allocation sheet, named by stripping " Allocations" ("Male Changeroom", "Female Changeroom"). The requests sheet says "Male Changerooms"/"Female Changerooms": map by prefix.
+- Lockers: one per numbered row; `SINGLE` / `USE` in the name columns -> `single_use`; level from the Level column.
+- Allocations: a row with a first name that is not SINGLE USE -> active allocation; `allocated_at` from the Excel serial date (convert correctly, tenant timezone); phone numbers arrive as numbers that lost their leading zero (`4.12345678E8`) -> restore to `04xxxxxxxx`; match `user_id` by lower-cased email against users with a membership in the tenant, else leave null and list in the report as unmatched.
+- `label_update_required`: true where the matching "Locker Requests" row has "Sticker Update Required" = 1.
+- Pending requests: "Locker Requests" rows with no Approved value and no Revoked value and an email -> `pending` (preserve the timestamp as `created_at`, requested number, area).
+- Never sends email. Report counts: areas, lockers, single-use, allocations (matched / unmatched), pending requests, label flags, skipped rows with reasons.
+- Does not set `lockersEnabled` or the cutoff.
+
+## 11. Tests (vitest; DB-gated suites use `describe.skipIf(!process.env.DATABASE_URL)` like `force-renew.test.ts`)
+
+Run with `DATABASE_URL=postgres://accessbuddy:testpassword@127.0.0.1:54329/accessbuddy_lockers` (embedded Postgres already running; database already migrated to 0020; run `bun run db:migrate` after adding 0021). Baseline before this work: db 16, shared 27, web 378 passing, 0 skipped. All must stay green, with 0 skipped.
+
+Must cover at minimum: suggested-locker function (requested free; requested taken; runs broken by single-use/occupied; none free); `seasonForDate` and the cutoff-instant computation (1 Dec and 1 Feb cases, boundary at local midnight); request state rules (approve twice -> 409; decline non-pending -> 409); approve refuses a non-member; the unique-index race path; revoke flags both tasks; move; the module gate (404 when off) on at least the public submit and one admin route; permission matrix (`approve_lockers` cannot do inventory/move/tasks; `update_lockers` cannot approve/decline/revoke/assign; neither -> 403); settings PUT cannot change `lockersEnabled` or `lockerPolicy`; platform PATCH refuses non-global-admins; combined fob+locker submit creates both rows and rejects `locker` on non-`new` types; attestation GET/POST locker keep and release (and rejection of a foreign allocation id); cutoff step releases only unrenewed linked holders after the cutoff, nothing before it, and is idempotent; EMAIL PROOF: allocation, decline and revoke each invoke the send path with the right template, recipient and (when a policy exists) an attachment, by spying/mocking at the same seam existing email tests use; importer parsing unit tests on SYNTHETIC rows (phone restore, Excel date, single-use detection). The `tenant-isolation` guard test must pass with the four new tables.
+
+## 12. Gates and delivery
+
+- `bun run typecheck`, `bun run lint`, `bun run db:check-drift` (if it runs locally against the test database), `bun run test`: all exit 0 on the FINAL tree, run with turbo `--force` so nothing is served from cache, 0 skipped.
+- Conventional commits, `feat(lockers): ...`. Commit in logical steps. Do NOT push, do NOT open a PR, do NOT touch `main`, do NOT run anything against production or over `ssh mac`.
+- No new runtime dependencies without saying so in your report (`xlsx` is already a devDependency of `@accessbuddy/db`).
+- Do not refactor unrelated code. Known unrelated defects to leave alone: the cross-tenant join in `buildAuthContext` (being fixed on a separate branch), unused `email_configurations` overrides, `PERMISSION_LABELS` gaps for existing permissions.
+
+## 13. AMENDMENTS after design review (these OVERRIDE anything above that conflicts)
+
+A. Concurrency. Every transition starts with a guarded write and stops on zero rows before doing anything else: requests `UPDATE ... WHERE id = $1 AND tenant_id = $2 AND status = 'pending' RETURNING`; allocations `UPDATE ... WHERE id = $1 AND tenant_id = $2 AND ended_at IS NULL RETURNING`. Zero rows -> 409, no insert, no email. Approve, assign, move and locker status edits take `SELECT ... FOR UPDATE` on the locker row first. Add a partial unique index on `locker_requests (tenant_id, lower(email)) WHERE status = 'pending'` and translate its violation to the friendly 409. Emails are sent only when the guarded row came back. Include at least one `Promise.all` race test (two approvals of one request -> exactly one allocation, one 409).
+
+B. Tenant consistency. Every query carries an explicit `tenant_id` filter (do not rely on RLS alone). Any `areaId`, `lockerId`, `userId`, `allocationId` or `requestId` from a request body is loaded with the tenant filter and a miss is 400/404. Test: a public submit with another tenant's `areaId` is rejected. FKs to `users` are `ON DELETE SET NULL`; `lockers.area_id` and `locker_allocations.locker_id` are `ON DELETE RESTRICT`.
+
+C. Identity on public submit. Set `locker_requests.user_id` ONLY when the submitter is signed in (session user). Signed-out submits keep `user_id` null and store the snapshot; add `submitted_authenticated boolean not null default false`; the approver sees a "Submitted while signed out" badge. At approve, a null `user_id` is resolved by the snapshot email to a user with a membership in this tenant (else the 409 "not a member yet"). The allocation's holder snapshot is copied from the user record, not the form, whenever `user_id` is set. A signed-in member sees and may cancel a pending request when `request.user_id = session user` OR the request email equals their own account email. `linkLockerHoldersByEmail` links ALLOCATIONS only (imported legacy holders), never requests.
+
+D. Combined fob + locker request. If the related fob request is rejected or cancelled, any `pending` locker request with that `related_fob_request_id` becomes `cancelled` in the same transaction (decline_reason "The access request was not approved"), with NO separate locker email. When a fob request is approved/linked so the person becomes a member, nothing else is needed (approve resolves by email). In the combined submit, an existing pending locker request for that email must not block the fob request: return 409 with a message that names only the locker so the form can offer "submit without the locker". Test both.
+
+E. Clean-out window. Add `lockers.cleanout_due_at timestamptz null`, set to the end time + 7 days whenever an allocation ends as `revoked`, `released` or `not_renewed`, cleared when "Cleaned out" is marked. The suggestion function skips lockers with `cleanout_required`. Approve, assign and move refuse a locker with `cleanout_required` (409 "This locker has not been cleaned out yet") unless the body carries `overrideCleanout: true`, which is recorded in the audit entry; the UI offers that as an explicit confirm. The To do list and the `lockerCleanoutRequired` email show "Clean out on or after {date}".
+
+F. Cutoff arming (prevents a surprise mass release). Add `settings.lockerCutoffArmedAt` (ISO string), written by the SERVER whenever the cutoff month/day is set or changed (and removed when cleared); clients cannot set it. The cutoff step acts for a season only when `armedAt` is EARLIER than that season's cutoff instant. So a cutoff saved after this season's date first applies next season. Exempt allocations with `allocated_at >= cutoff instant` and allocations with `kept_for_season = currentSeason`. Add a test asserting `seasonForDate` output has the same format as stored `tenant_memberships.current_season` values ("2026/2027"). `cutoff-preview` and the admin panel state plainly when the rule will next run ("Next runs on 1 December 2027") and why.
+
+G. Settings writes. The three writers of `tenants.settings` touched here (settings PUT, policy upload/delete, platform PATCH) must not lose each other's updates: inside the transaction, lock the tenant row (`SELECT ... FOR UPDATE`) and merge against that fresh read. The settings PUT strips `lockersEnabled`, `lockerPolicy` and `lockerCutoffArmedAt` from the body. Clearing the cutoff: the client sends `lockerCutoffMonth: null, lockerCutoffDay: null` and the route REMOVES those keys and `lockerCutoffArmedAt`. Test: set, clear, read back unset. The policy GET route also returns 404 when the module is off.
+
+H. Emails. Add a fifth member template `lockerReleased` used for `released` (member said no in the confirmation) and `not_renewed` (cutoff); `lockerRevoked` is only for an admin revoke. Approve / assign / move / decline / revoke: send directly after commit with the policy attached; if the send fails the action still succeeds, the failure is audited the way existing sends audit failures, and the JSON response carries `emailSent: false` so the UI can warn the admin. Cutoff and confirmation releases: enqueue with `enqueueEmail` inside the same transaction (no attachment; that template does not need the policy), so they are retried by the queue. First read `lib/services/email-queue.ts` and confirm how and when the queue drains; if queued mail would wait until the nightly cron, say so in your report and still use the queue for the cron-originated releases only (send confirmation releases directly after commit).
+
+I. Season confirmation hardening. In `lockerResponses`: an id belonging to another user or tenant -> 400; the member's own allocation that has already ended -> ignored and recorded as `{ allocationId, keep, ignored: "already_ended" }`; never block the renewal for that. Keep/release runs in the same transaction as the attestation completion and behind its existing "already completed" guard, so a second POST changes nothing and sends nothing. With the module off, `lockerResponses` is ignored and not persisted.
+
+J. Inventory semantics. Deleting an area that has lockers or requests -> 409 "Set the area inactive instead". An inactive area is hidden from the public form but its lockers stay usable by admins; its pending requests stay pending. Move copies `user_id`, the holder snapshot, `kept_for_season` and `request_id` to the new allocation. Turning the module off keeps all data, hides everything and sends nothing.
+
+K. Importer. Writes inside the tenant context (the same `setTenantContext`/RLS path `migrate-data.ts` uses). `--commit` REFUSES when the tenant already has any `lockers` row (one-shot import; no partial re-runs). Anomalies are reported and skipped, never guessed: duplicate locker number in a sheet, an allocated row with no email (import it unlinked, report it), a requests row whose changeroom is blank. Phone restore: prepend `0` only to a 9-digit number starting 2, 3, 4, 7 or 8; pass through values already starting `0` or `+61`; report anything else unchanged. Excel serial dates -> correct instants in the tenant timezone, including the time-of-day fraction; unit test both.
+
+L. Migration. Purely additive (new tables, one nullable column, indexes); safe while the previous app revision is still serving. Number it 0021; note in your report that it must be renumbered if `main` gains another migration first.
+
+M. Not adopted (leave existing behaviour): `sendAdminNotification` recipient rules (it includes global admins by design); ending allocations when a membership is archived (the cutoff rule covers it).

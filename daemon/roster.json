@@ -1,7 +1,7 @@
 {
   "proto": 1,
-  "supervisorPid": 1853099,
-  "updatedAt": 1794827724745,
+  "supervisorPid": 2316523,
+  "updatedAt": 1795088667276,
   "workers": {
     "eb37ba0f": {
       "pid": 3600454,
@@ -73,121 +73,6 @@
       "ptyAuth": "67d5e129a7377857b4083646b8a36308",
       "replPid": 3600460,
       "replProcStart": "580744503"
-    },
-    "89fdcb2e": {
-      "pid": 469252,
-      "procStart": "730731016",
-      "sessionId": "89fdcb2e-263c-4f0c-920b-b364a63ce275",
-      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/89fdcb2e.sock",
-      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/a92f749e.pty.sock",
-      "cliVersion": "2.1.319",
-      "startedAt": 1794823825460,
-      "attempt": 1,
-      "cwd": "/home/nicholas-wood/.claude",
-      "dispatch": {
-        "proto": 1,
-        "short": "89fdcb2e",
-        "nonce": "287f0540",
-        "sessionId": "89fdcb2e-263c-4f0c-920b-b364a63ce275",
-        "createdAt": 1794823825453,
-        "source": "fleet",
-        "cwd": "/home/nicholas-wood/.claude",
-        "launch": {
-          "mode": "prompt",
-          "args": [
-            "--session-id",
-            "89fdcb2e-263c-4f0c-920b-b364a63ce275",
-            "--agent",
-            "claude",
-            "--",
-            "# Prompt for Claude Code: deploy the LSV Operational Service Summary site\n\nCopy everything below the line into Claude Code. Put the `pack` folder (the zip next to this file, unzipped) in the working directory first. `pack/samples/` holds a data export from 16 Nov 2026 (`Operational Service Summary data 2026-11-16.json`); seed from that one.\n\n---\n\nI want to deploy a single-page web app to Google Cloud, served at **https://nicholas.wood.com.au/lsv/dailysummary**. It must be guarded by **the same security measures and login procedures as accessbuddy**: same sign-in, same session handling, same access control and same infrastructure patterns. Look at how accessbuddy is built and deployed and follow it. If anything about the accessbuddy approach doesn't fit this app, ask me rather than inventing a different scheme.\n\n## What the app is\n\nIt's Life Saving Victoria's Operational Service Summary tool. Members use it twice a week to produce the Tue–Fri and Fri–Mon operational summary in Word. It tracks:\n- ongoing schedules per unit (LIMSOC unit codes such as LS30, SC40)\n- variations: Adjusted Hours, Service Variation, Low Patronage Patrol and Offline, either instead of or in addition to the schedule\n- events, with several units each and a per-unit \"takes it offline for normal operations\" flag\n- linked units (for example SC40 + SC41 share one set of hours and offline periods)\n- daily weather per area\n- contacts and public holidays\n\nIt generates an executive summary and exports the Word summary by filling LSV's own Fri–Mon and Tue–Fri templates (`src/ux/templates/`, embedded as base64 by build.py, filled with jszip@3.10.1 in `template.js`). Other date ranges fall back to a generated document using docx@8.5.0. It imports the OSSD spreadsheet using xlsx@0.18.5. All three libraries load from cdn.jsdelivr.net.\n\nIt was built as a claude.ai artifact, so it's currently one self-contained `index.html` (about 130 KB, vanilla JS, no framework). Everything is in the `pack` folder:\n- `pack/index.html` is the built page. Treat it as the starting point.\n- `pack/src/ux/` holds the source parts. `python3 build.py` (run inside that folder) rebuilds index.html from `index.before-ux.html` plus `markup.html`, `extra.css`, `views.js`, `links.js`, `import.js` and `wiring.js`. Make your changes in the parts and rebuild; don't hand-edit the built file. Splitting it into proper modules is fine if you keep behaviour identical.\n- `pack/src/bom-bookmarklet.js` is the current manual BOM weather fetch, and shows the feed format.\n- `pack/src/limsoc_units.py` is a LIMSOC staging snapshot of units. `build_seed.py` turns the OSSD xlsx into data docs.\n- `pack/samples/` holds a data file (JSON) and the OSSD 2026-27 spreadsheet, for seeding and testing.\n- `pack/src/ux/test-linked-units.js` is an example Playwright test. Its paths are absolute from the old environment, so adjust them.\n\n## 1. Replace the claude.ai storage with a real backend\n\nThe page talks to storage through a small Firestore-like interface, set up in the boot function at the end of `wiring.js`:\n- `db.collection(name).onSnapshot(cb)` gives live updates of all docs in a collection. The callback gets `{docs: [{id, data()}]}`.\n- `db.doc(path).onSnapshot(cb)` gives `{exists, data()}`. `db.doc(path).set(obj)` replaces a doc and `db.doc(path).delete()` deletes it.\n- The collections are `units/<code>`, `events/<id>`, `weather/<YYYY-MM-DD>`, `confirmations/<key>` and `summaries/<key>`, plus the docs `config/settings` and `config/contacts`. The schedules, adjustments and offline arrays live inside each unit doc.\n- When `window.claude` is missing, it falls back to `localStore()` (in-browser storage plus Open/Download data file).\n\nPlease:\n- Implement the same interface against a backend that follows the accessbuddy pattern. Use Firestore if accessbuddy uses it, since it maps one to one. Multiple members edit at once, so live updates matter.\n- Make all reads and writes go through the authenticated session; nothing should be readable without signing in.\n- Seed it from `pack/samples/Operational Service Summary data 20"
-          ],
-          "restoresTranscript": false
-        },
-        "env": {},
-        "isolation": "none",
-        "respawnFlags": [
-          "--agent",
-          "claude"
-        ],
-        "fromRoster": true,
-        "agent": "claude",
-        "seed": {
-          "intent": "# Prompt for Claude Code: deploy the LSV Operational Service Summary site\n\nCopy everything below the line into Claude Code. Put the `pack` folder (the zip next to this file, unzipped) in the working directory first. `pack/samples/` holds a data export from 16 Nov 2026 (`Operational Service Summary data 2026-11-16.json`); seed from that one.\n\n---\n\nI want to deploy a single-page web app to Google Cloud, served at **https://nicholas.wood.com.au/lsv/dailysummary**. It must be guarded by **the same security measures and login procedures as accessbuddy**: same sign-in, same session handling, same access control and same infrastructure patterns. Look at how accessbuddy is built and deployed and follow it. If anything about the accessbuddy approach doesn't fit this app, ask me rather than inventing a different scheme.\n\n## What the app is\n\nIt's Life Saving Victoria's Operational Service Summary tool. Members use it twice a week to produce the Tue–Fri and Fri–Mon operational summary in Word. It tracks:\n- ongoing schedules per unit (LIMSOC unit codes such as LS30, SC40)\n- variations: Adjusted Hours, Service Variation, Low Patronage Patrol and Offline, either instead of or in addition to the schedule\n- events, with several units each and a per-unit \"takes it offline for normal operations\" flag\n- linked units (for example SC40 + SC41 share one set of hours and offline periods)\n- daily weather per area\n- contacts and public holidays\n\nIt generates an executive summary and exports the Word summary by filling LSV's own Fri–Mon and Tue–Fri templates (`src/ux/templates/`, embedded as base64 by build.py, filled with jszip@3.10.1 in `template.js`). Other date ranges fall back to a generated document using docx@8.5.0. It imports the OSSD spreadsheet using xlsx@0.18.5. All three libraries load from cdn.jsdelivr.net.\n\nIt was built as a claude.ai artifact, so it's currently one self-contained `index.html` (about 130 KB, vanilla JS, no framework). Everything is in the `pack` folder:\n- `pack/index.html` is the built page. Treat it as the starting point.\n- `pack/src/ux/` holds the source parts. `python3 build.py` (run inside that folder) rebuilds index.html from `index.before-ux.html` plus `markup.html`, `extra.css`, `views.js`, `links.js`, `import.js` and `wiring.js`. Make your changes in the parts and rebuild; don't hand-edit the built file. Splitting it into proper modules is fine if you keep behaviour identical.\n- `pack/src/bom-bookmarklet.js` is the current manual BOM weather fetch, and shows the feed format.\n- `pack/src/limsoc_units.py` is a LIMSOC staging snapshot of units. `build_seed.py` turns the OSSD xlsx into data docs.\n- `pack/samples/` holds a data file (JSON) and the OSSD 2026-27 spreadsheet, for seeding and testing.\n- `pack/src/ux/test-linked-units.js` is an example Playwright test. Its paths are absolute from the old environment, so adjust them.\n\n## 1. Replace the claude.ai storage with a real backend\n\nThe page talks to storage through a small Firestore-like interface, set up in the boot function at the end of `wiring.js`:\n- `db.collection(name).onSnapshot(cb)` gives live updates of all docs in a collection. The callback gets `{docs: [{id, data()}]}`.\n- `db.doc(path).onSnapshot(cb)` gives `{exists, data()}`. `db.doc(path).set(obj)` replaces a doc and `db.doc(path).delete()` deletes it.\n- The collections are `units/<code>`, `events/<id>`, `weather/<YYYY-MM-DD>`, `confirmations/<key>` and `summaries/<key>`, plus the docs `config/settings` and `config/contacts`. The schedules, adjustments and offline arrays live inside each unit doc.\n- When `window.claude` is missing, it falls back to `localStore()` (in-browser storage plus Open/Download data file).\n\nPlease:\n- Implement the same interface against a backend that follows the accessbuddy pattern. Use Firestore if accessbuddy uses it, since it maps one to one. Multiple members edit at once, so live updates matter.\n- Make all reads and writes go through the authenticated session; nothing should be readable without signing in.\n- Seed it from `pack/samples/Operational Service Summary data 20"
-        },
-        "cols": 214,
-        "rows": 50
-      },
-      "decModes": [
-        2004,
-        2031,
-        1004,
-        1000,
-        1002,
-        1003,
-        1006
-      ],
-      "rvAuth": "44f81bfeb4aff32a95cdb8e5fff9af8f",
-      "ptyAuth": "9661d22f140df69203fabae6bbedc964",
-      "replPid": 469262,
-      "replProcStart": "730731030"
-    },
-    "7506614f": {
-      "pid": 1853355,
-      "procStart": "791490636",
-      "sessionId": "7506614f-a94c-479a-a7b1-f6c724349a2c",
-      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/7506614f.sock",
-      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/87eca30d.pty.sock",
-      "cliVersion": "2.1.325",
-      "startedAt": 1794824082614,
-      "attempt": 1,
-      "cwd": "/home/nicholas-wood/.claude",
-      "dispatch": {
-        "proto": 1,
-        "short": "7506614f",
-        "nonce": "421b0fd5",
-        "sessionId": "7506614f-a94c-479a-a7b1-f6c724349a2c",
-        "createdAt": 1794824082609,
-        "source": "fleet",
-        "cwd": "/home/nicholas-wood/.claude",
-        "launch": {
-          "mode": "prompt",
-          "args": [
-            "--session-id",
-            "7506614f-a94c-479a-a7b1-f6c724349a2c",
-            "--agent",
-            "claude",
-            "--",
-            "If we consider accessbuddy. There was an equivalent, albeit much simpler product that managed lockers."
-          ],
-          "restoresTranscript": false
-        },
-        "env": {},
-        "isolation": "none",
-        "respawnFlags": [
-          "--agent",
-          "claude"
-        ],
-        "agent": "claude",
-        "seed": {
-          "intent": "If we consider accessbuddy. There was an equivalent, albeit much simpler product that managed lockers."
-        },
-        "cols": 218,
-        "rows": 50
-      },
-      "decModes": [
-        2004,
-        2031,
-        1004,
-        1000,
-        1002,
-        1003,
-        1006
-      ],
-      "rvAuth": "346192dcad3f00855464b5d9a0eb1360",
-      "ptyAuth": "70d9cd96b13d49caeef00f63dbbd7739",
-      "replPid": 1853454,
-      "replProcStart": "791490649"
     }
   }
 }
