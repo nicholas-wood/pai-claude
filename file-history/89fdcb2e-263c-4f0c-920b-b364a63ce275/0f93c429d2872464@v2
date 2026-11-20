@@ -1,0 +1,21 @@
+# Public (inlined at build)
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_FIREBASE_API_KEY=
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=lsv-oss-prod.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=lsv-oss-prod
+NEXT_PUBLIC_FIREBASE_APP_ID=
+
+# Server
+# At least 32 characters. Signs OTP sessions. Fails closed when missing.
+SESSION_SIGNING_SECRET=
+# Optional: when set, magic links and codes are sent through Resend from
+# RESEND_FROM (a verified Resend domain). When unset, Firebase sends the
+# magic link itself and the email-code sign-in is hidden.
+RESEND_API_KEY=
+RESEND_FROM="LSV Service Summary <noreply@example.com>"
+# Service account email Cloud Scheduler uses to call /api/cron/weather (OIDC).
+CRON_INVOKER_EMAIL=
+# Local dev only: path to a service-account JSON. On Cloud Run ADC is used.
+GOOGLE_APPLICATION_CREDENTIALS=
+# Local dev only, never in production.
+ENABLE_DEV_LOGIN=false

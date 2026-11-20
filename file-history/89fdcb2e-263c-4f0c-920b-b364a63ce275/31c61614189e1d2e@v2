@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operational Service Summary</title>
+<style>body{font-family:system-ui;margin:40px;color:#1f2937}.box{max-width:560px;border:1px solid #e5e7eb;border-radius:8px;padding:24px}</style>
+</head>
+<body>
+<div class="box">
+  <h1>Operational Service Summary</h1>
+  <p id="welcome"></p>
+  <p>The application page has not been installed yet. Drop the pack's <code>index.html</code> at <code>oss/index.html</code> and rebuild.</p>
+  <p><a id="logout" href="#" hidden>Or log out →</a></p>
+</div>
+<script>
+  if (window.OSS_USER_FIRST_NAME) document.getElementById('welcome').textContent = 'Welcome ' + window.OSS_USER_FIRST_NAME;
+  if (window.OSS_LOGOUT_URL) { var a = document.getElementById('logout'); a.href = window.OSS_LOGOUT_URL; a.hidden = false; }
+</script>
+</body>
+</html>

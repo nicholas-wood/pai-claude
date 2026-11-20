@@ -1,0 +1,52 @@
+import { randomBytes, randomInt, scryptSync, timingSafeEqual } from "node:crypto";
+import { adminDb } from "./firebase-admin";
+
+/**
+ * Hashed, single-use, attempt-capped OTP store on Firestore (`otpCodes`),
+ * mirroring AccessBuddy's Postgres otp-store. Codes come from
+ * crypto.randomInt rather than Math.random.
+ */
+const OTP_TTL_MS = 5 * 60 * 1000;
+const MAX_ATTEMPTS = 5;
+const SCRYPT_KEYLEN = 64;
+
+export type VerifyOtpResult = "valid" | "invalid" | "expired" | "locked";
+
+function hashCode(code: string, salt: string): string {
+  return scryptSync(code, salt, SCRYPT_KEYLEN).toString("hex");
+}
+
+export function generateOtpCode(): string {
+  return String(randomInt(0, 1_000_000)).padStart(6, "0");
+}
+
+export async function setOtp(email: string, code: string): Promise<void> {
+  const salt = randomBytes(16).toString("hex");
+  await adminDb().collection("otpCodes").doc(email).set({
+    codeHash: `${salt}:${hashCode(code, salt)}`,
+    expiresAt: Date.now() + OTP_TTL_MS,
+    attempts: 0,
+    consumedAt: null,
+  });
+}
+
+export async function verifyOtp(email: string, code: string): Promise<VerifyOtpResult> {
+  const ref = adminDb().collection("otpCodes").doc(email);
+  return adminDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return "invalid";
+    const e = snap.data() as { codeHash: string; expiresAt: number; attempts: number; consumedAt: number | null };
+    if (e.consumedAt) return "invalid";
+    if (e.expiresAt < Date.now()) return "expired";
+    if (e.attempts >= MAX_ATTEMPTS) return "locked";
+    const [salt, stored] = e.codeHash.split(":");
+    const candidate = hashCode(code, salt);
+    const matches = stored.length === candidate.length && timingSafeEqual(Buffer.from(stored, "hex"), Buffer.from(candidate, "hex"));
+    if (!matches) {
+      tx.update(ref, { attempts: e.attempts + 1 });
+      return "invalid";
+    }
+    tx.update(ref, { consumedAt: Date.now() });
+    return "valid";
+  });
+}

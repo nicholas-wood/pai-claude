@@ -1,0 +1,41 @@
+import { beforeAll, describe, expect, test } from "bun:test";
+import { safeRedirect } from "../src/lib/safe-redirect";
+
+beforeAll(() => {
+  process.env.SESSION_SIGNING_SECRET = "test-secret-that-is-definitely-32-chars-long!!";
+});
+
+describe("OTP session cookie", () => {
+  test("round-trips and rejects tampering and expiry", async () => {
+    const { signOtpSession, verifyOtpSessionCookie } = await import("../src/lib/auth");
+    const cookie = signOtpSession({ uid: "u1", email: "A@Example.com" });
+    expect(cookie.startsWith("webauthn.")).toBeTrue();
+    expect(verifyOtpSessionCookie(cookie)).toEqual({ uid: "u1", email: "a@example.com" });
+
+    const parts = cookie.split(".");
+    const flipped = parts[2][0] === "A" ? "B" : "A";
+    expect(verifyOtpSessionCookie(`${parts[0]}.${parts[1]}.${flipped}${parts[2].slice(1)}`)).toBeNull();
+
+    const payload = Buffer.from(JSON.stringify({ uid: "u1", email: "a@example.com", iat: 1, exp: 2, webauthn: true })).toString("base64url");
+    expect(verifyOtpSessionCookie(`webauthn.${payload}.${parts[2]}`)).toBeNull();
+    expect(verifyOtpSessionCookie("garbage")).toBeNull();
+  });
+
+  test("fails closed without a long enough secret", async () => {
+    const { getSessionSigningSecret } = await import("../src/env");
+    const saved = process.env.SESSION_SIGNING_SECRET;
+    process.env.SESSION_SIGNING_SECRET = "short";
+    expect(() => getSessionSigningSecret()).toThrow();
+    process.env.SESSION_SIGNING_SECRET = saved;
+  });
+});
+
+describe("safeRedirect", () => {
+  test("accepts root-relative paths only", () => {
+    expect(safeRedirect("/#weather")).toBe("/#weather");
+    expect(safeRedirect("https://evil.example")).toBe("/");
+    expect(safeRedirect("//evil.example")).toBe("/");
+    expect(safeRedirect("/\\evil.example")).toBe("/");
+    expect(safeRedirect(null)).toBe("/");
+  });
+});

@@ -1,0 +1,71 @@
+rules_version = '2';
+
+// Deny by default. Only a Firebase user whose token carries the `member`
+// claim (set server-side after the allow-list check in /api/auth/session or
+// /api/auth/firebase-token) may read or write app data. Writes are shape
+// checked: known collections only, the writer stamps itself, documents stay
+// under 256 KB (the Firestore 1 MiB cap is the hard ceiling).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isMember() {
+      return request.auth != null && request.auth.token.member == true;
+    }
+    function isAdmin() {
+      return isMember() && request.auth.token.admin == true;
+    }
+    function stampedByCaller() {
+      return request.resource.data.updatedBy == request.auth.uid
+        && request.resource.data.updatedAt == request.time;
+    }
+    function smallEnough() {
+      return request.resource.size() < 262144;
+    }
+
+    // Members may read the roster for display names; only the server (Admin
+    // SDK, bypasses rules) writes it.
+    match /members/{email} {
+      allow read: if isMember();
+      allow write: if false;
+    }
+
+    match /units/{code} {
+      allow read: if isMember();
+      allow create, update: if isMember() && stampedByCaller() && smallEnough();
+      allow delete: if isMember();
+    }
+    match /events/{id} {
+      allow read: if isMember();
+      allow create, update: if isMember() && stampedByCaller() && smallEnough();
+      allow delete: if isMember();
+    }
+    match /weather/{date} {
+      allow read: if isMember();
+      allow create, update: if isMember() && stampedByCaller() && smallEnough()
+        && date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+      allow delete: if isMember();
+    }
+    match /confirmations/{key} {
+      allow read: if isMember();
+      allow create, update: if isMember() && stampedByCaller() && smallEnough();
+      allow delete: if isMember();
+    }
+    match /summaries/{key} {
+      allow read: if isMember();
+      allow create, update: if isMember() && stampedByCaller() && smallEnough();
+      allow delete: if isMember();
+    }
+    match /config/{doc} {
+      allow read: if isMember();
+      // weatherStatus is written by the job only.
+      allow create, update: if isMember() && stampedByCaller() && smallEnough()
+        && doc in ['settings', 'contacts'];
+      allow delete: if isAdmin() && doc in ['settings', 'contacts'];
+    }
+
+    // Server-only collections.
+    match /otpCodes/{doc} { allow read, write: if false; }
+    match /rateLimitBuckets/{doc} { allow read, write: if false; }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

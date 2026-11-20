@@ -1,0 +1,12 @@
+project_id        = "lsv-oss-prod"
+region            = "australia-southeast1"
+environment       = "prod"
+domain            = "nicholaswood.com.au"
+github_repository = "nicholas-wood/lsv-service-summary"
+manage_dns        = true
+# Fill after `gcloud beta run domain-mappings describe nicholaswood.com.au`:
+cloud_run_domain_ipv4 = []
+cloud_run_domain_ipv6 = []
+# Optional mail provider:
+resend_api_key = ""
+resend_from    = ""

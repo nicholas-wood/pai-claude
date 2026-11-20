@@ -1,0 +1,68 @@
+import type { BomFeed, DayForecast } from "./parse";
+
+/**
+ * Area (Bass, Port Phillip, Kingston, ...) to BOM town mapping and the
+ * feed-to-grid projection. This is the server-side twin of the page's
+ * BOM_FEED table and bomFeedToGrid(); the two must agree.
+ *
+ * PROVISIONAL until the pack arrives: the table below is a best guess from
+ * the LIMSOC areas. Reconcile against src/ux BOM_FEED and replace. The job
+ * will still run with it, but the authoritative mapping is the page's.
+ */
+export const BOM_FEED: Record<string, { town: string; metro?: string }> = {
+  "Port Phillip": { town: "Melbourne", metro: "Melbourne" },
+  Kingston: { town: "Melbourne", metro: "Melbourne" },
+  Bayside: { town: "Melbourne", metro: "Melbourne" },
+  Peninsula: { town: "Mornington", metro: "Mornington Peninsula" },
+  Bass: { town: "Wonthaggi" },
+  Geelong: { town: "Geelong", metro: "Geelong and Surf Coast" },
+  "Surf Coast": { town: "Torquay", metro: "Geelong and Surf Coast" },
+  "South West": { town: "Warrnambool" },
+  Gippsland: { town: "Lakes Entrance" },
+};
+
+/** The weather grid fields a day holds per area. Keys match the page's grid. */
+export const GRID_FIELDS = ["min", "max", "precis", "rainChance", "rainRange", "wind", "uv", "fireDanger"] as const;
+export type GridField = (typeof GRID_FIELDS)[number];
+export type GridRow = Partial<Record<GridField, string | number>>;
+/** regionName -> fields */
+export type DayGrid = Record<string, GridRow>;
+
+export function pickDay(days: DayForecast[] | undefined, date: string): DayForecast | undefined {
+  return days?.find((d) => d.date === date);
+}
+
+/**
+ * Project the feed onto one day's grid: for every mapped area, the town's
+ * values for that date, with the metro text forecast's wind/UV/fire danger
+ * filling anything the town text left blank.
+ */
+export function bomFeedToGrid(feed: BomFeed, date: string, mapping: typeof BOM_FEED = BOM_FEED): DayGrid {
+  const grid: DayGrid = {};
+  for (const [area, src] of Object.entries(mapping)) {
+    const town = pickDay(feed.towns[src.town], date);
+    const metro = src.metro ? pickDay(feed.metro[src.metro], date) : undefined;
+    if (!town && !metro) continue;
+    const row: GridRow = {};
+    if (town?.min !== undefined) row.min = town.min;
+    if (town?.max !== undefined) row.max = town.max;
+    if (town?.precis) row.precis = town.precis;
+    if (town?.rainChance) row.rainChance = town.rainChance;
+    if (town?.rainRange) row.rainRange = town.rainRange;
+    const wind = town?.wind ?? metro?.wind;
+    const uv = town?.uv ?? metro?.uv;
+    const fire = town?.fireDanger ?? metro?.fireDanger;
+    if (wind) row.wind = wind;
+    if (uv) row.uv = uv;
+    if (fire) row.fireDanger = fire;
+    grid[area] = row;
+  }
+  return grid;
+}
+
+/** Dates covered by the feed, local, sorted, at most `count`. */
+export function feedDates(feed: BomFeed, fromDate: string, count = 7): string[] {
+  const all = new Set<string>();
+  for (const days of Object.values(feed.towns)) for (const d of days) all.add(d.date);
+  return [...all].filter((d) => d >= fromDate).sort().slice(0, count);
+}

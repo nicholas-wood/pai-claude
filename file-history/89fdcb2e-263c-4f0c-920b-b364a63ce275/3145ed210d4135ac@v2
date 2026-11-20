@@ -1,0 +1,107 @@
+import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { buildFeed, extractFromText, formatIssued, parsePrecis } from "../src/lib/weather/parse";
+import { bomFeedToGrid, feedDates } from "../src/lib/weather/mapping";
+import { mergeBomDay, melbourneToday } from "../src/lib/weather/job";
+
+const fx = (n: string) => readFileSync(resolve(import.meta.dir, "fixtures", n), "utf8");
+const xml = { townPrecis: fx("IDV10753.xml"), townText: fx("IDV10752.xml"), metro: fx("IDV10751.xml") };
+
+describe("BOM parse", () => {
+  test("précis product yields towns with dated min/max", () => {
+    const towns = parsePrecis(xml.townPrecis);
+    expect(Object.keys(towns).length).toBeGreaterThan(50);
+    const melb = towns["Melbourne"];
+    expect(melb.length).toBeGreaterThanOrEqual(6);
+    const tomorrow = melb[1];
+    expect(tomorrow.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(typeof tomorrow.max).toBe("number");
+    expect(typeof tomorrow.min).toBe("number");
+    expect(tomorrow.precis).toBeTruthy();
+  });
+
+  test("feed has the bookmarklet format and an issue time", () => {
+    const feed = buildFeed(xml, new Date("2026-11-16T06:00:00Z"));
+    expect(feed.format).toBe("lsv-bom-weather");
+    expect(feed.issued).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(feed.metro["Melbourne"]?.length).toBeGreaterThan(0);
+    // The text product covers 25 towns (Melbourne, Frankston, Wonthaggi, ...);
+    // coastal areas without one take wind/UV from the metro text instead.
+    expect(feed.towns["Melbourne"]?.[1]?.forecast).toBeTruthy();
+    expect(feed.towns["Frankston"]?.[1]?.wind ?? feed.metro["Mornington Peninsula"]?.[1]?.wind).toBeTruthy();
+  });
+
+  test("Surf Coast takes wind from the Geelong and Surf Coast metro text", () => {
+    const feed = buildFeed(xml);
+    const date = feedDates(feed, "2026-11-16", 7)[1];
+    const grid = bomFeedToGrid(feed, date);
+    expect(grid["Surf Coast"]?.wind).toBeTruthy();
+  });
+
+  test("wind, UV and fire danger are lifted from forecast text", () => {
+    const t = "Sunny. Winds northerly 20 to 30 km/h tending northwesterly 25 to 35 km/h in the evening. Sun protection recommended from 9:10 am to 5:20 pm, UV Index predicted to reach 10 [Very High]. Fire Danger Rating: High.";
+    const r = extractFromText(t);
+    expect(r.wind).toStartWith("Winds northerly");
+    expect(r.uv).toBe("10 Very High");
+    expect(r.fireDanger).toBe("High");
+  });
+
+  test("issue time formats for the source label", () => {
+    expect(formatIssued("2026-11-16T16:20:00+11:00")).toBe("4:20 pm Mon 16 Nov");
+    expect(formatIssued("2026-11-17T05:05:00+11:00")).toBe("5:05 am Tue 17 Nov");
+  });
+});
+
+describe("feed to grid", () => {
+  const feed = buildFeed(xml);
+  test("seven dates from today in Melbourne", () => {
+    const dates = feedDates(feed, "2026-11-16", 7);
+    expect(dates.length).toBeGreaterThanOrEqual(6);
+    expect(dates[0] >= "2026-11-16").toBeTrue();
+  });
+  test("every mapped area gets a row with max temp", () => {
+    const date = feedDates(feed, "2026-11-16", 7)[1];
+    const grid = bomFeedToGrid(feed, date);
+    for (const area of ["Port Phillip", "Peninsula", "Geelong", "Surf Coast", "Bass"]) {
+      expect(grid[area]).toBeDefined();
+      expect(typeof grid[area].max).toBe("number");
+    }
+  });
+});
+
+describe("manual protection", () => {
+  const bom = { "Port Phillip": { min: 12, max: 24, precis: "Sunny." }, Bass: { min: 10, max: 20 } };
+  test("fills an empty day", () => {
+    const m = mergeBomDay(undefined, bom, "4:20 pm Mon 16 Nov")!;
+    expect(m.written).toBe(5);
+    expect(m.skippedManual).toBe(0);
+    expect((m.update.grid as Record<string, Record<string, unknown>>)["Bass"].max).toBe(20);
+    expect(m.update.source).toBe("BOM forecast issued 4:20 pm Mon 16 Nov");
+  });
+  test("never overwrites a manual cell", () => {
+    const existing = { grid: { "Port Phillip": { max: 31 } }, manual: ["Port Phillip|max"], source: "manual" };
+    const m = mergeBomDay(existing, bom, "x")!;
+    expect((m.update.grid as Record<string, Record<string, number>>)["Port Phillip"].max).toBe(31);
+    expect((m.update.grid as Record<string, Record<string, number>>)["Port Phillip"].min).toBe(12);
+    expect(m.skippedManual).toBe(1);
+    expect(m.update.manual).toEqual(["Port Phillip|max"]);
+  });
+  test("refreshes its own earlier value", () => {
+    const existing = { grid: { Bass: { max: 18, min: 10 } }, manual: [], source: "BOM forecast issued earlier" };
+    const m = mergeBomDay(existing, { Bass: { max: 20, min: 10 } }, "later")!;
+    expect(m.written).toBe(1);
+    expect((m.update.grid as Record<string, Record<string, number>>)["Bass"].max).toBe(20);
+  });
+  test("no change means no write", () => {
+    const existing = { grid: { Bass: { max: 20, min: 10 } }, manual: [], source: "BOM forecast issued same" };
+    expect(mergeBomDay(existing, { Bass: { max: 20, min: 10 } }, "same")).toBeNull();
+  });
+  test("never writes empty values", () => {
+    const m = mergeBomDay(undefined, { Bass: { max: undefined, precis: "" } }, "x");
+    expect(m?.written ?? 0).toBe(0);
+  });
+  test("Melbourne date is local, not UTC", () => {
+    expect(melbourneToday(new Date("2026-11-16T14:30:00Z"))).toBe("2026-11-17");
+  });
+});

@@ -1,0 +1,52 @@
+import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { z } from "zod";
+import { getAdminAuth } from "@/lib/firebase-admin";
+import { getMemberByEmail, linkMemberUid } from "@/lib/members";
+import { verifyOtp } from "@/lib/otp-store";
+import { checkRateLimitIpAndEmail, getClientIp } from "@/lib/rate-limit";
+import { SESSION_COOKIE_NAME, sessionCookieOptions, signOtpSession } from "@/lib/auth";
+import { resendConfigured } from "@/env";
+
+export const dynamic = "force-dynamic";
+
+const schema = z.object({ email: z.string().email(), code: z.string().length(6) });
+
+/**
+ * Email-code verification, ported from AccessBuddy: hashed single-use code,
+ * rate limited 30/IP and 10/email per 15 minutes, HMAC-signed session.
+ * Ensures a Firebase user exists for the email so the browser can later mint
+ * a custom token for Firestore.
+ */
+export async function POST(request: NextRequest) {
+  if (!resendConfigured()) return NextResponse.json({ error: "Code sign-in is not enabled" }, { status: 404 });
+  const body = await request.json().catch(() => null);
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: "Valid email and 6-digit code required" }, { status: 400 });
+
+  const email = parsed.data.email.toLowerCase().trim();
+  const ip = getClientIp(request);
+  const rl = await checkRateLimitIpAndEmail("auth.verify-otp", ip, email, { windowSeconds: 15 * 60, maxPerIp: 30, maxPerEmail: 10 });
+  if (!rl.ok) {
+    return NextResponse.json({ error: "Too many attempts, please wait a moment and try again." }, { status: 429, headers: { "Retry-After": String(rl.retryAfter) } });
+  }
+
+  const result = await verifyOtp(email, parsed.data.code);
+  if (result !== "valid") return NextResponse.json({ error: "Invalid or expired code" }, { status: 401 });
+
+  const member = await getMemberByEmail(email);
+  if (!member) return NextResponse.json({ error: "Invalid or expired code" }, { status: 401 });
+
+  const auth = getAdminAuth();
+  let uid: string;
+  try {
+    uid = (await auth.getUserByEmail(email)).uid;
+  } catch {
+    uid = (await auth.createUser({ email, emailVerified: true, displayName: member.displayName })).uid;
+  }
+  await linkMemberUid(email, uid);
+
+  const store = await cookies();
+  store.set(SESSION_COOKIE_NAME, signOtpSession({ uid, email }), sessionCookieOptions);
+  return NextResponse.json({ success: true, displayName: member.displayName, role: member.role });
+}

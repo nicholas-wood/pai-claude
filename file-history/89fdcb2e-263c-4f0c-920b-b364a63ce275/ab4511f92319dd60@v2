@@ -1,0 +1,38 @@
+{
+  "name": "lsv-service-summary",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Life Saving Victoria Operational Service Summary, hosted behind AccessBuddy-pattern sign-in on Cloud Run with Firestore.",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "bun run build:bridge && next build",
+    "build:bridge": "bun build src/bridge/bridge.ts --outfile public/vendor/bridge.js --target browser --minify",
+    "start": "node .next/standalone/server.js",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "vendor": "bun run scripts/vendor.ts",
+    "seed": "bun run scripts/seed.ts",
+    "weather": "bun run scripts/weather.ts"
+  },
+  "dependencies": {
+    "fast-xml-parser": "5.2.5",
+    "firebase": "11.10.0",
+    "firebase-admin": "13.4.0",
+    "google-auth-library": "9.15.1",
+    "next": "15.5.6",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "resend": "6.9.4",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "@types/node": "22.15.3",
+    "@types/react": "19.1.9",
+    "@types/react-dom": "19.1.7",
+    "eslint": "9.31.0",
+    "eslint-config-next": "15.5.6",
+    "typescript": "5.8.3"
+  }
+}

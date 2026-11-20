@@ -1,0 +1,35 @@
+import { NextResponse } from "next/server";
+import { OAuth2Client } from "google-auth-library";
+import { clientEnv, serverEnv } from "@/env";
+
+const client = new OAuth2Client();
+
+/**
+ * Cloud Scheduler calls the weather route with a Google-signed OIDC token
+ * (audience = the route URL, email = the scheduler service account). This
+ * verifies that token instead of AccessBuddy's shared x-cron-secret header,
+ * so no secret sits in Terraform state or the job definition. Fails closed
+ * when CRON_INVOKER_EMAIL is unset (503).
+ */
+export async function requireScheduler(request: Request, routeName: string): Promise<NextResponse | null> {
+  const expectedEmail = serverEnv().CRON_INVOKER_EMAIL;
+  if (!expectedEmail) {
+    console.error(`Cron ${routeName} invoked but CRON_INVOKER_EMAIL is not configured`);
+    return NextResponse.json({ error: "Service misconfigured" }, { status: 503 });
+  }
+  const authz = request.headers.get("authorization") ?? "";
+  const token = authz.startsWith("Bearer ") ? authz.slice(7) : "";
+  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const audience = `${clientEnv.NEXT_PUBLIC_APP_URL}${clientEnv.NEXT_PUBLIC_BASE_PATH}/api/cron/${routeName}`;
+    const ticket = await client.verifyIdToken({ idToken: token, audience });
+    const payload = ticket.getPayload();
+    if (!payload?.email_verified || payload.email !== expectedEmail) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return null;
+  } catch (err) {
+    console.error(`Cron ${routeName} OIDC verification failed:`, err);
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+}

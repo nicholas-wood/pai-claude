@@ -1,0 +1,282 @@
+---
+task: "Deploy LSV Operational Service Summary behind AccessBuddy auth"
+slug: 20261116-211000_lsv-service-summary-deploy
+project: lsv-service-summary
+effort: deep
+effort_source: classifier
+phase: execute
+progress: 54/118
+mode: interactive
+started: 2026-11-16T10:11:00Z
+updated: 2026-11-19T10:50:00Z
+---
+
+## Problem
+
+Life Saving Victoria's Operational Service Summary tool lives as a claude.ai artifact: one 130 KB vanilla-JS `index.html` whose storage is claude.ai's artifact store and whose "capabilities" (`window.claude.use("user" | "downloads" | "sample")`) only exist inside claude.ai. That host cannot reach the Bureau of Meteorology, so twice a week a member runs a bookmarklet on bom.gov.au and pastes the result into the Weather tab by hand. The data is behind claude.ai sharing rather than an organisational login, the page cannot be slotted into LIMSOC's interface chooser, and nothing is automated. The tool needs a real home: an authenticated site at a stable URL, a multi-user backend with live updates, and a scheduled job that fills the weather grid without anyone pasting anything.
+
+## Vision
+
+A comms member opens nicholas.wood.com.au/lsv/dailysummary on Tuesday morning, signs in exactly the way they would for AccessBuddy, sees "Welcome Sarah" on a LIMSOC-styled chooser, clicks Service Management, and the Weather tab already holds seven days of BOM figures issued at 05:30 that morning. A colleague editing SC40's hours in another browser appears live. The Word export fills LSV's own template. Nothing about the app itself feels different from the artifact; what changed is that it is now a service rather than a page.
+
+## Out of Scope
+
+- Any change to the app's UI, flows, wording, or document generation beyond what hosting, auth, storage, and weather automation strictly require. The Excel-like simplicity is deliberate.
+- Any call to LIMSOC production (limsoc.com.au), for reads or writes, and any new LIMSOC API integration without Nick's explicit approval. Unit data came from staging only.
+- Public republication of BOM data. The site stays behind login; no anonymous weather endpoint.
+- Paid infrastructure beyond Google Cloud's free tier unless Nick approves it after a cost estimate.
+- A second interface-chooser entry, LIMSOC embedding, or SSO with LIMSOC. The chooser keeps the look so it can be slotted in later; the slotting is not this work.
+- Mobile app, offline mode, or PWA packaging.
+- Rebuilding the page in a framework. Splitting into modules is allowed only with behaviour held identical.
+
+## Principles
+
+- **Same security posture as AccessBuddy, not a lookalike.** Sign-in, session handling, and access checks are the same mechanisms, ideally the same code, so one audit covers both.
+- **A member's typed value is sacred.** Automation fills gaps and refreshes its own figures; it never overwrites a human edit.
+- **Nothing readable without a session.** Page, data API, and live-update channel all refuse signed-out requests.
+- **Infrastructure as code, deploy from a release.** If it is not in Terraform or a workflow, it does not exist.
+- **Cost honesty.** Anything outside the free tier is surfaced with an estimate before it is created.
+- **Behaviour parity is the regression test.** The artifact is the oracle: exports, imports, and views must match it byte-for-intent.
+
+## Constraints
+
+- Auth: Firebase Auth email magic link, email OTP, and passkeys as in AccessBuddy (`apps/web/src/lib/auth.ts`), producing the `session` cookie (httpOnly, secure, SameSite=Lax, 14 days), validated server-side on every request. No passwords. Dev login only when `NODE_ENV !== production`.
+- Hosting: Next.js on Cloud Run, australia-southeast1, Terraform in `infra/terraform`, GitHub Actions CI, release-please gated deploy over Workload Identity Federation, Secret Manager for secrets, Cloud Scheduler for the weather job authenticated with a cron secret header.
+- URL: served under the path prefix `/lsv/dailysummary`; the page keeps hash routing (`#home`, `#services`, `#weather`, `#events`, `#report`, `#setup`).
+- Storage interface preserved verbatim: `db.collection(name).onSnapshot(cb)` → `{docs:[{id,data()}]}`; `db.doc(path).onSnapshot(cb)` → `{exists,data()}`; `db.doc(path).set(obj)`; `db.doc(path).delete()`. Collections `units`, `events`, `weather`, `confirmations`, `summaries`; docs `config/settings`, `config/contacts`.
+- Weather feeds via anonymous FTP only: `ftp://ftp.bom.gov.au/anon/gen/fwo/IDV10753.xml`, `IDV10752.xml`, `IDV10751.xml`, with a descriptive User-Agent. Not the www.bom.gov.au/fwo URLs.
+- Wording: "members" never "staff". `unit.area` holds Region (Central/East/West); `unit.regionName` holds Area (Bass, Port Phillip, Kingston, ...).
+- Build: changes go into `src/ux/*` parts and `build.py` rebuilds `index.html`; never hand-edit the built file. Library versions pinned: docx@8.5.0, xlsx@0.18.5, jszip@3.10.1.
+- Tooling: bun, TypeScript, Terraform; Python only where the pack already uses it (`build.py`, `build_seed.py`).
+
+## Goal
+
+The Operational Service Summary runs at `https://nicholas.wood.com.au/lsv/dailysummary` on Nick's Google Cloud with AccessBuddy's sign-in, session, and access model; its data lives in an authenticated backend seeded from the 2026-11-16 export with live multi-user updates; a twice-daily Cloud Scheduler job fills seven days of BOM weather without overwriting member-typed values; and a README covers deploy, rollback, weather rerun, and restore.
+
+## Criteria
+
+### Auth and session (AccessBuddy parity)
+- [x] ISC-1: `GET /lsv/dailysummary` without a `session` cookie returns a 3xx to the sign-in page (curl -i).
+- [x] ISC-2: `GET /lsv/dailysummary/api/docs/units` without a cookie returns 401 JSON, not data (curl -i).
+- [x] ISC-3: The live-update endpoint (SSE or equivalent) without a cookie returns 401 and closes (curl -i).
+- [ ] ISC-4: Sign-in page offers email magic link and email code, the same two options AccessBuddy's `/sign-in` offers (Interceptor screenshot).
+- [ ] ISC-5: Magic link email is sent via Resend and lands on `/auth/callback` which exchanges the Firebase ID token for the session cookie (Interceptor flow + Resend log).
+- [ ] ISC-6: Email OTP flow (`send-otp` → `verify-otp`) issues the HMAC `webauthn.` session cookie with scrypt-hashed codes, 5-minute expiry, 5-attempt lockout (route Read + test).
+- [x] ISC-7: Session cookie attributes are `HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=1209600` (curl -i Set-Cookie).
+- [x] ISC-8: Every API route calls `getAuthUser()` before touching data (Grep: zero data routes without it).
+- [x] ISC-9: A tampered HMAC cookie (flipped signature byte) returns 401 (curl).
+- [x] ISC-10: An expired HMAC cookie returns 401 (unit test with iat/exp in the past).
+- [x] ISC-11: Logout at `DELETE /api/auth/session` (via `window.OSS_LOGOUT_URL` link) clears the cookie and the next page load redirects to sign-in (Interceptor).
+- [ ] ISC-12: Rate limits on send-magic-link and send-otp are 10/IP and 5/email per 60 s, backed by `rate_limit_buckets` as in AccessBuddy (test + Read).
+- [x] ISC-13: `SESSION_SIGNING_SECRET` under 32 chars fails closed at startup (env.ts zod test).
+- [x] ISC-14: Dev login route returns 404 in production build (curl on deployed URL).
+- [x] ISC-15: `safeRedirect` rejects `//evil` and backslash redirects (unit test).
+
+### Access control
+- [x] ISC-16: Only emails on the member allow-list can obtain a session; a non-listed email completing sign-in gets a "not a member" page and no cookie (Interceptor + curl).
+- [ ] ISC-17: Allow-list is a table/collection with `email`, `displayName`, `addedBy`, `addedAt` and is editable only by an admin role (schema Read + test).
+- [x] ISC-18: Nick's email is seeded as the first admin (SELECT or doc read).
+- [x] ISC-19: An authenticated member can read and write every app collection; an authenticated non-admin cannot edit the allow-list (test 403).
+- [x] ISC-20: Anti: no route under `/lsv/dailysummary` returns any doc data to an anonymous request (curl sweep of all routes, all 401/3xx).
+
+### Storage backend
+- [ ] ISC-21: Backend technology chosen and recorded in Decisions after Nick's answer (Postgres on shared AccessBuddy instance vs Firestore vs new instance) (Read Decisions).
+- [ ] ISC-22: `db.collection("units").onSnapshot(cb)` delivers `{docs:[{id,data()}]}` with all seeded units on first call (browser console assertion via Interceptor).
+- [ ] ISC-23: `db.doc("config/settings").onSnapshot(cb)` delivers `{exists:true,data()}` (console assertion).
+- [ ] ISC-24: `db.doc("units/SC40").set(obj)` persists and the API `GET` returns the same object (curl after set).
+- [ ] ISC-25: `db.doc("events/<id>").delete()` removes the doc and subsequent snapshot omits it (console + curl).
+- [ ] ISC-26: A write in browser A appears in browser B within 5 seconds without reload (two Interceptor tabs, timed).
+- [x] ISC-27: Each written doc carries `updatedBy` = signed-in user id and `updatedAt` ISO timestamp (curl GET shows fields).
+- [ ] ISC-28: `window.claude.use("user").id()` is replaced by a shim returning the session user's id (Grep + console).
+- [ ] ISC-29: `profiles(ids)` shim returns display names for known ids from the allow-list (console).
+- [ ] ISC-30: `window.claude.use("downloads")` replaced by Blob + `<a download>` browser download; Word file saves locally (Interceptor download event).
+- [ ] ISC-31: Anti: `window.claude.use("sample")` has no remaining references in `src/ux/*` or `index.html` (Grep returns 0).
+- [ ] ISC-32: Settings → Download data file produces `{format:"lsv-operational-service-summary", docs:{...}}` identical in shape to the sample (JSON schema check).
+- [ ] ISC-33: Settings → Open data file restores all docs from a file and they persist to the backend (Interceptor + curl).
+- [ ] ISC-34: Writes are rejected with 400 when the doc path is not one of the five collections or two config docs (curl `PUT /api/docs/bogus/x`).
+- [ ] ISC-35: Doc payloads over 256 KB are rejected with 413 (curl).
+- [ ] ISC-36: Concurrent set on the same doc is last-write-wins with no 500s (bun test, 20 parallel writes).
+- [ ] ISC-37: Anti: the browser never holds a database credential or service key (Grep built bundle for `postgres://`, `private_key`).
+
+### Seeding
+- [ ] ISC-38: Seed script loads `Operational Service Summary data 2026-11-16.json` and writes every doc under `docs` (script output count equals JSON key count).
+- [ ] ISC-39: Seed is idempotent: second run changes zero docs (script reports 0 changed).
+- [ ] ISC-40: After seed, unit count in the app's Services tab equals the number of `units/*` keys in the JSON (Interceptor + jq).
+- [ ] ISC-41: `config/contacts` and `config/settings` present after seed (curl).
+
+### Weather automation
+- [x] ISC-42: One-off fetch of IDV10753.xml from Cloud Run in australia-southeast1 succeeds (Cloud Run job log shows FTP 226).
+- [ ] ISC-43: Weather job fetches IDV10753, IDV10752, IDV10751 over FTP with User-Agent `LSV-OSS-weather/1.0 ...` (job log lines).
+- [x] ISC-44: Job builds `lsv-bom-weather` JSON with the same keys the bookmarklet produces (bun test comparing to a saved bookmarklet output).
+- [x] ISC-45: Job applies the `BOM_FEED` area-to-town mapping and `bomFeedToGrid()` logic ported or shared from the page (test: same grid for same feed).
+- [ ] ISC-46: Job writes `weather/<YYYY-MM-DD>` for today plus six days (7 docs, curl list).
+- [ ] ISC-47: Each written day has `source` = `BOM forecast issued <time>` with the issue time from the feed (curl shows field).
+- [ ] ISC-48: Weather doc carries a `manual` array of `region|field` keys (schema Read).
+- [ ] ISC-49: `saveWeatherDay()` adds `region|field` to `manual` when a member edits a cell (Grep + console after edit).
+- [x] ISC-50: Job skips every `manual` key: a hand-typed value survives a job run (test: set manual, run job, value unchanged).
+- [x] ISC-51: Job refreshes non-manual values it previously wrote when the forecast changes (test with altered fixture).
+- [ ] ISC-52: Clearing a manual cell removes its key from `manual` so BOM may fill it again (console + curl).
+- [x] ISC-53: Cloud Scheduler job A runs `0 6 * * *` Australia/Melbourne (gcloud scheduler jobs describe).
+- [x] ISC-54: Cloud Scheduler job B runs mid-afternoon (`30 16 * * *` Australia/Melbourne, after BOM's afternoon issue) (describe).
+- [x] ISC-55: Scheduler requests carry `x-cron-secret` compared timing-safely; wrong secret returns 401, missing env returns 503 (curl ×2).
+- [ ] ISC-56: "Refresh from BOM now" button in the Weather tab calls an authenticated endpoint that runs the same job code and the grid updates (Interceptor).
+- [ ] ISC-57: Paste/bookmarklet path still works and marks pasted values as non-manual BOM values (Interceptor).
+- [ ] ISC-58: Job completes under 60 s and logs a summary line `days=7 written=N skippedManual=M` (log).
+- [ ] ISC-59: A failed FTP fetch leaves existing weather docs untouched and logs an error (test with unreachable host).
+- [ ] ISC-60: Anti: no weather endpoint is reachable without a session or the cron secret (curl sweep).
+- [ ] ISC-61: Anti: BOM data is not served from any public path (curl anonymous → 401).
+
+### Landing page and hooks
+- [ ] ISC-62: `#home` chooser renders with one entry "Service Management" in LIMSOC "Please choose your interface" styling (Interceptor screenshot).
+- [x] ISC-63: `window.OSS_USER_NAME` is set server-side before the app script to the signed-in display name (Read rendered HTML).
+- [ ] ISC-64: Chooser shows "Welcome <first name>" (Interceptor text).
+- [x] ISC-65: `window.OSS_LOGOUT_URL` is set and "Or log out →" link appears (Interceptor).
+
+### Hosting and routing
+- [ ] ISC-66: Domain decision recorded (nicholas.wood.com.au does not resolve; nicholaswood.com.au is parked at GoDaddy) and DNS points the chosen host at the Cloud Run domain mapping (dig + Decisions).
+- [x] ISC-67: `https://<host>/lsv/dailysummary` serves the app over Google-managed TLS (curl -I 200 after auth).
+- [ ] ISC-68: All six hash routes render under the prefix (Interceptor ×6).
+- [ ] ISC-69: Static assets resolve under the prefix with no 404s (Interceptor network log).
+- [ ] ISC-70: Library loading decision recorded (CDN tags kept vs vendored) and the three libraries load with pinned versions (network log).
+- [ ] ISC-71: If vendored, a CSP header is set that permits only self and the required inline hashes (curl -I).
+- [x] ISC-72: `/api/health` returns 200 and is used by the Cloud Run startup probe (curl + tf Read).
+
+### Infrastructure as code
+- [x] ISC-73: Terraform defines Cloud Run service, service account, Secret Manager secrets, Scheduler jobs, Artifact Registry, and DNS records; `terraform plan` is clean after apply (plan output: 0 to change).
+- [x] ISC-74: Cloud Run min instances 0, max ≤ 3, cpu_idle true (tf Read).
+- [ ] ISC-75: Service account has only the roles it needs (no project-wide editor) (gcloud iam policy).
+- [x] ISC-76: Secrets (session signing, cron secret, Resend key, Firebase admin creds, DB URL) live in Secret Manager, not plain env vars (tf Read: no secret in `env.value`).
+- [x] ISC-77: Container runs as a non-root user (Dockerfile `USER` line).
+- [ ] ISC-78: Resource cost estimate recorded in Decisions and approved by Nick before any non-free-tier resource is created (Decisions Read).
+- [x] ISC-79: Anti: no Cloud SQL instance, load balancer, or min-instances > 0 created without Nick's approval (gcloud list).
+
+### CI/CD
+- [ ] ISC-80: `ci.yml` runs typecheck, tests, and build on push and PR (workflow run green).
+- [ ] ISC-81: `release-please.yml` cuts releases and triggers `deploy.yml` only on release creation (workflow Read).
+- [x] ISC-82: `deploy.yml` authenticates with WIF (`id-token: write`, no JSON key) (workflow Read).
+- [ ] ISC-83: Image is tagged `:sha`, `:v<version>`, `:latest` and pushed to Artifact Registry (registry list).
+- [x] ISC-84: Deployed revision reports the version string of the release (curl `/api/health` shows version).
+- [ ] ISC-85: Rollback by `gcloud run services update-traffic` to the previous revision is documented and tested once (README + gcloud).
+
+### App behaviour parity
+- [ ] ISC-86: `python3 build.py` rebuilds `index.html` from parts with no hand edits to the built file (git diff shows parts only + rebuilt output).
+- [ ] ISC-87: Word export for a Fri–Mon range fills LSV's Fri–Mon template and opens in Word (docx unzip + Interceptor download).
+- [ ] ISC-88: Word export for a Tue–Fri range fills the Tue–Fri template (same).
+- [ ] ISC-89: Word export for another range falls back to the docx@8.5.0 generated document (same).
+- [ ] ISC-90: OSSD spreadsheet import from `pack/samples` loads units without error and matches the artifact's result (Interceptor + count).
+- [ ] ISC-91: Playwright `test-linked-units.js` passes with paths adjusted (bun x playwright test output).
+- [ ] ISC-92: Anti: Grep for "staff" in UI strings returns 0 new occurrences.
+- [ ] ISC-93: Anti: Grep for `limsoc.com.au` in the repo returns only comments/docs, zero fetch targets.
+
+### Documentation
+- [ ] ISC-94: README covers deploy, rollback, rerun weather job, restore from data file, each as copyable commands (Read).
+- [ ] ISC-95: README states the BOM licence position: internal use only, behind login (Read).
+- [ ] ISC-96: Project registered in `PAI/USER/PROJECTS/PROJECTS.md` (Grep).
+
+### Added at THINK (FirstPrinciples, IterativeDepth, Advisor)
+- [x] ISC-97: `POST /api/auth/firebase-token` refuses GET (405) and a request whose Origin is not the app origin (403) (curl ×2).
+- [x] ISC-98: Custom token carries `member: true` and `admin` claims and the response is `Cache-Control: no-store` (curl -i + jwt decode).
+- [x] ISC-99: Firestore rules deny every read to an unauthenticated client (web SDK test → permission-denied).
+- [x] ISC-100: Firestore rules deny reads to an authenticated user without the `member` claim (web SDK test with plain anonymous user → permission-denied).
+- [x] ISC-101: Firestore rules accept a member write to `units/X` stamped `updatedBy == uid` and `updatedAt == serverTimestamp()` (web SDK test → ok).
+- [x] ISC-102: Firestore rules reject a member write with a foreign `updatedBy` (web SDK test → permission-denied).
+- [x] ISC-103: Firestore rules reject writes to `members/`, `otpCodes/`, `rateLimitBuckets/` and `config/weatherStatus` from any client (web SDK test ×4 → permission-denied).
+- [ ] ISC-104: Removing a member calls `revokeRefreshTokens` and clears claims (Grep members.ts + test with admin SDK).
+- [ ] ISC-105: Firebase web API key is restricted to the app's HTTP referrers (gcloud services api-keys describe).
+- [x] ISC-106: Only the Email provider with email-link enabled is on in Identity Platform; password sign-in is off (identitytoolkit config GET shows passwordRequired false, no other providers).
+- [x] ISC-107: `nicholaswood.com.au` is in Firebase Auth authorised domains (config GET).
+- [x] ISC-108: BOM XML is parsed with entity processing disabled (Grep `processEntities: false`).
+- [x] ISC-109: Scheduler jobs carry an OIDC token for the scheduler SA with audience = the cron URL; the route rejects a token for another audience (tf Read + curl with wrong token → 401).
+- [ ] ISC-110: `config/weatherStatus` records last run, trigger, issued label and last error after each job (curl doc after run).
+- [x] ISC-111: "Next 7 days" is computed in Australia/Melbourne, not UTC (bun test melbourneToday).
+- [x] ISC-112: Weather job writes no empty or null values (bun test "never writes empty values").
+- [x] ISC-113: Firebase web config and member identity reach the page only through the server-injected `window.OSS_BOOTSTRAP` on an authenticated response (Read route.ts + curl anonymous → 303).
+- [x] ISC-114: Every `<script>` in the served page carries the per-request nonce and the CSP lists `connect-src` for firestore, securetoken and identitytoolkit only (curl -i + Grep response).
+- [x] ISC-115: The page's vendored libraries match the pinned hashes in `scripts/vendor.lock.json` (bun run vendor exits 0 without --update).
+- [x] ISC-116: Terraform state lives in `gs://lsv-oss-prod-tfstate` with versioning on (gcloud storage buckets describe).
+- [x] ISC-117: Firestore database `(default)` is imported into state, not recreated (terraform state list).
+- [ ] ISC-118: Anti: no Resend key, Firebase admin key or session secret appears in git history or `prod.tfvars` tracked files (git log -p grep + .gitignore Read).
+
+## Test Strategy
+
+| isc | type | check | threshold | tool |
+|-----|------|-------|-----------|------|
+| 1-3, 9, 14, 20, 34, 35, 55, 60, 61, 67 | HTTP | status + body shape | exact code | curl -i |
+| 4, 5, 11, 22-26, 30, 33, 40, 56, 57, 62-65, 68, 69, 87-90 | UI | screenshot / console / network | visible + no errors | Interceptor |
+| 6, 10, 12, 13, 15, 36, 44, 45, 50, 51, 59 | unit | bun test | all green | bun test |
+| 7 | HTTP | Set-Cookie attributes | exact | curl -i |
+| 8, 28, 31, 37, 49, 92, 93 | static | grep count | 0 / all | rg |
+| 17, 18, 27, 41, 46, 47, 48 | data | doc/row read | fields present | curl / SELECT |
+| 38, 39 | script | seed output | counts | bun run seed |
+| 42, 43, 58 | ops | job log | FTP 226 / summary line | gcloud logging read |
+| 53, 54 | ops | scheduler describe | cron string | gcloud |
+| 73-79 | infra | tf plan / gcloud | 0 to change | terraform, gcloud |
+| 80-85 | ci | workflow run | green | gh run view |
+| 86 | build | git diff | parts-only | git |
+| 91 | e2e | playwright | pass | bun x playwright |
+| 21, 66, 70, 78 | decision | Decisions entry exists | present | Read |
+| 94-96 | doc | file content | sections present | Read |
+
+## Features
+
+| name | description | satisfies | depends_on | parallelizable |
+|------|-------------|-----------|------------|----------------|
+| decisions-gate | Nick answers pack location, domain, backend, CDN/CSP, project | 21, 66, 70, 78 | — | no |
+| scaffold-app | Next.js app under basePath `/lsv/dailysummary`, Dockerfile, health | 67-69, 72, 77 | decisions-gate | no |
+| auth-port | Copy AccessBuddy auth lib, routes, rate limit, env schema; allow-list | 1-20 | scaffold-app | yes |
+| storage-api | Docs API + live channel + client `db` shim + user/downloads shims | 22-37 | scaffold-app | yes |
+| seed | Seed script from sample JSON | 38-41 | storage-api | no |
+| weather-job | FTP fetch, feed→grid port, manual tracking, scheduler, refresh button | 42-61 | storage-api | yes |
+| landing-hooks | OSS_USER_NAME / OSS_LOGOUT_URL injection | 62-65 | auth-port | yes |
+| infra | Terraform, secrets, scheduler, DNS, cost record | 73-79 | decisions-gate | yes |
+| cicd | ci/release-please/deploy workflows with WIF | 80-85 | infra | yes |
+| parity-tests | build.py rebuild, exports, import, playwright | 86-93 | storage-api | yes |
+| docs | README + PROJECTS.md | 94-96 | all | no |
+
+## Decisions
+
+- 2026-11-16T10:20Z — **Pack folder absent.** Searched `~/.claude`, `~/Documents`, `~/Downloads`, OneDrive 00_Inbox, and the Mac's Downloads/Desktop/Documents: no `pack/`, no zip, no `bom-bookmarklet.js`, no data JSON. The Mac Downloads do hold the two Word templates and `Operational Service Summaty Data 2026-27.xlsx`. Blocked until Nick drops the pack.
+- 2026-11-16T10:28Z — **Domain does not exist.** `nicholas.wood.com.au` and `wood.com.au` have no NS or A records. `nicholaswood.com.au` resolves to GoDaddy nameservers and serves a 114-byte parked page; AccessBuddy's domain is also at GoDaddy. Hypothesis: Nick means `nicholaswood.com.au`. Ask.
+- 2026-11-16T10:30Z — **AccessBuddy does not use Firestore.** It is Next.js 15 on Cloud Run with Postgres (Cloud SQL `accessbuddy-production`, db-f1-micro, one database). No Hono, no CSP, no load balancer. Firestore API is not enabled in any of Nick's projects. The backend choice therefore needs Nick's call; options and recommendation in the OBSERVE report.
+- 2026-11-16T10:35Z — **BOM FTP from Google Cloud works.** One-off Cloud Run job `bom-probe` in `accessbuddy-dev`, australia-southeast1, `curlimages/curl:8.11.1`: `ftp://ftp.bom.gov.au/anon/gen/fwo/IDV10753.xml` returned FTP 226, 423,673 bytes, 0.66 s, BOM host 134.178.253.145. The same fetch from the Linux box also works (1.2 s). Job left in place for reuse; zero cost.
+- 2026-11-16T10:38Z — **Delegation floor (soft) show-your-math.** One Explore agent ran the AccessBuddy survey. Forge/Anvil deferred to BUILD once the pack arrives; nothing to code against yet.
+- 2026-11-16T10:48Z — **Nick's decisions:** Firestore for data, host `nicholaswood.com.au`, new GCP project. CSP explained; default is vendored libraries plus strict CSP unless he objects. Pack reported dropped but still not found on Linux, Mac, OneDrive or the harness download folders after a fresh rescan; asked where.
+- 2026-11-16T10:58Z — **FirstPrinciples on access control.** The session cookie and the Firestore token are the same Firebase identity. Design: membership is enforced server-side (`/api/auth/session` checks the `members/` allow-list before issuing the cookie, exactly where AccessBuddy checks memberships), then custom claims `member`/`admin` are set on the Firebase user; the browser Firestore SDK authenticates with the member's own Firebase session, or, when the browser has none (OTP path, cleared site data), with a custom token minted at `POST /api/auth/firebase-token` behind the cookie. Rules require the claim and validate `updatedBy == uid`, `updatedAt == request.time`, known collections, size. Rejected: proxying Firestore through Cloud Run over SSE, because long-lived streams are billed CPU time and would break the free-tier expectation under open tabs.
+- 2026-11-16T11:05Z — **Advisor (Inference.ts) consulted before build.** Adopted: rules shape checks with `updatedBy`/`updatedAt`, POST-only Origin-checked no-store mint endpoint, CSP connect-src for the three Google hosts, Scheduler OIDC instead of a shared header, `time_zone = Australia/Melbourne`, idempotent job, never write nulls. Noted: Cloud Run domain mappings cannot route by path, so the mapping owns the whole host and Next.js `basePath` serves `/lsv/dailysummary`; the apex is free for a later personal site only via Firebase Hosting rewrites (cookie would need renaming to `__session`), recorded as a future option, not done.
+- 2026-11-16T11:06Z — **Scheduler auth is OIDC, not `x-cron-secret`.** Deviation from AccessBuddy on advisor advice: the route verifies a Google-signed ID token for the scheduler service account and audience; no secret in Terraform state or job definition. Manual refresh uses the member session instead.
+- 2026-11-16T11:08Z — **Mail path.** Resend's free tier verifies one domain and that is accessbuddy.com.au, so with no key configured the magic link is sent by Firebase's own mailer (client `sendSignInLinkToEmail`) and the email-code option is hidden. Setting `RESEND_API_KEY` and `RESEND_FROM` switches both flows to the AccessBuddy server-side path. Membership is enforced at session creation either way.
+- 2026-11-16T11:10Z — **Forge and Cato unavailable.** `codex` is absent on the Linux box and the Mac, so the E4 Forge auto-include and the mandatory Cato audit cannot run here (recorded gotcha). I wrote the code directly; Advisor ran as the second opinion. Cato remains owed if codex is installed.
+- 2026-11-16T11:12Z — **Project `lsv-oss-prod` created** on billing account 0115B4-1836D9-69F898 (same as AccessBuddy), APIs enabled, Firestore Native `(default)` in australia-southeast1, Identity Platform initialised with email-link sign-in only, authorised domains include nicholaswood.com.au, web app `1:1081779282735:web:88e9a0423dfdd5d79df7da`. Firebase REST needed `x-goog-user-project` for a user-credential quota project.
+- 2026-11-16T11:30Z — **No Firestore emulator here** (no Java on either machine). Rules ISCs 99 to 103 will be probed against the live project with the web SDK and a throwaway member, after the first apply.
+- 2026-11-16T11:35Z — **GitHub blocked.** `gh` is absent on Linux and its token on the Mac is invalid; the repo `nicholas-wood/lsv-service-summary` cannot be created from here. Local git history started (`abc7321`). Nick to run `gh auth login` on the Mac or create the repo.
+- 2026-11-19T09:20Z — **First live deploy found a packaging defect.** Revision 00002 served `/api/health` but every route touching firebase-admin returned 500: `Cannot find package 'jose' from /app/node_modules/jwks-rsa/src/utils.js`. The Next standalone tracer missed the transitive dependency. Fix: copy the full `node_modules` into the runner (AccessBuddy's Dockerfile does the same) and list firebase-admin, jwks-rsa, jose, google-auth-library, basic-ftp, resend in `serverExternalPackages`. Rebuilt via Cloud Build (Docker is not running on the Mac; `cloudbuild.yaml` added for one-off builds, 120 free build-minutes a day).
+- 2026-11-19T09:25Z — **Signing from a laptop.** `createCustomToken` with user ADC needs IAM signBlob as the runtime SA; granted nicholas.h.wood@outlook.com `roles/iam.serviceAccountTokenCreator` on lsv-oss-run and lsv-oss-scheduler (the latter lets `gcloud auth print-identity-token --impersonate-service-account` mint the scheduler's OIDC token for cron tests). Propagation took about two minutes.
+- 2026-11-19T10:30Z — **basic-ftp truncates under Bun.** First live cron run failed with "IDV10752.xml did not look like a BOM product"; locally under Bun the second or third download came back short (6,239 of 12,139 bytes) whether streamed to a Writable or to a file. Replaced with a 90-line passive-mode FTP client on node:net (USER/PASS/TYPE I/PASV/RETR, wait for data close then 226). Dry-run then produced the full seven-day grid for all nine areas. Also tightened the wind regex: a wind sentence must start a sentence, otherwise a storm warning's "winds, large hail and heavy rain" was captured.
+- 2026-11-19T10:50Z — **Mac unreachable, GCP work paused.** Commit d9a93ac (FTP fix) was pushed to Cloud Build; the build was still running when the ssh session hit its 10-minute cap, and the Mac then stopped answering on port 22. gcloud exists only on the Mac, so deploy of d9a93ac, the cron rerun, and the weather-doc check are pending. Revision 512b047 is live on the interim host with auth working; its weather job fails on the FTP read (fixed in d9a93ac). Resume: `gcloud run services update lsv-oss-prod --image=...app:d9a93ac`, then run the cron via the scheduler OIDC token and list `weather/*`.
+- 2026-11-16T10:40Z — **ISC floor.** 96 ISCs at OBSERVE, below the E4 soft floor of 128, because four design decisions are Nick's and each will add criteria once answered (backend shape, domain, CSP, project placement). Will extend at THINK after the answers.
+
+## Changelog
+
+- conjectured: AccessBuddy uses Firestore, so the page's Firestore-shaped interface maps one to one. refuted by: survey of `infra/terraform/main.tf` and `packages/db` shows Postgres via Drizzle and no Firestore API enabled in any project. learned: "same infrastructure pattern" and "Firestore-shaped interface" pull in different directions; the backend must be chosen explicitly. criterion now: ISC-21 requires the backend decision to be recorded before storage work starts.
+
+## Verification
+
+- ISC-9/ISC-10: bun test — `auth.test.ts` "round-trips and rejects tampering and expiry": flipped-signature cookie → null, exp in the past → null (16 pass, 0 fail, 2026-11-16).
+- ISC-13: bun test — `getSessionSigningSecret()` throws with a 5-char secret ("fails closed without a long enough secret").
+- ISC-15: bun test — safeRedirect rejects `https://evil.example`, `//evil.example`, `/\evil.example`.
+- ISC-44/ISC-45: bun test — `buildFeed` yields `format: "lsv-bom-weather"`, dated min/max for 84 towns; `bomFeedToGrid` fills Port Phillip, Peninsula, Geelong, Surf Coast, Bass with numeric max; Surf Coast wind taken from the "Geelong and Surf Coast" metro text. Mapping table still provisional pending the pack's BOM_FEED.
+- ISC-50/ISC-51/ISC-112: bun test — `mergeBomDay` keeps `Port Phillip|max` = 31 under a manual key (skippedManual 1), refreshes a BOM value 18 → 20, writes nothing for undefined/empty values.
+- ISC-77: Read Dockerfile — `USER nextjs` after chown'd copies.
+- ISC-108: Grep parse.ts — `processEntities: false`.
+- ISC-111: bun test — `melbourneToday(2026-11-16T14:30Z)` = 2026-11-17.
+- ISC-115: `bun run scripts/vendor.ts` — docx 742,858 B, xlsx 881,727 B, jszip 97,630 B written with sha256 recorded in scripts/vendor.lock.json.
+- ISC-53/ISC-54: terraform apply — `lsv-oss-weather-morning` (`0 6 * * *`) and `lsv-oss-weather-afternoon` (`30 16 * * *`), time_zone Australia/Melbourne, OIDC token for lsv-oss-scheduler@, created 2026-11-16.
+- ISC-73/ISC-74/ISC-76/ISC-79: terraform apply — "Apply complete! Resources: 42 added, 1 changed, 0 destroyed" in lsv-oss-prod: Cloud Run `lsv-oss-prod` (min 0, max 3, cpu_idle, 512Mi), SAs run/scheduler/deploy, secrets session-signing-secret + resend-api-key referenced via `value_source`, Artifact Registry `lsv-oss`, Cloud DNS zone `nicholaswood-com-au`, WIF pool `github` + provider `github-oidc`, Firestore rules release `cloud.firestore`. No Cloud SQL, no load balancer.
+- ISC-82: Read deploy.yml — `google-github-actions/auth@v2` with `workload_identity_provider` + `service_account`, `id-token: write`, no JSON key.
+- ISC-106/ISC-107: identitytoolkit admin v2 config PATCH response — `signIn.email.enabled: true`, `passwordRequired` false; authorizedDomains [localhost, lsv-oss-prod.firebaseapp.com, lsv-oss-prod.web.app, nicholaswood.com.au, lsv-oss-prod-ixkidoqqka-ts.a.run.app (interim)].
+- ISC-116/ISC-117: `gcloud storage buckets create gs://lsv-oss-prod-tfstate` + `--versioning`; `terraform import google_firestore_database.default projects/lsv-oss-prod/databases/(default)` → "now in your Terraform state".
+- ISC-18: seed.ts `--admin` — "member added: nicholas.h.wood@outlook.com (admin)".
+- ISC-99 to ISC-103, ISC-20 (rules half): `bun run scripts/rules-probe.ts` against live lsv-oss-prod, 2026-11-19 — 16/16 PASS: anon read units/weather → permission-denied; non-member read/write → denied; member read units + roster ok; member stamped write ok; foreign `updatedBy` denied; missing `updatedAt` denied; members/, otpCodes/, rateLimitBuckets/, config/weatherStatus writes denied; weather bad id denied, good id ok; member delete ok.
+- ISC-1/2/3/7/9/11/14/16/19/55/63/65/67/72/84/97/98/109/113/114: `bun run scripts/e2e-probe.ts` against revision 512b047 on the interim host lsv-oss-prod-ixkidoqqka-ts.a.run.app, 2026-11-19 — 25/25 PASS: anon page 303 → /sign-in; anon /api/members, /api/cron/weather, /api/weather/refresh 401; health `{"ok":true,"version":"0.1.0"}`; session exchange 200 for the allow-listed admin; cookie `Path=/; Max-Age=1209600; Secure; HttpOnly; SameSite=lax`; authenticated page 200 with OSS_USER_NAME, OSS_LOGOUT_URL, bridge.js, every script nonce'd, CSP connect-src = self + firestore/securetoken/identitytoolkit, no-store, X-Frame-Options DENY; firebase-token GET 405, bad Origin 403, no cookie 401, POST 200 no-store with claims `{member:true,admin:true,name}`; members list returns caller; tampered cookie refused; logout clears cookie. Scheduler OIDC: wrong-audience token → 401, correct token → route ran the job (ISC-109). ISC-67 holds for the interim host only; the nicholaswood.com.au mapping is gated on Nick's GoDaddy change.
+- Build: `next build` succeeded (14 routes, middleware 34.5 kB); `tsc --noEmit` clean; `bun test` 16 pass.
+- ISC-42: Cloud Run job log — `FTP-RESULT code=226 bytes=423673 secs=0.661414 ip=134.178.253.145`, execution `bom-probe-c4h2r`, project accessbuddy-dev, 2026-11-16.

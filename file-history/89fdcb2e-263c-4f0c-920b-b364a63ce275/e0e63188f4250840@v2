@@ -1,0 +1,23 @@
+#!/usr/bin/env bun
+/**
+ * Run the BOM weather job from a terminal (ops rerun or local test).
+ *   bun run weather            fetch, apply to Firestore, print summary
+ *   bun run weather --dry-run  fetch and print the grid for each day, no writes
+ */
+import { fetchBomProducts } from "../src/lib/weather/ftp";
+import { buildFeed, formatIssued } from "../src/lib/weather/parse";
+import { bomFeedToGrid, feedDates } from "../src/lib/weather/mapping";
+
+const xml = await fetchBomProducts();
+const feed = buildFeed(xml);
+console.log(`issued: ${formatIssued(feed.issued)} (${feed.issued})`);
+if (process.argv.includes("--dry-run")) {
+  const { melbourneToday } = await import("../src/lib/weather/job");
+  for (const date of feedDates(feed, melbourneToday(), 7)) {
+    console.log(`\n${date}`);
+    console.table(bomFeedToGrid(feed, date));
+  }
+} else {
+  const { applyFeed } = await import("../src/lib/weather/job");
+  console.log(await applyFeed(feed, "cli"));
+}

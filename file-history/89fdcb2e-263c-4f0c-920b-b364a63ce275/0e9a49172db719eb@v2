@@ -1,0 +1,34 @@
+#!/usr/bin/env bun
+/**
+ * Vendor the three browser libraries the page loads, at the exact versions
+ * the artifact pinned, into public/vendor so the CSP can stay 'self'-only.
+ * Verifies each download against the SHA-256 recorded in vendor.lock.json;
+ * run with --update to (re)record hashes after a deliberate version change.
+ */
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+const LIBS = [
+  { name: "docx.min.js", url: "https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js" },
+  { name: "xlsx.full.min.js", url: "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" },
+  { name: "jszip.min.js", url: "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" },
+];
+
+const outDir = resolve(import.meta.dir, "../public/vendor");
+const lockPath = resolve(import.meta.dir, "vendor.lock.json");
+mkdirSync(outDir, { recursive: true });
+const update = process.argv.includes("--update");
+const lock: Record<string, string> = existsSync(lockPath) ? JSON.parse(readFileSync(lockPath, "utf8")) : {};
+
+for (const lib of LIBS) {
+  const res = await fetch(lib.url);
+  if (!res.ok) throw new Error(`${lib.url}: ${res.status}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  const sha = createHash("sha256").update(buf).digest("hex");
+  if (!update && lock[lib.name] && lock[lib.name] !== sha) throw new Error(`${lib.name}: hash mismatch (expected ${lock[lib.name]}, got ${sha})`);
+  lock[lib.name] = sha;
+  writeFileSync(resolve(outDir, lib.name), buf);
+  console.log(`${lib.name} ${buf.length} bytes sha256=${sha.slice(0, 16)}...`);
+}
+writeFileSync(lockPath, JSON.stringify(lock, null, 2) + "\n");

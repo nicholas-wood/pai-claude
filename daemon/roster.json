@@ -1,7 +1,7 @@
 {
   "proto": 1,
-  "supervisorPid": 2316523,
-  "updatedAt": 1795088667276,
+  "supervisorPid": 3018386,
+  "updatedAt": 1795133967822,
   "workers": {
     "eb37ba0f": {
       "pid": 3600454,
@@ -73,6 +73,79 @@
       "ptyAuth": "67d5e129a7377857b4083646b8a36308",
       "replPid": 3600460,
       "replProcStart": "580744503"
+    },
+    "7506614f": {
+      "pid": 3007837,
+      "procStart": "822122122",
+      "sessionId": "7506614f-a94c-479a-a7b1-f6c724349a2c",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/7506614f.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/c4ad3f32.pty.sock",
+      "cliVersion": "2.1.328",
+      "startedAt": 1795130210109,
+      "attempt": 1,
+      "cwd": "/home/nicholas-wood/.claude",
+      "dispatch": {
+        "proto": 1,
+        "short": "7506614f",
+        "nonce": "7fb38206",
+        "sessionId": "7506614f-a94c-479a-a7b1-f6c724349a2c",
+        "createdAt": 1795130210101,
+        "source": "fleet",
+        "cwd": "/home/nicholas-wood/.claude",
+        "launch": {
+          "mode": "resume",
+          "sessionId": "7506614f-a94c-479a-a7b1-f6c724349a2c",
+          "transcriptPath": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/7506614f-a94c-479a-a7b1-f6c724349a2c.jsonl",
+          "fork": false,
+          "flagArgs": [
+            "--agent",
+            "claude",
+            "--model",
+            "fable[1m]"
+          ],
+          "restoresTranscript": true
+        },
+        "env": {},
+        "isolation": "none",
+        "respawnFlags": [
+          "--agent",
+          "claude",
+          "--model",
+          "fable[1m]"
+        ],
+        "fromRoster": true,
+        "agent": "claude",
+        "seed": {
+          "intent": "",
+          "name": "accessbuddy locker equivalent"
+        },
+        "cols": 224,
+        "rows": 50
+      },
+      "decModes": [
+        2004,
+        2031,
+        1004,
+        1000,
+        1002,
+        1003,
+        1006
+      ],
+      "firedInteractiveMarks": [
+        {
+          "kind": "content_paint",
+          "msgsLoaded": 1380,
+          "msgsInJsonl": 1380,
+          "msgsRenderedAtFirstPaint": 1380
+        },
+        {
+          "kind": "prompt_idle"
+        }
+      ],
+      "rvAuth": "37f93f8c0ef6bec0dac9ef0d5b675608",
+      "ptyAuth": "cf198bd08fa4b62651edf33d132f547e",
+      "replPid": 3007847,
+      "replProcStart": "822122134"
     }
   }
 }

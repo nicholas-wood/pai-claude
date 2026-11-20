@@ -1,0 +1,178 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { safeRedirect } from "@/lib/safe-redirect";
+
+const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
+async function errorFromResponse(res: Response, fallback: string): Promise<Error> {
+  const data = await res.json().catch(() => null);
+  return new Error(data?.error ?? fallback);
+}
+
+/**
+ * Sign-in form ported from AccessBuddy: email magic link by default, with
+ * the 6-digit code path available when a mail provider is configured.
+ */
+export function SignInForm({ codeSignInAvailable }: { codeSignInAvailable: boolean }) {
+  const router = useRouter();
+  const params = useSearchParams();
+  const redirectTo = safeRedirect(params.get("redirect"));
+  const [email, setEmail] = useState("");
+  const [mode, setMode] = useState<"link" | "code">("link");
+  const [sent, setSent] = useState(false);
+  const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [resent, setResent] = useState(false);
+
+  async function sendLink() {
+    const res = await fetch(`${BASE}/api/auth/send-magic-link`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim(), redirect: redirectTo }),
+    });
+    if (!res.ok) throw await errorFromResponse(res, "Failed to send sign-in link");
+    const data = await res.json();
+    if (data.clientSend) {
+      // Firebase sends the email itself when Resend is not configured.
+      const { auth } = await import("@/lib/firebase-client");
+      const { sendSignInLinkToEmail } = await import("firebase/auth");
+      await sendSignInLinkToEmail(auth, email.trim(), {
+        url: `${window.location.origin}${BASE}/auth/callback?redirect=${encodeURIComponent(redirectTo)}`,
+        handleCodeInApp: true,
+      });
+    }
+    window.localStorage.setItem("emailForSignIn", email.trim());
+  }
+
+  async function sendCode() {
+    const res = await fetch(`${BASE}/api/auth/send-otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim() }),
+    });
+    if (!res.ok) throw await errorFromResponse(res, "Failed to send code");
+  }
+
+  async function handleSend() {
+    if (!email.trim()) return;
+    setLoading(true);
+    setError(null);
+    try {
+      if (mode === "code") await sendCode();
+      else await sendLink();
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResend() {
+    setLoading(true);
+    setError(null);
+    try {
+      if (mode === "code") await sendCode();
+      else await sendLink();
+      setResent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to resend.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleVerifyCode() {
+    if (code.length !== 6) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${BASE}/api/auth/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), code }),
+      });
+      if (!res.ok) throw await errorFromResponse(res, "Invalid code");
+      router.push(redirectTo);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Verification failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="auth-card">
+      <h1>Operational Service Summary</h1>
+      <p className="sub">Life Saving Victoria. Sign in with your email, no password needed.</p>
+      {!sent ? (
+        <>
+          <label htmlFor="email">Email address</label>
+          <input
+            id="email"
+            type="email"
+            autoComplete="email"
+            autoFocus
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSend()}
+            placeholder="you@example.com"
+          />
+          <button className="primary" onClick={handleSend} disabled={loading || !email.trim()}>
+            {loading ? "Sending..." : mode === "code" ? "Send sign-in code" : "Send sign-in link"}
+          </button>
+          {error && <p className="error">{error}</p>}
+          <p className="hint">
+            {mode === "code" ? "We will email you a 6-digit code." : "We will email you a sign-in link."}
+          </p>
+          {codeSignInAvailable && (
+            <div className="row">
+              <button className="link" onClick={() => setMode(mode === "code" ? "link" : "code")}>
+                {mode === "code" ? "Use a sign-in link instead" : "Use a 6-digit code instead"}
+              </button>
+            </div>
+          )}
+        </>
+      ) : mode === "code" ? (
+        <div className="sent">
+          <div className="icon">✉</div>
+          <p>Enter the 6-digit code we sent to <strong>{email}</strong></p>
+          <input
+            className="code"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={6}
+            placeholder="000000"
+            autoFocus
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            onKeyDown={(e) => e.key === "Enter" && handleVerifyCode()}
+          />
+          <button className="primary" onClick={handleVerifyCode} disabled={loading || code.length !== 6}>
+            {loading ? "Verifying..." : "Sign in"}
+          </button>
+          {error && <p className="error">{error}</p>}
+          <div className="row">
+            <button className="link" onClick={handleResend} disabled={loading}>{resent ? "Code resent" : "Resend code"}</button>
+            <button className="link" onClick={() => { setSent(false); setCode(""); setError(null); }}>Use a different email</button>
+          </div>
+        </div>
+      ) : (
+        <div className="sent">
+          <div className="icon">✉</div>
+          <p><strong>Check your email</strong></p>
+          <p className="hint">We sent a sign-in link to <strong>{email}</strong>. Open it in this browser.</p>
+          {resent && <p className="hint">Link resent.</p>}
+          {error && <p className="error">{error}</p>}
+          <div className="row">
+            <button className="link" onClick={handleResend} disabled={loading}>Resend link</button>
+            <button className="link" onClick={() => { setSent(false); setResent(false); setError(null); }}>Use a different email</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

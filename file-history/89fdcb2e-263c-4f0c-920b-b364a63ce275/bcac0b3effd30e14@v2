@@ -1,0 +1,41 @@
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { getAuthUser } from "@/lib/auth";
+import { listMembers, removeMember, upsertMember } from "@/lib/members";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Member allow-list administration. Members may list (for display names);
+ * only admins may add, change or remove. The page's profiles() shim reads
+ * display names straight from Firestore, so GET here is for ops use.
+ */
+export async function GET() {
+  const user = await getAuthUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const members = await listMembers();
+  return NextResponse.json({ members: members.map(({ email, displayName, role, uid }) => ({ email, displayName, role, uid: uid ?? null })) });
+}
+
+const upsertSchema = z.object({ email: z.string().email(), displayName: z.string().min(1).max(80), role: z.enum(["member", "admin"]).default("member") });
+
+export async function PUT(request: NextRequest) {
+  const user = await getAuthUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const parsed = upsertSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "email, displayName and role required" }, { status: 400 });
+  const rec = await upsertMember(parsed.data, user.email);
+  return NextResponse.json({ member: rec });
+}
+
+export async function DELETE(request: NextRequest) {
+  const user = await getAuthUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const email = new URL(request.url).searchParams.get("email") ?? "";
+  if (!email) return NextResponse.json({ error: "email required" }, { status: 400 });
+  if (email.toLowerCase().trim() === user.email) return NextResponse.json({ error: "You cannot remove yourself" }, { status: 400 });
+  await removeMember(email);
+  return NextResponse.json({ success: true });
+}

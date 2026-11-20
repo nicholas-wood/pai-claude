@@ -1,0 +1,58 @@
+import { z } from "zod";
+
+/**
+ * Server environment, validated lazily so build steps that do not need
+ * secrets still succeed. Mirrors AccessBuddy's apps/web/src/env.ts shape.
+ */
+const serverSchema = z.object({
+  SESSION_SIGNING_SECRET: z.string().min(32).optional(),
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM: z.string().optional(),
+  CRON_INVOKER_EMAIL: z.string().email().optional(),
+  ENABLE_DEV_LOGIN: z.enum(["true", "false"]).optional(),
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+});
+
+let _server: z.infer<typeof serverSchema> | null = null;
+export function serverEnv() {
+  if (_server) return _server;
+  const parsed = serverSchema.safeParse(process.env);
+  if (!parsed.success) {
+    throw new Error(`Invalid server environment: ${parsed.error.message}`);
+  }
+  _server = parsed.data;
+  return _server;
+}
+
+export const clientEnv = {
+  NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+  NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? "",
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? "",
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "",
+  NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? "",
+  NEXT_PUBLIC_BASE_PATH: process.env.NEXT_PUBLIC_BASE_PATH ?? "/lsv/dailysummary",
+  NEXT_PUBLIC_APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION ?? "dev",
+};
+
+const MIN_SESSION_SIGNING_SECRET_LENGTH = 32;
+
+/**
+ * Dedicated session-signing secret. Throws when unset or too short so OTP
+ * sessions fail closed instead of being signed with a guessable value.
+ * Copied from AccessBuddy's getSessionSigningSecret().
+ */
+export function getSessionSigningSecret(): string {
+  const secret = process.env.SESSION_SIGNING_SECRET;
+  if (!secret || secret.length < MIN_SESSION_SIGNING_SECRET_LENGTH) {
+    throw new Error(
+      `SESSION_SIGNING_SECRET is required and must be at least ${MIN_SESSION_SIGNING_SECRET_LENGTH} characters. ` +
+        "Refusing to sign or verify session cookies without it."
+    );
+  }
+  return secret;
+}
+
+/** Email sending through Resend is on only when both values are configured. */
+export function resendConfigured(): boolean {
+  return !!process.env.RESEND_API_KEY && !!process.env.RESEND_FROM;
+}

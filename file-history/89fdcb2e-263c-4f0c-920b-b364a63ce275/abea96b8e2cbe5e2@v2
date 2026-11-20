@@ -1,0 +1,16 @@
+const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
+export default function NotAMemberPage() {
+  return (
+    <main className="auth-shell">
+      <div className="auth-card sent">
+        <h1>Not on the member list</h1>
+        <p className="hint">
+          Your email signed in, but it is not on the Operational Service Summary member list. Ask the
+          State Lifesaving Communications Officer to add you, then sign in again.
+        </p>
+        <p><a href={`${BASE}/sign-in`}>Back to sign-in</a></p>
+      </div>
+    </main>
+  );
+}

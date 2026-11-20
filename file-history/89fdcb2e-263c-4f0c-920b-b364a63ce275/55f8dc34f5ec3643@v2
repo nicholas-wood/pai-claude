@@ -1,0 +1,28 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getAuthUser } from "@/lib/auth";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { runWeatherJob } from "@/lib/weather/job";
+import { clientEnv } from "@/env";
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 120;
+
+/**
+ * "Refresh from BOM now" button. Session-gated, same-origin, and limited to
+ * two runs a minute across all members so the BOM's FTP is not hammered.
+ */
+export async function POST(request: NextRequest) {
+  const origin = request.headers.get("origin");
+  if (!origin || origin !== new URL(clientEnv.NEXT_PUBLIC_APP_URL).origin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const user = await getAuthUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const rl = await checkRateLimit("global", { namespace: "weather.refresh", windowSeconds: 60, max: 2 });
+  if (!rl.ok) return NextResponse.json({ error: "A refresh ran a moment ago. Try again shortly." }, { status: 429, headers: { "Retry-After": String(rl.retryAfter) } });
+  try {
+    const summary = await runWeatherJob({ trigger: `manual:${user.email}` });
+    return NextResponse.json(summary, { headers: { "Cache-Control": "no-store" } });
+  } catch (err) {
+    console.error("Manual weather refresh failed:", err);
+    return NextResponse.json({ error: "BOM refresh failed", detail: String(err) }, { status: 502 });
+  }
+}

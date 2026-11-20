@@ -1,0 +1,122 @@
+import { FieldValue } from "firebase-admin/firestore";
+import { adminDb } from "../firebase-admin";
+import { fetchBomProducts } from "./ftp";
+import { buildFeed, formatIssued, type BomFeed } from "./parse";
+import { bomFeedToGrid, feedDates, GRID_FIELDS, type DayGrid } from "./mapping";
+
+/**
+ * The weather job. Fetches the BOM feeds, projects them onto the areas, and
+ * writes `weather/<YYYY-MM-DD>` for the next seven Melbourne days.
+ *
+ * Doc shape (compatible with the page's saveWeatherDay()):
+ *   { grid: { <area>: { min, max, precis, ... } }, source: "BOM forecast issued <time>",
+ *     manual: ["<area>|<field>", ...], bomIssued, bomUpdatedAt, updatedBy }
+ *
+ * A key in `manual` means a member typed that value by hand. The job never
+ * touches those cells, never writes empty values, and leaves everything else
+ * in the doc alone.
+ */
+export type WeatherJobSummary = {
+  ok: true;
+  trigger: string;
+  issued: string;
+  days: number;
+  written: number;
+  skippedManual: number;
+  dates: string[];
+};
+
+export const WEATHER_DOC_PREFIX = "weather";
+export const WEATHER_STATUS_DOC = "config/weatherStatus";
+const BOM_SOURCE_PREFIX = "BOM forecast issued ";
+const JOB_ACTOR = "bom-weather-job";
+
+export function melbourneToday(now = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Melbourne", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+}
+
+export type ExistingWeatherDoc = {
+  grid?: DayGrid;
+  manual?: string[];
+  source?: string;
+  [k: string]: unknown;
+};
+
+/** Pure merge: returns the update to apply, or null when nothing changes. */
+export function mergeBomDay(existing: ExistingWeatherDoc | undefined, bomGrid: DayGrid, issuedLabel: string): { update: Record<string, unknown>; written: number; skippedManual: number } | null {
+  const manual = new Set(existing?.manual ?? []);
+  const grid: DayGrid = JSON.parse(JSON.stringify(existing?.grid ?? {}));
+  let written = 0;
+  let skippedManual = 0;
+  for (const [area, row] of Object.entries(bomGrid)) {
+    for (const field of GRID_FIELDS) {
+      const value = row[field];
+      if (value === undefined || value === null || value === "") continue;
+      if (manual.has(`${area}|${field}`)) {
+        skippedManual++;
+        continue;
+      }
+      grid[area] = grid[area] ?? {};
+      if (grid[area][field] !== value) {
+        grid[area][field] = value;
+        written++;
+      }
+    }
+  }
+  const sourceChanged = existing?.source !== `${BOM_SOURCE_PREFIX}${issuedLabel}`;
+  if (written === 0 && !sourceChanged) return null;
+  return {
+    update: {
+      grid,
+      source: `${BOM_SOURCE_PREFIX}${issuedLabel}`,
+      manual: [...manual],
+      bomIssued: issuedLabel,
+      bomUpdatedAt: FieldValue.serverTimestamp(),
+      updatedBy: JOB_ACTOR,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    written,
+    skippedManual,
+  };
+}
+
+export async function applyFeed(feed: BomFeed, trigger: string, now = new Date()): Promise<WeatherJobSummary> {
+  const db = adminDb();
+  const issuedLabel = formatIssued(feed.issued);
+  const dates = feedDates(feed, melbourneToday(now), 7);
+  let written = 0;
+  let skippedManual = 0;
+  for (const date of dates) {
+    const ref = db.collection(WEATHER_DOC_PREFIX).doc(date);
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const merged = mergeBomDay(snap.exists ? (snap.data() as ExistingWeatherDoc) : undefined, bomFeedToGrid(feed, date), issuedLabel);
+      if (!merged) return;
+      written += merged.written;
+      skippedManual += merged.skippedManual;
+      tx.set(ref, merged.update, { merge: true });
+    });
+  }
+  await db.doc(WEATHER_STATUS_DOC).set(
+    { lastRunAt: FieldValue.serverTimestamp(), lastTrigger: trigger, lastIssued: issuedLabel, lastWritten: written, lastSkippedManual: skippedManual, lastDates: dates, lastError: null },
+    { merge: true }
+  );
+  return { ok: true, trigger, issued: issuedLabel, days: dates.length, written, skippedManual, dates };
+}
+
+export async function runWeatherJob(opts: { trigger: string }): Promise<WeatherJobSummary> {
+  const started = Date.now();
+  try {
+    const xml = await fetchBomProducts();
+    const feed = buildFeed(xml);
+    const summary = await applyFeed(feed, opts.trigger);
+    console.log(`[weather] trigger=${opts.trigger} issued="${summary.issued}" days=${summary.days} written=${summary.written} skippedManual=${summary.skippedManual} ms=${Date.now() - started}`);
+    return summary;
+  } catch (err) {
+    await adminDb()
+      .doc(WEATHER_STATUS_DOC)
+      .set({ lastErrorAt: FieldValue.serverTimestamp(), lastError: String(err), lastTrigger: opts.trigger }, { merge: true })
+      .catch(() => {});
+    throw err;
+  }
+}

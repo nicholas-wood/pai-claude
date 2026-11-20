@@ -1,0 +1,54 @@
+import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { getAdminAuth } from "@/lib/firebase-admin";
+import { SESSION_COOKIE_NAME, SESSION_MAX_AGE_SECONDS, sessionCookieOptions } from "@/lib/auth";
+import { getMemberByEmail, linkMemberUid } from "@/lib/members";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Exchange a Firebase ID token for the 14-day httpOnly session cookie, the
+ * same step AccessBuddy's /api/auth/session performs. Only allow-listed
+ * emails get a cookie; everyone else gets 403 and no session.
+ */
+export async function POST(request: NextRequest) {
+  const ip = getClientIp(request);
+  const rl = await checkRateLimit(`ip:${ip}`, { namespace: "auth.session", windowSeconds: 60, max: 20 });
+  if (!rl.ok) return NextResponse.json({ error: "Too many requests" }, { status: 429, headers: { "Retry-After": String(rl.retryAfter) } });
+
+  let idToken: string;
+  try {
+    ({ idToken } = await request.json());
+  } catch {
+    return NextResponse.json({ error: "Token required" }, { status: 400 });
+  }
+  if (!idToken || typeof idToken !== "string") return NextResponse.json({ error: "Token required" }, { status: 400 });
+
+  try {
+    const auth = getAdminAuth();
+    const decoded = await auth.verifyIdToken(idToken, true);
+    const email = (decoded.email ?? "").toLowerCase().trim();
+    if (!email || !decoded.email_verified) return NextResponse.json({ error: "Email not verified" }, { status: 401 });
+
+    const member = await getMemberByEmail(email);
+    if (!member) {
+      return NextResponse.json({ error: "Not a member" }, { status: 403 });
+    }
+    await linkMemberUid(email, decoded.uid);
+
+    const sessionValue = await auth.createSessionCookie(idToken, { expiresIn: SESSION_MAX_AGE_SECONDS * 1000 });
+    const store = await cookies();
+    store.set(SESSION_COOKIE_NAME, sessionValue, sessionCookieOptions);
+    return NextResponse.json({ success: true, displayName: member.displayName, role: member.role }, { headers: { "Cache-Control": "no-store" } });
+  } catch (err) {
+    console.error("Session creation error:", err);
+    return NextResponse.json({ error: "Failed to create session" }, { status: 401 });
+  }
+}
+
+export async function DELETE() {
+  const store = await cookies();
+  store.delete(SESSION_COOKIE_NAME);
+  return NextResponse.json({ success: true });
+}

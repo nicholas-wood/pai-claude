@@ -1,0 +1,184 @@
+import { XMLParser } from "fast-xml-parser";
+
+/**
+ * Parses the BOM Victorian products into the `lsv-bom-weather` feed the
+ * bookmarklet produced, so the page's existing bomFeedToGrid() keeps working.
+ *
+ * IDV10753: town précis (min, max, précis, chance and amount of rain)
+ * IDV10752: town text (full forecast text, from which wind, UV and fire
+ *           danger are lifted)
+ * IDV10751: metropolitan areas (Melbourne, Geelong and Surf Coast,
+ *           Mornington Peninsula) text forecasts
+ */
+export type DayForecast = {
+  date: string; // YYYY-MM-DD local
+  min?: number;
+  max?: number;
+  precis?: string;
+  rainChance?: string; // e.g. "30%"
+  rainRange?: string; // e.g. "0 to 2 mm"
+  forecast?: string; // full text from IDV10752
+  wind?: string;
+  uv?: string;
+  fireDanger?: string;
+};
+
+export type BomFeed = {
+  format: "lsv-bom-weather";
+  issued: string; // issue-time-local of IDV10753
+  issuedUtc: string;
+  fetchedAt: string;
+  towns: Record<string, DayForecast[]>;
+  metro: Record<string, DayForecast[]>;
+};
+
+const parser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_",
+  processEntities: false, // no entity expansion: closes the XXE class
+  allowBooleanAttributes: true,
+  parseTagValue: false,
+  isArray: (name) => ["area", "forecast-period", "element", "text"].includes(name),
+});
+
+type Node = Record<string, unknown>;
+
+function asArray<T>(v: T | T[] | undefined): T[] {
+  if (v === undefined) return [];
+  return Array.isArray(v) ? v : [v];
+}
+
+function localDate(startTimeLocal: string): string {
+  // "2026-11-17T00:00:00+11:00" -> "2026-11-17" (the local date is in the string)
+  return startTimeLocal.slice(0, 10);
+}
+
+function areas(xml: string, type: string): Node[] {
+  const root = parser.parse(xml) as Node;
+  const product = root.product as Node;
+  const forecast = product?.forecast as Node | undefined;
+  return asArray(forecast?.area as Node[] | undefined).filter((a) => a["@_type"] === type);
+}
+
+function issueTime(xml: string): { local: string; utc: string } {
+  const root = parser.parse(xml) as Node;
+  const amoc = (root.product as Node)?.amoc as Node;
+  const scalar = (v: unknown): string => (v && typeof v === "object" ? String((v as Node)["#text"] ?? "") : String(v ?? ""));
+  return { local: scalar(amoc?.["issue-time-local"]), utc: scalar(amoc?.["issue-time-utc"]) };
+}
+
+function periods(area: Node): Node[] {
+  return asArray(area["forecast-period"] as Node[] | undefined);
+}
+
+function textOf(period: Node, type: string): string | undefined {
+  const t = asArray(period.text as Node[] | undefined).find((x) => x["@_type"] === type);
+  return t ? String(t["#text"] ?? "").trim() || undefined : undefined;
+}
+
+function elementOf(period: Node, type: string): string | undefined {
+  const e = asArray(period.element as Node[] | undefined).find((x) => x["@_type"] === type);
+  return e ? String(e["#text"] ?? "").trim() || undefined : undefined;
+}
+
+export function parsePrecis(xml: string): Record<string, DayForecast[]> {
+  const out: Record<string, DayForecast[]> = {};
+  for (const area of areas(xml, "location")) {
+    const name = String(area["@_description"]);
+    const days: DayForecast[] = [];
+    for (const p of periods(area)) {
+      const d: DayForecast = { date: localDate(String(p["@_start-time-local"])) };
+      const min = elementOf(p, "air_temperature_minimum");
+      const max = elementOf(p, "air_temperature_maximum");
+      if (min !== undefined) d.min = Number(min);
+      if (max !== undefined) d.max = Number(max);
+      d.precis = textOf(p, "precis");
+      d.rainChance = textOf(p, "probability_of_precipitation");
+      d.rainRange = elementOf(p, "precipitation_range");
+      days.push(d);
+    }
+    out[name] = mergeSameDay(days);
+  }
+  return out;
+}
+
+/** The first period of the day can be a partial "rest of today" slot; keep one row per date. */
+function mergeSameDay(days: DayForecast[]): DayForecast[] {
+  const byDate = new Map<string, DayForecast>();
+  for (const d of days) {
+    const existing = byDate.get(d.date);
+    byDate.set(d.date, existing ? { ...existing, ...stripUndefined(d) } : d);
+  }
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function stripUndefined<T extends object>(o: T): Partial<T> {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
+}
+
+// A wind sentence starts the sentence ("Winds northerly..." / "Light winds."),
+// not a mid-sentence "winds, large hail and heavy rain" from a storm warning.
+const WIND_RE = /(?:^|\.\s+)((?:Light w|W)inds?\b[^.]*\.)/;
+const UV_RE = /UV Index predicted to reach (\d+)\s*\[([^\]]+)\]/i;
+const FIRE_RE = /Fire Danger(?:\s*Rating)?[:\s-]+([A-Za-z ]+?)(?:\.|$)/i;
+
+export function extractFromText(text: string): Pick<DayForecast, "wind" | "uv" | "fireDanger"> {
+  const wind = text.match(WIND_RE)?.[1]?.trim();
+  const uvm = text.match(UV_RE);
+  const uv = uvm ? `${uvm[1]} ${uvm[2]}`.trim() : undefined;
+  const fireDanger = text.match(FIRE_RE)?.[1]?.trim();
+  return { wind, uv, fireDanger };
+}
+
+export function parseText(xml: string, type: "location" | "metropolitan"): Record<string, DayForecast[]> {
+  const out: Record<string, DayForecast[]> = {};
+  for (const area of areas(xml, type)) {
+    const name = String(area["@_description"]);
+    const days: DayForecast[] = [];
+    for (const p of periods(area)) {
+      const forecast = textOf(p, "forecast");
+      const d: DayForecast = { date: localDate(String(p["@_start-time-local"])), forecast };
+      if (forecast) Object.assign(d, stripUndefined(extractFromText(forecast)));
+      const fd = textOf(p, "fire_danger");
+      if (fd) d.fireDanger = fd;
+      const uvAlert = textOf(p, "uv_alert");
+      if (uvAlert && !d.uv) d.uv = extractFromText(uvAlert).uv ?? uvAlert;
+      days.push(d);
+    }
+    out[name] = mergeSameDay(days);
+  }
+  return out;
+}
+
+export function buildFeed(xml: { townPrecis: string; townText: string; metro: string }, fetchedAt = new Date()): BomFeed {
+  const issued = issueTime(xml.townPrecis);
+  const precis = parsePrecis(xml.townPrecis);
+  const text = parseText(xml.townText, "location");
+  const towns: Record<string, DayForecast[]> = {};
+  for (const [name, days] of Object.entries(precis)) {
+    const textDays = new Map((text[name] ?? []).map((d) => [d.date, d]));
+    towns[name] = days.map((d) => ({ ...d, ...stripUndefined(textDays.get(d.date) ?? { date: d.date }) }));
+  }
+  return {
+    format: "lsv-bom-weather",
+    issued: issued.local,
+    issuedUtc: issued.utc,
+    fetchedAt: fetchedAt.toISOString(),
+    towns,
+    metro: parseText(xml.metro, "metropolitan"),
+  };
+}
+
+/** "2026-11-16T16:20:00+11:00" -> "4:20 pm Mon 16 Nov" in the feed's own local offset. */
+export function formatIssued(issuedLocal: string): string {
+  const m = issuedLocal.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!m) return issuedLocal;
+  const [, y, mo, d, hh, mm] = m;
+  const h = Number(hh);
+  const ampm = h >= 12 ? "pm" : "am";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  const date = new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d)));
+  const dow = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][date.getUTCDay()];
+  const mon = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][Number(mo) - 1];
+  return `${h12}:${mm} ${ampm} ${dow} ${Number(d)} ${mon}`;
+}

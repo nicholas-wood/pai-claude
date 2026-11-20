@@ -1,0 +1,12 @@
+/**
+ * Only accepts a same-origin, root-relative path for post-sign-in redirects.
+ * Rejects off-origin, protocol-relative and backslash forms. Copied from
+ * AccessBuddy's lib/safe-redirect.ts.
+ */
+export function safeRedirect(value: string | null | undefined, fallback = "/"): string {
+  if (!value) return fallback;
+  if (!value.startsWith("/")) return fallback;
+  if (value.startsWith("//")) return fallback;
+  if (value.includes("\\")) return fallback;
+  return value;
+}

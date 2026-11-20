@@ -1,0 +1,87 @@
+import { FieldValue } from "firebase-admin/firestore";
+import { adminDb, getAdminAuth } from "./firebase-admin";
+
+/**
+ * The member allow-list. One doc per member, keyed by lower-cased email, in
+ * the `members` collection. Plays the role AccessBuddy's tenant_memberships
+ * and admin_assignments rows play: only listed emails can hold a session,
+ * and only admins can edit the list.
+ */
+export type MemberRecord = {
+  email: string;
+  displayName: string;
+  role: "member" | "admin";
+  uid?: string;
+  addedBy: string;
+  addedAt: string;
+  lastSignInAt?: string;
+};
+
+export function normaliseEmail(email: string): string {
+  return email.toLowerCase().trim();
+}
+
+export async function getMemberByEmail(email: string): Promise<MemberRecord | null> {
+  const snap = await adminDb().collection("members").doc(normaliseEmail(email)).get();
+  return snap.exists ? (snap.data() as MemberRecord) : null;
+}
+
+export async function listMembers(): Promise<MemberRecord[]> {
+  const snap = await adminDb().collection("members").orderBy("displayName").get();
+  return snap.docs.map((d) => d.data() as MemberRecord);
+}
+
+export async function upsertMember(
+  input: Pick<MemberRecord, "email" | "displayName" | "role">,
+  actorEmail: string
+): Promise<MemberRecord> {
+  const email = normaliseEmail(input.email);
+  const ref = adminDb().collection("members").doc(email);
+  const existing = await ref.get();
+  const record: MemberRecord = {
+    email,
+    displayName: input.displayName.trim(),
+    role: input.role,
+    addedBy: existing.exists ? (existing.data() as MemberRecord).addedBy : actorEmail,
+    addedAt: existing.exists ? (existing.data() as MemberRecord).addedAt : new Date().toISOString(),
+    ...(existing.exists && (existing.data() as MemberRecord).uid ? { uid: (existing.data() as MemberRecord).uid } : {}),
+  };
+  await ref.set(record, { merge: true });
+  // Keep the Firebase custom claim in step so a role change reaches rules on
+  // the next token refresh.
+  if (record.uid) await syncClaims(record.uid, record);
+  return record;
+}
+
+export async function removeMember(email: string): Promise<void> {
+  const ref = adminDb().collection("members").doc(normaliseEmail(email));
+  const snap = await ref.get();
+  if (!snap.exists) return;
+  const rec = snap.data() as MemberRecord;
+  await ref.delete();
+  if (rec.uid) {
+    const auth = getAdminAuth();
+    await auth.setCustomUserClaims(rec.uid, { member: false, admin: false });
+    // Invalidates refresh tokens so the browser Firestore session dies too.
+    await auth.revokeRefreshTokens(rec.uid);
+  }
+}
+
+/** Record the Firebase uid against the member and set the rules claims. */
+export async function linkMemberUid(email: string, uid: string): Promise<MemberRecord | null> {
+  const ref = adminDb().collection("members").doc(normaliseEmail(email));
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+  const rec = snap.data() as MemberRecord;
+  await ref.set({ uid, lastSignInAt: FieldValue.serverTimestamp() }, { merge: true });
+  await syncClaims(uid, rec);
+  return { ...rec, uid };
+}
+
+async function syncClaims(uid: string, rec: MemberRecord): Promise<void> {
+  await getAdminAuth().setCustomUserClaims(uid, {
+    member: true,
+    admin: rec.role === "admin",
+    name: rec.displayName,
+  });
+}

@@ -1,0 +1,54 @@
+import { adminDb } from "./firebase-admin";
+
+/**
+ * Fixed-window rate limiter on Firestore (`rateLimitBuckets`), the Firestore
+ * twin of AccessBuddy's Postgres `rate_limit_buckets`. One transaction per
+ * check keeps the counter consistent across Cloud Run instances.
+ * Kill switch: RATE_LIMIT_DISABLED=1.
+ */
+export function getClientIp(request: Request): string {
+  const fwd = request.headers.get("x-forwarded-for");
+  if (fwd) {
+    const first = fwd.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  const real = request.headers.get("x-real-ip");
+  if (real) return real.trim();
+  return "unknown";
+}
+
+export type RateLimitResult = { ok: boolean; remaining: number; retryAfter: number };
+export type RateLimitOptions = { namespace: string; windowSeconds: number; max: number };
+
+export async function checkRateLimit(key: string, options: RateLimitOptions): Promise<RateLimitResult> {
+  if (process.env.RATE_LIMIT_DISABLED === "1") return { ok: true, remaining: options.max, retryAfter: 0 };
+  const docId = encodeURIComponent(`${options.namespace}:${key}`);
+  const ref = adminDb().collection("rateLimitBuckets").doc(docId);
+  const now = Date.now();
+  const windowMs = options.windowSeconds * 1000;
+  const result = await adminDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const data = snap.exists ? (snap.data() as { count: number; resetAt: number }) : null;
+    if (!data || data.resetAt <= now) {
+      tx.set(ref, { count: 1, resetAt: now + windowMs });
+      return { count: 1, resetAt: now + windowMs };
+    }
+    tx.update(ref, { count: data.count + 1 });
+    return { count: data.count + 1, resetAt: data.resetAt };
+  });
+  if (result.count > options.max) {
+    return { ok: false, remaining: 0, retryAfter: Math.max(1, Math.ceil((result.resetAt - now) / 1000)) };
+  }
+  return { ok: true, remaining: Math.max(0, options.max - result.count), retryAfter: 0 };
+}
+
+export async function checkRateLimitIpAndEmail(
+  namespace: string,
+  ip: string,
+  email: string,
+  options: { windowSeconds: number; maxPerIp: number; maxPerEmail: number }
+): Promise<RateLimitResult> {
+  const ipResult = await checkRateLimit(`ip:${ip}`, { namespace, windowSeconds: options.windowSeconds, max: options.maxPerIp });
+  if (!ipResult.ok) return ipResult;
+  return checkRateLimit(`email:${email}`, { namespace, windowSeconds: options.windowSeconds, max: options.maxPerEmail });
+}

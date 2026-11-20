@@ -1,0 +1,19 @@
+import { NextRequest, NextResponse } from "next/server";
+import { requireScheduler } from "@/lib/cron-auth";
+import { runWeatherJob } from "@/lib/weather/job";
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 120;
+
+/** Cloud Scheduler entry point (OIDC-authenticated). */
+export async function GET(request: NextRequest) {
+  const unauthorised = await requireScheduler(request, "weather");
+  if (unauthorised) return unauthorised;
+  try {
+    const summary = await runWeatherJob({ trigger: "scheduler" });
+    return NextResponse.json(summary);
+  } catch (err) {
+    console.error("Weather job failed:", err);
+    return NextResponse.json({ error: "Weather job failed", detail: String(err) }, { status: 500 });
+  }
+}

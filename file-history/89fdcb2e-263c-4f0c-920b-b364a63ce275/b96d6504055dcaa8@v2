@@ -1,0 +1,17 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { cookies } from "next/headers";
+import { SESSION_COOKIE_NAME } from "@/lib/auth";
+import { clientEnv } from "@/env";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Plain-link logout for the page's "Or log out" anchor (window.OSS_LOGOUT_URL).
+ * Clears the session cookie and lands on sign-in. The bridge script also
+ * signs the Firebase client out before following this link.
+ */
+export async function GET(_request: NextRequest) {
+  const store = await cookies();
+  store.delete(SESSION_COOKIE_NAME);
+  return NextResponse.redirect(`${clientEnv.NEXT_PUBLIC_APP_URL}${clientEnv.NEXT_PUBLIC_BASE_PATH}/sign-in`, { status: 303 });
+}
