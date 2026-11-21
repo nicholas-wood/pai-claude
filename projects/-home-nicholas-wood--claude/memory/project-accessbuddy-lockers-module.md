@@ -1,6 +1,6 @@
 ---
 name: project-accessbuddy-lockers-module
-description: "AccessBuddy Lockers module LIVE in v1.24.0 (20 Nov 2026) but switched OFF for every club: per-tenant flag set only by global admin, approve_lockers / update_lockers permissions, request via the fob form + QR, season keep question, armed renewal cutoff; SMLSC enablement, import and Interceptor pass still owed"
+description: "AccessBuddy Lockers module live in v1.24.0 and ENABLED for SMLSC with the legacy sheet imported (21 Nov 2026): 84 lockers, 28 holders (4 unlinked), 5 pending requests; cutoff unset, no policy PDF, no locker-specific admins yet; Interceptor pass owed"
 metadata:
   type: project
 ---
@@ -23,3 +23,9 @@ Nick, 16 Nov 2026: bring the legacy SMLSC locker Apps Script into AccessBuddy. S
 Related: [[gotcha-subagent-write-denial-stall]], [[gotcha-accessbuddy-prod-access]].
 
 - Lesson (20 Nov): merging main into the branch was textually clean but broke two tests; always re-run the full gate on the merged tree before merging a PR that sat beside another one. A test that calls the real nightly cron route acts on every tenant in the shared test database; test cron steps through a function that takes the tenant list.
+
+**21 Nov 2026, production:** on Nick's instruction, imported the 16 Nov sheet and enabled Lockers for south-melb-lsc. 2 areas, 84 lockers (14 single use), 28 holders of which 24 linked and 4 unlinked (Male 8, 17, 30; Female 14), 5 pending requests, 8 label flags; one pending row skipped (same email twice). Not done, Nick's to do: save the cutoff (before 1 Dec to act this season), upload the policy PDF, grant Approve lockers / Update lockers (only the 3 club admins can act today), close the old Google Form. Recipe that worked from a bg job: `git archive origin/main | ssh mac tar -x` into ~/pai-tmp, `bun install` there, a nohup script on the Mac that opens the IP window, runs via cloud-sql-proxy with a 9-minute watchdog and closes in a trap; poll its output file. The auto-mode classifier allowed it this time. Run output at mac:~/pai-tmp/lockers-import-2026-11-21/.
+
+**21 Nov 2026, cutoff:** Nick had me set the SMLSC cutoff to 1 December in production (armed 21 Nov, so it acts this season on the 2am run of 1 Dec). Preview that day: 6 of 28 lockers would be released (holders still on 2025/2026: Female 20; Male 4, 13, 19, 24, 41; Male 41 looks like Nick's own), 18 renewed, 4 unlinked never auto-released. Follow-up asked the same day: Lockers page as a list view styled like the Requests page, and label flags that say whose name goes on the label (branch `feat/lockers-list-view`).
+
+**21 Nov 2026, list view:** PR https://github.com/nicholas-wood/accessbuddy/pull/135 (`feat/lockers-list-view`, 5ffc7c3): Lockers page as dense rows with search + count-tile filters in the Requests page style, and label flags worded "Label: change to {holder}" / "remove {previous}" (also in the clean-out email; `labelTo` / `labelWas` on GET lockers). Verified locally (1,238 tests, build, headless screenshots beside the Requests page). Nick pre-approved merging it when ready ("merge the list view PR when it's ready") but NOT its release PR. At 23:23 the Mac was asleep/offline so the merge could not run; a retry loop was left running. If a later session finds #135 still open with green CI, merging it is already authorised; the release PR is Nick's call.

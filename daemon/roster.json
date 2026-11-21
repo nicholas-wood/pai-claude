@@ -1,7 +1,7 @@
 {
   "proto": 1,
-  "supervisorPid": 3018386,
-  "updatedAt": 1795133967822,
+  "supervisorPid": 2762027,
+  "updatedAt": 1795263569285,
   "workers": {
     "eb37ba0f": {
       "pid": 3600454,
@@ -146,6 +146,63 @@
       "ptyAuth": "cf198bd08fa4b62651edf33d132f547e",
       "replPid": 3007847,
       "replProcStart": "822122134"
+    },
+    "64af022a": {
+      "pid": 2762217,
+      "procStart": "834697104",
+      "sessionId": "64af022a-9db8-483c-9774-50c9480e5f0b",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/64af022a.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/ef5606a6.pty.sock",
+      "cliVersion": "2.1.330",
+      "startedAt": 1795257964933,
+      "attempt": 1,
+      "cwd": "/home/nicholas-wood/.claude",
+      "dispatch": {
+        "proto": 1,
+        "short": "64af022a",
+        "nonce": "953fb1f4",
+        "sessionId": "64af022a-9db8-483c-9774-50c9480e5f0b",
+        "createdAt": 1795257964924,
+        "source": "fleet",
+        "cwd": "/home/nicholas-wood/.claude",
+        "launch": {
+          "mode": "prompt",
+          "args": [
+            "--session-id",
+            "64af022a-9db8-483c-9774-50c9480e5f0b",
+            "--agent",
+            "claude",
+            "--",
+            "I want to deploy a small static web app, LIMSOC Permission Assist, at https://nicholaswood.com.au/lsv/limsoc-permission-assist. Follow the accessbuddy patterns: the same sign-in, session handling, access control, Google Cloud project, region, CI/CD, secrets handling, security headers and infrastructure as code. If the LSV Operational Service Summary app (/lsv/dailysummary) has already been deployed this way, reuse its setup and its auth gate rather than building a second one. If anything in the accessbuddy approach doesn't fit, ask me instead of inventing a new scheme.\n\nWhat the app is\nIt's in nicholas-wood/limsoc-permission-assist. It's a single page (vanilla JS, no framework, no backend data) that Life Saving Victoria uses to maintain LIMSOC permission groups:\n\nYou upload LIMSOC's own Groups export (.xlsx or .csv, with columns name and permissions).\nIt shows the permissions in Superuser that aren't in Superuser (last run).\nYou tick them per group. Group rules apply: for example, SDO/SAC gets everything from LSVComms Supervisor.\nYou compare groups and download an import file.\nIt never talks to LIMSOC. Everything happens in the browser.\n\nSource: src/page.html and src/app.js. Data: data/. python3 build.py writes dist/index.html, a single self-contained file of about 180 KB.\nMake changes in src/ and rebuild. Don't hand-edit dist/.\nIn Claude it used window.claude.use(\"downloads\"). When window.claude is missing it already falls back to a normal browser download, so nothing needs replacing.\nGroup rules are kept in the browser's localStorage (key lsvperm-rules). That's fine for now, so don't add a backend for them unless accessbuddy makes it trivial. If it does, ask me first.\nStorage: private blob storage, cheapest option\nPut the built files in a Cloud Storage bucket that follows accessbuddy's naming and project.\nUse the Standard storage class in a single region. For a file this small that's read often, it's the cheapest option. Nearline, Coldline and Archive charge per read and have minimum storage periods, so they would cost more. If accessbuddy already has a bucket for static sites that fits, a separate prefix in it is fine.\nThe bucket must be private:\npublic access prevention enforced\nuniform bucket-level access\nno allUsers or allAuthenticatedUsers\nno public URL or signed URLs handed to the browser\nonly the serving service account gets roles/storage.objectViewer, on this bucket or prefix only\nTurn on object versioning, or keep the previous build, so rollback is one command.\nServing and security\nSigned-out requests to /lsv/limsoc-permission-assist and anything under it must get the accessbuddy sign-in, never the file. Check the page, the assets and any direct bucket path.\nServe through accessbuddy's existing gate (the same Cloud Run service, load balancer and IAP, or whatever accessbuddy uses), reading from the bucket server-side.\nRestrict who can use it the way accessbuddy restricts access: an allow-list, a group or a role. Start with only me (Nick) allowed, and tell me how to add people.\nSecurity headers like accessbuddy's, with a strict CSP. The page loads xlsx@0.18.5 from cdnjs, so vendor xlsx.full.min.js into the build and serve it from the same path instead of the CDN. Then the CSP can be script-src 'self' plus whatever the inline scripts need (hashes or nonces; the build inlines the app script and two JSON data blocks).\nAdd Cache-Control: no-store on the HTML (or a short max-age), and X-Robots-Tag: noindex.\nHTTPS only, behind the existing domain setup.\nNo analytics or third-party calls.\nData sensitivity\ndata/staging-snapshot-2026-11-14.json holds LIMSOC staging group names and permission names. The page embeds it as example data and for permission labels. It isn't personal data, but it does describe LIMSOC's permission structure, so it must stay behind sign-in and the repository must stay private.\n\nRules\nLIMSOC: the app must never call LIMSOC, production (limsoc.com.au) or otherwise. Testing of imports is done by me on staging.limsoc.com.au only.\nCosts: tell me before creating anything that costs money beyond Google "
+          ],
+          "restoresTranscript": false
+        },
+        "env": {},
+        "isolation": "none",
+        "respawnFlags": [
+          "--agent",
+          "claude"
+        ],
+        "agent": "claude",
+        "seed": {
+          "intent": "I want to deploy a small static web app, LIMSOC Permission Assist, at https://nicholaswood.com.au/lsv/limsoc-permission-assist. Follow the accessbuddy patterns: the same sign-in, session handling, access control, Google Cloud project, region, CI/CD, secrets handling, security headers and infrastructure as code. If the LSV Operational Service Summary app (/lsv/dailysummary) has already been deployed this way, reuse its setup and its auth gate rather than building a second one. If anything in the accessbuddy approach doesn't fit, ask me instead of inventing a new scheme.\n\nWhat the app is\nIt's in nicholas-wood/limsoc-permission-assist. It's a single page (vanilla JS, no framework, no backend data) that Life Saving Victoria uses to maintain LIMSOC permission groups:\n\nYou upload LIMSOC's own Groups export (.xlsx or .csv, with columns name and permissions).\nIt shows the permissions in Superuser that aren't in Superuser (last run).\nYou tick them per group. Group rules apply: for example, SDO/SAC gets everything from LSVComms Supervisor.\nYou compare groups and download an import file.\nIt never talks to LIMSOC. Everything happens in the browser.\n\nSource: src/page.html and src/app.js. Data: data/. python3 build.py writes dist/index.html, a single self-contained file of about 180 KB.\nMake changes in src/ and rebuild. Don't hand-edit dist/.\nIn Claude it used window.claude.use(\"downloads\"). When window.claude is missing it already falls back to a normal browser download, so nothing needs replacing.\nGroup rules are kept in the browser's localStorage (key lsvperm-rules). That's fine for now, so don't add a backend for them unless accessbuddy makes it trivial. If it does, ask me first.\nStorage: private blob storage, cheapest option\nPut the built files in a Cloud Storage bucket that follows accessbuddy's naming and project.\nUse the Standard storage class in a single region. For a file this small that's read often, it's the cheapest option. Nearline, Coldline and Archive charge per read and have minimum storage periods, so they would cost more. If accessbuddy already has a bucket for static sites that fits, a separate prefix in it is fine.\nThe bucket must be private:\npublic access prevention enforced\nuniform bucket-level access\nno allUsers or allAuthenticatedUsers\nno public URL or signed URLs handed to the browser\nonly the serving service account gets roles/storage.objectViewer, on this bucket or prefix only\nTurn on object versioning, or keep the previous build, so rollback is one command.\nServing and security\nSigned-out requests to /lsv/limsoc-permission-assist and anything under it must get the accessbuddy sign-in, never the file. Check the page, the assets and any direct bucket path.\nServe through accessbuddy's existing gate (the same Cloud Run service, load balancer and IAP, or whatever accessbuddy uses), reading from the bucket server-side.\nRestrict who can use it the way accessbuddy restricts access: an allow-list, a group or a role. Start with only me (Nick) allowed, and tell me how to add people.\nSecurity headers like accessbuddy's, with a strict CSP. The page loads xlsx@0.18.5 from cdnjs, so vendor xlsx.full.min.js into the build and serve it from the same path instead of the CDN. Then the CSP can be script-src 'self' plus whatever the inline scripts need (hashes or nonces; the build inlines the app script and two JSON data blocks).\nAdd Cache-Control: no-store on the HTML (or a short max-age), and X-Robots-Tag: noindex.\nHTTPS only, behind the existing domain setup.\nNo analytics or third-party calls.\nData sensitivity\ndata/staging-snapshot-2026-11-14.json holds LIMSOC staging group names and permission names. The page embeds it as example data and for permission labels. It isn't personal data, but it does describe LIMSOC's permission structure, so it must stay behind sign-in and the repository must stay private.\n\nRules\nLIMSOC: the app must never call LIMSOC, production (limsoc.com.au) or otherwise. Testing of imports is done by me on staging.limsoc.com.au only.\nCosts: tell me before creating anything that costs money beyond Google "
+        },
+        "cols": 124,
+        "rows": 50
+      },
+      "decModes": [
+        2004,
+        2031,
+        1004,
+        1000,
+        1002,
+        1003,
+        1006
+      ],
+      "rvAuth": "e781d0c87cbcb0e3108f363a86853aa6",
+      "ptyAuth": "7c3fe3a5b0470fd926f28a1d4754e5ee",
+      "replPid": 2762306,
+      "replProcStart": "834697117"
     }
   }
 }
