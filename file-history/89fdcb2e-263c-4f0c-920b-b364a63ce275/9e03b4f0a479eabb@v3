@@ -1,0 +1,109 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { getSessionSigningSecret } from "@/env";
+import { getAdminAuth } from "./firebase-admin";
+import { getMemberByEmail, type MemberRecord } from "./members";
+
+/**
+ * AccessBuddy calls this cookie `session`. Here it is `__session` because the
+ * app is served through Firebase Hosting, which forwards only that one cookie
+ * name to Cloud Run. Same value, flags and lifetime.
+ */
+export const SESSION_COOKIE_NAME = "__session";
+/** 14 days, the same lifetime AccessBuddy uses. */
+export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 14;
+
+export const sessionCookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge: SESSION_MAX_AGE_SECONDS,
+};
+
+type OtpSessionPayload = { uid: string; email: string; iat: number; exp: number; webauthn: true };
+
+/**
+ * Sign an OTP session with SESSION_SIGNING_SECRET. Same `webauthn.<b64>.<sig>`
+ * shape AccessBuddy issues for OTP and passkey sign-ins, so the verifier is
+ * byte-compatible.
+ */
+export function signOtpSession(payload: Pick<OtpSessionPayload, "uid" | "email">): string {
+  const now = Math.floor(Date.now() / 1000);
+  const full: OtpSessionPayload = { uid: payload.uid, email: payload.email, iat: now, exp: now + SESSION_MAX_AGE_SECONDS, webauthn: true };
+  const payloadStr = JSON.stringify(full);
+  const sig = createHmac("sha256", getSessionSigningSecret()).update(payloadStr).digest("base64url");
+  return `webauthn.${Buffer.from(payloadStr).toString("base64url")}.${sig}`;
+}
+
+export function verifyOtpSessionCookie(value: string): { uid: string; email: string } | null {
+  const parts = value.split(".");
+  if (parts.length !== 3 || parts[0] !== "webauthn") return null;
+  const payloadStr = Buffer.from(parts[1], "base64url").toString();
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(payloadStr);
+  } catch {
+    return null;
+  }
+  const expected = createHmac("sha256", getSessionSigningSecret()).update(payloadStr).digest("base64url");
+  const provided = parts[2];
+  if (provided.length !== expected.length || !timingSafeEqual(Buffer.from(provided), Buffer.from(expected))) return null;
+  const exp = typeof payload.exp === "number" ? payload.exp : null;
+  if (!exp || exp < Math.floor(Date.now() / 1000)) return null;
+  const uid = typeof payload.uid === "string" ? payload.uid : "";
+  if (!uid) return null;
+  const email = typeof payload.email === "string" ? payload.email.toLowerCase().trim() : "";
+  return { uid, email };
+}
+
+export type AuthUser = { uid: string; email: string; displayName: string; role: "member" | "admin" };
+
+/**
+ * Resolve the signed-in member from the `session` cookie, or null.
+ * Firebase session cookies are verified with revocation checking; OTP
+ * cookies with the HMAC verifier. In both cases the email must still be on
+ * the allow-list: removing a member takes effect on their next request.
+ */
+export async function getAuthUserFromCookie(cookieValue: string | undefined): Promise<AuthUser | null> {
+  if (!cookieValue) return null;
+  try {
+    let uid: string;
+    let email: string;
+    if (cookieValue.startsWith("webauthn.")) {
+      const v = verifyOtpSessionCookie(cookieValue);
+      if (!v) return null;
+      uid = v.uid;
+      email = v.email;
+    } else {
+      const decoded = await getAdminAuth().verifySessionCookie(cookieValue, true);
+      uid = decoded.uid;
+      email = (decoded.email ?? "").toLowerCase().trim();
+    }
+    if (!uid || !email) return null;
+    const member = await getMemberByEmail(email);
+    if (!member) return null;
+    return toAuthUser(uid, member);
+  } catch (err) {
+    console.error("Session verification failed:", err);
+    return null;
+  }
+}
+
+export function toAuthUser(uid: string, member: MemberRecord): AuthUser {
+  return { uid, email: member.email, displayName: member.displayName || member.email, role: member.role };
+}
+
+/** Next.js request-context helper. */
+export async function getAuthUser(): Promise<AuthUser | null> {
+  try {
+    const { cookies } = await import("next/headers");
+    const store = await cookies();
+    return getAuthUserFromCookie(store.get(SESSION_COOKIE_NAME)?.value);
+  } catch {
+    return null;
+  }
+}
+
+export function firstName(displayName: string): string {
+  return displayName.trim().split(/\s+/)[0] ?? "";
+}

@@ -1,0 +1,200 @@
+/**
+ * Browser bridge: replaces the claude.ai artifact capabilities the page used
+ * (`window.claude.use("user" | "downloads")` and the artifact `db`) with
+ * Firebase Auth plus Firestore, authenticated as the signed-in member.
+ *
+ * Built by `bun run build:bridge` into public/vendor/bridge.js and injected
+ * by src/app/route.ts before the page script. It exposes `window.OSS_BACKEND`
+ * with the exact Firestore-like surface the page's boot function expects:
+ *   db.collection(name).onSnapshot(cb)  -> cb({ docs: [{ id, data() }] })
+ *   db.doc(path).onSnapshot(cb)         -> cb({ exists, data() })
+ *   db.doc(path).set(obj) / .delete()
+ *   user.id(), user.profiles(ids)
+ *   downloads.save(name, blob)
+ */
+import { initializeApp, getApps } from "firebase/app";
+import { getAuth, onAuthStateChanged, signInWithCustomToken, signOut, type User } from "firebase/auth";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  initializeFirestore,
+  onSnapshot,
+  setDoc,
+  type DocumentData,
+  type Firestore,
+} from "firebase/firestore";
+
+type Bootstrap = {
+  firebase: { apiKey: string; authDomain: string; projectId: string; appId: string };
+  basePath: string;
+  user: { id: string; email: string; displayName: string; role: "member" | "admin" };
+};
+
+declare global {
+  interface Window {
+    OSS_BOOTSTRAP?: Bootstrap;
+    OSS_BACKEND?: unknown;
+    OSS_LOGOUT_URL?: string;
+    OSS_BACKEND_READY?: Promise<unknown>;
+  }
+}
+
+const COLLECTIONS = new Set(["units", "events", "weather", "confirmations", "summaries", "config"]);
+
+function splitPath(path: string): [string, string] {
+  const parts = path.split("/").filter(Boolean);
+  if (parts.length !== 2 || !COLLECTIONS.has(parts[0])) throw new Error(`Unsupported doc path: ${path}`);
+  return [parts[0], parts[1]];
+}
+
+function makeDb(fs: Firestore, uid: string) {
+  return {
+    collection(name: string) {
+      if (!COLLECTIONS.has(name)) throw new Error(`Unsupported collection: ${name}`);
+      const ref = collection(fs, name);
+      return {
+        onSnapshot(cb: (snap: { docs: { id: string; data: () => DocumentData }[] }) => void, onError?: (e: Error) => void) {
+          return onSnapshot(
+            ref,
+            (snap) => cb({ docs: snap.docs.map((d) => ({ id: d.id, data: () => d.data() })) }),
+            (e) => (onError ? onError(e) : console.error("[oss] snapshot error", name, e))
+          );
+        },
+        async get() {
+          const snap = await getDocs(ref);
+          return { docs: snap.docs.map((d) => ({ id: d.id, data: () => d.data() })) };
+        },
+      };
+    },
+    doc(path: string) {
+      const [col, id] = splitPath(path);
+      const ref = doc(fs, col, id);
+      return {
+        onSnapshot(cb: (snap: { exists: boolean; data: () => DocumentData | undefined }) => void, onError?: (e: Error) => void) {
+          return onSnapshot(
+            ref,
+            (snap) => cb({ exists: snap.exists(), data: () => snap.data() }),
+            (e) => (onError ? onError(e) : console.error("[oss] snapshot error", path, e))
+          );
+        },
+        set(obj: DocumentData) {
+          // The page stamps updatedAt as an ISO string and reads it back as one, so it stays a string.
+          // updatedBy is always the signed-in member; the security rules require it.
+          return setDoc(ref, { ...obj, updatedBy: uid, updatedAt: typeof obj.updatedAt === "string" ? obj.updatedAt : new Date().toISOString() });
+        },
+        delete() {
+          return deleteDoc(ref);
+        },
+      };
+    },
+  };
+}
+
+function makeUser(fs: Firestore, me: Bootstrap["user"]) {
+  let cache: Record<string, { name: string; email: string }> | null = null;
+  async function loadMembers() {
+    if (cache) return cache;
+    const snap = await getDocs(collection(fs, "members"));
+    cache = {};
+    for (const d of snap.docs) {
+      const m = d.data() as { uid?: string; displayName?: string; email?: string };
+      if (m.uid) cache[m.uid] = { name: m.displayName ?? m.email ?? m.uid, email: m.email ?? "" };
+    }
+    return cache;
+  }
+  return {
+    id: () => me.id,
+    email: () => me.email,
+    displayName: () => me.displayName,
+    role: () => me.role,
+    /** Same shape the claude.ai capability returned: a map of id to { name }. Unknown ids are left out. */
+    async profiles(ids: string[]) {
+      const members = await loadMembers();
+      const out: Record<string, { name: string }> = {};
+      for (const id of ids) {
+        const name = id === me.id ? me.displayName : members[id]?.name;
+        if (name) out[id] = { name };
+      }
+      return out;
+    },
+  };
+}
+
+const downloads = {
+  /** Same call the page made to the claude.ai downloads capability: save({ filename, data }). */
+  async save({ filename, data }: { filename: string; data: Blob | ArrayBuffer | Uint8Array | string }) {
+    const blob = data instanceof Blob ? data : new Blob([data as BlobPart], { type: "application/octet-stream" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  },
+};
+
+async function ensureFirebaseUser(bootstrap: Bootstrap): Promise<User> {
+  const app = getApps().length ? getApps()[0] : initializeApp(bootstrap.firebase);
+  const auth = getAuth(app);
+  const current = await new Promise<User | null>((resolve) => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      unsub();
+      resolve(u);
+    });
+  });
+  if (current && current.uid === bootstrap.user.id) {
+    const token = await current.getIdTokenResult();
+    if (token.claims.member === true) return current;
+    await current.getIdToken(true);
+    const refreshed = await current.getIdTokenResult();
+    if (refreshed.claims.member === true) return current;
+  }
+  if (current) await signOut(auth);
+  // No usable Firebase session in this browser: mint one from the cookie.
+  const res = await fetch(`${bootstrap.basePath}/api/auth/firebase-token`, { method: "POST", credentials: "same-origin" });
+  if (!res.ok) throw new Error(`Could not start a data session (${res.status})`);
+  const { token } = (await res.json()) as { token: string };
+  const cred = await signInWithCustomToken(auth, token);
+  return cred.user;
+}
+
+async function boot() {
+  const bootstrap = window.OSS_BOOTSTRAP;
+  if (!bootstrap) throw new Error("OSS_BOOTSTRAP missing");
+  const user = await ensureFirebaseUser(bootstrap);
+  const fs = initializeFirestore(getApps()[0], { ignoreUndefinedProperties: true });
+  const backend = {
+    db: makeDb(fs, user.uid),
+    user: makeUser(fs, bootstrap.user),
+    downloads,
+    async refreshWeather(): Promise<{ ok: boolean; message: string }> {
+      const res = await fetch(`${bootstrap.basePath}/api/weather/refresh`, { method: "POST", credentials: "same-origin" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, message: body.error ?? `Refresh failed (${res.status})` };
+      return { ok: true, message: `BOM forecast issued ${body.issued}: ${body.written} values updated${body.skippedManual ? `, ${body.skippedManual} typed by members kept` : ""}.` };
+    },
+    async logout() {
+      try {
+        await fetch(`${bootstrap.basePath}/api/auth/session`, { method: "DELETE", credentials: "same-origin" });
+        await signOut(getAuth(getApps()[0]));
+      } finally {
+        window.location.href = `${bootstrap.basePath}/sign-in`;
+      }
+    },
+  };
+  window.OSS_BACKEND = backend;
+  return backend;
+}
+
+window.OSS_BACKEND_READY = boot().catch((err) => {
+  console.error("[oss] backend failed to start", err);
+  const el = document.createElement("div");
+  el.style.cssText = "position:fixed;top:0;left:0;right:0;background:#b91c1c;color:#fff;padding:10px 16px;font:14px system-ui;z-index:9999";
+  el.textContent = `Could not connect to the data service: ${err instanceof Error ? err.message : String(err)}. Reload, or sign out and back in.`;
+  document.body.prepend(el);
+  throw err;
+});

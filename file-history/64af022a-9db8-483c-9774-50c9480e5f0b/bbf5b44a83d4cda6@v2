@@ -1,0 +1,97 @@
+# Deploying LIMSOC Permission Assist
+
+Hosted at **https://nicholaswood.com.au/lsv/limsoc-permission-assist**, behind the same sign-in as the LSV Operational Service Summary.
+
+## How it is put together
+
+| Part | What | Where |
+|------|------|-------|
+| Site files | `index.html` and `vendor/xlsx.full.min.js` | Private bucket `gs://lsv-oss-prod-limsoc-permission-assist` (project `lsv-oss-prod`, australia-southeast1, Standard class, versioned) |
+| Gate | Cloud Run service `lsv-oss-prod`: checks the session, checks the member's grant, then reads the bucket server-side | Repo `nicholas-wood/lsv-service-summary` (`src/lib/static-app.ts`, `src/app/apps/[app]`) |
+| Infrastructure | Bucket, IAM, deploy account, WIF provider | `infra/terraform/limsoc-permission-assist.tf` in the gate repo |
+| Pipeline | Build and check on every push; publish on `main` | `.github/workflows/deploy.yml` in this repo |
+
+The bucket has public access prevention enforced and uniform bucket-level access. No one can read it by URL, and no signed URLs are issued. Two accounts can touch it: the gate's runtime account (`lsv-oss-run`, read only) and this repo's deploy account (`limsoc-pa-deploy`, objects in this bucket only).
+
+The page is served with a content security policy that allows scripts from this site only, plus the page's own inline script by hash, and allows no network connections at all (`connect-src 'none'`). The browser cannot call LIMSOC or anything else from this page. HTML is `no-store` and every response is `noindex`.
+
+## Deploy
+
+Push to `main`. GitHub Actions rebuilds with `SITE_BASE=/lsv/limsoc-permission-assist/`, checks the build, and uploads to the bucket. The gate picks up the new files on the next request; nothing is restarted.
+
+```
+git push origin main
+```
+
+Pull requests run the build and checks without publishing.
+
+Make changes in `src/` and run `python3 build.py`; commit the rebuilt `dist/`. CI fails if `dist/` does not match a fresh build.
+
+To publish by hand (needs `gcloud` signed in with access to the bucket):
+
+```
+SITE_BASE=/lsv/limsoc-permission-assist/ python3 build.py
+B=gs://lsv-oss-prod-limsoc-permission-assist
+gcloud storage cp dist/vendor/xlsx.full.min.js $B/vendor/xlsx.full.min.js
+gcloud storage cp dist/index.html $B/index.html
+python3 build.py   # put dist/ back to the committed local-file build
+```
+
+## Rollback
+
+Every upload keeps the previous build (the bucket keeps the ten most recent versions of each file). To put the previous page back:
+
+```
+B=gs://lsv-oss-prod-limsoc-permission-assist
+gcloud storage cp "$(gcloud storage ls -a $B/index.html | sort -t'#' -k2 -n | tail -2 | head -1)" $B/index.html
+```
+
+It is live on the next request. To pick a specific build, list them with `gcloud storage ls -a -l $B/index.html` and copy the one you want (`$B/index.html#<generation>`) over `$B/index.html`.
+
+Then fix `main` (for example `git revert <commit> && git push`), or the next push will publish the same thing again.
+
+## Adding a member
+
+Access needs two things: the person is on the gate's member allow-list, and they hold the `limsoc-permission-assist` grant. One command does both. Run it from a checkout of the gate repo (`nicholas-wood/lsv-service-summary`) on a machine where `gcloud auth application-default login` has been done:
+
+```
+bun run scripts/app-access.ts grant limsoc-permission-assist person@example.com "First Last"
+```
+
+They then sign in at the address above with an emailed link. Other commands:
+
+```
+bun run scripts/app-access.ts list   limsoc-permission-assist
+bun run scripts/app-access.ts revoke limsoc-permission-assist person@example.com
+```
+
+A grant or a revoke takes effect on the person's next request. Nothing is redeployed.
+
+Note: the allow-list is shared with the Operational Service Summary. Anyone added here is a gate member, so today they can also open `/lsv/dailysummary`. Revoking the grant removes Permission Assist only; to remove someone entirely, remove them from the allow-list in the gate.
+
+## Monthly cost
+
+Effectively nothing: well under 5 cents a month.
+
+| Item | Basis | Per month (USD) |
+|------|-------|-----------------|
+| Storage | About 1.1 MB per build, up to 11 builds kept, Standard class at roughly $0.023 per GB | under $0.001 |
+| Uploads | 2 writes per deploy at $0.005 per 1,000 | under $0.001 |
+| Reads | 1 conditional read per page or script request at $0.0004 per 1,000 | under $0.001 |
+| Network | Bucket to Cloud Run in the same region | $0 |
+| Gate | Existing Cloud Run service, scales to zero, inside its free tier at this usage | $0 extra |
+
+Regional buckets outside the US are not in Google Cloud's always-free allowance, so the storage line is a real charge, just a very small one.
+
+## First-time setup (once)
+
+1. Merge the gate change and apply its Terraform (`infra/terraform/limsoc-permission-assist.tf`), which creates the bucket, the read binding, the deploy account and the WIF provider.
+2. Deploy the gate so the route exists.
+3. Grant the first member (command above).
+4. Create the `production` environment in this repo's GitHub settings, then push to `main`.
+
+## Rules
+
+- The app never calls LIMSOC. Import testing is done by hand on staging.limsoc.com.au only, never production.
+- Keep this repository private. `data/` and `test/` describe LIMSOC's permission structure.
+- Do not make the bucket public, add `allUsers`, or hand out signed URLs.

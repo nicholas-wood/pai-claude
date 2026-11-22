@@ -1,0 +1,146 @@
+#!/usr/bin/env bun
+/**
+ * End-to-end probe of a deployed instance without email access.
+ *
+ *   APP_URL=https://host bun run scripts/e2e-probe.ts member@example.com
+ *
+ * Mints a Firebase custom token for the member (Admin SDK via IAM signBlob as
+ * the runtime SA), exchanges it for an ID token with the Identity Toolkit REST
+ * API, then drives the real HTTP surface: /api/auth/session → cookie,
+ * authenticated page (CSP, nonce, injected globals), /api/auth/firebase-token
+ * (POST only, Origin-checked), /api/members, anonymous refusals, logout.
+ * Prints PASS/FAIL lines; exits non-zero on any FAIL.
+ */
+import { initializeApp as initAdmin, applicationDefault } from "firebase-admin/app";
+import { getAuth as getAdminAuth } from "firebase-admin/auth";
+
+const APP_URL = (process.env.APP_URL ?? "").replace(/\/$/, "");
+const BASE = `${APP_URL}/lsv/dailysummary`;
+const email = process.argv[2]?.toLowerCase();
+const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "lsv-oss-prod";
+if (!APP_URL || !email || !apiKey) throw new Error("APP_URL, NEXT_PUBLIC_FIREBASE_API_KEY and a member email are required");
+
+initAdmin({ credential: applicationDefault(), projectId, serviceAccountId: `lsv-oss-run@${projectId}.iam.gserviceaccount.com` });
+const adminAuth = getAdminAuth();
+
+const results: { name: string; ok: boolean; detail?: string }[] = [];
+function check(name: string, ok: boolean, detail?: string) {
+  results.push({ name, ok, detail });
+}
+
+// Firebase user for the member (created if absent, as the OTP route does).
+let uid: string;
+try {
+  uid = (await adminAuth.getUserByEmail(email)).uid;
+} catch {
+  uid = (await adminAuth.createUser({ email, emailVerified: true })).uid;
+}
+const customToken = await adminAuth.createCustomToken(uid);
+const exch = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${apiKey}`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ token: customToken, returnSecureToken: true }),
+});
+const { idToken } = (await exch.json()) as { idToken: string };
+check("custom token exchanged for ID token", !!idToken);
+
+// Anonymous surface
+const anonPage = await fetch(BASE, { redirect: "manual" });
+check("anon page → 303 to sign-in", anonPage.status === 303 && (anonPage.headers.get("location") ?? "").includes("/sign-in"), `${anonPage.status} ${anonPage.headers.get("location")}`);
+const anonApi = await fetch(`${BASE}/api/members`);
+check("anon /api/members → 401", anonApi.status === 401, String(anonApi.status));
+const anonCron = await fetch(`${BASE}/api/cron/weather`);
+check("anon /api/cron/weather → 401", anonCron.status === 401, String(anonCron.status));
+const anonRefresh = await fetch(`${BASE}/api/weather/refresh`, { method: "POST" });
+check("anon /api/weather/refresh → 401/403", anonRefresh.status === 401 || anonRefresh.status === 403, String(anonRefresh.status));
+const health = await fetch(`${BASE}/api/health`);
+const healthBody = (await health.json()) as { ok: boolean; version: string };
+check("health 200 with version", health.status === 200 && healthBody.ok, JSON.stringify(healthBody));
+const signIn = await fetch(`${BASE}/sign-in`);
+check("sign-in page 200", signIn.status === 200, String(signIn.status));
+
+// Session exchange
+const sess = await fetch(`${BASE}/api/auth/session`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
+const setCookie = sess.headers.get("set-cookie") ?? "";
+check("session exchange 200", sess.status === 200, `${sess.status} ${await sess.text()}`);
+check("cookie HttpOnly;Secure;SameSite=lax;14d", /__session=/.test(setCookie) && /HttpOnly/i.test(setCookie) && /Secure/i.test(setCookie) && /SameSite=lax/i.test(setCookie) && /Max-Age=1209600/.test(setCookie), setCookie.replace(/__session=[^;]+/, "__session=<redacted>"));
+const cookie = setCookie.split(";")[0];
+
+// Authenticated page
+const page = await fetch(BASE, { headers: { cookie } });
+const html = await page.text();
+const csp = page.headers.get("content-security-policy") ?? "";
+check("authenticated page 200", page.status === 200, String(page.status));
+check("OSS_USER_NAME injected", html.includes("window.OSS_USER_NAME="));
+check("OSS_LOGOUT_URL injected", html.includes('window.OSS_LOGOUT_URL="/lsv/dailysummary/logout"'));
+check("bridge.js tag present", html.includes("/vendor/bridge.js"));
+const nonce = csp.match(/'nonce-([^']+)'/)?.[1];
+const scriptsWithoutNonce = (html.match(/<script\b[^>]*>/gi) ?? []).filter((t) => !t.includes(`nonce="${nonce}"`));
+check("every script tag carries the CSP nonce", !!nonce && scriptsWithoutNonce.length === 0, `${scriptsWithoutNonce.length} missing`);
+check("CSP connect-src limited to self + Google auth/firestore", /connect-src 'self' https:\/\/firestore\.googleapis\.com https:\/\/securetoken\.googleapis\.com https:\/\/identitytoolkit\.googleapis\.com/.test(csp));
+check("page Cache-Control no-store", (page.headers.get("cache-control") ?? "").includes("no-store"));
+check("security headers present", page.headers.get("x-frame-options") === "DENY" && page.headers.get("x-content-type-options") === "nosniff");
+
+// Custom-token mint endpoint
+const mintGet = await fetch(`${BASE}/api/auth/firebase-token`, { headers: { cookie } });
+check("firebase-token GET → 405", mintGet.status === 405, String(mintGet.status));
+const mintBadOrigin = await fetch(`${BASE}/api/auth/firebase-token`, { method: "POST", headers: { cookie, origin: "https://evil.example" } });
+check("firebase-token bad Origin → 403", mintBadOrigin.status === 403, String(mintBadOrigin.status));
+const mintNoCookie = await fetch(`${BASE}/api/auth/firebase-token`, { method: "POST", headers: { origin: APP_URL } });
+check("firebase-token no cookie → 401", mintNoCookie.status === 401, String(mintNoCookie.status));
+const mint = await fetch(`${BASE}/api/auth/firebase-token`, { method: "POST", headers: { cookie, origin: APP_URL } });
+const mintText = await mint.text();
+let mintBody: { token?: string } = {};
+try {
+  mintBody = JSON.parse(mintText);
+} catch {
+  check("firebase-token returned JSON", false, `${mint.status} ${mintText.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 160)}`);
+}
+check("firebase-token POST → token, no-store", mint.status === 200 && !!mintBody.token && (mint.headers.get("cache-control") ?? "").includes("no-store"), String(mint.status));
+if (mintBody.token) {
+  const payload = JSON.parse(Buffer.from(mintBody.token.split(".")[1], "base64url").toString()) as { claims?: Record<string, unknown> };
+  check("custom token carries the app-scoped claim only", (payload.claims?.poc_oss === "member" || payload.claims?.poc_oss === "admin") && payload.claims?.member === undefined && payload.claims?.admin === undefined, JSON.stringify(payload.claims));
+}
+
+// Members API
+const members = await fetch(`${BASE}/api/members`, { headers: { cookie } });
+const membersBody = (await members.json()) as { members: { email: string; role: string }[] };
+check("members list includes caller", members.status === 200 && membersBody.members.some((m) => m.email === email), JSON.stringify(membersBody).slice(0, 200));
+
+// Optional: the same session through another front door (Firebase Hosting), e.g. VIA_URL=https://lsv-oss-prod.web.app
+const VIA = (process.env.VIA_URL ?? "").replace(/\/$/, "");
+if (VIA) {
+  const viaHealth = await fetch(`${VIA}/lsv/dailysummary/api/health`);
+  check(`via ${VIA}: health 200`, viaHealth.status === 200, String(viaHealth.status));
+  const viaAnon = await fetch(`${VIA}/lsv/dailysummary`, { redirect: "manual" });
+  check(`via ${VIA}: anon page refused`, viaAnon.status === 303 || viaAnon.status === 302, `${viaAnon.status} ${viaAnon.headers.get("location")}`);
+  const viaAnonApi = await fetch(`${VIA}/lsv/dailysummary/api/members`);
+  check(`via ${VIA}: anon API 401`, viaAnonApi.status === 401, String(viaAnonApi.status));
+  const viaPage = await fetch(`${VIA}/lsv/dailysummary`, { headers: { cookie } });
+  const viaHtml = await viaPage.text();
+  check(`via ${VIA}: session cookie is forwarded, page 200`, viaPage.status === 200 && viaHtml.includes("window.OSS_USER_NAME="), `${viaPage.status} cache-control=${viaPage.headers.get("cache-control")}`);
+  const viaMembers = await fetch(`${VIA}/lsv/dailysummary/api/members`, { headers: { cookie } });
+  check(`via ${VIA}: authenticated API 200`, viaMembers.status === 200, String(viaMembers.status));
+  const viaVendor = await fetch(`${VIA}/lsv/dailysummary/vendor/jszip.min.js`, { redirect: "manual" });
+  check(`via ${VIA}: vendor file refused without a session`, viaVendor.status === 401 || viaVendor.status === 303 || viaVendor.status === 302, String(viaVendor.status));
+  const viaRoot = await fetch(`${VIA}/`, { redirect: "manual" });
+  check(`via ${VIA}: / redirects to the app`, viaRoot.status === 302 && (viaRoot.headers.get("location") ?? "").endsWith("/lsv/dailysummary"), `${viaRoot.status} ${viaRoot.headers.get("location")}`);
+}
+
+// Tampered cookie
+const tampered = cookie.slice(0, -4) + "AAAA";
+const tamperedPage = await fetch(BASE, { headers: { cookie: tampered }, redirect: "manual" });
+check("tampered cookie → refused", tamperedPage.status === 303, String(tamperedPage.status));
+
+// Logout
+const logout = await fetch(`${BASE}/logout`, { headers: { cookie }, redirect: "manual" });
+check("logout 303 to sign-in and clears cookie", logout.status === 303 && /__session=;|Max-Age=0/i.test(logout.headers.get("set-cookie") ?? ""), `${logout.status} ${logout.headers.get("set-cookie")}`);
+
+let failed = 0;
+for (const r of results) {
+  if (!r.ok) failed++;
+  console.log(`${r.ok ? "PASS" : "FAIL"}  ${r.name}${r.detail ? `  (${r.detail})` : ""}`);
+}
+console.log(`${results.length - failed}/${results.length} passed`);
+process.exit(failed ? 1 : 0);

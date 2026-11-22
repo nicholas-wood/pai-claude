@@ -1,0 +1,83 @@
+variable "project_id" {
+  type    = string
+  default = "lsv-oss-prod"
+}
+
+variable "region" {
+  type    = string
+  default = "australia-southeast1"
+}
+
+variable "environment" {
+  type    = string
+  default = "prod"
+}
+
+variable "domain" {
+  description = "Host the app is served on. The app itself lives under /lsv/dailysummary."
+  type        = string
+  default     = "service-summary.nicholaswood.com.au"
+}
+
+variable "github_repository" {
+  description = "owner/name of the GitHub repo allowed to deploy via WIF"
+  type        = string
+  default     = "nicholas-wood/lsv-service-summary"
+}
+
+variable "initial_image" {
+  description = "Image for the first apply; CI replaces it on every release and Terraform ignores the drift."
+  type        = string
+  default     = "us-docker.pkg.dev/cloudrun/container/hello"
+}
+
+variable "manage_dns" {
+  description = "Host the DNS zone for dns_zone_domain in Cloud DNS. Must stay true while the registry delegates to Google's nameservers."
+  type        = bool
+  default     = true
+}
+
+variable "dns_zone_domain" {
+  description = "The registered domain whose zone Cloud DNS hosts."
+  type        = string
+  default     = "nicholaswood.com.au"
+}
+
+
+
+variable "resend_api_key" {
+  description = "Optional. Empty disables Resend; Firebase then sends magic links itself and the code sign-in is hidden."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "resend_from" {
+  type    = string
+  default = ""
+}
+
+variable "app_url_override" {
+  description = "Serve from this origin instead of https://<domain> (interim Cloud Run URL before the domain is live). Empty = use the domain."
+  type        = string
+  default     = ""
+}
+
+variable "apex_txt_records" {
+  description = "TXT records at the zone apex, each already quoted."
+  type        = list(string)
+  default     = ["\"google-site-verification=WpvS60s6yNOOkjRDG8KmzcQqH0niTHc1CPNVipsizSs\""]
+}
+
+variable "dns_delegations" {
+  description = "Sub-zones delegated out of the parent zone: fully qualified name (no trailing dot) to its nameservers."
+  type        = map(list(string))
+  default = {
+    "poc.nicholaswood.com.au" = [
+      "ns-cloud-d1.googledomains.com.",
+      "ns-cloud-d2.googledomains.com.",
+      "ns-cloud-d3.googledomains.com.",
+      "ns-cloud-d4.googledomains.com.",
+    ]
+  }
+}

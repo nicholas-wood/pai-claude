@@ -1,0 +1,1222 @@
+import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import {
+  lockerAreas,
+  lockers,
+  lockerRequests,
+  lockerAllocations,
+  tenantMemberships,
+  users,
+  fobRequests,
+} from "@accessbuddy/db";
+import {
+  AuditAction,
+  AuditEntityType,
+  LockerEndType,
+  LockerRequestStatus,
+  type TenantSettings,
+} from "@accessbuddy/shared";
+import { createAuditEntry } from "@/lib/services/audit";
+import { formatExpiryDate } from "@/lib/format-date";
+import { suggestLocker, type SuggestableLocker } from "@/lib/locker-suggest";
+import { withTenant, type TransactionClient } from "@/lib/with-tenant";
+import type { Tenant } from "@/lib/tenant";
+import {
+  LockerError,
+  NOT_A_MEMBER_MESSAGE,
+  PENDING_DUPLICATE_MESSAGE,
+  assertAllocatable,
+  endAllocationGuarded,
+  flagVacatedLocker,
+  fullName,
+  holderSnapshot,
+  insertAllocation,
+  isUniqueViolation,
+  linkLockerHoldersByEmail,
+  loadArea,
+  lockLocker,
+  lockerWithArea,
+  normaliseEmail,
+  notActiveError,
+  notifyCleanoutRequired,
+  notifyRequestNeedsApproval,
+  resolveMember,
+  sendMemberLockerEmail,
+  type EmailOutcome,
+  type ResolvedMember,
+} from "@/lib/services/locker-core";
+
+/**
+ * Lockers service: reads, request lifecycle (submit / approve / decline /
+ * cancel) and allocation lifecycle (assign / revoke / move). Inventory and
+ * tasks live in locker-inventory.ts; season confirmation and the cutoff in
+ * locker-season.ts. Everything is re-exported from here for convenience.
+ *
+ * Rules that hold for every transition in these modules:
+ *  - each one begins with a GUARDED write (WHERE status = 'pending' /
+ *    WHERE ended_at IS NULL ... RETURNING) and stops on zero rows, so two
+ *    racing callers cannot both act; a thrown LockerError rolls the whole
+ *    transaction back, including the guarded write;
+ *  - approve, assign, move and locker edits take SELECT ... FOR UPDATE on the
+ *    locker row;
+ *  - every query carries an explicit tenant filter, RLS is defence in depth;
+ *  - member emails are sent AFTER the transaction commits, directly, with the
+ *    policy attached where the spec says so. Only cron cutoff releases are
+ *    enqueued.
+ */
+
+export * from "@/lib/services/locker-core";
+export * from "@/lib/services/locker-inventory";
+export * from "@/lib/services/locker-season";
+
+type LockerRequestRow = typeof lockerRequests.$inferSelect;
+
+// ─── Reads ───────────────────────────────────────────────────────────────
+
+/** GET lockers: areas with their lockers, active holder and task flags. */
+export async function listAreasWithLockers(tenantId: string) {
+  return withTenant(tenantId, async (tx) => {
+    const [areas, lockerRows, allocRows] = await Promise.all([
+      tx
+        .select()
+        .from(lockerAreas)
+        .where(eq(lockerAreas.tenantId, tenantId))
+        .orderBy(asc(lockerAreas.sortOrder), asc(lockerAreas.name)),
+      tx.select().from(lockers).where(eq(lockers.tenantId, tenantId)).orderBy(asc(lockers.number)),
+      tx
+        .select()
+        .from(lockerAllocations)
+        .where(and(eq(lockerAllocations.tenantId, tenantId), isNull(lockerAllocations.endedAt))),
+    ]);
+
+    const holderByLocker = new Map<string, ReturnType<typeof holderView>>();
+    const holderView = (a: (typeof allocRows)[number]) => ({
+      allocationId: a.id,
+      userId: a.userId,
+      firstName: a.holderFirstName,
+      lastName: a.holderLastName,
+      email: a.holderEmail,
+      phone: a.holderPhone,
+      since: a.allocatedAt.toISOString(),
+      keptForSeason: a.keptForSeason,
+    });
+    for (const a of allocRows) holderByLocker.set(a.lockerId, holderView(a));
+
+    // For every locker whose label needs updating: whose name is on it now (the
+    // most recent ENDED allocation). One query for all flagged lockers, never one
+    // per locker.
+    const flaggedIds = lockerRows.filter((l) => l.labelUpdateRequired).map((l) => l.id);
+    const previousByLocker = new Map<string, string>();
+    if (flaggedIds.length > 0) {
+      const previous = await tx
+        .selectDistinctOn([lockerAllocations.lockerId], {
+          lockerId: lockerAllocations.lockerId,
+          firstName: lockerAllocations.holderFirstName,
+          lastName: lockerAllocations.holderLastName,
+        })
+        .from(lockerAllocations)
+        .where(
+          and(
+            eq(lockerAllocations.tenantId, tenantId),
+            inArray(lockerAllocations.lockerId, flaggedIds),
+            sql`${lockerAllocations.endedAt} is not null`
+          )
+        )
+        .orderBy(lockerAllocations.lockerId, desc(lockerAllocations.endedAt));
+      for (const p of previous) {
+        const name = fullName(p.firstName, p.lastName);
+        if (name) previousByLocker.set(p.lockerId, name);
+      }
+    }
+
+    return {
+      areas: areas.map((area) => ({
+        id: area.id,
+        name: area.name,
+        sortOrder: area.sortOrder,
+        active: area.active,
+        lockers: lockerRows
+          .filter((l) => l.areaId === area.id)
+          .map((l) => ({
+            id: l.id,
+            number: l.number,
+            level: l.level,
+            status: l.status,
+            notes: l.notes,
+            labelUpdateRequired: l.labelUpdateRequired,
+            // Who the label should name now / whose name is on it now (null unless the label needs updating).
+            labelTo: l.labelUpdateRequired
+              ? fullName(holderByLocker.get(l.id)?.firstName, holderByLocker.get(l.id)?.lastName) || null
+              : null,
+            labelWas: l.labelUpdateRequired ? (previousByLocker.get(l.id) ?? null) : null,
+            cleanoutRequired: l.cleanoutRequired,
+            cleanoutDueAt: l.cleanoutDueAt?.toISOString() ?? null,
+            holder: holderByLocker.get(l.id) ?? null,
+          })),
+      })),
+    };
+  });
+}
+
+async function suggestableByArea(
+  tx: TransactionClient,
+  tenantId: string,
+  areaIds: string[]
+): Promise<Map<string, SuggestableLocker[]>> {
+  const result = new Map<string, SuggestableLocker[]>();
+  if (areaIds.length === 0) return result;
+  const rows = await tx
+    .select({
+      id: lockers.id,
+      areaId: lockers.areaId,
+      number: lockers.number,
+      status: lockers.status,
+      cleanoutRequired: lockers.cleanoutRequired,
+      activeAllocationId: lockerAllocations.id,
+    })
+    .from(lockers)
+    .leftJoin(
+      lockerAllocations,
+      and(
+        eq(lockerAllocations.lockerId, lockers.id),
+        eq(lockerAllocations.tenantId, tenantId),
+        isNull(lockerAllocations.endedAt)
+      )
+    )
+    .where(and(eq(lockers.tenantId, tenantId), inArray(lockers.areaId, areaIds)));
+  for (const r of rows) {
+    const list = result.get(r.areaId) ?? [];
+    list.push({
+      id: r.id,
+      number: r.number,
+      status: r.status,
+      occupied: r.activeAllocationId !== null,
+      cleanoutRequired: r.cleanoutRequired,
+    });
+    result.set(r.areaId, list);
+  }
+  return result;
+}
+
+/** GET lockers/requests?status= */
+export async function listLockerRequests(
+  tenantId: string,
+  status: LockerRequestStatus | "all" = "pending"
+) {
+  return withTenant(tenantId, async (tx) => {
+    const rows = await tx
+      .select({
+        request: lockerRequests,
+        areaName: lockerAreas.name,
+        areaActive: lockerAreas.active,
+        fobStatus: fobRequests.status,
+      })
+      .from(lockerRequests)
+      .innerJoin(lockerAreas, eq(lockerAreas.id, lockerRequests.areaId))
+      .leftJoin(fobRequests, eq(fobRequests.id, lockerRequests.relatedFobRequestId))
+      .where(
+        and(
+          eq(lockerRequests.tenantId, tenantId),
+          status === "all" ? undefined : eq(lockerRequests.status, status)
+        )
+      )
+      .orderBy(status === "pending" ? asc(lockerRequests.createdAt) : desc(lockerRequests.createdAt))
+      .limit(status === "pending" ? 500 : 200);
+
+    const emails = Array.from(new Set(rows.map((r) => normaliseEmail(r.request.email))));
+    const userIds = Array.from(
+      new Set(rows.map((r) => r.request.userId).filter((v): v is string => !!v))
+    );
+
+    const members: ResolvedMember[] =
+      rows.length === 0
+        ? []
+        : await tx
+            .select({
+              userId: users.id,
+              email: users.email,
+              firstName: users.firstName,
+              lastName: users.lastName,
+              phone: users.phone,
+              membershipStatus: tenantMemberships.status,
+              currentSeason: tenantMemberships.currentSeason,
+            })
+            .from(users)
+            .innerJoin(
+              tenantMemberships,
+              and(eq(tenantMemberships.userId, users.id), eq(tenantMemberships.tenantId, tenantId))
+            )
+            .where(
+              or(
+                userIds.length ? inArray(users.id, userIds) : undefined,
+                emails.length ? inArray(sql<string>`lower(${users.email})`, emails) : undefined
+              )
+            )
+            .orderBy(asc(users.createdAt));
+
+    const memberById = new Map<string, ResolvedMember>();
+    const memberByEmail = new Map<string, ResolvedMember>();
+    for (const m of members) {
+      if (!memberById.has(m.userId)) memberById.set(m.userId, m);
+      const key = normaliseEmail(m.email);
+      if (!memberByEmail.has(key)) memberByEmail.set(key, m);
+    }
+    const resolved = rows.map((row) => ({
+      row,
+      member:
+        (row.request.userId ? memberById.get(row.request.userId) : undefined) ??
+        memberByEmail.get(normaliseEmail(row.request.email)) ??
+        null,
+    }));
+
+    const memberIds = Array.from(
+      new Set(resolved.flatMap((r) => (r.member ? [r.member.userId] : [])))
+    );
+    const heldRows = memberIds.length
+      ? await tx
+          .select({
+            allocationId: lockerAllocations.id,
+            userId: lockerAllocations.userId,
+            number: lockers.number,
+            areaName: lockerAreas.name,
+          })
+          .from(lockerAllocations)
+          .innerJoin(lockers, eq(lockers.id, lockerAllocations.lockerId))
+          .innerJoin(lockerAreas, eq(lockerAreas.id, lockers.areaId))
+          .where(
+            and(
+              eq(lockerAllocations.tenantId, tenantId),
+              isNull(lockerAllocations.endedAt),
+              inArray(lockerAllocations.userId, memberIds)
+            )
+          )
+      : [];
+    const heldByUser = new Map<string, { allocationId: string; areaName: string; number: number }[]>();
+    for (const h of heldRows) {
+      const list = heldByUser.get(h.userId!) ?? [];
+      list.push({ allocationId: h.allocationId, areaName: h.areaName, number: h.number });
+      heldByUser.set(h.userId!, list);
+    }
+
+    const pendingAreaIds = Array.from(
+      new Set(rows.filter((r) => r.request.status === "pending").map((r) => r.request.areaId))
+    );
+    const areaLockers = await suggestableByArea(tx, tenantId, pendingAreaIds);
+
+    return {
+      requests: resolved.map(({ row, member }) => {
+        const r = row.request;
+        const held = member ? (heldByUser.get(member.userId) ?? []) : [];
+        return {
+          id: r.id,
+          status: r.status,
+          createdAt: r.createdAt.toISOString(),
+          area: { id: r.areaId, name: row.areaName, active: row.areaActive },
+          requestedNumber: r.requestedNumber,
+          requester: {
+            firstName: r.firstName,
+            lastName: r.lastName,
+            email: r.email,
+            phone: r.phone,
+          },
+          userId: r.userId ?? member?.userId ?? null,
+          submittedAuthenticated: r.submittedAuthenticated,
+          policyAcceptedAt: r.policyAcceptedAt?.toISOString() ?? null,
+          relatedFobRequest: r.relatedFobRequestId
+            ? { id: r.relatedFobRequestId, status: row.fobStatus }
+            : null,
+          membership: {
+            isMember: !!member,
+            status: member?.membershipStatus ?? null,
+            userId: member?.userId ?? null,
+          },
+          activeLockerCount: held.length,
+          activeLockers: held,
+          suggestedLockerId:
+            r.status === "pending"
+              ? suggestLocker({
+                  requestedNumber: r.requestedNumber,
+                  lockers: areaLockers.get(r.areaId) ?? [],
+                })
+              : null,
+          declineReason: r.declineReason,
+          decidedAt: r.decidedAt?.toISOString() ?? null,
+          decidedBy: r.decidedBy,
+          allocationId: r.allocationId,
+        };
+      }),
+    };
+  });
+}
+
+/** Everything the member page needs: active, pending requests, history. */
+export async function getMemberLockers(tenant: Tenant, userId: string) {
+  return withTenant(tenant.id, async (tx) => {
+    const [user] = await tx
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    const allocs = await tx
+      .select({
+        allocation: lockerAllocations,
+        number: lockers.number,
+        level: lockers.level,
+        areaId: lockers.areaId,
+        areaName: lockerAreas.name,
+      })
+      .from(lockerAllocations)
+      .innerJoin(lockers, eq(lockers.id, lockerAllocations.lockerId))
+      .innerJoin(lockerAreas, eq(lockerAreas.id, lockers.areaId))
+      .where(and(eq(lockerAllocations.tenantId, tenant.id), eq(lockerAllocations.userId, userId)))
+      .orderBy(desc(lockerAllocations.allocatedAt));
+
+    const requests = await tx
+      .select({ request: lockerRequests, areaName: lockerAreas.name })
+      .from(lockerRequests)
+      .innerJoin(lockerAreas, eq(lockerAreas.id, lockerRequests.areaId))
+      .where(
+        and(
+          eq(lockerRequests.tenantId, tenant.id),
+          or(
+            eq(lockerRequests.userId, userId),
+            user ? sql`lower(${lockerRequests.email}) = ${normaliseEmail(user.email)}` : undefined
+          )
+        )
+      )
+      .orderBy(desc(lockerRequests.createdAt));
+
+    const view = (a: (typeof allocs)[number]) => ({
+      allocationId: a.allocation.id,
+      locker: {
+        id: a.allocation.lockerId,
+        number: a.number,
+        level: a.level,
+        areaId: a.areaId,
+        areaName: a.areaName,
+      },
+      requestId: a.allocation.requestId,
+      allocatedAt: a.allocation.allocatedAt.toISOString(),
+      keptForSeason: a.allocation.keptForSeason,
+      endedAt: a.allocation.endedAt?.toISOString() ?? null,
+      endType: a.allocation.endType,
+      endReason: a.allocation.endReason,
+    });
+
+    return {
+      userId,
+      active: allocs.filter((a) => !a.allocation.endedAt).map(view),
+      history: allocs.filter((a) => a.allocation.endedAt).map(view),
+      pendingRequests: requests
+        .filter((r) => r.request.status === "pending")
+        .map((r) => ({
+          id: r.request.id,
+          areaId: r.request.areaId,
+          areaName: r.areaName,
+          requestedNumber: r.request.requestedNumber,
+          createdAt: r.request.createdAt.toISOString(),
+        })),
+      // For the member page audit trail: entity ids that belong to this member.
+      lockerIds: Array.from(new Set(allocs.map((a) => a.allocation.lockerId))),
+      requestIds: requests.map((r) => r.request.id),
+    };
+  });
+}
+
+/** Members holding at least one locker, for the members-list chip. */
+export async function listLockerHolders(tenantId: string) {
+  return withTenant(tenantId, async (tx) => {
+    const rows = await tx
+      .select({ userId: lockerAllocations.userId, count: sql<number>`count(*)::int` })
+      .from(lockerAllocations)
+      .where(
+        and(
+          eq(lockerAllocations.tenantId, tenantId),
+          isNull(lockerAllocations.endedAt),
+          sql`${lockerAllocations.userId} is not null`
+        )
+      )
+      .groupBy(lockerAllocations.userId);
+    return { holders: rows.map((r) => ({ userId: r.userId as string, count: r.count })) };
+  });
+}
+
+/** What the signed-in member sees on their dashboard. */
+export async function getMyLockers(tenant: Tenant, user: { id: string }) {
+  const data = await getMemberLockers(tenant, user.id);
+  return { active: data.active, pendingRequest: data.pendingRequests[0] ?? null };
+}
+
+/**
+ * Whether a locker area can take new requests: in this tenant, active, and with
+ * at least one `available` locker (the same rule as the public config).
+ */
+export async function isLockerAreaOpen(tenantId: string, areaId: string): Promise<boolean> {
+  return withTenant(tenantId, async (tx) => {
+    const [row] = await tx
+      .select({ id: lockerAreas.id })
+      .from(lockerAreas)
+      .where(
+        and(
+          eq(lockerAreas.id, areaId),
+          eq(lockerAreas.tenantId, tenantId),
+          eq(lockerAreas.active, true),
+          sql`exists (select 1 from ${lockers} where ${lockers.areaId} = ${lockerAreas.id} and ${lockers.tenantId} = ${tenantId} and ${lockers.status} = 'available')`
+        )
+      )
+      .limit(1);
+    return !!row;
+  });
+}
+
+/** Public config for the request form (the module is on when this is reached). */
+export async function getPublicLockerConfig(tenant: Tenant) {
+  return withTenant(tenant.id, async (tx) => {
+    const areas = await tx
+      .select({ id: lockerAreas.id, name: lockerAreas.name })
+      .from(lockerAreas)
+      .where(
+        and(
+          eq(lockerAreas.tenantId, tenant.id),
+          eq(lockerAreas.active, true),
+          sql`exists (select 1 from ${lockers} where ${lockers.areaId} = ${lockerAreas.id} and ${lockers.tenantId} = ${tenant.id} and ${lockers.status} = 'available')`
+        )
+      )
+      .orderBy(asc(lockerAreas.sortOrder), asc(lockerAreas.name));
+    const policy = (tenant.settings as Partial<TenantSettings>).lockerPolicy;
+    return {
+      enabled: true,
+      areas,
+      policy: policy
+        ? { name: policy.name, url: `/api/v1/t/${tenant.slug}/config/locker-policy` }
+        : null,
+    };
+  });
+}
+
+// ─── Request lifecycle ───────────────────────────────────────────────────
+
+/**
+ * Create a pending locker request inside the caller's transaction (also used
+ * by the combined fob + locker submit so both rows commit together). The area
+ * is loaded with the tenant filter; a miss or an inactive area is a 400. A
+ * second pending request from the same email is a friendly 409; the partial
+ * unique index backs it up for the race (the surrounding transaction rolls
+ * back).
+ */
+export async function createLockerRequest(
+  tx: TransactionClient,
+  params: {
+    tenantId: string;
+    areaId: string;
+    requestedNumber?: number | null;
+    email: string;
+    firstName: string;
+    lastName: string;
+    phone?: string | null;
+    /** Session user, set ONLY when the submitter is signed in as this email. */
+    userId: string | null;
+    relatedFobRequestId?: string | null;
+  }
+): Promise<{ request: LockerRequestRow; areaName: string }> {
+  const area = await loadArea(tx, params.tenantId, params.areaId);
+  if (!area || !area.active) throw new LockerError(400, "That locker area is not available");
+
+  const email = normaliseEmail(params.email);
+  if (await hasPendingLockerRequest(tx, params.tenantId, email)) {
+    throw new LockerError(409, PENDING_DUPLICATE_MESSAGE, "locker_request_pending");
+  }
+
+  let request: LockerRequestRow;
+  try {
+    [request] = await tx
+      .insert(lockerRequests)
+      .values({
+        tenantId: params.tenantId,
+        userId: params.userId,
+        areaId: area.id,
+        requestedNumber: params.requestedNumber ?? null,
+        status: LockerRequestStatus.PENDING,
+        policyAcceptedAt: new Date(),
+        email,
+        firstName: params.firstName.trim(),
+        lastName: params.lastName.trim(),
+        phone: params.phone?.trim() || null,
+        submittedAuthenticated: params.userId !== null,
+        relatedFobRequestId: params.relatedFobRequestId ?? null,
+      })
+      .returning();
+  } catch (err) {
+    if (isUniqueViolation(err, "locker_requests_pending_email_unique")) {
+      throw new LockerError(409, PENDING_DUPLICATE_MESSAGE, "locker_request_pending");
+    }
+    throw err;
+  }
+
+  await createAuditEntry(tx, {
+    tenantId: params.tenantId,
+    entityType: AuditEntityType.LOCKER_REQUEST,
+    entityId: request.id,
+    action: AuditAction.CREATE,
+    toState: LockerRequestStatus.PENDING,
+    actorId: params.userId,
+    actorType: params.userId ? "user" : "system",
+    metadata: {
+      action: "locker_request_submitted",
+      areaId: area.id,
+      areaName: area.name,
+      requestedNumber: params.requestedNumber ?? null,
+      email,
+      name: fullName(params.firstName, params.lastName),
+      submittedAuthenticated: params.userId !== null,
+      relatedFobRequestId: params.relatedFobRequestId ?? null,
+    },
+  });
+  return { request, areaName: area.name };
+}
+
+/** True when this email already has a pending locker request in the tenant. */
+export async function hasPendingLockerRequest(
+  tx: TransactionClient,
+  tenantId: string,
+  email: string
+): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: lockerRequests.id })
+    .from(lockerRequests)
+    .where(
+      and(
+        eq(lockerRequests.tenantId, tenantId),
+        eq(lockerRequests.status, LockerRequestStatus.PENDING),
+        sql`lower(${lockerRequests.email}) = ${normaliseEmail(email)}`
+      )
+    )
+    .limit(1);
+  return !!row;
+}
+
+/**
+ * After the request transaction commits: the requester's receipt and the admin
+ * notification. Never throws. Returns the receipt outcome.
+ */
+export async function afterLockerRequestSubmitted(
+  tenant: Tenant,
+  params: { request: LockerRequestRow; areaName: string }
+): Promise<EmailOutcome> {
+  const { request, areaName } = params;
+  const name = fullName(request.firstName, request.lastName) || request.email;
+  const outcome = await sendMemberLockerEmail({
+    tenant,
+    template: "lockerRequestReceived",
+    to: request.email,
+    variables: { memberName: name, areaName, requestedNumber: request.requestedNumber },
+    entityType: AuditEntityType.LOCKER_REQUEST,
+    entityId: request.id,
+    actorId: request.userId,
+    attachPolicy: false,
+  });
+  await notifyRequestNeedsApproval({
+    tenant,
+    requesterName: name,
+    areaName,
+    requestedNumber: request.requestedNumber,
+    requestId: request.id,
+  });
+  return outcome;
+}
+
+/** Public locker-only submit. */
+export async function submitLockerRequest(
+  tenant: Tenant,
+  params: {
+    areaId: string;
+    requestedNumber?: number | null;
+    email: string;
+    firstName: string;
+    lastName: string;
+    phone?: string | null;
+    sessionUserId: string | null;
+  }
+) {
+  const created = await withTenant(tenant.id, (tx) =>
+    createLockerRequest(tx, {
+      tenantId: tenant.id,
+      areaId: params.areaId,
+      requestedNumber: params.requestedNumber,
+      email: params.email,
+      firstName: params.firstName,
+      lastName: params.lastName,
+      phone: params.phone,
+      userId: params.sessionUserId,
+    })
+  );
+  const email = await afterLockerRequestSubmitted(tenant, created);
+  return { request: created.request, areaName: created.areaName, ...email };
+}
+
+/** 404 when the request does not exist in this tenant, otherwise 409. */
+async function notPendingError(
+  tx: TransactionClient,
+  tenantId: string,
+  requestId: string
+): Promise<LockerError> {
+  const [row] = await tx
+    .select({ status: lockerRequests.status })
+    .from(lockerRequests)
+    .where(and(eq(lockerRequests.id, requestId), eq(lockerRequests.tenantId, tenantId)))
+    .limit(1);
+  if (!row) return new LockerError(404, "Locker request not found");
+  return new LockerError(409, `This request has already been ${row.status}`);
+}
+
+/** APPROVE: allocate the chosen locker to the request's member in one step. */
+export async function approveLockerRequest(
+  tenant: Tenant,
+  params: { requestId: string; lockerId: string; actorId: string; overrideCleanout?: boolean }
+) {
+  const done = await withTenant(tenant.id, async (tx) => {
+    const now = new Date();
+    // 1. Guarded write: claim the request. Zero rows -> stop.
+    const [claimed] = await tx
+      .update(lockerRequests)
+      .set({
+        status: LockerRequestStatus.ALLOCATED,
+        decidedBy: params.actorId,
+        decidedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(lockerRequests.id, params.requestId),
+          eq(lockerRequests.tenantId, tenant.id),
+          eq(lockerRequests.status, LockerRequestStatus.PENDING)
+        )
+      )
+      .returning();
+    if (!claimed) throw await notPendingError(tx, tenant.id, params.requestId);
+
+    // 2. The requester must be a member of this tenant (re-resolved by email
+    // when the request was submitted signed out).
+    const member = await resolveMember(tx, tenant.id, {
+      userId: claimed.userId,
+      email: claimed.email,
+    });
+    if (!member) throw new LockerError(409, NOT_A_MEMBER_MESSAGE, "not_a_member");
+
+    // 3. Lock and validate the locker (ANY available locker in ANY area).
+    const locker = await lockLocker(tx, tenant.id, params.lockerId);
+    const { overrodeCleanout } = await assertAllocatable(
+      tx,
+      tenant.id,
+      locker,
+      params.overrideCleanout
+    );
+    const where = await lockerWithArea(tx, tenant.id, locker.id);
+
+    // 4. Allocate.
+    const allocation = await insertAllocation(tx, {
+      tenantId: tenant.id,
+      lockerId: locker.id,
+      requestId: claimed.id,
+      allocatedAt: now,
+      allocatedBy: params.actorId,
+      ...holderSnapshot(member, claimed.phone),
+    });
+    await tx
+      .update(lockerRequests)
+      .set({ allocationId: allocation.id, userId: member.userId, updatedAt: now })
+      .where(and(eq(lockerRequests.id, claimed.id), eq(lockerRequests.tenantId, tenant.id)));
+    await tx
+      .update(lockers)
+      .set({
+        labelUpdateRequired: true,
+        ...(overrodeCleanout ? { cleanoutRequired: false, cleanoutDueAt: null } : {}),
+        updatedAt: now,
+      })
+      .where(and(eq(lockers.id, locker.id), eq(lockers.tenantId, tenant.id)));
+
+    const holderName = fullName(member.firstName, member.lastName);
+    await createAuditEntry(tx, {
+      tenantId: tenant.id,
+      entityType: AuditEntityType.LOCKER_REQUEST,
+      entityId: claimed.id,
+      action: AuditAction.STATUS_CHANGE,
+      fromState: LockerRequestStatus.PENDING,
+      toState: LockerRequestStatus.ALLOCATED,
+      actorId: params.actorId,
+      metadata: {
+        action: "locker_request_approved",
+        lockerId: locker.id,
+        areaName: where?.areaName,
+        number: locker.number,
+        allocationId: allocation.id,
+        holderName,
+        ...(overrodeCleanout ? { overrideCleanout: true } : {}),
+      },
+    });
+    await createAuditEntry(tx, {
+      tenantId: tenant.id,
+      entityType: AuditEntityType.LOCKER,
+      entityId: locker.id,
+      action: AuditAction.UPDATE,
+      actorId: params.actorId,
+      metadata: {
+        action: "locker_allocated",
+        allocationId: allocation.id,
+        requestId: claimed.id,
+        userId: member.userId,
+        holderName,
+        areaName: where?.areaName,
+        number: locker.number,
+        ...(overrodeCleanout ? { overrideCleanout: true } : {}),
+      },
+    });
+    // Legacy holders for this tenant may now resolve (spec: link at approve).
+    await linkLockerHoldersByEmail(tx, tenant.id);
+    return { allocation, member, locker, where, requestId: claimed.id };
+  });
+
+  const email = await sendMemberLockerEmail({
+    tenant,
+    template: "lockerAllocated",
+    to: done.member.email,
+    variables: {
+      memberName: fullName(done.member.firstName, done.member.lastName) || done.member.email,
+      areaName: done.where?.areaName ?? "",
+      number: done.locker.number,
+      level: done.locker.level,
+    },
+    entityType: AuditEntityType.LOCKER,
+    entityId: done.locker.id,
+    actorId: params.actorId,
+    attachPolicy: true,
+  });
+  return { allocationId: done.allocation.id, requestId: done.requestId, ...email };
+}
+
+/** DECLINE a pending request with a reason; the requester is emailed. */
+export async function declineLockerRequest(
+  tenant: Tenant,
+  params: { requestId: string; reason: string; actorId: string }
+) {
+  const request = await withTenant(tenant.id, async (tx) => {
+    const now = new Date();
+    const [claimed] = await tx
+      .update(lockerRequests)
+      .set({
+        status: LockerRequestStatus.DECLINED,
+        declineReason: params.reason,
+        decidedBy: params.actorId,
+        decidedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(lockerRequests.id, params.requestId),
+          eq(lockerRequests.tenantId, tenant.id),
+          eq(lockerRequests.status, LockerRequestStatus.PENDING)
+        )
+      )
+      .returning();
+    if (!claimed) throw await notPendingError(tx, tenant.id, params.requestId);
+    await createAuditEntry(tx, {
+      tenantId: tenant.id,
+      entityType: AuditEntityType.LOCKER_REQUEST,
+      entityId: claimed.id,
+      action: AuditAction.STATUS_CHANGE,
+      fromState: LockerRequestStatus.PENDING,
+      toState: LockerRequestStatus.DECLINED,
+      actorId: params.actorId,
+      metadata: { action: "locker_request_declined", reason: params.reason },
+    });
+    return claimed;
+  });
+
+  const email = await sendMemberLockerEmail({
+    tenant,
+    template: "lockerDeclined",
+    to: request.email,
+    variables: {
+      memberName: fullName(request.firstName, request.lastName) || request.email,
+      reason: params.reason,
+    },
+    entityType: AuditEntityType.LOCKER_REQUEST,
+    entityId: request.id,
+    actorId: params.actorId,
+    attachPolicy: true,
+  });
+  return { requestId: request.id, ...email };
+}
+
+/** Loaded before a cancel to decide who may cancel (approver or requester). */
+export async function loadRequestForCancel(tenantId: string, requestId: string) {
+  return withTenant(tenantId, async (tx) => {
+    const [row] = await tx
+      .select({
+        id: lockerRequests.id,
+        userId: lockerRequests.userId,
+        email: lockerRequests.email,
+        status: lockerRequests.status,
+      })
+      .from(lockerRequests)
+      .where(and(eq(lockerRequests.id, requestId), eq(lockerRequests.tenantId, tenantId)))
+      .limit(1);
+    return row ?? null;
+  });
+}
+
+/** CANCEL a pending request. No email. */
+export async function cancelLockerRequest(
+  tenant: Tenant,
+  params: { requestId: string; actorId: string; byRequester: boolean }
+) {
+  return withTenant(tenant.id, async (tx) => {
+    const now = new Date();
+    const [claimed] = await tx
+      .update(lockerRequests)
+      .set({
+        status: LockerRequestStatus.CANCELLED,
+        decidedBy: params.actorId,
+        decidedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(lockerRequests.id, params.requestId),
+          eq(lockerRequests.tenantId, tenant.id),
+          eq(lockerRequests.status, LockerRequestStatus.PENDING)
+        )
+      )
+      .returning();
+    if (!claimed) throw await notPendingError(tx, tenant.id, params.requestId);
+    await createAuditEntry(tx, {
+      tenantId: tenant.id,
+      entityType: AuditEntityType.LOCKER_REQUEST,
+      entityId: claimed.id,
+      action: AuditAction.STATUS_CHANGE,
+      fromState: LockerRequestStatus.PENDING,
+      toState: LockerRequestStatus.CANCELLED,
+      actorId: params.actorId,
+      metadata: { action: "locker_request_cancelled", byRequester: params.byRequester },
+    });
+    return { requestId: claimed.id };
+  });
+}
+
+/**
+ * When a fob request is rejected or cancelled, any pending locker request
+ * created with it becomes `cancelled` in the same transaction. No email: the
+ * person is already told their access request was not approved.
+ */
+export async function cancelLockerRequestsForFobRequest(
+  tx: TransactionClient,
+  params: { tenantId: string; fobRequestId: string; actorId: string | null }
+): Promise<number> {
+  const now = new Date();
+  const cancelled = await tx
+    .update(lockerRequests)
+    .set({
+      status: LockerRequestStatus.CANCELLED,
+      declineReason: "The access request was not approved",
+      decidedAt: now,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(lockerRequests.tenantId, params.tenantId),
+        eq(lockerRequests.relatedFobRequestId, params.fobRequestId),
+        eq(lockerRequests.status, LockerRequestStatus.PENDING)
+      )
+    )
+    .returning({ id: lockerRequests.id });
+  for (const row of cancelled) {
+    await createAuditEntry(tx, {
+      tenantId: params.tenantId,
+      entityType: AuditEntityType.LOCKER_REQUEST,
+      entityId: row.id,
+      action: AuditAction.STATUS_CHANGE,
+      fromState: LockerRequestStatus.PENDING,
+      toState: LockerRequestStatus.CANCELLED,
+      actorId: params.actorId,
+      actorType: params.actorId ? "user" : "system",
+      metadata: {
+        action: "locker_request_auto_cancelled",
+        reason: "The access request was not approved",
+        relatedFobRequestId: params.fobRequestId,
+      },
+    });
+  }
+  return cancelled.length;
+}
+
+// ─── Allocations ─────────────────────────────────────────────────────────
+
+/** ASSIGN directly to a member (no request). Same checks and email as approve. */
+export async function assignLocker(
+  tenant: Tenant,
+  params: { lockerId: string; userId: string; actorId: string; overrideCleanout?: boolean }
+) {
+  const done = await withTenant(tenant.id, async (tx) => {
+    const now = new Date();
+    const locker = await lockLocker(tx, tenant.id, params.lockerId);
+    const member = await resolveMember(tx, tenant.id, { userId: params.userId });
+    if (!member) throw new LockerError(409, NOT_A_MEMBER_MESSAGE, "not_a_member");
+    const { overrodeCleanout } = await assertAllocatable(
+      tx,
+      tenant.id,
+      locker,
+      params.overrideCleanout
+    );
+    const where = await lockerWithArea(tx, tenant.id, locker.id);
+
+    const allocation = await insertAllocation(tx, {
+      tenantId: tenant.id,
+      lockerId: locker.id,
+      requestId: null,
+      allocatedAt: now,
+      allocatedBy: params.actorId,
+      ...holderSnapshot(member),
+    });
+    await tx
+      .update(lockers)
+      .set({
+        labelUpdateRequired: true,
+        ...(overrodeCleanout ? { cleanoutRequired: false, cleanoutDueAt: null } : {}),
+        updatedAt: now,
+      })
+      .where(and(eq(lockers.id, locker.id), eq(lockers.tenantId, tenant.id)));
+    await createAuditEntry(tx, {
+      tenantId: tenant.id,
+      entityType: AuditEntityType.LOCKER,
+      entityId: locker.id,
+      action: AuditAction.UPDATE,
+      actorId: params.actorId,
+      metadata: {
+        action: "locker_assigned",
+        allocationId: allocation.id,
+        userId: member.userId,
+        holderName: fullName(member.firstName, member.lastName),
+        areaName: where?.areaName,
+        number: locker.number,
+        ...(overrodeCleanout ? { overrideCleanout: true } : {}),
+      },
+    });
+    return { allocation, member, locker, where };
+  });
+
+  const email = await sendMemberLockerEmail({
+    tenant,
+    template: "lockerAllocated",
+    to: done.member.email,
+    variables: {
+      memberName: fullName(done.member.firstName, done.member.lastName) || done.member.email,
+      areaName: done.where?.areaName ?? "",
+      number: done.locker.number,
+      level: done.locker.level,
+    },
+    entityType: AuditEntityType.LOCKER,
+    entityId: done.locker.id,
+    actorId: params.actorId,
+    attachPolicy: true,
+  });
+  return { allocationId: done.allocation.id, ...email };
+}
+
+/** REVOKE (admin): ends the allocation, flags both tasks, emails the holder. */
+export async function revokeAllocation(
+  tenant: Tenant,
+  params: { allocationId: string; reason: string; actorId: string }
+) {
+  const done = await withTenant(tenant.id, async (tx) => {
+    const now = new Date();
+    const ended = await endAllocationGuarded(tx, {
+      tenantId: tenant.id,
+      allocationId: params.allocationId,
+      endType: LockerEndType.REVOKED,
+      reason: params.reason,
+      endedBy: params.actorId,
+      now,
+    });
+    if (!ended) throw await notActiveError(tx, tenant.id, params.allocationId);
+
+    const closed = await flagVacatedLocker(tx, {
+      tenantId: tenant.id,
+      lockerId: ended.lockerId,
+      cleanout: true,
+      now,
+      previousHolderName: fullName(ended.holderFirstName, ended.holderLastName),
+    });
+    await createAuditEntry(tx, {
+      tenantId: tenant.id,
+      entityType: AuditEntityType.LOCKER,
+      entityId: ended.lockerId,
+      action: AuditAction.UPDATE,
+      actorId: params.actorId,
+      metadata: {
+        action: "locker_revoked",
+        allocationId: ended.id,
+        userId: ended.userId,
+        holderName: fullName(ended.holderFirstName, ended.holderLastName),
+        areaName: closed?.areaName,
+        number: closed?.number,
+        reason: params.reason,
+      },
+    });
+    return { ended, closed };
+  });
+
+  const email = await sendMemberLockerEmail({
+    tenant,
+    template: "lockerRevoked",
+    to: done.ended.holderEmail,
+    variables: {
+      memberName: fullName(done.ended.holderFirstName, done.ended.holderLastName) || "there",
+      areaName: done.closed?.areaName ?? "",
+      number: done.closed?.number ?? 0,
+      level: done.closed?.level,
+      reason: params.reason,
+      removeBy: formatExpiryDate(done.closed?.cleanoutDueAt ?? new Date(Date.now() + 7 * 86400_000), tenant.timezone),
+    },
+    entityType: AuditEntityType.LOCKER,
+    entityId: done.ended.lockerId,
+    actorId: params.actorId,
+    attachPolicy: true,
+  });
+  if (done.closed) {
+    await notifyCleanoutRequired({ tenant, lockers: [done.closed], actorId: params.actorId });
+  }
+  return { allocationId: done.ended.id, ...email };
+}
+
+/**
+ * MOVE a holder to another locker: ends the old allocation as `moved` and
+ * creates the new one (copying holder, kept_for_season and request) in one
+ * transaction. Both labels need updating; the old locker needs no clean-out.
+ */
+export async function moveAllocation(
+  tenant: Tenant,
+  params: {
+    allocationId: string;
+    targetLockerId: string;
+    actorId: string;
+    overrideCleanout?: boolean;
+  }
+) {
+  const done = await withTenant(tenant.id, async (tx) => {
+    const now = new Date();
+    const ended = await endAllocationGuarded(tx, {
+      tenantId: tenant.id,
+      allocationId: params.allocationId,
+      endType: LockerEndType.MOVED,
+      reason: null,
+      endedBy: params.actorId,
+      now,
+    });
+    if (!ended) throw await notActiveError(tx, tenant.id, params.allocationId);
+    if (ended.lockerId === params.targetLockerId) {
+      throw new LockerError(400, "That member already holds this locker");
+    }
+
+    const target = await lockLocker(tx, tenant.id, params.targetLockerId);
+    const { overrodeCleanout } = await assertAllocatable(
+      tx,
+      tenant.id,
+      target,
+      params.overrideCleanout
+    );
+    const targetInfo = await lockerWithArea(tx, tenant.id, target.id);
+    const closedOld = await flagVacatedLocker(tx, {
+      tenantId: tenant.id,
+      lockerId: ended.lockerId,
+      cleanout: false,
+      now,
+      previousHolderName: fullName(ended.holderFirstName, ended.holderLastName),
+    });
+
+    const allocation = await insertAllocation(tx, {
+      tenantId: tenant.id,
+      lockerId: target.id,
+      userId: ended.userId,
+      holderEmail: ended.holderEmail,
+      holderFirstName: ended.holderFirstName,
+      holderLastName: ended.holderLastName,
+      holderPhone: ended.holderPhone,
+      keptForSeason: ended.keptForSeason,
+      requestId: ended.requestId,
+      // A move preserves state (spec 13J): the holder keeps their original
+      // "since" date. Stamping `now` would also hand a holder moved after the
+      // cutoff the "allocated after the cutoff" exemption.
+      allocatedAt: ended.allocatedAt,
+      allocatedBy: params.actorId,
+    });
+    await tx
+      .update(lockers)
+      .set({
+        labelUpdateRequired: true,
+        ...(overrodeCleanout ? { cleanoutRequired: false, cleanoutDueAt: null } : {}),
+        updatedAt: now,
+      })
+      .where(and(eq(lockers.id, target.id), eq(lockers.tenantId, tenant.id)));
+
+    const holderName = fullName(ended.holderFirstName, ended.holderLastName);
+    await createAuditEntry(tx, {
+      tenantId: tenant.id,
+      entityType: AuditEntityType.LOCKER,
+      entityId: ended.lockerId,
+      action: AuditAction.UPDATE,
+      actorId: params.actorId,
+      metadata: {
+        action: "locker_moved_out",
+        allocationId: ended.id,
+        newAllocationId: allocation.id,
+        userId: ended.userId,
+        holderName,
+        areaName: closedOld?.areaName,
+        number: closedOld?.number,
+        toLockerId: target.id,
+        toAreaName: targetInfo?.areaName,
+        toNumber: target.number,
+      },
+    });
+    await createAuditEntry(tx, {
+      tenantId: tenant.id,
+      entityType: AuditEntityType.LOCKER,
+      entityId: target.id,
+      action: AuditAction.UPDATE,
+      actorId: params.actorId,
+      metadata: {
+        action: "locker_moved_in",
+        allocationId: allocation.id,
+        previousAllocationId: ended.id,
+        userId: ended.userId,
+        holderName,
+        areaName: targetInfo?.areaName,
+        number: target.number,
+        fromLockerId: ended.lockerId,
+        fromAreaName: closedOld?.areaName,
+        fromNumber: closedOld?.number,
+        ...(overrodeCleanout ? { overrideCleanout: true } : {}),
+      },
+    });
+    return { ended, allocation, target, targetInfo, closedOld, holderName };
+  });
+
+  const email = await sendMemberLockerEmail({
+    tenant,
+    template: "lockerAllocated",
+    to: done.ended.holderEmail,
+    variables: {
+      memberName: done.holderName || "there",
+      areaName: done.targetInfo?.areaName ?? "",
+      number: done.target.number,
+      level: done.target.level,
+      replacesAreaName: done.closedOld?.areaName ?? null,
+      replacesNumber: done.closedOld?.number ?? null,
+    },
+    entityType: AuditEntityType.LOCKER,
+    entityId: done.target.id,
+    actorId: params.actorId,
+    attachPolicy: true,
+  });
+  return { allocationId: done.allocation.id, previousAllocationId: done.ended.id, ...email };
+}

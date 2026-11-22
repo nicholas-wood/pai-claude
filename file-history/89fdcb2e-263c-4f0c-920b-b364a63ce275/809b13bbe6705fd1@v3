@@ -1,0 +1,221 @@
+#!/usr/bin/env bun
+/**
+ * Real-browser probe of a deployed instance (Playwright Chromium, two contexts).
+ *
+ *   APP_URL=https://host NEXT_PUBLIC_FIREBASE_API_KEY=... \
+ *     bun run scripts/browser-probe.ts member@example.com "<ossd.xlsx>" [outDir]
+ *
+ * Signs in without email (custom token → ID token → /api/auth/session, as
+ * e2e-probe.ts does), then checks in two browsers: the chooser, services
+ * loading from Firestore, a weather edit in A appearing live in B, manual-cell
+ * protection across "Refresh from BOM now", Word exports for Fri–Mon, Tue–Fri
+ * and a free range, the data-file download, and the OSSD spreadsheet import.
+ *
+ * It WRITES to the shared data (one weather cell, then the OSSD import).
+ * Re-seed afterwards if the data must match a file exactly.
+ */
+import { mkdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { chromium, type BrowserContext, type Page } from "playwright";
+import { initializeApp as initAdmin, applicationDefault } from "firebase-admin/app";
+import { getAuth as getAdminAuth } from "firebase-admin/auth";
+
+const APP_URL = (process.env.APP_URL ?? "").replace(/\/$/, "");
+const BASE = `${APP_URL}/lsv/dailysummary`;
+const email = process.argv[2]?.toLowerCase();
+const ossd = process.argv[3];
+const outDir = process.argv[4] ?? "/tmp/oss-browser-probe";
+const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "lsv-oss-prod";
+if (!APP_URL || !email || !apiKey || !ossd) throw new Error("APP_URL, NEXT_PUBLIC_FIREBASE_API_KEY, member email and OSSD xlsx path are required");
+mkdirSync(outDir, { recursive: true });
+
+const results: { name: string; ok: boolean; detail?: string }[] = [];
+const check = (name: string, ok: boolean, detail?: string) => {
+  results.push({ name, ok, detail });
+  console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? `  (${detail})` : ""}`);
+};
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Poll a string expression through CDP. page.waitForFunction evaluates inside the page and the CSP (no unsafe-eval) refuses it. */
+async function until(page: Page, expr: string, timeout = 30_000): Promise<boolean> {
+  const end = Date.now() + timeout;
+  while (Date.now() < end) {
+    if (await page.evaluate(expr).catch(() => false)) return true;
+    await sleep(250);
+  }
+  return false;
+}
+
+// --- session cookie without email ---
+initAdmin({ credential: applicationDefault(), projectId, serviceAccountId: `lsv-oss-run@${projectId}.iam.gserviceaccount.com` });
+const uid = (await getAdminAuth().getUserByEmail(email)).uid;
+const custom = await getAdminAuth().createCustomToken(uid);
+const exch = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${apiKey}`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ token: custom, returnSecureToken: true }),
+});
+const { idToken } = (await exch.json()) as { idToken: string };
+const sess = await fetch(`${BASE}/api/auth/session`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
+const cookieValue = (sess.headers.get("set-cookie") ?? "").match(/__session=([^;]+)/)?.[1];
+if (!cookieValue) throw new Error(`no session cookie: ${sess.status}`);
+
+const browser = await chromium.launch();
+async function ctx(label: string): Promise<{ context: BrowserContext; page: Page; errors: string[] }> {
+  const context = await browser.newContext({ viewport: { width: 1400, height: 900 }, acceptDownloads: true });
+  await context.addCookies([{ name: "__session", value: cookieValue!, url: APP_URL, httpOnly: true, secure: true, sameSite: "Lax" }]);
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(`${label} pageerror: ${e.message}`));
+  page.on("console", (m) => {
+    if (m.type() === "error") errors.push(`${label} console: ${m.text().slice(0, 200)}`);
+  });
+  return { context, page, errors };
+}
+const A = await ctx("A");
+const B = await ctx("B");
+
+async function download(page: Page, trigger: () => Promise<void>, name: string): Promise<{ path: string; filename: string; size: number }> {
+  const [dl] = await Promise.all([page.waitForEvent("download", { timeout: 60_000 }), trigger()]);
+  const filename = dl.suggestedFilename();
+  const path = join(outDir, `${name}-${filename}`);
+  await dl.saveAs(path);
+  return { path, filename, size: statSync(path).size };
+}
+const isZip = (p: string) => readFileSync(p).subarray(0, 2).toString() === "PK";
+
+try {
+  // --- chooser ---
+  await A.page.goto(BASE, { waitUntil: "domcontentloaded" });
+  await until(A.page, `(document.querySelector("#home-hi")?.textContent || "").startsWith("Welcome ")`);
+  check("chooser greets the member", (await A.page.textContent("#home-hi")) === "Welcome Nicholas", (await A.page.textContent("#home-hi")) ?? "");
+  check("chooser heading and single entry", (await A.page.textContent(".home-h")) === "Please choose your interface" && (await A.page.locator(".home-row").count()) === 1, await A.page.locator(".home-row").first().innerText());
+  check("log out link shown and points at /logout", (await A.page.isVisible("#home-out")) && ((await A.page.getAttribute("#home-out", "href")) ?? "").endsWith("/lsv/dailysummary/logout"));
+  await A.page.screenshot({ path: join(outDir, "01-home.png") });
+
+  // --- services load from Firestore ---
+  await A.page.click(".home-row");
+  await until(A.page, `document.querySelectorAll("button[data-svc]").length > 20`, 45_000);
+  const unitCount = await A.page.evaluate("Object.keys(S.units).length");
+  const standalone = await A.page.evaluate("!!S.standalone");
+  check("services loaded from the shared database", (unitCount as number) >= 100 && !standalone, `${unitCount} units, standalone=${standalone}`);
+  check("no data-file bar on the hosted page", !(await A.page.isVisible("#filebar")));
+  await A.page.screenshot({ path: join(outDir, "02-services.png") });
+  for (const v of ["weather", "events", "report", "setup", "services", "home"]) {
+    await A.page.goto(`${BASE}#${v}`);
+    await sleep(300);
+    const shown = (await A.page.evaluate(`!document.getElementById("view-${v}")?.hidden`)) as boolean;
+    check(`hash route #${v} renders`, shown);
+  }
+
+  // --- live edit across two browsers + manual protection ---
+  await A.page.goto(`${BASE}#weather`);
+  await B.page.goto(`${BASE}#weather`);
+  await A.page.waitForSelector("[data-wx]", { timeout: 45_000 });
+  await B.page.waitForSelector("[data-wx]", { timeout: 45_000 });
+  await A.page.screenshot({ path: join(outDir, "03-weather-before.png"), fullPage: true });
+  const filled = (await A.page.evaluate(`[...document.querySelectorAll("[data-wx]")].filter((i) => i.value !== "").length`)) as number;
+  check("weather sheet shows BOM figures for the next 7 days without pasting", filled >= 200, `${filled} filled cells`);
+  const days = (await A.page.evaluate("wxDays()")) as string[];
+  const sources = (await A.page.evaluate("wxDays().map(d => S.weather[d]?.source || '')")) as string[];
+  check("all 7 days sourced 'BOM forecast issued …'", sources.every((s) => s.startsWith("BOM forecast issued ")), sources[0]);
+  const d = days[3];
+  const sel = `[data-wx="${d}|Bass|max"]`;
+  const original = await A.page.inputValue(sel);
+  await A.page.fill(sel, "41");
+  const t0 = Date.now();
+  await until(B.page, `document.querySelector(${JSON.stringify(sel)})?.value === "41"`, 15_000);
+  const live = (await B.page.inputValue(sel)) === "41";
+  check("edit in browser A appears in browser B without reload", live, `${Date.now() - t0} ms, original ${original}`);
+  await until(B.page, `(S.weather[${JSON.stringify(d)}]?.manual || []).includes("Bass|max")`, 8_000);
+  const manualB2 = (await B.page.evaluate(`S.weather[${JSON.stringify(d)}]?.manual || []`)) as string[];
+  check("the edited cell is recorded as typed by a member", manualB2.includes("Bass|max"), JSON.stringify(manualB2));
+  const stampedBy = await B.page.evaluate(`S.weather[${JSON.stringify(d)}]?.updatedBy`);
+  check("the write is stamped with the signed-in member", stampedBy === uid, String(stampedBy));
+
+  await A.page.click("#view-weather h2"); // leave the grid so it can redraw
+  await A.page.waitForSelector("#w-refresh:not([hidden])");
+  await sleep(Number(process.env.REFRESH_WAIT_MS ?? 0)); // the refresh endpoint allows two runs a minute
+  await A.page.click("#w-refresh");
+  await A.page.waitForSelector(".toast", { timeout: 90_000 });
+  const toast1 = (await A.page.textContent(".toast")) ?? "";
+  check("Refresh from BOM now runs the job", toast1.startsWith("BOM forecast issued "), toast1);
+  await sleep(2500);
+  check("the typed value survives a BOM refresh", (await B.page.inputValue(sel)) === "41", await B.page.inputValue(sel));
+
+  await A.page.fill(sel, "");
+  await sleep(2500);
+  const manualAfterClear = (await B.page.evaluate(`S.weather[${JSON.stringify(d)}]?.manual || []`)) as string[];
+  check("clearing the cell hands it back to the BOM", !manualAfterClear.includes("Bass|max"), JSON.stringify(manualAfterClear));
+  await A.page.click("#view-weather h2");
+  await sleep(4500); // let the first toast expire
+  await A.page.click("#w-refresh");
+  await until(A.page, `(document.querySelector(".toast")?.textContent || "").startsWith("BOM forecast issued ")`, 90_000);
+  await sleep(3000);
+  const refilled = await B.page.inputValue(sel);
+  check("the BOM fills the cleared cell again", refilled !== "" && refilled !== "41", `now ${refilled}, was ${original}`);
+  await A.page.screenshot({ path: join(outDir, "04-weather-after.png"), fullPage: true });
+
+  // --- paste fallback still present ---
+  await A.page.click("#w-bomtoggle");
+  check("paste-from-bookmark panel still available", await A.page.isVisible("#w-feedtext"));
+
+  // --- Word exports ---
+  await A.page.goto(`${BASE}#report`);
+  await A.page.waitForSelector("#r-export");
+  await sleep(800);
+  // The report offers two periods (current and next); one is Fri–Mon and one Tue–Fri, both filled into LSV's templates.
+  const presets = (await A.page.evaluate("presets().map(p => p[1] + '|' + p[2])")) as string[];
+  const names: string[] = [];
+  for (const pr of presets) {
+    await A.page.click(`[data-preset="${pr}"]`);
+    await sleep(700);
+    const dl = await download(A.page, () => A.page.click("#r-export"), "template");
+    names.push(dl.filename);
+    const doc = isZip(dl.path) && dl.filename.endsWith(".docx") && dl.size > 100_000;
+    check(`Word export from LSV template: ${dl.filename.split(" Operational")[0]}`, doc, `${dl.filename}, ${dl.size} bytes`);
+  }
+  check("both templates exercised (Fri–Mon and Tue–Fri)", names.some((n) => n.startsWith("Friday - Monday")) && names.some((n) => n.startsWith("Tuesday - Friday")), names.join(" ; "));
+  // Any other range falls back to the generated document (docx@8.5.0).
+  await A.page.evaluate("(() => { const t = todayMelb(); S.filters.from = t; S.filters.to = addDays(t, 6); filtersChanged(); })()");
+  await sleep(700);
+  const plain = await download(A.page, () => A.page.click("#r-export"), "plain");
+  check("Word export for another range uses the generated document", isZip(plain.path) && plain.filename.endsWith(".docx") && plain.size > 5_000, `${plain.filename}, ${plain.size} bytes`);
+
+  // --- data file download ---
+  await A.page.goto(`${BASE}#setup`);
+  await A.page.waitForSelector('#view-setup [data-savefile]');
+  const df = await download(A.page, () => A.page.click('#view-setup [data-savefile]'), "data");
+  const dfJson = JSON.parse(readFileSync(df.path, "utf8")) as { format: string; docs: Record<string, unknown> };
+  const nDocs = Object.keys(dfJson.docs).length;
+  check("Download data file gives the backup format", dfJson.format === "lsv-operational-service-summary" && nDocs >= 120 && !!dfJson.docs["config/settings"], `${df.filename}, ${nDocs} docs`);
+  check("Open data file control present in Settings", (await A.page.locator('#view-setup label[for="file-open"]').count()) === 1);
+
+  // --- OSSD spreadsheet import ---
+  await A.page.setInputFiles("#ossd-open", ossd);
+  await A.page.waitForSelector("#dlg h2", { timeout: 60_000 });
+  const h2 = (await A.page.textContent("#dlg h2")) ?? "";
+  const checks = (await A.page.locator("#dlg ul.checks li").allInnerTexts()).join(" | ");
+  check("OSSD spreadsheet is read and summarised", h2.startsWith("Update from ") && /Ongoing hours for \d+ services/.test(checks), checks.slice(0, 260));
+  await A.page.screenshot({ path: join(outDir, "05-import-dialog.png") });
+  await A.page.click("#dlg button.primary");
+  await until(A.page, `(document.querySelector(".toast")?.textContent || "").startsWith("Site updated from ")`, 180_000);
+  const importToast = (await A.page.textContent(".toast").catch(() => "")) ?? "";
+  const dlgErr = (await A.page.textContent("#dlg-err").catch(() => "")) ?? "";
+  check("OSSD import writes to the shared database", importToast.startsWith("Site updated from "), importToast || dlgErr);
+  await sleep(1500);
+  const lastImport = await B.page.evaluate("S.settings?.lastImport?.file || ''");
+  check("browser B sees the import live", String(lastImport).endsWith(".xlsx"), String(lastImport));
+
+  const errs = [...A.errors, ...B.errors];
+  check("no page errors or CSP violations in either browser", errs.length === 0, errs.slice(0, 4).join(" || "));
+} catch (e) {
+  check("probe ran to completion", false, String(e).slice(0, 300));
+  await A.page.screenshot({ path: join(outDir, "99-failure-A.png") }).catch(() => {});
+  console.log([...A.errors, ...B.errors].slice(0, 8).join("\n"));
+} finally {
+  await browser.close();
+}
+const failed = results.filter((r) => !r.ok).length;
+console.log(`${results.length - failed}/${results.length} passed; artefacts in ${outDir}`);
+process.exit(failed ? 1 : 0);

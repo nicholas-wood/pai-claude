@@ -1,0 +1,139 @@
+# Deploying LIMSOC Permission Assist
+
+Hosted on its own, behind its own sign-in. It follows the AccessBuddy and LSV Operational Service Summary patterns but shares nothing with either.
+
+- Address: **https://permissions.nicholaswood.com.au** (once the DNS record below exists). Until then: **https://limsoc-pa-prod.web.app**.
+- Google Cloud project: `limsoc-pa-prod`, region australia-southeast1.
+
+## How it is put together
+
+| Part | What | Where |
+|------|------|-------|
+| The page | `index.html` and `vendor/xlsx.full.min.js`, built by `build.py` | Private bucket `gs://limsoc-pa-prod-site` (Standard class, single region, versioned) |
+| Host service | Cloud Run service `limsoc-pa-prod`: sign-in, session, member allow-list, then reads the bucket server-side | `host/` (Next.js, sign-in code ported from AccessBuddy by way of the Service Summary) |
+| Sign-in | Firebase Auth emailed link; 14-day httpOnly `__session` cookie; allow-list in Firestore `members/` | project `limsoc-pa-prod` |
+| Front door | Firebase Hosting site `limsoc-pa-prod`, every path rewritten to the Cloud Run service (Cloud Run domain mappings are not offered in australia-southeast1) | `infra/terraform/main.tf` |
+| Infrastructure | All of the above, plus secrets, service accounts and the GitHub trust | `infra/terraform` (state in `gs://limsoc-pa-prod-tfstate`) |
+| Pipelines | `site.yml` publishes the page on every push to `main`; `release-please.yml` and `deploy.yml` release the host service | `.github/workflows` |
+
+The bucket has public access prevention enforced and uniform bucket-level access. No one can read it by URL and no signed URLs are issued. Its access policy is set outright in Terraform and has three entries: the service's runtime account (`limsoc-pa-run`, read only, the only `objectViewer`), the GitHub deploy account (`limsoc-pa-deploy`, objects in this bucket only), and the project's owners, for manual publish and rollback.
+
+The page is served with a content security policy that allows scripts from this site only, plus the page's own inline script by hash, and allows no network connections at all (`connect-src 'none'`). The browser cannot call LIMSOC or anything else from this page. HTML is `no-store` and every response is `noindex`.
+
+## Deploy
+
+**The page.** Push to `main`. GitHub Actions rebuilds it, checks it, and uploads it to the bucket. The service picks up the new files on the next request; nothing is restarted.
+
+```
+git push origin main
+```
+
+Make changes in `src/` and run `python3 build.py`; commit the rebuilt `dist/`. CI fails if `dist/` does not match a fresh build. Pull requests run the checks without publishing.
+
+**The host service** (`host/`, rarely changes). Merge the open "release" pull request that release-please maintains. That cuts a release, builds the image and updates Cloud Run. Release-please only proposes a release when commits on `main` use conventional prefixes (`fix: …`, `feat: …`); other commits publish the page but leave the service alone.
+
+To publish the page by hand (needs `gcloud` signed in with access to the bucket):
+
+```
+SITE_BASE=/ python3 build.py
+B=gs://limsoc-pa-prod-site
+gcloud storage cp dist/vendor/xlsx.full.min.js $B/vendor/xlsx.full.min.js
+gcloud storage cp dist/index.html $B/index.html
+python3 build.py   # put dist/ back to the committed local-file build
+```
+
+## Rollback
+
+**The page.** Every upload keeps the previous build (the bucket keeps the ten most recent versions of each file). To put the previous page back:
+
+```
+B=gs://limsoc-pa-prod-site
+gcloud storage cp "$(gcloud storage ls -a $B/index.html | sort -t'#' -k2 -n | tail -2 | head -1)" $B/index.html
+```
+
+It is live on the next request. To pick a specific build, list them with `gcloud storage ls -a -l $B/index.html` and copy the one you want (`$B/index.html#<generation>`) over `$B/index.html`. Then fix `main` (for example `git revert <commit> && git push`), or the next push will publish the same thing again.
+
+**The host service.** Send traffic back to the previous revision:
+
+```
+gcloud run revisions list --service limsoc-pa-prod --region australia-southeast1 --project limsoc-pa-prod --limit 3
+gcloud run services update-traffic limsoc-pa-prod --to-revisions <previous-revision>=100 --region australia-southeast1 --project limsoc-pa-prod
+```
+
+## Adding a member
+
+Only people on the allow-list can sign in. From `host/`, on a machine where `gcloud auth application-default login` has been done:
+
+```
+bun run members add person@example.com "First Last"
+```
+
+They then go to the address above, enter their email, and use the link they are sent. Other commands:
+
+```
+bun run members list
+bun run members remove person@example.com
+bun run members add person@example.com "First Last" --admin   # may also manage members through /api/members
+```
+
+Adding takes effect at the person's next sign-in. Removing takes effect on their next request and ends their sessions. Nothing is redeployed.
+
+## Monthly cost
+
+Cents: under 50 US cents a month at the outside, most likely under 10.
+
+| Item | Basis | Per month (USD) |
+|------|-------|-----------------|
+| Page storage | About 1.1 MB per build, up to 11 builds kept, Standard class at roughly $0.023 per GB | under $0.001 |
+| Bucket operations | 2 writes per publish; 1 conditional read per page or script request | under $0.001 |
+| Container images | Artifact Registry keeps the 3 newest images; 0.5 GB is free, then $0.10 per GB | $0 to about $0.10 |
+| Cloud Run | Scales to zero; free tier is 2 million requests and 180,000 vCPU-seconds a month | $0 at this usage |
+| Firestore, Firebase sign-in, Firebase Hosting, Secret Manager (1 secret), Cloud Build (first deploy only) | Inside their free tiers at this usage | $0 |
+| Network | Bucket to Cloud Run in the same region | $0 |
+
+Regional buckets outside the US are not in Google Cloud's always-free allowance, so the storage line is a real charge, just a very small one.
+
+## The custom domain
+
+Firebase Hosting needs DNS records at GoDaddy for `permissions.nicholaswood.com.au`. To see exactly which:
+
+```
+cd infra/terraform && terraform output custom_domain_dns_records
+```
+
+Add them at GoDaddy. When `terraform output custom_domain_state` shows the host active and the certificate issued, set `serve_on_domain = true` in `prod.tfvars`, `terraform apply`, update `APP_URL` in `.github/workflows/deploy.yml` to the custom address, and release the host service so its links use it.
+
+## Checking a deployment
+
+`host/scripts/probe.ts` exercises the live service without needing the email: signed-out refusals for the page, the script and the bucket, then a real session for a member and the signed-in responses and headers.
+
+```
+cd host
+APP_URL=https://limsoc-pa-prod.web.app NEXT_PUBLIC_FIREBASE_API_KEY=<terraform output firebase_api_key> bun run probe you@example.com
+```
+
+The probe signs a test token as the runtime service account, so the person running it needs `roles/iam.serviceAccountTokenCreator` on `limsoc-pa-run` (granted to Nick on 22 Nov 2026):
+
+```
+gcloud iam service-accounts add-iam-policy-binding limsoc-pa-run@limsoc-pa-prod.iam.gserviceaccount.com \
+  --project limsoc-pa-prod --member=user:you@example.com --role=roles/iam.serviceAccountTokenCreator
+```
+
+## First-time setup (already done; recorded for rebuilds)
+
+```
+gcloud projects create limsoc-pa-prod --name="LIMSOC Permission Assist"
+gcloud billing projects link limsoc-pa-prod --billing-account=<account>
+gcloud storage buckets create gs://limsoc-pa-prod-tfstate --project limsoc-pa-prod --location=australia-southeast1 --uniform-bucket-level-access --public-access-prevention
+gcloud storage buckets update gs://limsoc-pa-prod-tfstate --versioning
+cd infra/terraform && cp example.tfvars prod.tfvars
+terraform init -backend-config="bucket=limsoc-pa-prod-tfstate" && terraform apply -var-file=prod.tfvars
+```
+
+Then build and deploy the first image (`host/cloudbuild.yaml`), publish the page, add the first member, and in GitHub create the `production` environment and allow Actions to create pull requests (for release-please).
+
+## Rules
+
+- The app never calls LIMSOC. Import testing is done by hand on staging.limsoc.com.au only, never production.
+- Keep this repository private. `data/` and `test/` describe LIMSOC's permission structure.
+- Do not make the bucket public, add `allUsers` to it, or hand out signed URLs.

@@ -1,0 +1,26 @@
+import { NextResponse, type NextRequest } from "next/server";
+
+/**
+ * Edge gate: anything under the app that is not an auth surface needs a
+ * session cookie to exist. The cookie is verified properly in getAuthUser();
+ * this just stops anonymous requests from reaching data or page handlers at
+ * all, including the static vendor files that only signed-in pages load.
+ */
+const PUBLIC_PREFIXES = ["/sign-in", "/auth/", "/not-a-member", "/logout", "/api/auth/", "/api/health", "/api/cron/", "/_next/", "/favicon"];
+
+export function middleware(request: NextRequest) {
+  const path = request.nextUrl.pathname.replace(/^\/lsv\/dailysummary/, "") || "/";
+  if (PUBLIC_PREFIXES.some((p) => path.startsWith(p))) return NextResponse.next();
+  if (request.cookies.get("__session")?.value) return NextResponse.next();
+  if (path.startsWith("/api/")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // Built from the configured origin, not the request host: behind Firebase
+  // Hosting the request arrives with the Cloud Run hostname.
+  const origin = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+  return NextResponse.redirect(`${origin}/lsv/dailysummary/sign-in`, { status: 303 });
+}
+
+export const config = {
+  matcher: ["/((?!_next/static|_next/image).*)"],
+};

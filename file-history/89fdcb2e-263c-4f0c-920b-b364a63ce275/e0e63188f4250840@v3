@@ -1,0 +1,31 @@
+#!/usr/bin/env bun
+/**
+ * Run the BOM weather job from a terminal (ops rerun or local test).
+ *   bun run weather                     fetch, apply to Firestore, print summary
+ *   bun run weather --dry-run <file>    fetch and print the grid using weatherAreas/Sites from a data file, no writes
+ *   bun run weather --feed              print the lsv-bom-weather feed JSON (what the bookmarklet would copy)
+ */
+import { readFileSync } from "node:fs";
+import { fetchBomProducts } from "../src/lib/weather/ftp";
+import { buildFeed, formatIssued } from "../src/lib/weather/parse";
+import { bomFeedToGrid, type WeatherSettings } from "../src/lib/weather/mapping";
+
+const xml = await fetchBomProducts();
+const feed = buildFeed(xml);
+if (process.argv.includes("--feed")) {
+  console.log(JSON.stringify(feed));
+} else if (process.argv.includes("--dry-run")) {
+  const file = process.argv[process.argv.indexOf("--dry-run") + 1];
+  if (!file) throw new Error("--dry-run needs a data file path (for config/settings weatherAreas)");
+  const settings = (JSON.parse(readFileSync(file, "utf8")).docs["config/settings"] ?? {}) as WeatherSettings;
+  const { weatherDays } = await import("../src/lib/weather/job");
+  const { out, missing } = bomFeedToGrid(feed, weatherDays(), settings);
+  console.log(`issued: ${formatIssued(feed.issued)} (${feed.issued})  missing: ${missing.join(", ") || "none"}`);
+  for (const [date, regions] of Object.entries(out)) {
+    console.log(`\n${date}`);
+    console.table(regions);
+  }
+} else {
+  const { applyFeed } = await import("../src/lib/weather/job");
+  console.log(await applyFeed(feed, "cli"));
+}

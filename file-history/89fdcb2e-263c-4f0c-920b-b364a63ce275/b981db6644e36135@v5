@@ -1,0 +1,11 @@
+project_id        = "lsv-oss-prod"
+region            = "australia-southeast1"
+environment       = "prod"
+domain            = "service-summary.nicholaswood.com.au"
+github_repository = "nicholas-wood/lsv-service-summary"
+manage_dns        = true
+# Optional mail provider:
+resend_api_key = ""
+resend_from    = ""
+# Interim: serve from the Cloud Run URL until the domain is live. Remove once it is.
+# app_url_override = "https://lsv-oss-prod-ixkidoqqka-ts.a.run.app"

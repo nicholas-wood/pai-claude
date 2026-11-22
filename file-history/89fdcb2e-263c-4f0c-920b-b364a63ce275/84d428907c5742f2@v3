@@ -1,0 +1,49 @@
+import type { NextConfig } from "next";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+// Served under this prefix on service-summary.nicholaswood.com.au. The app uses hash routing
+// inside the page, so the prefix is the only path the server needs to own.
+export const BASE_PATH = "/lsv/dailysummary";
+
+let version = "dev";
+try {
+  const manifest = JSON.parse(readFileSync(resolve(__dirname, ".release-please-manifest.json"), "utf8"));
+  version = manifest["."] ?? "dev";
+} catch {
+  // manifest absent in some environments
+}
+
+const nextConfig: NextConfig = {
+  output: "standalone",
+  basePath: BASE_PATH,
+  poweredByHeader: false,
+  // Keep the Admin SDK and friends as runtime requires rather than bundling
+  // them into route chunks; they resolve from node_modules in the image.
+  serverExternalPackages: ["firebase-admin", "jwks-rsa", "jose", "google-auth-library", "resend"],
+  env: {
+    NEXT_PUBLIC_APP_VERSION: version,
+    NEXT_PUBLIC_BASE_PATH: BASE_PATH,
+  },
+  // Static headers for everything except the OSS page itself, which sets a
+  // per-request nonce CSP in its route handler (see src/app/route.ts).
+  async headers() {
+    return [
+      // Firebase Hosting's CDN sits in front; nothing behind sign-in may be stored by it.
+      { source: "/api/:path*", headers: [{ key: "Cache-Control", value: "private, no-store" }] },
+      { source: "/vendor/:path*", headers: [{ key: "Cache-Control", value: "private, max-age=3600" }] },
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
+        ],
+      },
+    ];
+  },
+};
+
+export default nextConfig;

@@ -1,0 +1,118 @@
+"""Apply the hosting changes to the pack's source parts. Every replacement is asserted."""
+import sys, pathlib
+
+ux = pathlib.Path(sys.argv[1])
+
+def patch(name, pairs):
+    p = ux / name
+    s = p.read_text()
+    for a, b in pairs:
+        assert a in s, f"{name}: anchor not found: {a[:70]!r}"
+        assert s.count(a) == 1, f"{name}: anchor not unique: {a[:70]!r}"
+        s = s.replace(a, b)
+    p.write_text(s)
+    print("patched", name, len(pairs))
+
+# --- build.py: vendored libraries instead of the CDN (strict CSP on the host) ---
+V = "/lsv/dailysummary/vendor"
+patch("build.py", [(
+    r"""'<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>\n<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>\n<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>')""",
+    rf"""'<script src="{V}/docx.min.js"></script>\n<script src="{V}/xlsx.full.min.js"></script>\n<script src="{V}/jszip.min.js"></script>')
+assert 'cdn.jsdelivr.net' not in head  # docx@8.5.0, xlsx@0.18.5, jszip@3.10.1 are vendored by `bun run vendor`""",
+)])
+
+# --- markup.html: Refresh from BOM now ---
+patch("markup.html", [(
+    """<button class="btn primary" id="w-bomtoggle" aria-expanded="false">Fill from BOM</button>""",
+    """<button class="btn" id="w-refresh" type="button" hidden title="Fetch the latest Bureau forecast now. Values typed by a member are kept.">Refresh from BOM now</button>
+      <button class="btn primary" id="w-bomtoggle" aria-expanded="false">Fill from BOM</button>""",
+)])
+
+# --- views.js: per-value manual tracking in the weather sheet ---
+patch("views.js", [
+    (
+        """const wxTimers = {};
+function saveWeatherDay(d, source) {
+  clearTimeout(wxTimers[d]);
+  wxTimers[d] = setTimeout(async () => {
+    const regions = { ...(S.weather[d]?.regions || {}) };""",
+        """const wxTimers = {};
+/* Which cells a member typed by hand: weather/<date>.manual is a list of "Area|field" keys. The scheduled BOM job
+   never overwrites those; clearing a cell, or filling it from the BOM, hands it back to the BOM. */
+const wxManual = {};
+function markManual(d, r, k, on) { const m = (wxManual[d] ||= { add: new Set(), del: new Set() }); const key = r + "|" + k; (on ? m.add : m.del).add(key); (on ? m.del : m.add).delete(key); }
+function manualKeys(w) {
+  if (!w) return []; if (Array.isArray(w.manual)) return w.manual;
+  if (/^BOM forecast issued/.test(w.source || "")) return [];
+  // Days saved before tracking existed: treat every filled value as typed by a member.
+  return Object.entries(w.regions || {}).flatMap(([r, rec]) => Object.entries(rec || {}).filter(([k, v]) => k !== "fire" && v != null && v !== "").map(([k]) => r + "|" + k));
+}
+function saveWeatherDay(d, source) {
+  clearTimeout(wxTimers[d]);
+  wxTimers[d] = setTimeout(async () => {
+    const pend = wxManual[d] || { add: new Set(), del: new Set() }; delete wxManual[d];
+    const manual = [...new Set([...manualKeys(S.weather[d]), ...pend.add])].filter(x => !pend.del.has(x)).sort();
+    const regions = { ...(S.weather[d]?.regions || {}) };""",
+    ),
+    (
+        """    S.weather[d] = { ...(S.weather[d] || {}), date: d, regions };""",
+        """    S.weather[d] = { ...(S.weather[d] || {}), date: d, regions, manual };""",
+    ),
+    (
+        """await dbSet("weather/" + d, stamp({ date: d, regions, source: source || S.weather[d]?.source || "Entered from BOM" }));""",
+        """await dbSet("weather/" + d, stamp({ date: d, regions, manual, source: source || S.weather[d]?.source || "Entered from BOM" }));""",
+    ),
+    (
+        """if (inp && v !== "") { inp.value = v; n++; touched.add(d); }""",
+        """if (inp && v !== "") { inp.value = v; n++; touched.add(d); markManual(d, r, k, false); }""",
+    ),
+])
+
+# --- wiring.js: hosted backend instead of claude.ai capabilities ---
+patch("wiring.js", [
+    (
+        """$("#w-grid").addEventListener("input", e => { const i = e.target.closest("[data-wx]"); if (i) saveWeatherDay(i.dataset.wx.split("|")[0]); });""",
+        """$("#w-grid").addEventListener("input", e => { const i = e.target.closest("[data-wx]"); if (i) { const [d, r, k] = i.dataset.wx.split("|"); markManual(d, r, k, i.value.trim() !== ""); saveWeatherDay(d); } });
+$("#w-refresh").onclick = async e => {
+  if (!S.refreshWeather) return; const b = e.currentTarget; b.disabled = true; $("#w-state").textContent = "Fetching the BOM forecast…";
+  try { const r = await S.refreshWeather(); $("#w-state").textContent = r.ok ? "Saved" : "Changes save as you type"; toast(r.message); }
+  catch (err) { $("#w-state").textContent = "Changes save as you type"; toast("BOM refresh failed: " + (err?.message || err)); }
+  finally { b.disabled = false; }
+};""",
+    ),
+    (
+        """if (!S.loaded.units) status("Service data has not loaded. Open this page on claude.ai while signed in, or open a data file.");""",
+        """if (!S.loaded.units) status("Service data has not loaded. Reload the page, or log out and sign in again.");""",
+    ),
+    (
+        """    const inClaude = typeof window.claude?.use === "function";
+    let db = inClaude ? await window.claude.use("db") : null;
+    if (!db) {
+      S.standalone = true; let cached = {}; try { cached = JSON.parse(localStorage.getItem("oss-data") || "{}"); } catch {}
+      db = localStore(cached); $("#filebar").hidden = false;
+      if (inClaude) $("#filebar-msg").textContent = "Shared data is not available here. Sign in to claude.ai, or work from a data file.";
+      else if (Object.keys(cached).length) $("#filebar-msg").textContent = "Showing the data last used in this browser. Open the latest data file if someone else has made changes.";
+    }
+    if (inClaude) {
+      S.user = await window.claude.use("user"); try { S.me = S.user ? await S.user.id() : null; } catch {}
+      S.downloads = await window.claude.use("downloads");
+      S.sample = await window.claude.use("sample");
+    }""",
+        """    // Hosted: /vendor/bridge.js signs this member in to the shared database and exposes it as window.OSS_BACKEND
+    // (db, user, downloads, refreshWeather). Opened as a plain file: fall back to the in-browser store and data files.
+    const hosted = !!window.OSS_BACKEND_READY;
+    const backend = hosted ? await window.OSS_BACKEND_READY.catch(() => null) : null;
+    let db = backend ? backend.db : null;
+    if (!db) {
+      S.standalone = true; let cached = {}; try { cached = JSON.parse(localStorage.getItem("oss-data") || "{}"); } catch {}
+      db = localStore(cached); $("#filebar").hidden = false;
+      if (hosted) $("#filebar-msg").textContent = "Shared data is not available right now. Reload the page, or work from a data file.";
+      else if (Object.keys(cached).length) $("#filebar-msg").textContent = "Showing the data last used in this browser. Open the latest data file if someone else has made changes.";
+    }
+    if (backend) {
+      S.user = backend.user; try { S.me = await S.user.id(); } catch {}
+      S.downloads = backend.downloads;
+      S.refreshWeather = backend.refreshWeather; $("#w-refresh").hidden = false;
+    }""",
+    ),
+])

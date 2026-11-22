@@ -1,0 +1,85 @@
+import { NextRequest, NextResponse } from "next/server";
+import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { firstName, getAuthUser } from "@/lib/auth";
+import { clientEnv } from "@/env";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Serves the Operational Service Summary page at the basePath root.
+ *
+ * The page is the built artifact (oss/index.html) with three injections made
+ * at request time: a per-request nonce on every script tag, the signed-in
+ * member's name and logout URL for the chooser, and the Firebase config and
+ * bridge script that replaces claude.ai storage. Signed-out requests go to
+ * sign-in; no page bytes leave the server without a session.
+ */
+let cachedHtml: string | null = null;
+function loadPage(): string {
+  if (cachedHtml && process.env.NODE_ENV === "production") return cachedHtml;
+  cachedHtml = readFileSync(resolve(process.cwd(), "oss/index.html"), "utf8");
+  return cachedHtml;
+}
+
+export async function GET(request: NextRequest) {
+  const user = await getAuthUser();
+  const base = clientEnv.NEXT_PUBLIC_BASE_PATH;
+  if (!user) {
+    const to = new URL(`${base}/sign-in`, clientEnv.NEXT_PUBLIC_APP_URL);
+    const wanted = request.nextUrl.hash ? `/${request.nextUrl.hash}` : "/";
+    to.searchParams.set("redirect", wanted);
+    return NextResponse.redirect(to, { status: 303 });
+  }
+
+  const nonce = randomBytes(16).toString("base64");
+  const bootstrap = {
+    firebase: {
+      apiKey: clientEnv.NEXT_PUBLIC_FIREBASE_API_KEY,
+      authDomain: clientEnv.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+      projectId: clientEnv.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+      appId: clientEnv.NEXT_PUBLIC_FIREBASE_APP_ID,
+    },
+    basePath: base,
+    user: { id: user.uid, email: user.email, displayName: user.displayName, role: user.role },
+  };
+  const head =
+    `<script nonce="${nonce}">` +
+    `window.OSS_USER_NAME=${JSON.stringify(user.displayName)};` +
+    `window.OSS_USER_FIRST_NAME=${JSON.stringify(firstName(user.displayName))};` +
+    `window.OSS_LOGOUT_URL=${JSON.stringify(`${base}/logout`)};` +
+    `window.OSS_BOOTSTRAP=${JSON.stringify(bootstrap).replace(/</g, "\\u003c")};` +
+    `</script>` +
+    `<script nonce="${nonce}" src="${base}/vendor/bridge.js"></script>`;
+
+  // The built page is an HTML fragment (claude.ai supplied the document shell), so the shell is added here.
+  const page = loadPage().replace(/<script\b(?![^>]*\bnonce=)/gi, `<script nonce="${nonce}"`);
+  const html =
+    `<!doctype html>\n<html lang="en-AU">\n<head>\n<meta charset="utf-8">\n` +
+    `<meta name="viewport" content="width=device-width, initial-scale=1">\n<meta name="robots" content="noindex">\n<link rel="icon" href="data:,">\n` +
+    `${head}\n${page}`;
+
+  const csp = [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}'`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "connect-src 'self' https://firestore.googleapis.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com wss://firestore.googleapis.com",
+    "frame-src 'none'",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join("; ");
+
+  return new NextResponse(html, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "private, no-store",
+      "Content-Security-Policy": csp,
+    },
+  });
+}

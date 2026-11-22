@@ -1,0 +1,98 @@
+#!/usr/bin/env bun
+/**
+ * Live Firestore rules probe (no emulator available on this box).
+ *
+ *   bun run scripts/rules-probe.ts
+ *
+ * Uses the Admin SDK (ADC) to mint custom tokens for two throwaway users, one
+ * with the `member` claim and one without, then exercises the deployed rules
+ * with the web SDK. Prints PASS/FAIL per case and exits non-zero on any FAIL.
+ * Cleans up the docs it writes.
+ */
+import { initializeApp as initAdmin, applicationDefault } from "firebase-admin/app";
+import { getAuth as getAdminAuth } from "firebase-admin/auth";
+import { getFirestore as getAdminFs } from "firebase-admin/firestore";
+import { initializeApp } from "firebase/app";
+import { getAuth, signInWithCustomToken, signOut } from "firebase/auth";
+import { collection, deleteDoc, doc, getDoc, getDocs, getFirestore, serverTimestamp, setDoc } from "firebase/firestore";
+
+const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "lsv-oss-prod";
+const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+if (!apiKey) throw new Error("NEXT_PUBLIC_FIREBASE_API_KEY required (source .env)");
+
+// With user ADC the Admin SDK cannot sign tokens itself; it signs through IAM
+// signBlob as the runtime service account instead (same as Cloud Run does).
+initAdmin({
+  credential: applicationDefault(),
+  projectId,
+  serviceAccountId: process.env.FIREBASE_SIGNER_SA ?? `lsv-oss-run@${projectId}.iam.gserviceaccount.com`,
+});
+const adminAuth = getAdminAuth();
+const web = initializeApp({ apiKey, projectId, authDomain: `${projectId}.firebaseapp.com` });
+const auth = getAuth(web);
+const fs = getFirestore(web);
+
+const MEMBER_UID = "rules-probe-member";
+const OUTSIDER_UID = "rules-probe-outsider";
+const results: { name: string; ok: boolean; detail?: string }[] = [];
+
+async function expectDenied(name: string, fn: () => Promise<unknown>) {
+  try {
+    await fn();
+    results.push({ name, ok: false, detail: "allowed" });
+  } catch (e) {
+    const code = (e as { code?: string }).code ?? String(e);
+    results.push({ name, ok: code.includes("permission-denied"), detail: code });
+  }
+}
+async function expectAllowed(name: string, fn: () => Promise<unknown>) {
+  try {
+    await fn();
+    results.push({ name, ok: true });
+  } catch (e) {
+    results.push({ name, ok: false, detail: (e as { code?: string }).code ?? String(e) });
+  }
+}
+
+const probeUnit = doc(fs, "units", "ZZ-PROBE");
+
+// 1. Unauthenticated
+await expectDenied("anon read units", () => getDocs(collection(fs, "units")));
+await expectDenied("anon read weather doc", () => getDoc(doc(fs, "weather", "2026-01-01")));
+
+// 2. Authenticated, no member claim
+await signInWithCustomToken(auth, await adminAuth.createCustomToken(OUTSIDER_UID, {}));
+await expectDenied("non-member read units", () => getDocs(collection(fs, "units")));
+await expectDenied("non-member write unit", () => setDoc(probeUnit, { code: "ZZ", updatedBy: OUTSIDER_UID, updatedAt: new Date().toISOString() }));
+await signOut(auth);
+
+// 3. Member
+await signInWithCustomToken(auth, await adminAuth.createCustomToken(MEMBER_UID, { member: true }));
+await expectAllowed("member read units", () => getDocs(collection(fs, "units")));
+await expectAllowed("member read members roster", () => getDocs(collection(fs, "members")));
+await expectAllowed("member write stamped unit", () => setDoc(probeUnit, { code: "ZZ", updatedBy: MEMBER_UID, updatedAt: new Date().toISOString() }));
+await expectDenied("member write foreign updatedBy", () => setDoc(probeUnit, { code: "ZZ", updatedBy: "someone-else", updatedAt: new Date().toISOString() }));
+await expectDenied("member write without updatedAt", () => setDoc(probeUnit, { code: "ZZ", updatedBy: MEMBER_UID }));
+await expectDenied("member write members/", () => setDoc(doc(fs, "members", "x@example.com"), { email: "x@example.com", role: "admin" }));
+await expectDenied("member write otpCodes/", () => setDoc(doc(fs, "otpCodes", "x"), { a: 1 }));
+await expectDenied("member write rateLimitBuckets/", () => setDoc(doc(fs, "rateLimitBuckets", "x"), { a: 1 }));
+await expectDenied("member write config/weatherStatus", () => setDoc(doc(fs, "config", "weatherStatus"), { a: 1, updatedBy: MEMBER_UID, updatedAt: new Date().toISOString() }));
+await expectDenied("member write weather bad id", () => setDoc(doc(fs, "weather", "not-a-date"), { updatedBy: MEMBER_UID, updatedAt: new Date().toISOString() }));
+await expectAllowed("member write weather good id", () => setDoc(doc(fs, "weather", "2099-01-01"), { grid: {}, manual: [], updatedBy: MEMBER_UID, updatedAt: new Date().toISOString() }));
+await expectAllowed("member delete own probe docs", async () => {
+  await deleteDoc(probeUnit);
+  await deleteDoc(doc(fs, "weather", "2099-01-01"));
+});
+await signOut(auth);
+
+// cleanup users
+for (const uid of [MEMBER_UID, OUTSIDER_UID]) await adminAuth.deleteUser(uid).catch(() => {});
+await getAdminFs().doc("units/ZZ-PROBE").delete().catch(() => {});
+
+let failed = 0;
+for (const r of results) {
+  if (!r.ok) failed++;
+  console.log(`${r.ok ? "PASS" : "FAIL"}  ${r.name}${r.detail ? `  (${r.detail})` : ""}`);
+}
+console.log(`${results.length - failed}/${results.length} passed`);
+process.exit(failed ? 1 : 0);

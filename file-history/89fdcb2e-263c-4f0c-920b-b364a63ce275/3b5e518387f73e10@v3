@@ -1,0 +1,42 @@
+output "cloud_run_url" {
+  value = google_cloud_run_v2_service.app.uri
+}
+
+output "run_service_account" {
+  value = google_service_account.run.email
+}
+
+output "scheduler_service_account" {
+  value = google_service_account.scheduler.email
+}
+
+output "deploy_service_account" {
+  description = "GCP_SERVICE_ACCOUNT GitHub secret"
+  value       = google_service_account.deploy.email
+}
+
+output "workload_identity_provider" {
+  description = "GCP_WORKLOAD_IDENTITY_PROVIDER GitHub secret"
+  value       = google_iam_workload_identity_pool_provider.github.name
+}
+
+output "artifact_registry" {
+  value = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.app.repository_id}"
+}
+
+output "dns_name_servers" {
+  value = var.manage_dns ? google_dns_managed_zone.root[0].name_servers : []
+}
+
+output "hosting_default_url" {
+  value = google_firebase_hosting_site.default.default_url
+}
+
+output "hosting_domain_dns_updates" {
+  description = "Records to add at the DNS host (GoDaddy) for the custom domain"
+  value       = google_firebase_hosting_custom_domain.root.required_dns_updates
+}
+
+output "hosting_domain_state" {
+  value = "${google_firebase_hosting_custom_domain.root.host_state} / ${google_firebase_hosting_custom_domain.root.ownership_state} / cert ${try(google_firebase_hosting_custom_domain.root.cert[0].state, "none")}"
+}

@@ -1,0 +1,238 @@
+---
+task: "Deploy LIMSOC Permission Assist behind the existing LSV gate"
+slug: 20261121-214500_limsoc-permission-assist-deploy
+project: limsoc-permission-assist
+effort: deep
+effort_source: classifier
+phase: verify
+progress: 68/71
+mode: interactive
+started: 2026-11-21T10:45:00Z
+updated: 2026-11-21T23:58:00Z
+---
+
+## Problem
+
+LIMSOC Permission Assist is a single-page vanilla-JS tool (repo `nicholas-wood/limsoc-permission-assist`) that Life Saving Victoria uses to maintain LIMSOC permission groups. It runs only as a claude.ai artifact or a local file. It embeds a snapshot of LIMSOC staging group and permission names, so it cannot be put on a public URL, and it loads its Excel library from cdnjs, which rules out a strict content security policy. It has no home behind an organisational sign-in, no deploy pipeline, and no rollback.
+
+## Vision
+
+Nick opens `https://nicholaswood.com.au/lsv/limsoc-permission-assist`, signs in exactly as he does for the Operational Service Summary, and the page he knows appears with the staging example loaded. He uploads a Groups export, ticks, downloads the import file. Nothing about the tool changed; what changed is that a signed-out request gets the sign-in page and nothing else, the browser is technically unable to call anything but its own origin, and a push to main puts a new build live with the previous one a single command away.
+
+## Out of Scope
+
+- Any change to the app's behaviour, layout, wording or LIMSOC look beyond what hosting and security require.
+- Any call to LIMSOC, production (limsoc.com.au) or staging, from the app, the gate, CI or my testing. Import testing on staging.limsoc.com.au is Nick's.
+- A backend for group rules. They stay in localStorage (`lsvperm-rules`).
+- A second sign-in system, load balancer, IAP, CDN, or a second Cloud Run service.
+- Restructuring the Operational Service Summary app (its basePath, routes, or data model), which another session is still building.
+- Analytics, error reporting or any third-party call.
+- Making the repository public.
+
+## Principles
+
+- **One gate, one audit.** Sign-in, session and membership checks are the gate's existing code paths, not a copy.
+- **Nothing readable without a session.** Page, vendored script, any other path under the prefix, and the bucket itself all refuse a signed-out request.
+- **Least privilege by default.** A new app starts with one allowed person and an explicit grant per person after that.
+- **The browser cannot be asked to misbehave.** The CSP forbids network calls outright, so "never talks to LIMSOC" is enforced, not promised.
+- **Additive to shared things.** The gate repo and Terraform state are shared with in-flight work; changes there are new files or minimal hunks.
+- **Cost honesty.** Anything outside the free tier is surfaced with an estimate before it is created.
+
+## Constraints
+
+- URL: `https://nicholaswood.com.au/lsv/limsoc-permission-assist`. The domain mapping is gated on Nick's GoDaddy nameserver change (inherited from the gate project); until then the interim host is `lsv-oss-prod-ixkidoqqka-ts.a.run.app`.
+- Gate: Cloud Run service `lsv-oss-prod`, project `lsv-oss-prod`, australia-southeast1, Next.js 15.5.6 with `basePath: "/lsv/dailysummary"`, Firebase Auth session cookie `session` (httpOnly, secure, SameSite=Lax, 14 days), Firestore `members` allow-list.
+- Storage: one GCS bucket in `lsv-oss-prod`, Standard class, australia-southeast1, uniform bucket-level access, public access prevention enforced, versioning on, no allUsers/allAuthenticatedUsers, no signed URLs. Only `limsoc-pa-run` holds `roles/storage.objectViewer` on it.
+- CI: GitHub Actions with Workload Identity Federation, no JSON keys. Push to main builds and deploys.
+- Build: edit `src/`, run `python3 build.py`, never hand-edit `dist/`. xlsx pinned at 0.18.5, vendored, hash-checked.
+- Headers: strict CSP (`script-src 'self'` plus the inline script hash), `Cache-Control: no-store` on HTML, `X-Robots-Tag: noindex`, plus the gate's nosniff, frame deny, referrer, permissions and HSTS set.
+- Tooling: bun and TypeScript for new scripts; Python only for the existing `build.py`. gcloud, terraform and gh exist only on the Mac (`ssh mac`).
+- Wording: "members", never "staff".
+
+## Goal
+
+LIMSOC Permission Assist is served at `/lsv/limsoc-permission-assist` by the existing `lsv-oss-prod` gate from a private versioned bucket, only to signed-in members holding an explicit grant (initially Nick alone), under a CSP that allows same-origin scripts and no network connections; a push to main of the app repo rebuilds and publishes it over WIF; and `DEPLOY.md` covers deploy, rollback, adding a member and monthly cost.
+
+## Criteria
+
+### App build (repo limsoc-permission-assist)
+- [x] ISC-1: `vendor/xlsx.full.min.js` is committed and its sha256 is `c9506197caf809a075b6dee1da0d36fb19da7158ffe8a88e7b0c96c5d8623c99` (sha256sum).
+- [x] ISC-2: The vendored file is byte-identical to cdnjs xlsx 0.18.5 fetched independently (sha256 compare).
+- [x] ISC-3: `build.py` fails if the vendored file's hash differs from the pinned value (run with a tampered copy).
+- [x] ISC-4: `src/page.html` has no `cdnjs` reference (rg count 0).
+- [x] ISC-5: `dist/index.html` has no `http://` or `https://` script, link or img source (rg).
+- [x] ISC-6: `python3 build.py` writes `dist/index.html` and `dist/vendor/xlsx.full.min.js` (ls).
+- [x] ISC-7: Built page references the script at `/lsv/limsoc-permission-assist/vendor/xlsx.full.min.js` when built with the hosting base path (rg).
+- [x] ISC-8: Built with no base path, the page references `vendor/xlsx.full.min.js` relatively so the local file still works (rg).
+- [x] ISC-9: `dist/` is not hand-edited: git diff of dist equals a fresh build output (build then git status clean).
+- [x] ISC-10: Anti: `src/app.js` is unchanged from commit 8ea7216 (git diff empty).
+- [x] ISC-11: Anti: visible page text and CSS in `src/page.html` are unchanged apart from the one script tag (git diff shows one hunk).
+- [x] ISC-12: Anti: no `fetch(`, `XMLHttpRequest`, `WebSocket`, `sendBeacon` or `limsoc.com.au` request target in `src/` (rg).
+- [x] ISC-13: Anti: the word "staff" does not appear in `src/`, DEPLOY.md or new gate UI strings (rg).
+- [x] ISC-14: `scripts/make-test-csv.ts` writes a csv with header `name,permissions` from the staging snapshot (head -1).
+- [x] ISC-15: The test csv has one row per snapshot group plus a `Superuser (last run)` row (row count 29 or 28 if already present).
+- [x] ISC-16: The `Superuser (last run)` row is a strict subset of `Superuser`, so the page shows new permissions (script output count > 0).
+- [x] ISC-17: Permission cells are codenames such as `view_units`, not ids (rg for a digits-only cell returns 0).
+
+### Bucket and IAM
+- [x] ISC-18: Bucket `limsoc-pa-prod-site` exists in australia-southeast1 (gcloud storage buckets describe).
+- [x] ISC-19: Storage class is STANDARD (describe).
+- [x] ISC-20: Uniform bucket-level access is true (describe).
+- [x] ISC-21: Public access prevention is `enforced` (describe).
+- [x] ISC-22: Versioning is enabled (describe).
+- [x] ISC-23: Bucket IAM policy has no `allUsers` or `allAuthenticatedUsers` member (get-iam-policy).
+- [x] ISC-24: `limsoc-pa-run` holds `roles/storage.objectViewer` on this bucket (get-iam-policy).
+- [x] ISC-25: Anti: `limsoc-pa-run` holds no project-level storage role (projects get-iam-policy filter).
+- [x] ISC-26: The CI deploy account holds an object write role on this bucket only (get-iam-policy).
+- [x] ISC-27: Anti: the CI deploy account holds no project-level role (projects get-iam-policy filter).
+- [x] ISC-28: Lifecycle rule bounds noncurrent versions so old builds do not accumulate without limit (describe).
+- [x] ISC-29: Anonymous `GET https://storage.googleapis.com/limsoc-pa-prod-site/index.html` is refused with 401 or 403 (curl -i).
+- [x] ISC-30: Anonymous JSON API object read is refused (curl -i).
+- [x] ISC-31: Anonymous bucket listing is refused (curl -i).
+
+### Gate serving
+- [x] ISC-32: `GET /lsv/limsoc-permission-assist` with no cookie returns 303 to the gate sign-in (curl -i).
+- [x] ISC-33: `GET /lsv/limsoc-permission-assist/vendor/xlsx.full.min.js` with no cookie returns 303 to sign-in and zero script bytes (curl -i).
+- [x] ISC-34: `GET /lsv/limsoc-permission-assist/anything/else` with no cookie returns 303 to sign-in (curl -i).
+- [x] ISC-35: A tampered session cookie is treated as signed out (curl -i).
+- [x] ISC-36: The sign-in Location is a relative or public-host URL, never `127.0.0.1` (curl -i).
+- [ ] ISC-37: After sign-in the member lands on `/lsv/limsoc-permission-assist`, not the inner gate path (probe following redirects).
+- [x] ISC-38: Signed in as Nick, the page returns 200 `text/html` (probe).
+- [x] ISC-39: Signed in as Nick, the vendored script returns 200 `text/javascript` with the pinned sha256 (probe).
+- [x] ISC-40: Signed in, an unknown object path returns 404 (probe).
+- [x] ISC-41: A path-traversal request (`..%2f`) returns 404 or 400 and no object (probe).
+- [ ] ISC-42: [DROPPED — see Decisions 2026-11-22: replaced by ISC-42.1]
+- [x] ISC-42.1: Someone not on the allow-list is refused a session with 403 and no cookie (probe with throwaway address).
+- [x] ISC-43: Only GET and HEAD are accepted; POST returns 405 (curl).
+- [ ] ISC-44: [DROPPED — see Decisions 2026-11-22: the Service Summary is no longer touched]
+- [x] ISC-45: Gate `bun run typecheck`, `bun test` and `next build` pass on the branch.
+
+### Headers
+- [x] ISC-46: HTML response carries `Content-Security-Policy` with `script-src 'self' 'sha256-…'` and no `unsafe-inline` or `unsafe-eval` in script-src (curl -i).
+- [x] ISC-47: CSP carries `connect-src 'none'` (curl -i).
+- [x] ISC-48: CSP carries `default-src 'none'`, `object-src 'none'`, `base-uri 'none'`, `frame-ancestors 'none'`, `form-action 'none'` (curl -i).
+- [x] ISC-49: The sha256 in the CSP equals the hash of the inline app script in the served HTML (compute and compare).
+- [x] ISC-50: HTML carries `Cache-Control: private, no-store` (curl -i).
+- [x] ISC-51: Every response under the prefix carries `X-Robots-Tag: noindex` (curl -i).
+- [x] ISC-52: Responses carry `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, `Strict-Transport-Security` (curl -i).
+- [x] ISC-53: The vendored script is not publicly cacheable (`Cache-Control: private…`) (curl -i).
+
+### Access control
+- [ ] ISC-54: [DROPPED — see Decisions 2026-11-22: own allow-list replaces the per-app grant]
+- [x] ISC-55: Nick's member record is the only one holding the grant (Firestore read).
+- [x] ISC-56: A script adds or removes the grant for an email in one command (run + Firestore read).
+- [ ] ISC-57: Removing the grant takes effect on the next request without a redeploy (probe).
+
+### Browser behaviour under CSP
+- [x] ISC-58: Signed in, the page shows the staging example (source label "Example" visible) (browser).
+- [x] ISC-59: Browser console shows zero CSP violations on load (browser console).
+- [x] ISC-60: Network log shows requests only to the page's own origin (browser network log).
+- [x] ISC-61: Uploading the test csv loads the groups and shows new permissions (browser).
+- [x] ISC-62: Download .xlsx produces a non-empty valid xlsx (zip magic, sheet `Groups`) (browser download + unzip).
+- [x] ISC-63: Download .csv produces a csv with header `name,permissions` (browser download + head).
+- [ ] ISC-64: Page loads at `https://nicholaswood.com.au/lsv/limsoc-permission-assist` (browser; gated on DNS).
+
+### CI/CD
+- [x] ISC-65: Workflow on push to main builds, verifies and uploads `dist/` to the bucket using WIF with `id-token: write` and no JSON key (workflow Read).
+- [x] ISC-66: Pull requests run build and checks without deploying (workflow Read + run).
+- [x] ISC-67: The WIF provider for this repo accepts only `nicholas-wood/limsoc-permission-assist` on `refs/heads/main` (gcloud describe).
+- [x] ISC-68: A real push to main results in a new object generation in the bucket and a green run (gh run view + gcloud storage ls -a).
+- [x] ISC-69: Rollback restores the previous generation with one command and the page serves the old build (run + probe).
+- [x] ISC-70: Anti: no service-account key, token or secret value is committed in either repo (rg).
+
+### Infrastructure as code and docs
+- [x] ISC-71: Bucket, IAM bindings, deploy account and WIF provider are defined in Terraform in the gate repo and `terraform plan` is clean after apply.
+- [ ] ISC-72: [DROPPED — see Decisions 2026-11-22: own project, no shared resources]
+- [x] ISC-73: `DEPLOY.md` covers deploy, rollback, adding a member and monthly cost with copyable commands (Read).
+- [x] ISC-74: Cost estimate is given to Nick before the bucket is created (Decisions entry + message).
+
+## Test Strategy
+
+| isc | type | check | threshold | tool |
+|-----|------|-------|-----------|------|
+| 1-17 | build/static | hash, grep, script output | exact | sha256sum, rg, python3 build.py, bun |
+| 18-28, 67 | infra | resource attributes | exact | gcloud via ssh mac |
+| 29-36, 43, 46-53 | HTTP | status and headers | exact | curl -i |
+| 37-42, 44, 57 | HTTP signed-in | probe with minted session | exact | bun probe script (admin SDK custom token) |
+| 45 | build | typecheck, tests, next build | green | bun |
+| 54-56 | data | Firestore doc read | field present | bun script |
+| 58-64 | UI | page content, console, network, downloads | no violations | real Chrome (Interceptor where Nick's session exists, otherwise headless Chrome with the probe cookie, disclosed) |
+| 65-70 | CI | workflow file and run | green | gh via ssh mac |
+| 71-72 | IaC | terraform plan | adds only, then 0 | terraform via ssh mac |
+| 73-74 | doc | file content | sections present | Read |
+
+## Features
+
+| name | description | satisfies | depends_on | parallelizable |
+|------|-------------|-----------|------------|----------------|
+| app-build | Vendor xlsx, base-path aware build, test csv script | 1-17 | — | yes |
+| gate-route | Loopback rewrite, static-app lib, route, middleware hunk, per-app grant | 32-57 | — | yes |
+| infra | Terraform file: bucket, IAM, deploy SA, WIF provider | 18-31, 67, 71, 72 | cost notice | no |
+| ci | Deploy workflow in app repo | 65-70 | infra | no |
+| browser-verify | CSP, upload and downloads in real Chrome | 58-64 | gate-route deployed | no |
+| docs | DEPLOY.md | 73, 74 | all | no |
+
+## Decisions
+
+- 2026-11-21T10:50Z — **The gate is already deployed the AccessBuddy way, so it is reused.** Cloud Run `lsv-oss-prod` revision 00004 is live on the interim run.app host with Firebase sign-in, session cookie, Firestore `members` allow-list, Terraform state in `gs://lsv-oss-prod-tfstate`, WIF pool `github`. No second gate.
+- 2026-11-21T10:52Z — **Domain is not live.** `nicholaswood.com.au` still resolves to GoDaddy (ns41/42.domaincontrol.com) and `/lsv/*` returns GoDaddy 404s. The mapping waits on Nick's nameserver change, inherited from the gate project. Everything is verified on the interim host; ISC-64 stays open until DNS moves.
+- 2026-11-21T10:55Z — **Concurrent session in the gate checkout.** `origin/main` moved to 3544c06 during OBSERVE and the shared tree holds uncommitted work. All gate work happens in a separate worktree (`projects/limsoc-permission-assist/gate`, branch `feat/limsoc-permission-assist`) and is additive.
+- 2026-11-21T11:00Z — **Routing: loopback rewrite, not a basePath restructure.** The gate's Next.js basePath is `/lsv/dailysummary`; Next refuses internal rewrites from outside the basePath. Options were (a) change basePath to `/lsv` and move every dailysummary route, (b) a `basePath: false` rewrite to the gate's own loopback address. (a) rewrites an app another session is mid-build on; (b) is a few lines. Chosen (b), pending an empirical test on Next 15.5.6.
+- 2026-11-21T11:02Z — **Access model: per-app grant on the existing allow-list.** `members/{email}.apps` must contain `limsoc-permission-assist`. This is the allow-list-plus-role shape AccessBuddy uses. Consequence to surface: anyone granted is also a gate member, which today also opens the Operational Service Summary.
+- 2026-11-21T11:03Z — **CSP by hash computed in the gate from the served bytes**, so HTML and policy cannot drift during a deploy. JSON data blocks are not executed and need no hash. `style-src 'self' 'unsafe-inline'` is kept because app.js writes inline `style=` attributes and the rule is not to change the app; this matches the dailysummary page's style policy.
+- 2026-11-21T11:04Z — **ISC floor (soft) show-your-math.** 74 ISCs against the E4 soft floor of 128. The thing is one static page, one bucket, one route and one workflow; every criterion is a single probe and further splitting would be padding.
+- 2026-11-21T11:10Z — **Loopback rewrite confirmed, internal rewrite refuted.** Next 15.5.6 fails the build on a `basePath: false` rewrite to an internal path ("rewrites urls outside of the basePath. Please use a destination that starts with http:// or https://"). The loopback form builds and, on a local production build, forwards cookies and reaches middleware and the route. Next's middleware adapter rejects a relative `Location`, so sign-in redirects are built from `NEXT_PUBLIC_APP_URL`, as the gate's page and logout routes already do.
+- 2026-11-21T11:20Z — **Deploy and apply held: the gate is under active concurrent deployment.** During this run the live service moved from revision 00004 to 00008 (image 76924ab) and `origin/main` advanced twice. The other session's Terraform working copy (`mac:~/pai-tmp/lsv-oss`) shares the remote state. Deploying an image from this branch could roll back their work; applying this branch's new file from a separate copy would have their next apply plan to destroy it. So: branches pushed, PRs opened (app #1, gate #2, rebased onto 76924ab), read-only plan run with `-lock=false`, nothing created. Go-live sequence is in the PR and the final report.
+- 2026-11-21T11:22Z — **Cost estimate (for Nick before creation):** bucket storage about 1.1 MB per build, up to 11 versions, Standard, australia-southeast1: under US$0.001 a month; operations under US$0.001; no egress charge in-region; no new Cloud Run service. Total well under 5 cents a month. Regional buckets outside the US are not in the always-free allowance, so this is technically a non-free-tier resource and is being announced, not silently created.
+- 2026-11-21T11:30Z — **Advisor consulted (Inference.ts advisor).** Adopted: WIF condition and binding pinned to GitHub numeric ids (repository 1466423213, owner 68529679) plus `refs/heads/main`; `Vary: Cookie`; spike of the internal rewrite (refuted, above). Already true: cookie `Path=/`, hash computed from served bytes, revocation-checked session, provider-level condition. Not adopted: CSP `sandbox` without `allow-same-origin`, which would isolate the page from the Operational Service Summary's origin storage but break the localStorage group rules Nick asked to keep. Surfaced to Nick as an open choice.
+- 2026-11-21T11:32Z — **Pre-existing plan drift, not applied.** The plan shows `google_cloud_run_v2_service.app` updating in place (scaling block normalisation `manual_instance_count`/`min_instance_count` 0 -> null). It belongs to the gate project. ISC-72 is refined: this branch adds 7 resources and changes none; the one change in the plan predates it.
+- 2026-11-21T11:38Z — **Forge and Cato unavailable** (`codex` absent on both machines, recorded gotcha). The Advisor ran as the second opinion. Delegation floor (soft) show-your-math: the work was two small additive diffs whose correctness depended on live probes I had to read myself; a subagent would have re-derived the gate's auth code to no gain. **Browser checks used headless Chrome 131 on Linux, not Interceptor**: the page was not deployed, so there was no URL for Nick's Chrome to open; the signed-in Interceptor pass is owed after go-live.
+- 2026-11-21T11:39Z — **Mac dropped off SSH twice.** The plan re-run after the WIF id change did not execute, so that edit is pushed but not yet through `terraform validate`.
+
+- 2026-11-22 — **refined: Nick's direction, "It should stay separate, just follow those patterns. Read only."** The shared-gate design is withdrawn. Everything placed in the Service Summary was removed: PR #2 closed unmerged, branch deleted locally and on GitHub, worktree removed, temporary Terraform copy (with its `prod.tfvars` copy) deleted. Nothing was ever merged, applied or deployed there. The Service Summary is a read-only reference from here on. Constraints, Goal and the criteria that named the gate now read against the standalone service; ISC-42, 44, 54, 72 are dropped and ISC-42.1 added.
+- 2026-11-22 — **Nick chose: own subdomain, new project.** Asked because a Cloud Run domain mapping gives a whole host to one service, so a separate service cannot share `nicholaswood.com.au/lsv/...`. Address `permissions.nicholaswood.com.au`; project `limsoc-pa-prod` (number 421104274842).
+- 2026-11-22 — **Front door is Firebase Hosting, cookie is `__session`.** Read from the reference: Cloud Run domain mappings are not offered in australia-southeast1, so the reference moved to Firebase Hosting rewrites and renamed the cookie because Hosting forwards only `__session`. Same here; Hosting holds no files, every path is rewritten to Cloud Run.
+- 2026-11-22 — **Billing cap.** The billing account allows 5 linked projects and was full. Nick chose to unlink `limsoc-brief-poc` (inventory: no buckets, Firestore, functions, SQL or VMs; only Vertex AI enabled). Unlinked, `limsoc-pa-prod` linked. Reversible by relinking, but only if a slot is free.
+- 2026-11-22 — **Layout.** One repo: the page at the root (`src/`, `build.py`, `dist/`), the service in `host/`, Terraform in `infra/terraform`. The page is not in the image; the service reads it from `gs://limsoc-pa-prod-site`. `site.yml` publishes the page on every push to main; release-please and `deploy.yml` release the service.
+- 2026-11-22 — **Access model is the allow-list itself.** With its own project the member list is this app's alone, so the per-app grant is gone. Nick is the only member (admin). `bun run members add|remove|list` in `host/`.
+- 2026-11-22 — **Bucket policy made authoritative.** Google's default bindings let project editors and viewers read objects. Replaced with `google_storage_bucket_iam_policy`: `limsoc-pa-run` objectViewer, `limsoc-pa-deploy` objectUser, project owners for the two legacy owner roles. The first apply wrote the policy and then destroyed the two old member bindings, which stripped both accounts for about a minute; re-applied, verified on a cold revision.
+- 2026-11-22 — **Probe access.** `roles/iam.serviceAccountTokenCreator` on `limsoc-pa-run` granted to Nick's account so `host/scripts/probe.ts` can mint a test session (same grant the reference made). Documented in DEPLOY.md.
+- 2026-11-22 — **Cost told before creation:** under 50 US cents a month at the outside, most likely under 10. Cloud Build also created `limsoc-pa-prod_cloudbuild` (US multi-region, source tarballs of a few hundred KB, inside the US free allowance).
+- 2026-11-22 — **Not exercised.** The emailed sign-in link as a person receives it (the probe uses a custom token); the release-please to `deploy.yml` path (the running image came from a one-off Cloud Build; no conventional commit has landed to trigger a release PR); the Interceptor pass in Nick's Chrome; member removal taking effect (ISC-57); the custom domain (ISC-64, needs the CNAME).
+
+## Changelog
+
+- conjectured: the gate can take a second path prefix with an ordinary internal rewrite, or failing that the public path needs a basePath restructure. refuted by: Next 15.5.6 build error on an internal `basePath: false` rewrite, and a local production build showing the loopback form working end to end for signed-out requests. learned: with a basePath, the only config-level way to own a sibling path is an absolute rewrite to the server itself, and anything built from the request on that leg (redirects) must use the configured public URL. criterion now: ISC-36 requires the sign-in Location never to be `127.0.0.1`, verified on the local build.
+- conjectured: this session could apply Terraform and deploy the gate once the code was green. refuted by: the live revision changing four times and `origin/main` twice during the run, from another session sharing the service and the state. learned: a shared service under concurrent deployment makes "green on my branch" insufficient; integration has to go through the shared main and the owner. criterion now: ISC-18 to ISC-44 and ISC-54 onward stay open until the gate PR is merged and applied from the shared line.
+
+## Verification
+
+- ISC-1/ISC-2: sha256sum — `vendor/xlsx.full.min.js` fetched from cdnjs 0.18.5 = `c9506197caf809a075b6dee1da0d36fb19da7158ffe8a88e7b0c96c5d8623c99`, identical to the gate's `public/vendor/xlsx.full.min.js` and its `scripts/vendor.lock.json` entry; 881,727 bytes.
+- ISC-3: tampered copy — `AssertionError: vendor/xlsx.full.min.js does not match the pinned xlsx 0.18.5 build`.
+- ISC-4/ISC-5: rg — 0 matches for `cdnjs` in `src/` and built page; no `(src|href)="http…"` in `dist/index.html`.
+- ISC-6/ISC-7/ISC-8: build output — `dist/index.html` + `dist/vendor/xlsx.full.min.js`; `SITE_BASE=/lsv/limsoc-permission-assist/` gives `<script src="/lsv/limsoc-permission-assist/vendor/xlsx.full.min.js"`, unset gives `<script src="vendor/xlsx.full.min.js"`.
+- ISC-9: CI "Committed dist matches a fresh build" passed on PR #1 (run 44897550739).
+- ISC-10/ISC-11: `git diff 8ea7216 -- src/` — one line: the cdnjs tag became `<script src="__XLSX__"></script>`; `app.js` untouched.
+- ISC-12/ISC-13: rg — no fetch/XHR/WebSocket/sendBeacon or limsoc.com.au in `src/`; no "staff" in DEPLOY.md, README, workflow, scripts (the snapshot's group name "25-26-Staff Operations" is LIMSOC data, left as is).
+- ISC-14 to ISC-17: `bun scripts/make-test-csv.ts` — "29 groups, Superuser 1099, last run 1040, new 59"; header `"name","permissions"`; csv parse: last run is a strict subset, no digit-only cells, longest cell 23,399 chars (under Excel's 32,767).
+- ISC-45: gate PR #2 CI "Lint, Type Check, Test, Build" pass (run 44897554556); local `bun test` 32 pass, `tsc --noEmit` clean, `next build` lists `ƒ /apps/[app]/[[...path]]`.
+- ISC-65/ISC-66/ISC-70: workflow Read — `id-token: write` only on the deploy job, `google-github-actions/auth@v2` with provider + service account, no key; PR run built and skipped "Publish to the private bucket"; no secret values in either diff.
+- ISC-73/ISC-74: DEPLOY.md sections Deploy, Rollback, Adding a member, Monthly cost; estimate in Decisions and in the report to Nick before any resource exists.
+- **Local-only evidence, criteria left open until live** — ISC-32 to ISC-36, 43 (local production build of the gate, `Host: nicholaswood.com.au`): page, `/vendor/xlsx.full.min.js`, `/a/b/c.html`, `/..%2f..%2fapi/health`, tampered cookie and POST each `303` → `https://nicholaswood.com.au/lsv/dailysummary/sign-in?redirect=%2Fapps%2Flimsoc-permission-assist`, `Cache-Control: private, no-store`, `x-robots-tag: noindex, nofollow`, no body. ISC-46 to ISC-53, 58 to 63 (headless Chrome 131 against a harness using the gate's `buildCsp`/`inlineScriptHashes`/headers): CSP `default-src 'none'; script-src 'self' 'sha256-ZDANiefDXdxuFcZviZ7c8yCwyBoaIflrIvFpcESxXA4='; … connect-src 'none'`; "Example: LIMSOC staging, 14 Nov 2026"; XLSX 0.18.5; upload → "groups-export-test.csv", 27 groups / 1099 / 1040 / 59 new; downloads `LIMSOC group import 2026-11-21.xlsx` 69,811 B (`504b0304`, sheet "Groups") and `.csv` 53,753 B (`"name","permissions"`); 0 CSP violations; requests to own origin only; `fetch("https://example.com/")` blocked (connect-src) and injected inline script blocked (script-src-elem).
+- ISC-71/ISC-72 (partial): `terraform plan -lock=false` on the first version of the file — "Plan: 7 to add, 1 to change, 0 to destroy"; the 7 are this branch's resources, the 1 is pre-existing Cloud Run scaling-block drift. Not re-planned after the WIF id edit (Mac offline).
+- Live now, signed out: `https://lsv-oss-prod-ixkidoqqka-ts.a.run.app/lsv/limsoc-permission-assist` → 404 (route not deployed); `https://nicholaswood.com.au/lsv/limsoc-permission-assist` → GoDaddy 404 (domain not moved).
+
+### 2026-11-22 — standalone service, live at https://limsoc-pa-prod.web.app
+
+- ISC-18 to ISC-23, 28: `gcloud storage buckets describe gs://limsoc-pa-prod-site` — location AUSTRALIA-SOUTHEAST1, default_storage_class STANDARD, uniform_bucket_level_access true, public_access_prevention enforced, versioning_enabled true, lifecycle Delete at numNewerVersions 10 / isLive false.
+- ISC-23, 24, 26: bucket IAM (authoritative) — `roles/storage.objectViewer <- limsoc-pa-run`, `roles/storage.objectUser <- limsoc-pa-deploy`, `legacyBucketOwner`/`legacyObjectOwner <- projectOwner:limsoc-pa-prod`. No allUsers, no allAuthenticatedUsers.
+- ISC-25, 27: project IAM — run: datastore.user, firebaseauth.admin, logging.logWriter; deploy: run.developer, artifactregistry.writer. No project-level storage role for either. Owner: Nick only.
+- ISC-29 to ISC-31: anonymous `storage.googleapis.com/limsoc-pa-prod-site/index.html` → 403 AccessDenied; `/vendor/xlsx.full.min.js` → 403; JSON API `?alt=media` → 401 "Anonymous caller does not have storage.objects.get access"; object list → 401; virtual-host URL → 403.
+- ISC-32 to ISC-36, 43: live, no cookie — `GET /`, `/vendor/xlsx.full.min.js`, `/index.html`, `/anything/else.html` → `303 Location: https://limsoc-pa-prod.web.app/sign-in`, 38 bytes; encoded traversal (`/..%2f..%2fvendor/xlsx.full.min.js`, `/vendor/..%2findex.html`, `/%2e%2e/index.html`) → ends at 303 sign-in; forged cookie → 303; POST → 303; `/api/members` → 401.
+- ISC-38 to ISC-41, 42.1, 46 to ISC-53, 55: `host/scripts/probe.ts` — 34 PASS, 0 FAIL. Session `200 {"success":true,"displayName":"Nicholas Wood","role":"admin"}`; cookie `__session=…; Path=/; Max-Age=1209600; HttpOnly; Secure; SameSite=Lax`; page 200 text/html 177,437 chars; script 200 text/javascript 881,727 bytes sha256 pinned, `cache-control private, no-cache`; CSP `default-src 'none'; script-src 'self' 'sha256-ZDANiefDXdxuFcZviZ7c8yCwyBoaIflrIvFpcESxXA4='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`; `private, no-store`; `noindex, nofollow`; nosniff, DENY, referrer, permissions, HSTS; `/nope.html` 404; traversal 404; allow-list = nicholas.h.wood@outlook.com only; outsider `403 {"error":"Not a member"}` no cookie.
+- ISC-56: `bun run scripts/members.ts add … --admin` → "member added"; `list` → one row.
+- ISC-58 to ISC-63: headless Chrome 131 on the live site with the probe's session — "Example: LIMSOC staging, 14 Nov 2026"; XLSX 0.18.5; upload → "groups-export-test.csv", 27 groups / 1099 / 1040 / 59 new; downloads `LIMSOC group import 2026-11-22.xlsx` 69,811 B (`504b0304`, sheet "Groups") and `.csv` 53,753 B (`"name","permissions"`); 0 CSP violations; requests to `https://limsoc-pa-prod.web.app` only; `fetch` to another host and an injected inline script blocked. Screenshot shows the LSV Comms Online header and the download toast.
+- ISC-67: WIF condition — `assertion.repository_id == "1466423213" && assertion.repository_owner_id == "68529679" && assertion.ref == "refs/heads/main"`.
+- ISC-68: PR #1 merged (a08618d) → "Publish site" success → `index.html#1795305177746147`, metadata commit a08618d; PR #2 merged (efc934f) → success → generation 1795305600511302, under the authoritative bucket policy.
+- ISC-69: rollback command from DEPLOY.md → new generation 1795305216820981 from the previous build; probe immediately reported `generation 1795305216820981`, ALL PASS.
+- ISC-71: `terraform apply` — "Apply complete! Resources: 0 added, 0 changed, 0 destroyed."

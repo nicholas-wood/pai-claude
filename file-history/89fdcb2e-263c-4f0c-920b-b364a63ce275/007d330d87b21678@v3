@@ -1,0 +1,179 @@
+# LSV Operational Service Summary
+
+Life Saving Victoria's Operational Service Summary tool, hosted at
+`https://nicholaswood.com.au/lsv/dailysummary` behind AccessBuddy's sign-in
+pattern, with Firestore for live multi-member data and a scheduled BOM
+weather job.
+
+| Piece | Where |
+|---|---|
+| GCP project | `lsv-oss-prod`, australia-southeast1 |
+| Runtime | Cloud Run service `lsv-oss-prod` (Next.js 15, Bun image, min 0 instances) |
+| Data | Firestore Native `(default)`; rules in `firestore.rules` |
+| Sign-in | Firebase Auth email link (and email code when Resend is configured); 14-day httpOnly `session` cookie; member allow-list in `members/` |
+| Weather | Cloud Scheduler `lsv-oss-weather-morning` 06:00 and `-afternoon` 16:30 Melbourne → `GET /api/cron/weather` (OIDC) |
+| Infra | `infra/terraform` (state in `gs://lsv-oss-prod-tfstate`) |
+| Deploy | GitHub Actions: `ci.yml` on every push, `release-please.yml` cuts a release and runs `deploy.yml` over Workload Identity Federation |
+
+## The page
+
+`oss/index.html` is the built page (an HTML fragment; the server adds the
+document shell). Edit the parts under `oss/src/ux/` and run `bun run build:page`
+(runs `python3 build.py` there and copies the result to `oss/index.html`);
+never hand-edit the built file. `oss/src` is the pack's `src` folder with the
+hosting changes applied: vendored library tags in `build.py`, the hosted
+backend boot and "Refresh from BOM now" in `wiring.js` and `markup.html`, and
+per-cell `manual` tracking in `views.js`. `oss/samples/` (data file and OSSD
+spreadsheet) is gitignored because it holds operational contacts. The server injects, per request, a CSP nonce on each script tag,
+`window.OSS_USER_NAME`, `window.OSS_LOGOUT_URL`, `window.OSS_BOOTSTRAP`, and
+`/vendor/bridge.js`, which provides `window.OSS_BACKEND` (`db`, `user`,
+`downloads`, `refreshWeather`, `logout`) in place of the claude.ai
+capabilities. docx, xlsx and jszip are vendored in `public/vendor` by
+`bun run vendor` (hashes in `scripts/vendor.lock.json`) so the CSP is
+`'self'`-only.
+
+## Local development
+
+```bash
+bun install
+cp .env.example .env            # fill the NEXT_PUBLIC_FIREBASE_* values
+gcloud auth application-default login --project lsv-oss-prod
+bun run vendor && bun run dev   # http://localhost:3000/lsv/dailysummary
+```
+
+Add yourself to the allow-list once (or use the seed `--admin` flag):
+
+```bash
+bun run seed path/to/data.json --admin you@example.com "Your Name"
+```
+
+## Deploy
+
+A deploy is a release. Merge conventional-commit PRs to `main`; release-please
+opens a release PR; merging it creates the release and `deploy.yml` builds,
+pushes `:sha`, `:vX.Y.Z` and `:latest` to Artifact Registry, updates the Cloud
+Run service and checks `/api/health` reports the new version.
+
+After merging a release PR, do not merge anything else to `main` until
+"Deploy to Cloud Run" is green. If a later push cancels the release run,
+`gh run rerun <run-id> --failed` re-runs the deploy for that release.
+
+GitHub repository secrets (values from `terraform output`):
+`GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`,
+`NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_APP_ID`.
+
+Manual deploy from a laptop (emergency only):
+
+```bash
+IMG=australia-southeast1-docker.pkg.dev/lsv-oss-prod/lsv-oss/app:manual-$(date +%Y%m%d%H%M)
+docker build --platform linux/amd64 --build-arg NEXT_PUBLIC_APP_URL=https://nicholaswood.com.au \
+  --build-arg NEXT_PUBLIC_FIREBASE_API_KEY=... --build-arg NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=lsv-oss-prod.firebaseapp.com \
+  --build-arg NEXT_PUBLIC_FIREBASE_PROJECT_ID=lsv-oss-prod --build-arg NEXT_PUBLIC_FIREBASE_APP_ID=... -t $IMG .
+docker push $IMG
+gcloud run services update lsv-oss-prod --image=$IMG --region=australia-southeast1 --project=lsv-oss-prod
+```
+
+## Rollback
+
+Cloud Run keeps every revision. Send traffic back to the previous one:
+
+```bash
+gcloud run revisions list --service=lsv-oss-prod --region=australia-southeast1 --project=lsv-oss-prod
+gcloud run services update-traffic lsv-oss-prod --to-revisions=<previous-revision>=100 \
+  --region=australia-southeast1 --project=lsv-oss-prod
+```
+
+Rolling back code does not roll back data. Firestore has no schema
+migrations in this app, so older revisions read current data fine.
+
+## Infrastructure changes
+
+```bash
+cd infra/terraform
+terraform init -backend-config="bucket=lsv-oss-prod-tfstate"
+terraform plan -var-file=prod.tfvars
+terraform apply -var-file=prod.tfvars
+```
+
+`prod.tfvars` is gitignored. Firestore rules deploy with Terraform
+(`google_firebaserules_release`), so a rules change is a Terraform apply.
+
+Domain: Cloud Run domain mapping on `nicholaswood.com.au` (Google-managed
+TLS). One-off steps the account owner does: verify the domain
+(`gcloud domains verify nicholaswood.com.au`), create the mapping
+(`gcloud beta run domain-mappings create --service lsv-oss-prod --domain nicholaswood.com.au --region australia-southeast1`),
+copy the A/AAAA records it prints into `cloud_run_domain_ipv4/6` in
+`prod.tfvars`, apply, and point GoDaddy's nameservers at the Cloud DNS
+`dns_name_servers` output.
+
+## Weather job
+
+Runs 06:00 and 16:30 Melbourne via Cloud Scheduler. It fetches
+`IDV10753.xml`, `IDV10752.xml` and `IDV10751.xml` over the BOM's anonymous FTP,
+builds the same `lsv-bom-weather` feed the bookmarklet builds, projects it onto
+the areas in `config/settings` (`src/lib/weather/mapping.ts` is a line-for-line
+port of the page's `BOM_FEED` and `bomFeedToGrid()`), and writes
+`weather/<YYYY-MM-DD>` for seven days with `source: "BOM forecast issued <time>"`.
+Cells listed in a day's `manual` array (`"<area>|<field>"`) were typed by a
+member and are never overwritten; the page adds a key when a member edits a
+cell and removes it when the cell is cleared or filled from the BOM. Days saved
+before tracking existed, and not sourced from a BOM feed, count as wholly typed. Status
+is in `config/weatherStatus` (last run, last issued, last error).
+
+Rerun it:
+
+```bash
+# From the UI: Weather tab → Refresh from BOM now (session-gated, 2/min).
+# From Scheduler:
+gcloud scheduler jobs run lsv-oss-weather-morning --location=australia-southeast1 --project=lsv-oss-prod
+# From a laptop with ADC:
+bun run weather            # writes
+bun run weather --dry-run <data-file.json>  # prints the grid, no writes
+```
+
+Logs: `gcloud logging read 'resource.type=cloud_run_revision AND textPayload:"[weather]"' --project=lsv-oss-prod --limit=20`.
+
+BOM licence: anonymous FTP data is for internal organisational use. The site
+stays behind sign-in; nothing from the feeds is served to anonymous requests.
+
+## Backup and restore
+
+Members: Settings → Download data file produces
+`{ format: "lsv-operational-service-summary", docs: {...} }`; Settings → Open
+data file writes it back through the signed-in session.
+
+Ops restore from a file (idempotent; `--replace` also deletes docs not in the file):
+
+```bash
+bun run seed "Operational Service Summary data 2026-11-16.json"
+bun run seed backup.json --replace
+```
+
+Point-in-time export for safekeeping:
+
+```bash
+gcloud firestore export gs://lsv-oss-prod-tfstate/firestore-export/$(date +%F) --project=lsv-oss-prod
+```
+
+## Members
+
+Allow-list docs live in `members/<email>` with `displayName` and `role`
+(`member` or `admin`). Add or change via the API as an admin:
+
+```bash
+curl -X PUT https://nicholaswood.com.au/lsv/dailysummary/api/members \
+  -H 'Content-Type: application/json' -b 'session=...' \
+  -d '{"email":"person@lsv.com.au","displayName":"First Last","role":"member"}'
+```
+
+or with the seed script's `--admin` flag for the first admin. Removing a member
+revokes their Firebase refresh tokens, so open tabs lose data access within an
+hour and the next page load is refused.
+
+## Rules
+
+- Never call LIMSOC production. Unit data came from staging only.
+- Wording: members, not staff. `unit.area` is Region (Central/East/West);
+  `unit.regionName` is Area (Bass, Port Phillip, Kingston, ...).
+- Costs: everything here sits in GCP free tiers except the Cloud DNS zone
+  (about US$0.20 a month). No Cloud SQL, no load balancer, min instances 0.

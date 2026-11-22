@@ -1,0 +1,391 @@
+# LSV Operational Service Summary — infrastructure
+#
+# Same shape as AccessBuddy's infra/terraform/main.tf: one Cloud Run service
+# in australia-southeast1, Secret Manager for secrets, Cloud Scheduler for the
+# cron, Artifact Registry for images, Cloud DNS for the domain, WIF for the
+# GitHub deploy. Differences: Firestore instead of Cloud SQL, the scheduler
+# authenticates with OIDC instead of a shared header, and WIF is in Terraform.
+#
+# First-time bootstrap (state bucket), then:
+#   terraform init -backend-config="bucket=lsv-oss-prod-tfstate"
+#   terraform apply -var-file=prod.tfvars
+
+terraform {
+  required_version = ">= 1.5"
+  required_providers {
+    google      = { source = "hashicorp/google", version = "~> 6.0" }
+    google-beta = { source = "hashicorp/google-beta", version = "~> 6.0" }
+    random      = { source = "hashicorp/random", version = "~> 3.6" }
+  }
+  backend "gcs" {
+    prefix = "terraform/state"
+  }
+}
+
+provider "google" {
+  project               = var.project_id
+  region                = var.region
+  user_project_override = true
+  billing_project       = var.project_id
+}
+
+provider "google-beta" {
+  project               = var.project_id
+  region                = var.region
+  user_project_override = true
+  billing_project       = var.project_id
+}
+
+locals {
+  service_name = "lsv-oss-${var.environment}"
+  # Until the custom domain serves the app, app_url_override points at the Cloud Run URL so sign-in,
+  # Origin checks and the scheduler all work on the interim host.
+  app_url      = var.app_url_override != "" ? var.app_url_override : "https://${var.domain}"
+  base_path    = "/lsv/dailysummary"
+}
+
+# ── APIs ──────────────────────────────────────────────────────────────────────
+resource "google_project_service" "apis" {
+  for_each = toset([
+    "run.googleapis.com",
+    "firestore.googleapis.com",
+    "firebase.googleapis.com",
+    "identitytoolkit.googleapis.com",
+    "firebaserules.googleapis.com",
+    "cloudscheduler.googleapis.com",
+    "secretmanager.googleapis.com",
+    "artifactregistry.googleapis.com",
+    "iam.googleapis.com",
+    "iamcredentials.googleapis.com",
+    "sts.googleapis.com",
+    "dns.googleapis.com",
+    "logging.googleapis.com",
+    "cloudresourcemanager.googleapis.com",
+  ])
+  service            = each.key
+  disable_on_destroy = false
+}
+
+# ── Firestore (created out of band on 2026-11-16; imported) ───────────────────
+resource "google_firestore_database" "default" {
+  name                        = "(default)"
+  location_id                 = var.region
+  type                        = "FIRESTORE_NATIVE"
+  delete_protection_state     = "DELETE_PROTECTION_ENABLED"
+  deletion_policy             = "ABANDON"
+  point_in_time_recovery_enablement = "POINT_IN_TIME_RECOVERY_DISABLED"
+  depends_on                  = [google_project_service.apis]
+}
+
+# Security rules are versioned here and released by Terraform.
+resource "google_firebaserules_ruleset" "firestore" {
+  provider = google-beta
+  source {
+    files {
+      name    = "firestore.rules"
+      content = file("${path.module}/../../firestore.rules")
+    }
+  }
+  depends_on = [google_firestore_database.default]
+}
+
+resource "google_firebaserules_release" "firestore" {
+  provider     = google-beta
+  name         = "cloud.firestore"
+  ruleset_name = google_firebaserules_ruleset.firestore.name
+  lifecycle {
+    replace_triggered_by = [google_firebaserules_ruleset.firestore]
+  }
+}
+
+# ── Artifact Registry ────────────────────────────────────────────────────────
+resource "google_artifact_registry_repository" "app" {
+  location      = var.region
+  repository_id = "lsv-oss"
+  format        = "DOCKER"
+  cleanup_policies {
+    id     = "keep-tagged"
+    action = "KEEP"
+    condition {
+      tag_state = "TAGGED"
+    }
+  }
+  cleanup_policies {
+    id     = "delete-untagged"
+    action = "DELETE"
+    condition {
+      tag_state  = "UNTAGGED"
+      older_than = "604800s"
+    }
+  }
+  cleanup_policies {
+    id     = "keep-recent"
+    action = "KEEP"
+    most_recent_versions {
+      keep_count = 5
+    }
+  }
+  depends_on = [google_project_service.apis]
+}
+
+# ── Secrets ──────────────────────────────────────────────────────────────────
+resource "random_password" "session_signing_secret" {
+  length  = 64
+  special = false
+}
+
+resource "google_secret_manager_secret" "session_signing_secret" {
+  secret_id = "session-signing-secret"
+  replication {
+    auto {}
+  }
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret_version" "session_signing_secret" {
+  secret      = google_secret_manager_secret.session_signing_secret.id
+  secret_data = random_password.session_signing_secret.result
+}
+
+# Optional mail provider. Empty value disables Resend paths in the app.
+resource "google_secret_manager_secret" "resend_api_key" {
+  secret_id = "resend-api-key"
+  replication {
+    auto {}
+  }
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret_version" "resend_api_key" {
+  secret      = google_secret_manager_secret.resend_api_key.id
+  secret_data = var.resend_api_key == "" ? "unset" : var.resend_api_key
+}
+
+# ── Service accounts ─────────────────────────────────────────────────────────
+resource "google_service_account" "run" {
+  account_id   = "lsv-oss-run"
+  display_name = "LSV OSS Cloud Run runtime"
+}
+
+resource "google_project_iam_member" "run_roles" {
+  for_each = toset([
+    "roles/datastore.user",
+    "roles/firebaseauth.admin",
+    "roles/logging.logWriter",
+  ])
+  project = var.project_id
+  role    = each.key
+  member  = "serviceAccount:${google_service_account.run.email}"
+}
+
+# Firebase Admin on ADC signs session cookies and custom tokens via IAM signBlob.
+resource "google_service_account_iam_member" "run_self_token_creator" {
+  service_account_id = google_service_account.run.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.run.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "run_secrets" {
+  for_each = {
+    session = google_secret_manager_secret.session_signing_secret.secret_id
+    resend  = google_secret_manager_secret.resend_api_key.secret_id
+  }
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.run.email}"
+}
+
+resource "google_service_account" "scheduler" {
+  account_id   = "lsv-oss-scheduler"
+  display_name = "LSV OSS Cloud Scheduler invoker"
+}
+
+# ── Cloud Run ────────────────────────────────────────────────────────────────
+resource "google_cloud_run_v2_service" "app" {
+  name                = local.service_name
+  location            = var.region
+  ingress             = "INGRESS_TRAFFIC_ALL"
+  deletion_protection = var.environment == "prod"
+
+  template {
+    service_account                  = google_service_account.run.email
+    max_instance_request_concurrency = 80
+    timeout                          = "300s"
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 3
+    }
+    containers {
+      image = var.initial_image
+      ports {
+        container_port = 3000
+      }
+      resources {
+        limits            = { cpu = "1", memory = "512Mi" }
+        cpu_idle          = true
+        startup_cpu_boost = true
+      }
+      startup_probe {
+        http_get {
+          path = "${local.base_path}/api/health"
+          port = 3000
+        }
+        initial_delay_seconds = 2
+        period_seconds        = 3
+        failure_threshold     = 10
+      }
+      env {
+        name  = "NEXT_PUBLIC_APP_URL"
+        value = local.app_url
+      }
+      env {
+        name  = "NEXT_PUBLIC_FIREBASE_PROJECT_ID"
+        value = var.project_id
+      }
+      env {
+        name  = "CRON_INVOKER_EMAIL"
+        value = google_service_account.scheduler.email
+      }
+      env {
+        name  = "RESEND_FROM"
+        value = var.resend_from
+      }
+      env {
+        name = "SESSION_SIGNING_SECRET"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.session_signing_secret.secret_id
+            version = "latest"
+          }
+        }
+      }
+      dynamic "env" {
+        for_each = var.resend_api_key == "" ? [] : [1]
+        content {
+          name = "RESEND_API_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.resend_api_key.secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    # CI sets the image on each release; Terraform owns everything else.
+    ignore_changes = [template[0].containers[0].image, client, client_version, template[0].labels]
+  }
+  depends_on = [google_project_service.apis, google_secret_manager_secret_version.session_signing_secret]
+}
+
+# Public invoker: the app enforces its own sign-in, exactly like AccessBuddy.
+resource "google_cloud_run_v2_service_iam_member" "public" {
+  name     = google_cloud_run_v2_service.app.name
+  location = var.region
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+# ── Cloud Scheduler: BOM weather, 06:00 and 16:30 Melbourne ──────────────────
+resource "google_cloud_scheduler_job" "weather" {
+  for_each = {
+    morning   = "0 6 * * *"
+    afternoon = "30 16 * * *"
+  }
+  name             = "lsv-oss-weather-${each.key}"
+  description      = "Fetch BOM Victorian forecasts over FTP and refresh weather/<date> for 7 days (${each.key})"
+  schedule         = each.value
+  time_zone        = "Australia/Melbourne"
+  attempt_deadline = "180s"
+  region           = var.region
+  retry_config {
+    retry_count = 2
+  }
+  http_target {
+    http_method = "GET"
+    uri         = "${local.app_url}${local.base_path}/api/cron/weather"
+    oidc_token {
+      service_account_email = google_service_account.scheduler.email
+      audience              = "${local.app_url}${local.base_path}/api/cron/weather"
+    }
+  }
+  depends_on = [google_project_service.apis]
+}
+
+# ── Cloud DNS: nicholaswood.com.au ───────────────────────────────────────────
+# Nick points GoDaddy's nameservers at this zone (see README). The A/AAAA
+# records come from the Cloud Run domain mapping once the domain is verified.
+resource "google_dns_managed_zone" "root" {
+  count       = var.manage_dns ? 1 : 0
+  name        = "nicholaswood-com-au"
+  dns_name    = "${var.domain}."
+  description = "nicholaswood.com.au (Cloud Run domain mapping for the LSV service summary)"
+  depends_on  = [google_project_service.apis]
+}
+
+resource "google_dns_record_set" "apex_a" {
+  count        = var.manage_dns && length(var.cloud_run_domain_ipv4) > 0 ? 1 : 0
+  managed_zone = google_dns_managed_zone.root[0].name
+  name         = "${var.domain}."
+  type         = "A"
+  ttl          = 300
+  rrdatas      = var.cloud_run_domain_ipv4
+}
+
+resource "google_dns_record_set" "apex_aaaa" {
+  count        = var.manage_dns && length(var.cloud_run_domain_ipv6) > 0 ? 1 : 0
+  managed_zone = google_dns_managed_zone.root[0].name
+  name         = "${var.domain}."
+  type         = "AAAA"
+  ttl          = 300
+  rrdatas      = var.cloud_run_domain_ipv6
+}
+
+# ── Workload Identity Federation for GitHub Actions deploys ──────────────────
+resource "google_iam_workload_identity_pool" "github" {
+  workload_identity_pool_id = "github"
+  display_name              = "GitHub Actions"
+  depends_on                = [google_project_service.apis]
+}
+
+resource "google_iam_workload_identity_pool_provider" "github" {
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = "github-oidc"
+  display_name                       = "GitHub OIDC"
+  attribute_mapping = {
+    "google.subject"       = "assertion.sub"
+    "attribute.repository" = "assertion.repository"
+    "attribute.ref"        = "assertion.ref"
+  }
+  attribute_condition = "assertion.repository == \"${var.github_repository}\""
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+}
+
+resource "google_service_account" "deploy" {
+  account_id   = "lsv-oss-deploy"
+  display_name = "LSV OSS GitHub deploy"
+}
+
+resource "google_service_account_iam_member" "deploy_wif" {
+  service_account_id = google_service_account.deploy.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repository}"
+}
+
+resource "google_project_iam_member" "deploy_roles" {
+  for_each = toset(["roles/run.developer", "roles/artifactregistry.writer"])
+  project  = var.project_id
+  role     = each.key
+  member   = "serviceAccount:${google_service_account.deploy.email}"
+}
+
+resource "google_service_account_iam_member" "deploy_acts_as_run" {
+  service_account_id = google_service_account.run.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.deploy.email}"
+}

@@ -1,0 +1,693 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { and, eq, isNull } from "drizzle-orm";
+import { NextRequest } from "next/server";
+import {
+  addMembership,
+  auditActions,
+  cleanup,
+  dbPkg,
+  loadTenant as loadTenantFromDb,
+  mkArea,
+  mkLockers,
+  mkTenant,
+  mkUser,
+  uniqueSuffix,
+  type FixtureUser,
+} from "./helpers/locker-fixture";
+
+/**
+ * Season handling against a real database:
+ *  - the nightly cutoff step (arming, boundary, exemptions, idempotence, queue),
+ *  - the season confirmation (attestation GET / POST keep and release).
+ * Email is mocked at the sendTemplatedEmail / sendAdminNotification seam.
+ * Gated on DATABASE_URL.
+ */
+
+const hasDb = !!process.env.DATABASE_URL;
+
+const sent: { to: string; template: string; vars: Record<string, unknown>; attachments: unknown }[] = [];
+const adminNotes: { requiredPermission: string; html: string }[] = [];
+
+vi.mock("@/lib/services/email", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/services/email")>();
+  return {
+    ...actual,
+    sendTemplatedEmail: vi.fn(async (to: string, template: string, vars: Record<string, unknown>, _c: unknown, attachments: unknown) => {
+      sent.push({ to, template, vars, attachments });
+      return { sent: true } as never;
+    }),
+    sendAdminNotification: vi.fn(async (_tx: unknown, params: (typeof adminNotes)[number]) => {
+      adminNotes.push(params);
+    }),
+  };
+});
+
+// 1 December 2026 00:00 in Melbourne (AEDT, UTC+11)
+const CUTOFF = new Date("2026-11-30T13:00:00.000Z");
+const SEASON = "2026/2027";
+
+describe.skipIf(!hasDb)("locker cutoff step", () => {
+  let d: Awaited<ReturnType<typeof dbPkg>>;
+  let svc: typeof import("@/lib/services/lockers");
+  let suffix: string;
+  let tenantRow: { id: string; slug: string };
+  const userIds: string[] = [];
+  let renewed: FixtureUser, lapsed: FixtureUser, inactive: FixtureUser, kept: FixtureUser, fresh: FixtureUser, noMembership: FixtureUser, lateLinked: FixtureUser, joiner: FixtureUser, future: FixtureUser;
+  let area: { id: string };
+  let lockerRows: Awaited<ReturnType<typeof mkLockers>>;
+  const alloc: Record<string, string> = {};
+
+  // The cutoff rule lives in this variable, NOT in the database. Other suites run the real
+  // cron route over every tenant; with an armed rule stored in the database, that cron would
+  // release this suite's holders underneath it once the cutoff date arrives. The database row
+  // stays module-off ({}), and each test hands the service the settings it wants.
+  let live: Record<string, unknown> = {};
+  async function setSettings(settings: Record<string, unknown>) {
+    live = settings;
+  }
+  async function loadTenant(slug: string) {
+    return { ...(await loadTenantFromDb(slug)), settings: live };
+  }
+  const ARMED = { lockersEnabled: true, lockerCutoffMonth: 12, lockerCutoffDay: 1, lockerCutoffArmedAt: "2026-09-01T00:00:00.000Z" };
+
+  async function seedAllocations() {
+    await d.db.delete(d.lockerAllocations).where(eq(d.lockerAllocations.tenantId, tenantRow.id));
+    await d.db.delete(d.emailQueue).where(eq(d.emailQueue.tenantId, tenantRow.id));
+    await d.db.update(d.lockers).set({ labelUpdateRequired: false, cleanoutRequired: false, cleanoutDueAt: null }).where(eq(d.lockers.tenantId, tenantRow.id));
+    const old = new Date("2025-09-01T00:00:00.000Z");
+    const rows: [string, number, Record<string, unknown>][] = [
+      ["renewed", 0, { userId: renewed.id, holderEmail: renewed.email }],
+      ["lapsed", 1, { userId: lapsed.id, holderEmail: lapsed.email }],
+      ["inactive", 2, { userId: inactive.id, holderEmail: inactive.email }],
+      ["kept", 3, { userId: kept.id, holderEmail: kept.email, keptForSeason: SEASON }],
+      ["fresh", 4, { userId: fresh.id, holderEmail: fresh.email, allocatedAt: new Date(CUTOFF.getTime() + 3600_000) }],
+      ["noMembership", 5, { userId: noMembership.id, holderEmail: noMembership.email }],
+      ["unlinkedNoMatch", 6, { userId: null, holderEmail: "nobody-matches@example.com" }],
+      ["unlinkedMatches", 7, { userId: null, holderEmail: lateLinked.email.toUpperCase() }],
+      // New joiner: membership created this season with NO season recorded.
+      ["joiner", 8, { userId: joiner.id, holderEmail: joiner.email }],
+      // Renewed into a LATER season than the cutoff season (pre-season renewal drive).
+      ["future", 9, { userId: future.id, holderEmail: future.email }],
+    ];
+    for (const [key, idx, vals] of rows) {
+      const [a] = await d.db
+        .insert(d.lockerAllocations)
+        .values({
+          tenantId: tenantRow.id,
+          lockerId: lockerRows[idx].id,
+          holderFirstName: "H",
+          holderLastName: key,
+          allocatedAt: old,
+          ...vals,
+        })
+        .returning();
+      alloc[key] = a.id;
+    }
+  }
+
+  async function endedKeys(): Promise<string[]> {
+    const rows = await d.db.select().from(d.lockerAllocations).where(eq(d.lockerAllocations.tenantId, tenantRow.id));
+    return Object.entries(alloc).filter(([, id]) => rows.find((r) => r.id === id)?.endedAt).map(([k]) => k).sort();
+  }
+
+  beforeAll(async () => {
+    d = await dbPkg();
+    svc = await import("@/lib/services/lockers");
+    suffix = uniqueSuffix();
+    const t = await mkTenant({ slug: `lk-cut-${suffix}`, settings: {} });
+    tenantRow = t;
+    renewed = await mkUser("renewed", suffix, "Rena", "Renewed");
+    lapsed = await mkUser("lapsed", suffix, "Lap", "Sed");
+    inactive = await mkUser("inactive", suffix);
+    kept = await mkUser("kept", suffix);
+    fresh = await mkUser("fresh", suffix);
+    noMembership = await mkUser("nomem", suffix);
+    lateLinked = await mkUser("late", suffix);
+    joiner = await mkUser("joiner", suffix);
+    future = await mkUser("future", suffix);
+    userIds.push(renewed.id, lapsed.id, inactive.id, kept.id, fresh.id, noMembership.id, lateLinked.id, joiner.id, future.id);
+    await addMembership(t.id, joiner.id, { currentSeason: null });
+    await addMembership(t.id, future.id, { currentSeason: "2027/2028" });
+    await addMembership(t.id, renewed.id, { currentSeason: SEASON });
+    await addMembership(t.id, lapsed.id, { currentSeason: "2025/2026" });
+    await addMembership(t.id, inactive.id, { currentSeason: SEASON, status: "inactive" });
+    await addMembership(t.id, kept.id, { currentSeason: "2025/2026" });
+    await addMembership(t.id, fresh.id, { currentSeason: "2025/2026" });
+    await addMembership(t.id, lateLinked.id, { currentSeason: "2025/2026" });
+    area = await mkArea(t.id, "Cutoff Area");
+    lockerRows = await mkLockers(t.id, area.id, Array.from({ length: 10 }, (_, i) => ({ number: i + 1 })));
+  });
+
+  beforeEach(async () => {
+    sent.length = 0;
+    adminNotes.length = 0;
+    await setSettings(ARMED);
+    await seedAllocations();
+  });
+
+  afterAll(async () => {
+    await cleanup([tenantRow.id], userIds);
+  });
+
+  it("does nothing before the cutoff instant (one millisecond early)", async () => {
+    const res = await svc.runLockerCutoff(await loadTenant(tenantRow.slug), new Date(CUTOFF.getTime() - 1));
+    expect(res.released).toBe(0);
+    expect(res.state).toBe("waiting");
+    expect(await endedKeys()).toEqual([]);
+    expect(adminNotes).toHaveLength(0);
+    expect(await d.db.select().from(d.emailQueue).where(eq(d.emailQueue.tenantId, tenantRow.id))).toHaveLength(0);
+  });
+
+  it("at the cutoff instant releases only unrenewed LINKED holders (including one linked by email on the way)", async () => {
+    const res = await svc.runLockerCutoff(await loadTenant(tenantRow.slug), CUTOFF);
+    expect(res.state).toBe("active");
+    expect(res.linked).toBe(1);
+    // lapsed (old season), inactive membership, no membership, and the holder linked by email who had not renewed.
+    expect(await endedKeys()).toEqual(["inactive", "lapsed", "noMembership", "unlinkedMatches"]);
+    expect(res.released).toBe(4);
+    // renewed, kept-for-season, allocated-after-cutoff and the unlinked non-match are untouched.
+    const rows = await d.db.select().from(d.lockerAllocations).where(and(eq(d.lockerAllocations.tenantId, tenantRow.id), isNull(d.lockerAllocations.endedAt)));
+    expect(rows.map((r) => r.holderLastName).sort()).toEqual(["fresh", "future", "joiner", "kept", "renewed", "unlinkedNoMatch"]);
+  });
+
+  it("ends them as not_renewed with the dated reason, flags label + clean-out (+7 days), audits, and ENQUEUES the member email", async () => {
+    await svc.runLockerCutoff(await loadTenant(tenantRow.slug), CUTOFF);
+    const [a] = await d.db.select().from(d.lockerAllocations).where(eq(d.lockerAllocations.id, alloc.lapsed));
+    expect(a).toMatchObject({ endType: "not_renewed", endedBy: null });
+    expect(a.endReason).toBe("Membership not renewed for 2026/2027 by 1 December 2026");
+    expect(a.endedAt!.getTime()).toBe(CUTOFF.getTime());
+
+    const [locker] = await d.db.select().from(d.lockers).where(eq(d.lockers.id, lockerRows[1].id));
+    expect(locker.labelUpdateRequired).toBe(true);
+    expect(locker.cleanoutRequired).toBe(true);
+    expect(locker.cleanoutDueAt!.getTime()).toBe(CUTOFF.getTime() + 7 * 86400_000);
+    expect(await auditActions(lockerRows[1].id, "locker")).toContain("locker_not_renewed");
+
+    const queued = await d.db.select().from(d.emailQueue).where(eq(d.emailQueue.tenantId, tenantRow.id));
+    expect(queued).toHaveLength(4);
+    const lapsedMail = queued.find((q) => q.recipient === lapsed.email)!;
+    expect(lapsedMail).toMatchObject({ templateType: "lockerReleased", status: "queued", entityType: "locker", entityId: lockerRows[1].id });
+    expect(lapsedMail.payload).toMatchObject({ areaName: "Cutoff Area", number: 2, reason: "Membership not renewed for 2026/2027 by 1 December 2026" });
+    // Queued, not sent inline.
+    expect(sent.filter((s) => s.template === "lockerReleased")).toHaveLength(0);
+  });
+
+  it("never releases a holder renewed into a LATER season, or a new joiner with no season recorded (review fixes 1 and 2)", async () => {
+    await svc.runLockerCutoff(await loadTenant(tenantRow.slug), CUTOFF);
+    const ended = await endedKeys();
+    expect(ended).not.toContain("future");
+    expect(ended).not.toContain("joiner");
+  });
+
+  it("tells the clean-out team about holders it could not check: on the first active run, and with a run that releases, but not every night (review fix 2)", async () => {
+    const t = await loadTenant(tenantRow.slug);
+    await svc.runLockerCutoff(t, CUTOFF);
+    expect(adminNotes).toHaveLength(1);
+    expect(adminNotes[0].html).toContain("Could not be checked, please review");
+    expect(adminNotes[0].html).toContain("have no membership season recorded");
+
+    // Nothing left to release: a second night is silent.
+    adminNotes.length = 0;
+    await svc.runLockerCutoff(t, new Date(CUTOFF.getTime() + 86400_000));
+    expect(adminNotes).toHaveLength(0);
+    await svc.runLockerCutoff(t, new Date(CUTOFF.getTime() + 2 * 86400_000));
+    expect(adminNotes).toHaveLength(0);
+
+    // A later run that releases something carries the list again.
+    await d.db.update(d.tenantMemberships).set({ currentSeason: "2025/2026" }).where(eq(d.tenantMemberships.userId, renewed.id));
+    await svc.runLockerCutoff(t, new Date(CUTOFF.getTime() + 3 * 86400_000));
+    expect(adminNotes).toHaveLength(1);
+    expect(adminNotes[0].html).toContain("Could not be checked, please review");
+    await d.db.update(d.tenantMemberships).set({ currentSeason: SEASON }).where(eq(d.tenantMemberships.userId, renewed.id));
+  });
+
+  it("the first active run of a season sends the unchecked list even when nothing is released; the next run does not", async () => {
+    await d.db.delete(d.auditLog).where(eq(d.auditLog.tenantId, tenantRow.id));
+    // Leave only the new joiner holding a locker: nothing to release.
+    for (const [key, id] of Object.entries(alloc)) {
+      if (key !== "joiner") await d.db.delete(d.lockerAllocations).where(eq(d.lockerAllocations.id, id));
+    }
+    const t = await loadTenant(tenantRow.slug);
+    const first = await svc.runLockerCutoff(t, CUTOFF);
+    expect(first.released).toBe(0);
+    expect(adminNotes).toHaveLength(1);
+    expect(adminNotes[0].html).toContain("Locker Holders To Check");
+    expect(adminNotes[0].html).not.toContain("Clean out on or after");
+    adminNotes.length = 0;
+    await svc.runLockerCutoff(t, new Date(CUTOFF.getTime() + 86400_000));
+    expect(adminNotes).toHaveLength(0);
+  });
+
+  it("a holder moved to another locker keeps their original date, so a move cannot dodge the cutoff (review fix 7)", async () => {
+    const [spare] = await mkLockers(tenantRow.id, area.id, [{ number: 99 }]);
+    const t = await loadTenant(tenantRow.slug);
+    // The lapsed holder is moved AFTER the cutoff instant has passed.
+    await svc.moveAllocation(t, { allocationId: alloc.lapsed, targetLockerId: spare.id, actorId: lapsed.id });
+    const run = await svc.runLockerCutoff(t, new Date(CUTOFF.getTime() + 3600_000));
+    expect(run.released).toBeGreaterThanOrEqual(1);
+    const [moved] = await d.db.select().from(d.lockerAllocations).where(eq(d.lockerAllocations.lockerId, spare.id));
+    expect(moved.endType).toBe("not_renewed");
+    await d.db.delete(d.lockerAllocations).where(eq(d.lockerAllocations.lockerId, spare.id));
+    await d.db.delete(d.lockers).where(eq(d.lockers.id, spare.id));
+  });
+
+  it("the queued release email states the clean-out date, not 'within 7 days' (review fix 6)", async () => {
+    await svc.runLockerCutoff(await loadTenant(tenantRow.slug), CUTOFF);
+    const queued = await d.db.select().from(d.emailQueue).where(eq(d.emailQueue.tenantId, tenantRow.id));
+    expect(queued.length).toBeGreaterThan(0);
+    for (const q of queued) expect((q.payload as Record<string, unknown>).removeBy).toBe("8 December 2026");
+  });
+
+  it("re-checks at WRITE time: a keep or a renewal that commits after the candidate list was read blocks the release (review fix 5)", async () => {
+    const { withTenant } = await import("@/lib/with-tenant");
+    const release = (allocationId: string) =>
+      withTenant(tenantRow.id, (tx) =>
+        svc.endAllocationForCutoff(tx, { tenantId: tenantRow.id, allocationId, season: SEASON, reason: "r", now: CUTOFF })
+      );
+
+    // Kept for the season after the candidates were read.
+    await d.db.update(d.lockerAllocations).set({ keptForSeason: SEASON }).where(eq(d.lockerAllocations.id, alloc.lapsed));
+    expect(await release(alloc.lapsed)).toBeNull();
+    await d.db.update(d.lockerAllocations).set({ keptForSeason: null }).where(eq(d.lockerAllocations.id, alloc.lapsed));
+
+    // Renewed (this season, and a later one) after the candidates were read.
+    for (const season of [SEASON, "2027/2028"]) {
+      await d.db.update(d.tenantMemberships).set({ currentSeason: season }).where(eq(d.tenantMemberships.userId, lapsed.id));
+      expect(await release(alloc.lapsed), season).toBeNull();
+    }
+    // Membership season blanked or garbled: cannot be judged, so not released either.
+    for (const season of [null, "garbage"]) {
+      await d.db.update(d.tenantMemberships).set({ currentSeason: season }).where(eq(d.tenantMemberships.userId, lapsed.id));
+      expect(await release(alloc.lapsed), String(season)).toBeNull();
+    }
+    expect((await d.db.select().from(d.lockerAllocations).where(eq(d.lockerAllocations.id, alloc.lapsed)))[0].endedAt).toBeNull();
+
+    // Genuinely unrenewed: it does release.
+    await d.db.update(d.tenantMemberships).set({ currentSeason: "2025/2026" }).where(eq(d.tenantMemberships.userId, lapsed.id));
+    expect(await release(alloc.lapsed)).not.toBeNull();
+  });
+
+  it("sends ONE clean-out notification per run to update_lockers holders listing every released locker", async () => {
+    await svc.runLockerCutoff(await loadTenant(tenantRow.slug), CUTOFF);
+    expect(adminNotes).toHaveLength(1);
+    expect(adminNotes[0].requiredPermission).toBe("update_lockers");
+    expect(adminNotes[0].html.match(/Clean out on or after/g)).toHaveLength(4);
+    expect(adminNotes[0].html).toContain("8 December 2026");
+  });
+
+  it("is idempotent: a second run the same day releases nothing and sends nothing", async () => {
+    await svc.runLockerCutoff(await loadTenant(tenantRow.slug), CUTOFF);
+    adminNotes.length = 0;
+    const again = await svc.runLockerCutoff(await loadTenant(tenantRow.slug), new Date(CUTOFF.getTime() + 3600_000));
+    expect(again.released).toBe(0);
+    expect(adminNotes).toHaveLength(0);
+    expect(await d.db.select().from(d.emailQueue).where(eq(d.emailQueue.tenantId, tenantRow.id))).toHaveLength(4);
+  });
+
+  it("a cutoff saved AFTER this season's date does not act until next season", async () => {
+    await setSettings({ ...ARMED, lockerCutoffArmedAt: "2026-12-05T00:00:00.000Z" });
+    const res = await svc.runLockerCutoff(await loadTenant(tenantRow.slug), new Date("2026-12-10T00:00:00.000Z"));
+    expect(res.released).toBe(0);
+    expect(res.state).toBe("waiting");
+    expect(await endedKeys()).toEqual([]);
+  });
+
+  it("never acts when the rule is off, not armed, or the module is disabled", async () => {
+    for (const settings of [
+      { lockersEnabled: true },
+      { lockersEnabled: true, lockerCutoffMonth: 12, lockerCutoffDay: 1 },
+      { ...ARMED, lockersEnabled: false },
+      { lockerCutoffMonth: 12, lockerCutoffDay: 1, lockerCutoffArmedAt: "2026-09-01T00:00:00.000Z" },
+    ]) {
+      await setSettings(settings);
+      const res = await svc.runLockerCutoff(await loadTenant(tenantRow.slug), CUTOFF);
+      expect(res.released).toBe(0);
+    }
+    expect(await endedKeys()).toEqual([]);
+  });
+
+  it("a 1 February rule falls in February of the END year", async () => {
+    await setSettings({ ...ARMED, lockerCutoffMonth: 2, lockerCutoffDay: 1 });
+    const t = await loadTenant(tenantRow.slug);
+    // December 2026 is before 1 Feb 2027: waiting.
+    expect((await svc.runLockerCutoff(t, new Date("2026-12-15T00:00:00.000Z"))).released).toBe(0);
+    // Local midnight 1 Feb 2027 (AEDT) = 2027-01-31T13:00Z: acts.
+    const res = await svc.runLockerCutoff(t, new Date("2027-01-31T13:00:00.000Z"));
+    expect(res.state).toBe("active");
+    expect(res.released).toBeGreaterThan(0);
+  });
+
+  it("the preview applies the real run's exemptions in EVERY state and never fills both lists (QA 4)", async () => {
+    const t0 = await loadTenant(tenantRow.slug);
+    const cases: { name: string; settings: Record<string, unknown>; now: Date; state: string }[] = [
+      { name: "waiting", settings: ARMED, now: new Date("2026-11-16T00:00:00.000Z"), state: "waiting" },
+      { name: "active", settings: ARMED, now: new Date(CUTOFF.getTime() + 2 * 3600_000), state: "active" },
+      { name: "waiting (saved late, next season)", settings: { ...ARMED, lockerCutoffArmedAt: "2026-12-05T00:00:00.000Z" }, now: new Date("2026-12-10T00:00:00.000Z"), state: "waiting" },
+      { name: "not armed", settings: { lockersEnabled: true, lockerCutoffMonth: 12, lockerCutoffDay: 1 }, now: new Date("2026-11-16T00:00:00.000Z"), state: "not_armed" },
+    ];
+    void t0;
+    for (const c of cases) {
+      await setSettings(c.settings);
+      const preview = await svc.getCutoffPreview(await loadTenant(tenantRow.slug), c.now);
+      expect(preview.state, c.name).toBe(c.state);
+      const named = [...preview.wouldRelease, ...preview.wouldReleaseWhenActive].map((w) => w.holderName.split(" ")[1]);
+      // Allocated after the cutoff ("fresh"), kept for the season ("kept") and renewed ("renewed", "future") appear in neither list,
+      // in EVERY state. (This used to skip the saved-late case, which is exactly where the preview judged against the wrong season.)
+      for (const exempt of ["fresh", "kept", "renewed", "future", "joiner"]) expect(named, `${c.name}: ${exempt}`).not.toContain(exempt);
+      expect(named, c.name).toEqual(expect.arrayContaining(["lapsed"]));
+      expect(preview.wouldRelease.length > 0 && preview.wouldReleaseWhenActive.length > 0, c.name).toBe(false);
+      if (c.state === "active") expect(preview.wouldReleaseWhenActive).toEqual([]);
+      else expect(preview.wouldRelease).toEqual([]);
+    }
+  });
+
+  it("saved late (waiting for NEXT season): the list is judged against the CURRENT season, so kept and renewed holders are not listed, and it equals what the real run releases when armed in time (QA 1)", async () => {
+    // Today is after this season's 1 December cutoff, but the rule was saved after it: the next run is next season.
+    const now = new Date(CUTOFF.getTime() + 2 * 3600_000);
+    const lateSettings = { ...ARMED, lockerCutoffArmedAt: new Date(CUTOFF.getTime() + 3600_000).toISOString() };
+    await setSettings(lateSettings);
+    // The real run links holders by email before judging them; do that first so both see the same holders.
+    const { withTenant } = await import("@/lib/with-tenant");
+    await withTenant(tenantRow.id, (tx) => svc.linkLockerHoldersByEmail(tx, tenantRow.id));
+    const preview = await svc.getCutoffPreview(await loadTenant(tenantRow.slug), now);
+    expect(preview.state).toBe("waiting");
+    expect(preview.message).toContain("first applies for 2027/2028");
+    const listed = preview.wouldReleaseWhenActive.map((w) => w.holderName.split(" ")[1]).sort();
+    // Kept for the current season, renewed for the current season, allocated after this season's cutoff: none of them.
+    for (const exempt of ["kept", "renewed", "fresh", "future", "joiner"]) expect(listed).not.toContain(exempt);
+    expect(listed).toEqual(["inactive", "lapsed", "noMembership", "unlinkedMatches"]);
+    expect(preview.wouldRelease).toEqual([]);
+
+    // The same data, the same rule, armed in time: the real run releases exactly that set.
+    await setSettings(ARMED);
+    await svc.runLockerCutoff(await loadTenant(tenantRow.slug), now);
+    const released = (await d.db.select().from(d.lockerAllocations).where(eq(d.lockerAllocations.tenantId, tenantRow.id)))
+      .filter((a) => a.endType === "not_renewed")
+      .map((a) => a.holderLastName)
+      .sort();
+    expect(released).toEqual(listed);
+  });
+
+  it("cutoff-preview states plainly when the rule next runs, and who it would release or cannot evaluate", async () => {
+    const preview = await svc.getCutoffPreview(await loadTenant(tenantRow.slug), new Date("2026-11-16T00:00:00.000Z"));
+    expect(preview).toMatchObject({ configured: true, state: "waiting", currentSeason: SEASON });
+    expect(preview.message).toBe("Next runs on 1 December 2026.");
+    expect(preview.nextRun).toMatchObject({ season: SEASON, date: "1 December 2026" });
+    expect(preview.wouldRelease).toEqual([]); // waiting: nothing "would release"
+    expect(preview.wouldReleaseWhenActive.map((w) => w.holderName.split(" ")[1]).sort()).toEqual(["inactive", "lapsed", "noMembership"]);
+    expect(preview.cannotEvaluate.map((c) => c.number).sort()).toEqual([7, 8, 9]);
+    expect(preview.cannotEvaluate.find((c) => c.number === 9)).toMatchObject({ reason: "no_season_recorded" });
+    expect(preview.cannotEvaluate.find((c) => c.number === 7)).toMatchObject({ reason: "unlinked" });
+
+    await setSettings({ ...ARMED, lockerCutoffArmedAt: "2026-12-05T00:00:00.000Z" });
+    const later = await svc.getCutoffPreview(await loadTenant(tenantRow.slug), new Date("2026-12-10T00:00:00.000Z"));
+    expect(later.message).toContain("Next runs on 1 December 2027.");
+    expect(later.message).toContain("saved after this season's date");
+
+    await setSettings({ lockersEnabled: true });
+    const off = await svc.getCutoffPreview(await loadTenant(tenantRow.slug));
+    expect(off).toMatchObject({ configured: false, state: "off", nextRun: null });
+  });
+});
+
+// ─── Season confirmation (attestation) ──────────────────────────────────
+
+describe.skipIf(!hasDb)("season confirmation: lockers on the attestation", () => {
+  let d: Awaited<ReturnType<typeof dbPkg>>;
+  let GET: typeof import("@/app/api/v1/t/[slug]/attestations/[token]/route").GET;
+  let POST: typeof import("@/app/api/v1/t/[slug]/attestations/[token]/route").POST;
+  let suffix: string;
+  let tenantRow: { id: string; slug: string };
+  let otherTenant: { id: string; slug: string };
+  let member: FixtureUser;
+  let other: FixtureUser;
+  let admin: FixtureUser;
+  let areaId: string;
+  let lockerRows: Awaited<ReturnType<typeof mkLockers>>;
+  let foreignLockerRows: Awaited<ReturnType<typeof mkLockers>>;
+  const userIds: string[] = [];
+  let tokenSeq = 0;
+
+  async function mkAttestation(over: { credentialIds?: string[] | null } = {}) {
+    const token = `tok-${suffix}-${++tokenSeq}`;
+    const [row] = await d.db
+      .insert(d.attestationRequests)
+      .values({
+        tenantId: tenantRow.id,
+        userId: member.id,
+        season: SEASON,
+        token,
+        tokenExpiresAt: new Date(Date.now() + 86400_000),
+        initiatedBy: admin.id,
+        credentialIds: over.credentialIds ?? null,
+      })
+      .returning();
+    return { token, id: row.id };
+  }
+  async function mkAlloc(lockerId: string, over: Record<string, unknown> = {}) {
+    const [a] = await d.db
+      .insert(d.lockerAllocations)
+      .values({
+        tenantId: tenantRow.id,
+        lockerId,
+        userId: member.id,
+        holderEmail: member.email,
+        holderFirstName: "Mia",
+        holderLastName: "Member",
+        ...over,
+      })
+      .returning();
+    return a;
+  }
+  const call = {
+    get: (token: string) =>
+      GET(new NextRequest(`http://localhost/api/v1/t/${tenantRow.slug}/attestations/${token}`), {
+        params: Promise.resolve({ slug: tenantRow.slug, token }),
+      }),
+    post: (token: string, body: unknown) =>
+      POST(
+        new NextRequest(`http://localhost/api/v1/t/${tenantRow.slug}/attestations/${token}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+        { params: Promise.resolve({ slug: tenantRow.slug, token }) }
+      ),
+  };
+  const allocRow = async (id: string) => (await d.db.select().from(d.lockerAllocations).where(eq(d.lockerAllocations.id, id)))[0];
+  const attRow = async (id: string) => (await d.db.select().from(d.attestationRequests).where(eq(d.attestationRequests.id, id)))[0];
+
+  beforeAll(async () => {
+    d = await dbPkg();
+    ({ GET, POST } = await import("@/app/api/v1/t/[slug]/attestations/[token]/route"));
+    suffix = uniqueSuffix();
+    tenantRow = await mkTenant({ slug: `lk-att-${suffix}` });
+    otherTenant = await mkTenant({ slug: `lk-att-o-${suffix}` });
+    member = await mkUser("attm", suffix, "Mia", "Member");
+    other = await mkUser("atto", suffix, "Olive", "Other");
+    admin = await mkUser("atta", suffix);
+    userIds.push(member.id, other.id, admin.id);
+    await addMembership(tenantRow.id, member.id, { currentSeason: "2025/2026" });
+    await addMembership(tenantRow.id, other.id);
+    const area = await mkArea(tenantRow.id, "Att Area");
+    areaId = area.id;
+    const oArea = await mkArea(otherTenant.id, "Foreign Area");
+    lockerRows = await mkLockers(tenantRow.id, areaId, [{ number: 1, level: "Top" }, { number: 2 }, { number: 3 }, { number: 4 }]);
+    foreignLockerRows = await mkLockers(otherTenant.id, oArea.id, [{ number: 1 }]);
+  });
+
+  beforeEach(async () => {
+    sent.length = 0;
+    adminNotes.length = 0;
+    await d.db.delete(d.lockerAllocations).where(eq(d.lockerAllocations.tenantId, tenantRow.id));
+    await d.db.delete(d.lockerAllocations).where(eq(d.lockerAllocations.tenantId, otherTenant.id));
+    await d.db.delete(d.attestationRequests).where(eq(d.attestationRequests.tenantId, tenantRow.id));
+    await d.db.update(d.lockers).set({ labelUpdateRequired: false, cleanoutRequired: false, cleanoutDueAt: null }).where(eq(d.lockers.tenantId, tenantRow.id));
+    await d.db.update(d.tenants).set({ settings: { lockersEnabled: true } as never }).where(eq(d.tenants.id, tenantRow.id));
+    await d.db.update(d.tenantMemberships).set({ currentSeason: "2025/2026" }).where(eq(d.tenantMemberships.userId, member.id));
+  });
+
+  afterAll(async () => {
+    await cleanup([tenantRow.id, otherTenant.id], userIds);
+  });
+
+  it("GET lists the member's active lockers for a whole-membership renewal", async () => {
+    await mkAlloc(lockerRows[0].id);
+    await mkAlloc(lockerRows[1].id, { endedAt: new Date(), endType: "revoked" }); // ended: not listed
+    await d.db.insert(d.lockerAllocations).values({ tenantId: tenantRow.id, lockerId: lockerRows[2].id, userId: other.id }); // someone else's
+    const { token } = await mkAttestation();
+    const json = await (await call.get(token)).json();
+    expect(json.lockers).toEqual([
+      { allocationId: expect.any(String), areaName: "Att Area", number: 1, level: "Top" },
+    ]);
+  });
+
+  it("GET returns no lockers for a scoped confirmation, or when the module is off", async () => {
+    await mkAlloc(lockerRows[0].id);
+    const scoped = await mkAttestation({ credentialIds: ["4b2c7a1e-6a3f-4f5e-8d6a-0f1d2c3b4a5e"] });
+    expect((await (await call.get(scoped.token)).json()).lockers).toEqual([]);
+
+    await d.db.update(d.tenants).set({ settings: {} as never }).where(eq(d.tenants.id, tenantRow.id));
+    const { token } = await mkAttestation();
+    expect((await (await call.get(token)).json()).lockers).toEqual([]);
+  });
+
+  it("POST keep: sets kept_for_season, persists the answer, completes the renewal, emails nobody", async () => {
+    const a = await mkAlloc(lockerRows[0].id);
+    const { token, id } = await mkAttestation();
+    const res = await call.post(token, { responses: [], lockerResponses: [{ allocationId: a.id, keep: true }] });
+    expect(res.status).toBe(200);
+    expect((await res.json()).lockers).toEqual({ kept: 1, released: 0, removeBy: null });
+
+    const row = await allocRow(a.id);
+    expect(row.keptForSeason).toBe(SEASON);
+    expect(row.endedAt).toBeNull();
+    const att = await attRow(id);
+    expect(att.status).toBe("completed");
+    expect(att.lockerResponses).toEqual([{ allocationId: a.id, keep: true }]);
+    const [m] = await d.db.select().from(d.tenantMemberships).where(and(eq(d.tenantMemberships.userId, member.id), eq(d.tenantMemberships.tenantId, tenantRow.id)));
+    expect(m.currentSeason).toBe(SEASON);
+    expect(sent).toHaveLength(0);
+    expect(adminNotes).toHaveLength(0);
+    expect(await auditActions(lockerRows[0].id, "locker")).toContain("locker_kept");
+  });
+
+  it("POST release: ends it as released, flags label + clean-out, emails lockerReleased DIRECTLY and notifies update_lockers once", async () => {
+    const a = await mkAlloc(lockerRows[0].id);
+    const b = await mkAlloc(lockerRows[1].id);
+    const { token, id } = await mkAttestation();
+    const res = await call.post(token, {
+      responses: [],
+      lockerResponses: [
+        { allocationId: a.id, keep: false },
+        { allocationId: b.id, keep: false },
+      ],
+    });
+    expect(res.status).toBe(200);
+    // The member is told the actual clean-out date (7 days on), not just "within 7 days".
+    const releaseBody = await res.json();
+    expect(releaseBody.lockers).toEqual({ kept: 0, released: 2, removeBy: expect.stringMatching(/^\d{1,2} [A-Z][a-z]+ \d{4}$/) });
+
+    const row = await allocRow(a.id);
+    expect(row).toMatchObject({ endType: "released", endedBy: member.id });
+    expect(row.endReason).toBe("Member chose not to keep the locker for 2026/2027");
+    const [locker] = await d.db.select().from(d.lockers).where(eq(d.lockers.id, lockerRows[0].id));
+    expect(locker).toMatchObject({ labelUpdateRequired: true, cleanoutRequired: true });
+    expect(locker.cleanoutDueAt).not.toBeNull();
+
+    const mails = sent.filter((s) => s.template === "lockerReleased");
+    expect(mails).toHaveLength(2);
+    expect(mails[0]).toMatchObject({ to: member.email });
+    expect(mails[0].vars.reason).toBe("Member chose not to keep the locker for 2026/2027");
+    expect(mails[0].attachments).toBeUndefined();
+    // The body the member actually reads carries the explicit date (the same one the page shows), never "within 7 days".
+    const { renderTemplate } = await import("@/lib/services/email");
+    const removeBy = releaseBody.lockers.removeBy as string;
+    for (const mail of mails) {
+      expect(mail.vars.removeBy).toBe(removeBy);
+      const { html } = renderTemplate("lockerReleased", mail.vars as never, "Test Club");
+      expect(html).toContain(`by ${removeBy}`);
+      expect(html).not.toContain("within 7 days");
+    }
+    expect(sent.filter((s) => s.template === "lockerRevoked")).toHaveLength(0); // revoke template is admin-only
+    expect(adminNotes).toHaveLength(1);
+    expect(adminNotes[0].requiredPermission).toBe("update_lockers");
+    expect(adminNotes[0].html.match(/Clean out on or after/g)).toHaveLength(2);
+    expect(await d.db.select().from(d.emailQueue).where(eq(d.emailQueue.tenantId, tenantRow.id))).toHaveLength(0);
+    expect((await attRow(id)).lockerResponses).toHaveLength(2);
+    expect(await auditActions(lockerRows[0].id, "locker")).toContain("locker_released");
+  });
+
+  it("a held locker missing from the body is treated as keep (older clients)", async () => {
+    const a = await mkAlloc(lockerRows[0].id);
+    const { token, id } = await mkAttestation();
+    expect((await call.post(token, { responses: [] })).status).toBe(200);
+    expect((await allocRow(a.id)).keptForSeason).toBe(SEASON);
+    expect((await attRow(id)).lockerResponses).toEqual([{ allocationId: a.id, keep: true, implicit: true }]);
+  });
+
+  it("an allocation that belongs to another member or another tenant is a 400 and consumes nothing", async () => {
+    const mine = await mkAlloc(lockerRows[0].id);
+    const [theirs] = await d.db.insert(d.lockerAllocations).values({ tenantId: tenantRow.id, lockerId: lockerRows[2].id, userId: other.id }).returning();
+    const [foreign] = await d.db.insert(d.lockerAllocations).values({ tenantId: otherTenant.id, lockerId: foreignLockerRows[0].id, userId: member.id }).returning();
+    for (const bad of [theirs.id, foreign.id, "4b2c7a1e-6a3f-4f5e-8d6a-0f1d2c3b4a5e"]) {
+      const { token, id } = await mkAttestation();
+      const res = await call.post(token, {
+        responses: [],
+        lockerResponses: [{ allocationId: mine.id, keep: false }, { allocationId: bad, keep: false }],
+      });
+      expect(res.status).toBe(400);
+      expect((await attRow(id)).status).toBe("pending");
+      expect((await allocRow(mine.id)).endedAt).toBeNull(); // nothing was released
+      expect((await allocRow(theirs.id)).endedAt).toBeNull();
+    }
+    expect(sent).toHaveLength(0);
+  });
+
+  it("the member's own allocation that has already ended is ignored, recorded, and never blocks the renewal", async () => {
+    const ended = await mkAlloc(lockerRows[0].id, { endedAt: new Date(), endType: "revoked", endReason: "x" });
+    const live = await mkAlloc(lockerRows[1].id);
+    const { token, id } = await mkAttestation();
+    const res = await call.post(token, {
+      responses: [],
+      lockerResponses: [{ allocationId: ended.id, keep: false }, { allocationId: live.id, keep: true }],
+    });
+    expect(res.status).toBe(200);
+    const att = await attRow(id);
+    expect(att.status).toBe("completed");
+    expect(att.lockerResponses).toEqual(
+      expect.arrayContaining([
+        { allocationId: ended.id, keep: false, ignored: "already_ended" },
+        { allocationId: live.id, keep: true },
+      ])
+    );
+    expect(sent).toHaveLength(0);
+  });
+
+  it("a second POST changes nothing and sends nothing (410)", async () => {
+    const a = await mkAlloc(lockerRows[0].id);
+    const { token } = await mkAttestation();
+    await call.post(token, { responses: [], lockerResponses: [{ allocationId: a.id, keep: false }] });
+    const mailsAfterFirst = sent.length;
+    const notesAfterFirst = adminNotes.length;
+
+    const second = await call.post(token, { responses: [], lockerResponses: [{ allocationId: a.id, keep: true }] });
+    expect(second.status).toBe(410);
+    expect(sent).toHaveLength(mailsAfterFirst);
+    expect(adminNotes).toHaveLength(notesAfterFirst);
+    expect((await allocRow(a.id)).endType).toBe("released");
+  });
+
+  it("two simultaneous POSTs complete once: one 200, one 410, one release email", async () => {
+    const a = await mkAlloc(lockerRows[0].id);
+    const { token } = await mkAttestation();
+    const body = { responses: [], lockerResponses: [{ allocationId: a.id, keep: false }] };
+    const [r1, r2] = await Promise.all([call.post(token, body), call.post(token, body)]);
+    expect([r1.status, r2.status].sort()).toEqual([200, 410]);
+    expect(sent.filter((s) => s.template === "lockerReleased")).toHaveLength(1);
+    expect(adminNotes).toHaveLength(1);
+  });
+
+  it("with the module off, lockerResponses are ignored and not persisted", async () => {
+    await d.db.update(d.tenants).set({ settings: {} as never }).where(eq(d.tenants.id, tenantRow.id));
+    const a = await mkAlloc(lockerRows[0].id);
+    const { token, id } = await mkAttestation();
+    const res = await call.post(token, { responses: [], lockerResponses: [{ allocationId: a.id, keep: false }] });
+    expect(res.status).toBe(200);
+    const row = await allocRow(a.id);
+    expect(row.endedAt).toBeNull();
+    expect(row.keptForSeason).toBeNull();
+    expect((await attRow(id)).lockerResponses).toBeNull();
+    expect(sent).toHaveLength(0);
+  });
+
+  it("a scoped confirmation never touches lockers", async () => {
+    const a = await mkAlloc(lockerRows[0].id);
+    const [cred] = [{ id: "4b2c7a1e-6a3f-4f5e-8d6a-0f1d2c3b4a5e" }];
+    const { token } = await mkAttestation({ credentialIds: [cred.id] });
+    // A scoped POST with no fob responses is rejected by the existing rule; the
+    // locker row must be untouched either way.
+    await call.post(token, { responses: [], lockerResponses: [{ allocationId: a.id, keep: false }] });
+    expect((await allocRow(a.id)).endedAt).toBeNull();
+  });
+});
