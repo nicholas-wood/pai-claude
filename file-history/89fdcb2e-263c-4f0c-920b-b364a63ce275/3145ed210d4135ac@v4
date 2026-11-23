@@ -1,0 +1,165 @@
+import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { buildFeed, formatIssued } from "../src/lib/weather/parse";
+import { BOM_FEED, bomFeedToGrid, compass, windFromText, type WeatherSettings } from "../src/lib/weather/mapping";
+import { manualKeys, melbourneToday, mergeBomDay, weatherDays } from "../src/lib/weather/job";
+
+const fx = (n: string) => readFileSync(resolve(import.meta.dir, "fixtures", n), "utf8");
+const xml = { townPrecis: fx("IDV10753.xml"), townText: fx("IDV10752.xml"), metro: fx("IDV10751.xml") };
+
+// Same areas and sites as the 2026-11-16 data file's config/settings.
+const settings: WeatherSettings = {
+  weatherAreas: { Central: ["Kingston", "Bayside", "Port Phillip"], East: ["Bass", "Peninsula", "Gippsland"], West: ["Geelong", "Surf Coast", "Otway", "Western"] },
+  weatherSites: { Bass: { site: "Wonthaggi" }, Bayside: { site: "Moorabbin" } },
+};
+const feed = buildFeed(xml, new Date("2026-11-16T06:00:00Z"));
+const DAY = "2026-11-17"; // first full day in the fixtures
+
+describe("feed (bookmarklet format)", () => {
+  test("has the bookmarklet's envelope", () => {
+    expect(feed.format).toBe("lsv-bom-weather");
+    expect(feed.version).toBe(1);
+    expect(feed.issued).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/);
+    expect(Object.keys(feed.towns).length).toBeGreaterThan(80);
+  });
+  test("town précis values are keyed town → date → min/max/rain/pop/precis as text", () => {
+    const m = feed.towns["Melbourne"][DAY];
+    expect(m.max).toMatch(/^\d+$/);
+    expect(m.min).toMatch(/^\d+$/);
+    expect(m.precis).toBeTruthy();
+    expect(m.pop).toMatch(/%$/);
+  });
+  test("town text and metro text land under text / uvText / fire, metro under area:", () => {
+    expect(feed.towns["Wonthaggi"][DAY].text).toBeTruthy();
+    expect(feed.towns["area:Melbourne"][DAY].text).toBeTruthy();
+    expect(feed.towns["area:Geelong and Surf Coast"]).toBeDefined();
+    expect(feed.towns["area:Mornington Peninsula"]).toBeDefined();
+  });
+  test("every BOM_FEED town exists in the BOM products", () => {
+    for (const [area, [town, txt]] of Object.entries(BOM_FEED)) {
+      expect(feed.towns[town], `${area} numbers town ${town}`).toBeDefined();
+      expect(feed.towns[txt], `${area} text source ${txt}`).toBeDefined();
+    }
+  });
+  test("source label matches the page's toLocaleString", () => {
+    expect(formatIssued("2026-11-16T16:20:00+11:00")).toBe(
+      new Date("2026-11-16T16:20:00+11:00").toLocaleString("en-AU", { timeZone: "Australia/Melbourne", dateStyle: "medium", timeStyle: "short" })
+    );
+    expect(formatIssued("2026-11-16T16:20:00+11:00")).toContain("16 Nov 2026");
+  });
+});
+
+describe("page logic ports", () => {
+  test("compass", () => {
+    expect(compass("west to northwesterly")).toBe("W-NW");
+    expect(compass("southerly")).toBe("S");
+    expect(compass("north to northeasterly")).toBe("N-NE");
+  });
+  test("windFromText takes the day's range and directions", () => {
+    expect(windFromText("Sunny. Winds northerly 20 to 30 km/h tending northwesterly 25 to 35 km/h in the evening.")).toEqual({ wind: "20-35", windDir: "N-NW" });
+    expect(windFromText("Partly cloudy. Light winds.")).toEqual({ wind: "Light", windDir: "" });
+    expect(windFromText("Fine.")).toEqual({});
+    expect(windFromText(undefined)).toEqual({});
+  });
+  test("bomFeedToGrid fills all ten areas with string values", () => {
+    const { out, missing } = bomFeedToGrid(feed, [DAY], settings);
+    expect(missing).toEqual([]);
+    expect(Object.keys(out[DAY]).sort()).toEqual(["Bass", "Bayside", "Geelong", "Gippsland", "Kingston", "Otway", "Peninsula", "Port Phillip", "Surf Coast", "Western"]);
+    for (const rec of Object.values(out[DAY])) {
+      expect(rec.max).toMatch(/^\d+$/);
+      expect(typeof rec.rain).toBe("string");
+      expect(rec.rain).not.toContain("mm");
+    }
+  });
+  test("rain is normalised like the page: '0 to 2 mm' → '0-2', none → '0'", () => {
+    const f = { ...feed, towns: { Wonthaggi: { [DAY]: { max: "20", rain: "0 to 2 mm" } }, Mornington: { [DAY]: { max: "21", pop: "5%" } } } };
+    const { out } = bomFeedToGrid(f, [DAY], { weatherAreas: { East: ["Bass", "Peninsula"] } });
+    expect(out[DAY].Bass.rain).toBe("0-2");
+    expect(out[DAY].Peninsula.rain).toBe("0");
+  });
+  test("settings bomTown/bomText override the defaults", () => {
+    const { out } = bomFeedToGrid(feed, [DAY], { weatherAreas: { East: ["Bass"] }, weatherSites: { Bass: { bomTown: "Melbourne", bomText: "area:Melbourne" } } });
+    expect(out[DAY].Bass.max).toBe(feed.towns["Melbourne"][DAY].max!);
+  });
+});
+
+describe("UV alert product (IDZ00112)", () => {
+  const uvXml = fx("IDZ00112.xml");
+  const withUv = buildFeed({ ...xml, uv: uvXml }, new Date("2026-11-23T06:00:00Z"));
+  const uvDays = ["2026-11-24", "2026-11-25", "2026-11-26"];
+  test("every area's numbers town is in the UV product", () => {
+    for (const [area, [town]] of Object.entries(BOM_FEED)) expect(uvXml, `${area}: ${town}`).toContain(`description="${town}"`);
+  });
+  test("a town gets a UV line for each day the product covers", () => {
+    for (const d of uvDays) expect(withUv.towns["Wonthaggi"][d].uvText).toMatch(/UV Index predicted to reach \d+/);
+    expect(withUv.towns["Aireys Inlet"]["2026-11-26"].uvText).toBeTruthy();
+  });
+  test("the grid has Max UV for every area on every covered day, including areas whose wind source is a metro district", () => {
+    const { out } = bomFeedToGrid(withUv, uvDays, settings);
+    for (const d of uvDays) for (const area of Object.keys(BOM_FEED)) expect(out[d][area].uv, `${area} ${d}`).toMatch(/^\d+$/);
+    expect(out["2026-11-25"].Bass.uv).toBe("10");
+  });
+  test("without the product the job still runs, with UV from the forecasts only", () => {
+    const { out } = bomFeedToGrid(feed, [DAY], settings);
+    expect(out[DAY].Bass.max).toMatch(/^\d+$/);
+  });
+});
+
+describe("manual protection", () => {
+  const bom = { "Port Phillip": { min: "12", max: "24", rain: "0" }, Bass: { min: "10", max: "20" } };
+  const NOW = "2026-11-17T19:00:00.000Z";
+  test("fills an empty day in the page's doc shape", () => {
+    const m = mergeBomDay(DAY, undefined, bom, "16 Nov 2026, 4:20 pm", NOW)!;
+    expect(m.written).toBe(5);
+    expect(m.doc.date).toBe(DAY);
+    expect(m.doc.regions!.Bass.max).toBe("20");
+    expect(m.doc.manual).toEqual([]);
+    expect(m.doc.source).toBe("BOM forecast issued 16 Nov 2026, 4:20 pm");
+    expect(m.doc.updatedAt).toBe(NOW);
+  });
+  test("never overwrites a cell a member typed", () => {
+    const existing = { date: DAY, regions: { "Port Phillip": { max: "31", min: "11" } }, manual: ["Port Phillip|max"], source: "BOM forecast issued earlier" };
+    const m = mergeBomDay(DAY, existing, bom, "x", NOW)!;
+    expect(m.doc.regions!["Port Phillip"].max).toBe("31");
+    expect(m.doc.regions!["Port Phillip"].min).toBe("12");
+    expect(m.skippedManual).toBe(1);
+    expect(m.doc.manual).toEqual(["Port Phillip|max"]);
+  });
+  test("a day saved before tracking, not from a BOM feed, is wholly member-typed", () => {
+    const legacy = { date: DAY, regions: { Bass: { max: "20", min: "13", rain: "", uv: "" } }, source: "OSSD Weather sheet (copied from BOM)" };
+    expect(manualKeys(legacy).sort()).toEqual(["Bass|max", "Bass|min"]);
+    const m = mergeBomDay(DAY, legacy, { Bass: { max: "25", min: "9", rain: "1-3", uv: "8" } }, "x", NOW)!;
+    expect(m.doc.regions!.Bass.max).toBe("20");
+    expect(m.doc.regions!.Bass.min).toBe("13");
+    expect(m.doc.regions!.Bass.rain).toBe("1-3");
+    expect(m.doc.regions!.Bass.uv).toBe("8");
+    expect(m.skippedManual).toBe(2);
+    expect(m.doc.manual).toEqual(["Bass|max", "Bass|min"]);
+  });
+  test("a legacy day sourced from a BOM feed is refreshable", () => {
+    expect(manualKeys({ regions: { Bass: { max: "20" } }, source: "BOM forecast issued 15 Nov 2026, 5:00 am" })).toEqual([]);
+  });
+  test("refreshes its own earlier value", () => {
+    const existing = { date: DAY, regions: { Bass: { max: "18", min: "10" } }, manual: [], source: "BOM forecast issued earlier" };
+    const m = mergeBomDay(DAY, existing, { Bass: { max: "20", min: "10" } }, "later", NOW)!;
+    expect(m.written).toBe(1);
+    expect(m.doc.regions!.Bass.max).toBe("20");
+    expect(m.doc.source).toBe("BOM forecast issued later");
+  });
+  test("no change means no write", () => {
+    const existing = { date: DAY, regions: { Bass: { max: "20", min: "10" } }, manual: [], source: "BOM forecast issued same" };
+    expect(mergeBomDay(DAY, existing, { Bass: { max: "20", min: "10" } }, "same", NOW)).toBeNull();
+  });
+  test("never writes empty values and keeps other fields of the doc", () => {
+    const existing = { date: DAY, regions: { Bass: { max: "20" } }, manual: [], source: "BOM forecast issued a", note: "keep me" };
+    const m = mergeBomDay(DAY, existing, { Bass: { max: "", min: undefined, uv: "9" } }, "b", NOW)!;
+    expect(m.doc.regions!.Bass.max).toBe("20");
+    expect(m.doc.regions!.Bass.uv).toBe("9");
+    expect(m.doc.note).toBe("keep me");
+  });
+  test("the seven days are Melbourne dates, not UTC", () => {
+    expect(melbourneToday(new Date("2026-11-16T14:30:00Z"))).toBe("2026-11-17");
+    expect(weatherDays(new Date("2026-11-16T14:30:00Z"))).toEqual(["2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20", "2026-11-21", "2026-11-22", "2026-11-23"]);
+  });
+});

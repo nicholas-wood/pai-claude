@@ -1,0 +1,193 @@
+# LSV Operational Service Summary
+
+Life Saving Victoria's Operational Service Summary tool, a tenant of the LSV
+POC platform (app id `oss`), served at
+`https://service-summary.poc.nicholaswood.com.au` behind the platform's
+sign-in, with Firestore for live multi-member data and a scheduled BOM weather
+job.
+
+| Piece | Where |
+|---|---|
+| GCP project | `lsv-poc` (shared with the other LSV POCs), australia-southeast1 |
+| Runtime | Cloud Run service `poc-oss` (Next.js 15, Bun image, scales to zero) |
+| Data | Firestore named database `poc-oss`; rules in `firestore.rules`, released by the platform |
+| Sign-in | Shared LSV POC sign-in pool, email link only. The hub (https://poc.nicholaswood.com.au) allocates who may open the app and issues the claim `poc_oss` = `member` or `admin`. 14-day httpOnly `__session` cookie signed by this app |
+| Front door | Firebase Hosting site `lsv-poc-oss`, hostname in the delegated `poc` sub-zone |
+| Weather | Cloud Scheduler `oss-weather-morning` 06:00 and `oss-weather-afternoon` 16:30 Melbourne → `POST /api/jobs/weather` (Google-signed token) |
+| Infra | `infra/` calls the vendored `infra/modules/poc-app`; state in `gs://lsv-poc-tfstate`, prefix `apps/oss` |
+| Deploy | GitHub Actions: `ci.yml` on pull requests; release-please cuts a release and `deploy.yml` ships it over Workload Identity Federation |
+
+The platform repo is `nicholas-wood/lsv-poc-platform`. Two parts of it are
+vendored here and must not be edited in place: `vendor/poc-auth` (sign-in) and
+`infra/modules/poc-app` (Terraform). `vendor/PLATFORM_COMMIT` records the
+commit they were copied from; to update, re-copy both and bump that file.
+
+## Who can get in
+
+Access is not managed in this app. The platform owner allocates it per person
+in the hub. This app:
+
+- verifies the sign-in token with Google's public keys and reads only the
+  `poc_oss` claim; a claim for another POC, or a bare `member` claim, grants
+  nothing;
+- never writes sign-in claims and holds no Firebase Auth admin permission;
+- honours a revoke or downgrade at once: the hub writes
+  `platformAccess/<uid>` into this app's database, the server checks it on
+  every request (15 second cache) and the Firestore rules check it on every
+  read and write.
+
+A member's display name is kept in `profiles/<uid>`, written by the server at
+sign-in.
+
+## The page
+
+`oss/index.html` is the built page (an HTML fragment; the server adds the
+document shell). Edit the parts under `oss/src/ux/` and run
+`bun run build:page`; never hand-edit the built file. `oss/src` is the
+original pack's `src` folder with the hosting changes applied: vendored
+library tags in `build.py`, the hosted backend boot and "Refresh from BOM now"
+in `wiring.js` and `markup.html`, and per-cell `manual` tracking in `views.js`
+and `import.js`. `oss/samples/` (data file and OSSD spreadsheet) is gitignored
+because it holds operational contacts.
+
+Per request the server (`src/app/route.ts`) injects a CSP nonce on each script
+tag, `window.OSS_USER_NAME`, `window.OSS_LOGOUT_URL`, `window.OSS_BOOTSTRAP`,
+and `/vendor/bridge.js`, which provides `window.OSS_BACKEND` (`db`, `user`,
+`downloads`, `refreshWeather`, `logout`) in place of the claude.ai
+capabilities. docx, xlsx and jszip are vendored in `public/vendor` by
+`bun run vendor` (hashes in `scripts/vendor.lock.json`). The browser reads and
+writes Firestore directly with the member's own Firebase session; if the
+browser has none, the server mints a token from the verified session.
+
+## Local development
+
+```bash
+bun install
+cp .env.example .env            # fill NEXT_PUBLIC_FIREBASE_API_KEY and SESSION_SIGNING_SECRET
+gcloud auth application-default login --project lsv-poc
+bun run vendor && bun run dev   # http://localhost:3000
+```
+
+The browser API key only answers from `poc.nicholaswood.com.au` hostnames, so
+sign-in does not complete from localhost. Use the probes against the deployed
+app for anything that needs a session.
+
+## Deploy
+
+A release deploys; an ordinary merge deploys nothing.
+
+1. Every change goes in as a pull request to `main`, with a conventional
+   commit title. CI runs on the pull request (secret scan, typecheck, tests,
+   dependency audit, build).
+2. When it is merged, release-please opens or updates the pull request
+   "chore(main): release x.y.z".
+3. Merging that release pull request creates the release, and
+   `release-please.yml` then calls `deploy.yml`: the image is built, pushed and
+   released, and `/api/health` must report the new version.
+
+After merging a release pull request, do not merge anything else to `main`
+until "Deploy" is green. If a later push cancels the run,
+`gh run rerun <run-id> --failed` re-runs the deploy for that release. To
+redeploy `main` by hand: Actions → Deploy → Run workflow, with the version.
+
+The deploy identity admits only this repository on `refs/heads/main`.
+Repository settings: environment `production`; variable `FIREBASE_API_KEY`
+(the platform's public web API key); "Allow GitHub Actions to create and
+approve pull requests" on.
+
+## Rollback
+
+Cloud Run keeps every revision:
+
+```bash
+gcloud run revisions list --service=poc-oss --region=australia-southeast1 --project=lsv-poc
+gcloud run services update-traffic poc-oss --to-revisions=<previous-revision>=100 \
+  --region=australia-southeast1 --project=lsv-poc
+```
+
+Rolling back code does not roll back data. There are no schema migrations, so
+older revisions read current data.
+
+## Infrastructure changes
+
+```bash
+cd infra
+terraform init -backend-config="bucket=lsv-poc-tfstate" -backend-config="prefix=apps/oss"
+terraform plan -var-file=app.tfvars -out=tfplan
+terraform apply tfplan
+```
+
+`app.tfvars` is gitignored; start from `example.tfvars`. Apply the saved plan
+as a whole, never a targeted Cloud Run resource. Firestore rules are not
+applied from here: send `firestore.rules` to the platform, which reviews it
+into `terraform/platform/rules/oss.rules` and releases it.
+
+Never delete or recreate a DNS zone that something delegates to. The parent
+zone `nicholaswood.com.au` lives in project `lsv-oss-prod` and stays there.
+
+## Weather job
+
+Runs 06:00 and 16:30 Melbourne. It fetches `IDV10753.xml`, `IDV10752.xml` and
+`IDV10751.xml` over the BOM's anonymous FTP, plus the Victorian UV alert
+`IDZ00112.xml` (a UV index per town for four days; the forecasts repeat only
+tomorrow's), builds the same `lsv-bom-weather`
+feed the bookmarklet builds, projects it onto the areas in `config/settings`
+(`src/lib/weather/mapping.ts` is a line-for-line port of the page's `BOM_FEED`
+and `bomFeedToGrid()`), and writes `weather/<YYYY-MM-DD>` for seven days with
+`source: "BOM forecast issued <time>"`. Cells listed in a day's `manual` array
+(`"<area>|<field>"`) were typed by a member and are never overwritten; the
+page adds a key when a member edits a cell and removes it when the cell is
+cleared or filled from the BOM. Days saved before tracking existed, and not
+sourced from a BOM feed, count as wholly typed. Status is in
+`config/weatherStatus`. A figure the Bureau did not publish and nobody typed
+(a wind direction for light winds, UV beyond the alert's four days) is written
+to the Word summary as "Not available".
+
+Rerun it:
+
+```bash
+# From the UI: Weather tab → Refresh from BOM now (member session, 2 a minute).
+gcloud scheduler jobs run oss-weather-morning --location=australia-southeast1 --project=lsv-poc
+# From a laptop with application-default credentials:
+FIRESTORE_DATABASE=poc-oss FIREBASE_PROJECT_ID=lsv-poc bun run weather
+bun run weather --dry-run <data-file.json>   # prints the grid, no writes
+```
+
+Logs: `gcloud logging read 'resource.labels.service_name="poc-oss" AND textPayload:"[weather]"' --project=lsv-poc --limit=20`.
+
+BOM licence: anonymous FTP data is for internal organisational use. The site
+stays behind sign-in; nothing from the feeds is served to anonymous requests.
+
+## Backup and restore
+
+Members: Settings → Download data file produces
+`{ format: "lsv-operational-service-summary", docs: {...} }`; Settings → Open
+data file writes it back through the signed-in session.
+
+Ops restore from a file (idempotent; `--replace` also deletes app documents
+that are not in the file):
+
+```bash
+bun run seed "Operational Service Summary data 2026-11-16.json"
+bun run seed backup.json --replace
+```
+
+## Probes
+
+Run as the platform owner on a machine with `gcloud` application-default
+credentials (they mint test sign-ins; see `scripts/lib-probe.ts`):
+
+```bash
+export APP_URL=https://service-summary.poc.nicholaswood.com.au NEXT_PUBLIC_FIREBASE_API_KEY=<key>
+bun run probe <allocated-email> <unallocated-email>     # HTTP surface
+bun run scripts/rules-probe.ts                          # Firestore rules, including revoke and bare claims
+bun run scripts/browser-probe.ts <allocated-email> "<ossd.xlsx>"   # two real browsers; writes test data
+```
+
+## Rules
+
+- Never call LIMSOC production. Unit data came from staging only.
+- Wording: members, not staff. `unit.area` is Region (Central/East/West);
+  `unit.regionName` is Area (Bass, Port Phillip, Kingston, ...).
+- Costs: everything sits in free tiers at this use; the platform's budget
+  alert covers the shared project.

@@ -1,0 +1,116 @@
+import { XMLParser } from "fast-xml-parser";
+
+/**
+ * Builds the same `lsv-bom-weather` feed the page's bookmarklet builds
+ * (oss/src/bom-bookmarklet.js), from the same three BOM products:
+ *
+ *   IDV10753  town précis    → min, max, rain, pop, precis
+ *   IDV10752  town text      → text, fire, uvText
+ *   IDV10751  metro areas    → text, fire, uvText under "area:<name>"
+ *   IDZ00112  UV alert       → uvText per town for today and three more days
+ *                              (not in the bookmarklet; the forecasts above
+ *                              carry a UV line for tomorrow only)
+ *
+ * Shape: { format, version: 1, fetched, issued, towns: { <town>: { <YYYY-MM-DD>: { ... } } } }
+ * Values are the element text exactly as the BOM publishes it, as the
+ * bookmarklet's `textContent` would give.
+ */
+export type TownDay = {
+  min?: string;
+  max?: string;
+  rain?: string;
+  pop?: string;
+  precis?: string;
+  text?: string;
+  fire?: string;
+  uvText?: string;
+};
+
+export type BomFeed = {
+  format: "lsv-bom-weather";
+  version: 1;
+  fetched: string;
+  issued: string;
+  towns: Record<string, Record<string, TownDay>>;
+};
+
+const parser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_",
+  processEntities: false, // no entity expansion: closes the XXE class
+  parseTagValue: false,
+  trimValues: true,
+  isArray: (name) => ["area", "forecast-period", "element", "text"].includes(name),
+});
+
+type Node = Record<string, unknown>;
+
+const PRECIS_KEYS: Record<string, keyof TownDay> = {
+  air_temperature_minimum: "min",
+  air_temperature_maximum: "max",
+  precipitation_range: "rain",
+  probability_of_precipitation: "pop",
+  precis: "precis",
+};
+const TEXT_KEYS: Record<string, keyof TownDay> = { forecast: "text", fire_danger: "fire", uv_alert: "uvText" };
+
+function scalar(v: unknown): string {
+  return v && typeof v === "object" ? String((v as Node)["#text"] ?? "") : String(v ?? "");
+}
+
+function product(xml: string): Node {
+  return ((parser.parse(xml) as Node).product ?? {}) as Node;
+}
+
+function areas(xml: string, type: string): Node[] {
+  const forecast = product(xml).forecast as Node | undefined;
+  const list = (forecast?.area ?? []) as Node[];
+  return list.filter((a) => a["@_type"] === type);
+}
+
+function put(feed: BomFeed, town: string, date: string, key: keyof TownDay, value: string) {
+  const t = (feed.towns[town] ??= {});
+  (t[date] ??= {})[key] = value;
+}
+
+function collect(feed: BomFeed, xml: string, areaType: string, prefix: string, keys: Record<string, keyof TownDay>, tags: ("element" | "text")[]) {
+  for (const area of areas(xml, areaType)) {
+    const name = prefix + String(area["@_description"]);
+    for (const period of (area["forecast-period"] ?? []) as Node[]) {
+      const date = String(period["@_start-time-local"]).slice(0, 10);
+      for (const tag of tags) {
+        for (const el of (period[tag] ?? []) as Node[]) {
+          const key = keys[String(el["@_type"])];
+          if (key) put(feed, name, date, key, scalar(el));
+        }
+      }
+    }
+  }
+}
+
+export function buildFeed(xml: { townPrecis: string; townText: string; metro: string; uv?: string }, fetchedAt = new Date()): BomFeed {
+  const amoc = (product(xml.townPrecis).amoc ?? {}) as Node;
+  const feed: BomFeed = {
+    format: "lsv-bom-weather",
+    version: 1,
+    fetched: fetchedAt.toISOString(),
+    issued: scalar(amoc["issue-time-local"]),
+    towns: {},
+  };
+  collect(feed, xml.townPrecis, "location", "", PRECIS_KEYS, ["element", "text"]);
+  // UV alert first, so a town's own text forecast (when it carries a UV line) still wins for that day.
+  if (xml.uv) collect(feed, xml.uv, "location", "", { uv_alert: "uvText" }, ["text"]);
+  collect(feed, xml.townText, "location", "", TEXT_KEYS, ["text"]);
+  collect(feed, xml.metro, "metropolitan", "area:", TEXT_KEYS, ["text"]);
+  return feed;
+}
+
+/**
+ * The label the page puts in `source` after a paste:
+ * new Date(issued).toLocaleString("en-AU", { timeZone: "Australia/Melbourne", dateStyle: "medium", timeStyle: "short" })
+ */
+export function formatIssued(issued: string): string {
+  const d = new Date(issued);
+  if (Number.isNaN(d.getTime())) return issued || "recently";
+  return d.toLocaleString("en-AU", { timeZone: "Australia/Melbourne", dateStyle: "medium", timeStyle: "short" });
+}

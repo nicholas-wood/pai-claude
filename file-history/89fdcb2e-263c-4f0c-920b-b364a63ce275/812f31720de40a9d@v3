@@ -1,0 +1,8 @@
+import { logoutResponse } from "@lsv-poc/poc-auth";
+import { secureCookie, sessionExchange } from "@/lib/deps";
+
+export const dynamic = "force-dynamic";
+
+/** Exchange a Firebase ID token carrying `poc_oss` for the signed `__session` cookie (vendor/poc-auth). */
+export const POST = (request: Request) => sessionExchange()(request);
+export const DELETE = () => logoutResponse(null, secureCookie());

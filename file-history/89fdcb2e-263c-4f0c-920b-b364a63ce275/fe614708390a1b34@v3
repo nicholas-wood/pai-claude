@@ -1,0 +1,19 @@
+import type { Metadata } from "next";
+import type { ReactNode } from "react";
+import "./globals.css";
+
+// Every page renders per request. Firebase Hosting caches a prerendered page for a year; never remove this.
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "LSV Operational Service Summary",
+  robots: { index: false, follow: false },
+};
+
+export default function RootLayout({ children }: { children: ReactNode }) {
+  return (
+    <html lang="en-AU">
+      <body>{children}</body>
+    </html>
+  );
+}

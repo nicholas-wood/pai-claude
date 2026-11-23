@@ -1,0 +1,412 @@
+[
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cat PAI/ALGORITHM/LATEST && cat projects/-home-nicholas-wood--claude/memory/project-accessbuddy-pr111-expiry-update-stage.md projects/-home-nicholas-wood--claude/memory/gotcha-accessbuddy-prod-access.md projects/-home-nicholas-wood--claude/memory/gotcha-automode-blocks-prod-db-window.md && cat PAI/USER/PROJECTS/accessbuddy.md | head -60",
+      "description": "Read Algorithm version pointer and AccessBuddy memory notes"
+    },
+    "timestamp": "2026-11-22T09:16:54.029Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/.claude/PAI/ALGORITHM/v6.3.0.md"
+    },
+    "timestamp": "2026-11-22T09:16:56.960Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy 2>/dev/null && pwd && ls && (cd code 2>/dev/null && git status -sb | head -5 && git log --oneline -5; true) && rg -l \"attestation\" --glob '!node_modules' --glob '!*.sql' --glob '!.worktrees' -g '*.ts' -g '*.tsx' . 2>/dev/null | head -60",
+      "description": "Locate AccessBuddy checkout and attestation-related files"
+    },
+    "timestamp": "2026-11-22T09:16:58.909Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -m 3 -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Entering the Algorithm\", \"voice_id\": \"pNInz6obpgDQGcFmaJgB\", \"voice_enabled\": true}' >/dev/null 2>&1; cd ~/Documents/workspace/projects/accessbuddy/code && git status --short | head -10; git fetch -q origin 2>&1 | tail -2; git log --oneline -3 origin/main; rg -l -i \"attestation\" --glob '!node_modules' --glob '!**/drizzle/**' --glob '!.worktrees/**' --glob '!*.test.*' . | sort | head -80",
+      "description": "Announce Algorithm entry and list attestation source files"
+    },
+    "timestamp": "2026-11-22T09:17:15.299Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && git show origin/main:packages/db/src/schema/attestations.ts; echo ------; git show \"origin/main:apps/web/src/app/t/[slug]/admin/page.tsx\" | rg -n -i \"attest\" ",
+      "description": "Show attestation schema and dashboard references on main"
+    },
+    "timestamp": "2026-11-22T09:17:22.330Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && git show \"origin/main:apps/web/src/app/t/[slug]/admin/page.tsx\" | sed -n 120,215p; echo \"=== inserts\"; git grep -n -E \"insert\\(attestationRequests\\)|attestationRequests\\)\\s*$|\\.update\\(attestationRequests\\)\" origin/main -- apps packages | rg -v \"test\"; echo \"=== pending-row\"; git show origin/main:apps/web/src/components/attestation-pending-row.tsx | head -80",
+      "description": "Show dashboard attestation query, insert sites, row component"
+    },
+    "timestamp": "2026-11-22T09:17:28.549Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && git grep -n -E \"attestationRequests\" origin/main -- apps/web/src packages/db/src | rg -v \"test|schema/|import \" | sed 's/^origin\\/main://' ",
+      "description": "List all attestationRequests usages on main"
+    },
+    "timestamp": "2026-11-22T09:17:31.801Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && git grep -n -E \"attestationRequests\" origin/main -- apps/web/src packages/db/src | rg -v \"\\.test\\.|__tests__|schema/|import |seed|dump-\" | sed 's/^origin\\/main://' ",
+      "description": "List all attestationRequests usages on main"
+    },
+    "timestamp": "2026-11-22T09:17:35.473Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && echo \"=== renew\"; git show \"origin/main:apps/web/src/app/api/v1/t/[slug]/members/[id]/renew/route.ts\" | sed -n 30,130p; echo \"=== credentials stageExpiryUpdate\"; git show \"origin/main:apps/web/src/app/api/v1/t/[slug]/credentials/route.ts\" | sed -n 570,600p; git show \"origin/main:apps/web/src/app/api/v1/t/[slug]/credentials/route.ts\" | sed -n 655,690p; echo \"=== cron\"; git show origin/main:apps/web/src/app/api/cron/daily/route.ts | sed -n 240,420p",
+      "description": "Read guards around the three attestation insert sites"
+    },
+    "timestamp": "2026-11-22T09:17:39.449Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && git show origin/main:apps/web/src/lib/attestation-resend-logic.ts; echo \"=== resend route\"; git show \"origin/main:apps/web/src/app/api/v1/t/[slug]/members/[id]/resend-attestation/route.ts\" | sed -n 40,130p",
+      "description": "Read cron resend eligibility logic and manual resend route"
+    },
+    "timestamp": "2026-11-22T09:17:52.501Z"
+  },
+  {
+    "name": "Skill",
+    "input": {
+      "skill": "Interceptor",
+      "args": "Read-only: open AccessBuddy SMLSC admin requests page and Helen Osman's member page in Nick's running Mac Chrome to observe duplicate pending attestation rows"
+    },
+    "timestamp": "2026-11-22T09:17:53.439Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -m 3 -X POST http://localhost:31337/notify -H \"Content-Type: application/json\" -d '{\"message\": \"Running the Reproduce workflow in the Interceptor skill to view the attestation queue\"}' >/dev/null 2>&1; timeout 120 ssh mac 'export PATH=/opt/homebrew/bin:$PATH; interceptor status 2>&1 | head -8; pgrep -lf \"Google Chrome\" | head -1; interceptor open \"https://accessbuddy.com.au/t/south-melb-lsc/admin\" --text-only 2>&1 | grep -n -i -B3 -A6 \"osman\" | head -80'",
+      "description": "Open the live admin queue in Mac Chrome and extract Helen's rows"
+    },
+    "timestamp": "2026-11-22T09:17:57.617Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 120 ssh mac 'export PATH=/opt/homebrew/bin:$PATH; interceptor open \"https://accessbuddy.com.au/t/south-melb-lsc/admin\" --text-only 2>&1 | head -60'",
+      "description": "Show raw output of the admin page open"
+    },
+    "timestamp": "2026-11-22T09:18:01.619Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 150 ssh mac 'export PATH=/opt/homebrew/bin:$PATH; open -na \"Google Chrome\" --args --profile-directory=\"Profile 3\"; sleep 6; interceptor open \"https://accessbuddy.com.au/t/south-melb-lsc/admin\" --text-only > ~/pai-tmp/ab-admin.txt 2>&1; wc -c ~/pai-tmp/ab-admin.txt; head -c 600 ~/pai-tmp/ab-admin.txt; echo; echo ---; grep -n -i -B3 -A6 \"osman\" ~/pai-tmp/ab-admin.txt | head -80; echo ---; grep -c -i \"attestation pending\" ~/pai-tmp/ab-admin.txt'",
+      "description": "Wake the extension and read the admin queue for Helen's rows"
+    },
+    "timestamp": "2026-11-22T09:18:07.172Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 200 ssh mac 'export PATH=/opt/homebrew/bin:$PATH; open -na \"Google Chrome\" --args --profile-directory=\"Profile 3\"; for i in 1 2 3 4 5 6 7 8; do sleep 4; if interceptor tabs 2>&1 | grep -qv \"no extensions connected\"; then echo \"connected after $((i*4))s\"; break; fi; done; interceptor tabs 2>&1 | head -12; ls ~/Library/Application\\ Support/Google/Chrome/ | grep -i -E \"^Profile|^Default\" | head; pgrep -x \"Google Chrome\" | head -2'",
+      "description": "Retry extension wake with polling and list Chrome profiles"
+    },
+    "timestamp": "2026-11-22T09:18:18.269Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 180 ssh mac 'export PATH=/opt/homebrew/bin:$PATH; echo \"== text hits\"; gcloud logging read \"resource.type=cloud_run_revision AND resource.labels.service_name=accessbuddy-production AND (textPayload:\\\"Osman\\\" OR jsonPayload.message:\\\"Osman\\\")\" --project accessbuddy-prod --freshness=45d --limit 30 --format=\"value(timestamp,textPayload)\" 2>&1 | cut -c1-400 | head -40; echo \"== renew/resend/force-renew/credentials POSTs\"; gcloud logging read \"resource.type=cloud_run_revision AND resource.labels.service_name=accessbuddy-production AND httpRequest.requestMethod=POST AND (httpRequest.requestUrl:\\\"/renew\\\" OR httpRequest.requestUrl:\\\"/force-renew\\\" OR httpRequest.requestUrl:\\\"/resend-attestation\\\" OR httpRequest.requestUrl:\\\"/cancel-confirmation\\\" OR httpRequest.requestUrl:\\\"/confirm-on-behalf\\\")\" --project accessbuddy-prod --freshness=45d --limit 200 --format=\"value(timestamp,httpRequest.status,httpRequest.requestUrl)\" 2>&1 | sed \"s#https://accessbuddy.com.au/api/v1/t/south-melb-lsc##\" | head -200'",
+      "description": "Search prod logs for Helen and attestation-creating requests"
+    },
+    "timestamp": "2026-11-22T09:18:30.739Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && git show \"origin/main:apps/web/src/app/t/[slug]/admin/members/[id]/renew-button.tsx\" | head -150; timeout 120 ssh mac 'export PATH=/opt/homebrew/bin:$PATH; gcloud logging read \"resource.type=cloud_run_revision AND resource.labels.service_name=accessbuddy-production AND timestamp>=\\\"2026-11-18T06:14:30Z\\\" AND timestamp<=\\\"2026-11-18T06:15:40Z\\\"\" --project accessbuddy-prod --limit 80 --order=asc --format=\"value(timestamp,httpRequest.requestMethod,httpRequest.status,httpRequest.requestUrl,httpRequest.userAgent,textPayload)\" 2>&1 | cut -c1-330'",
+      "description": "Read Renew button code and logs around the 18 Nov double call"
+    },
+    "timestamp": "2026-11-22T09:20:11.971Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && git show --stat --format='%h %ad%n%s%n%b' --date=short 483ddf0 | head -40; timeout 150 ssh mac 'export PATH=/opt/homebrew/bin:$PATH; gcloud logging read \"resource.type=cloud_run_revision AND resource.labels.service_name=accessbuddy-production AND (httpRequest.requestUrl:\\\"q=osm\\\" OR httpRequest.requestUrl:\\\"q=helen\\\" OR httpRequest.requestUrl:\\\"q=Osm\\\" OR httpRequest.requestUrl:\\\"q=Helen\\\" OR httpRequest.requestUrl:\\\"q=os&\\\" OR httpRequest.requestUrl:\\\"q=hel&\\\")\" --project accessbuddy-prod --freshness=45d --limit 40 --format=\"value(timestamp,httpRequest.requestUrl)\" 2>&1 | sed \"s#https://accessbuddy.com.au##\"'",
+      "description": "Show local fix commit and find admin searches for Helen"
+    },
+    "timestamp": "2026-11-22T09:20:26.360Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 200 ssh mac 'export PATH=/opt/homebrew/bin:$PATH; for w in \"2026-11-11T02:58:30Z 2026-11-11T03:01:45Z\" \"2026-11-15T04:49:30Z 2026-11-15T04:52:25Z\" \"2026-11-15T05:53:00Z 2026-11-15T05:56:10Z\" \"2026-11-22T09:14:30Z 2026-11-22T09:18:10Z\"; do set -- $w; echo \"== $1\"; gcloud logging read \"resource.type=cloud_run_revision AND resource.labels.service_name=accessbuddy-production AND timestamp>=\\\"$1\\\" AND timestamp<=\\\"$2\\\" AND (httpRequest.requestUrl:\\\"members?q=\\\" OR httpRequest.requestMethod=POST OR httpRequest.requestUrl:\\\"/admin/members/\\\" OR httpRequest.requestUrl:\\\"/admin?\\\" OR httpRequest.requestUrl:\\\"/admin\\\")\" --project accessbuddy-prod --limit 60 --order=asc --format=\"value(timestamp,httpRequest.requestMethod,httpRequest.status,httpRequest.requestUrl)\" 2>&1 | sed \"s#https://accessbuddy.com.au##\" | grep -v \"_next/\" | cut -c12-170; done'",
+      "description": "Show admin navigation around the other Renew calls"
+    },
+    "timestamp": "2026-11-22T09:20:49.549Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 240 ssh mac 'export PATH=/opt/homebrew/bin:$PATH; q() { echo \"== $1\"; gcloud logging read \"resource.type=cloud_run_revision AND resource.labels.service_name=accessbuddy-production AND timestamp>=\\\"$1\\\" AND timestamp<=\\\"$2\\\" AND (httpRequest.requestUrl:\\\"members?q=\\\" OR httpRequest.requestMethod=POST OR httpRequest.requestUrl:\\\"/admin\\\")\" --project accessbuddy-prod --limit 80 --order=asc --format=\"value(timestamp,httpRequest.requestMethod,httpRequest.status,httpRequest.requestUrl)\" 2>&1 | sed \"s#https://accessbuddy.com.au##\" | grep -v \"_next/\" | grep -E \"q=|POST|members/[0-9a-f-]{36}(\\?|$|\t)\" | cut -c12-150; }; q 2026-11-11T02:58:30Z 2026-11-11T03:01:45Z; q 2026-11-15T04:49:30Z 2026-11-15T04:52:25Z; q 2026-11-15T05:53:00Z 2026-11-15T05:56:10Z; q 2026-11-22T09:14:30Z 2026-11-22T09:18:10Z'",
+      "description": "Show admin searches and posts around the other Renew calls"
+    },
+    "timestamp": "2026-11-22T09:20:58.490Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "timeout 240 ssh mac 'export PATH=/opt/homebrew/bin:$PATH; B=\"resource.type=cloud_run_revision AND resource.labels.service_name=accessbuddy-production\"; echo \"== non-GET touching 3e12fe57\"; gcloud logging read \"$B AND httpRequest.requestUrl:\\\"3e12fe57-3efd-46df-b4e9-29455c81bf20\\\" AND NOT httpRequest.requestMethod=GET\" --project accessbuddy-prod --freshness=45d --limit 40 --format=\"value(timestamp,httpRequest.requestMethod,httpRequest.status,httpRequest.requestUrl)\" | sed \"s#https://accessbuddy.com.au##\"; echo \"== first/last GET of 3e12fe57 (non-prefetch count)\"; gcloud logging read \"$B AND httpRequest.requestUrl:\\\"admin/members/3e12fe57-3efd-46df-b4e9-29455c81bf20\\\"\" --project accessbuddy-prod --freshness=45d --limit 300 --format=\"value(timestamp,httpRequest.requestUrl)\" | sed \"s#https://accessbuddy.com.au/t/south-melb-lsc/admin/members/##\" | awk \"{print substr(\\$1,1,16), \\$2}\" | tail -25; echo \"== POST credentials\"; gcloud logging read \"$B AND httpRequest.requestMethod=POST AND httpRequest.requestUrl:\\\"/api/v1/t/south-melb-lsc/credentials\\\"\" --project accessbuddy-prod --freshness=45d --limit 60 --format=\"value(timestamp,httpRequest.status,httpRequest.requestUrl)\" | sed \"s#https://accessbuddy.com.au/api/v1/t/south-melb-lsc##\"; echo \"== cron text\"; gcloud logging read \"$B AND (textPayload:\\\"attestation\\\" OR textPayload:\\\"Attestation\\\" OR textPayload:\\\"resent\\\")\" --project accessbuddy-prod --freshness=12d --limit 30 --format=\"value(timestamp,textPayload)\" | cut -c1-500'",
+      "description": "Pull one member's write history, credential posts, cron logs"
+    },
+    "timestamp": "2026-11-22T09:21:38.399Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && git show \"origin/main:apps/web/src/app/api/v1/t/[slug]/members/[id]/renew/route.ts\" | sed -n 128,175p; git diff origin/main 483ddf0 --stat -- \"apps/web/src/app/t/[slug]/admin/members/[id]/renew-button.tsx\" | tail -2; git branch -r --contains 483ddf0 | head -3; timeout 150 ssh mac 'export PATH=/opt/homebrew/bin:$PATH; ls -la ~/pai-tmp/rx-open.sh ~/pai-tmp/.dburl 2>&1 | cut -c1-120; gcloud logging read \"resource.type=cloud_run_revision AND resource.labels.service_name=accessbuddy-production AND textPayload:\\\"Cron daily completed\\\"\" --project accessbuddy-prod --freshness=16d --limit 20 --format=\"value(timestamp,textPayload)\" | sed -E \"s/^([0-9T:-]{16})[^\\t]*\\t.*\\\"expiredAttestations\\\":([0-9]+),\\\"attestationsAutoResent\\\":([0-9]+).*/\\1 expired=\\2 resent=\\3/\"'",
+      "description": "Check Renew response, local fix scope, cron history, DB opener"
+    },
+    "timestamp": "2026-11-22T09:22:52.430Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "date -u +%FT%TZ; timeout 120 ssh mac 'export PATH=/opt/homebrew/bin:$PATH; gcloud logging read \"resource.type=cloud_run_revision AND resource.labels.service_name=accessbuddy-production AND timestamp>=\\\"2026-11-22T09:18:00Z\\\" AND (httpRequest.requestUrl:\\\"/admin\\\" OR httpRequest.requestUrl:\\\"members?q=\\\" OR NOT httpRequest.requestMethod=GET) AND httpRequest.requestUrl:\\\"south-melb-lsc\\\"\" --project accessbuddy-prod --limit 120 --order=asc --format=\"value(timestamp,httpRequest.requestMethod,httpRequest.status,httpRequest.requestUrl,httpRequest.remoteIp)\" | sed \"s#https://accessbuddy.com.au##\" | grep -v \"_next/\" | cut -c12-175'",
+      "description": "Show admin activity since the last Renew call today"
+    },
+    "timestamp": "2026-11-22T09:23:18.769Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && git show \"origin/main:apps/web/src/app/t/[slug]/admin/members/[id]/attestation-section.tsx\" | rg -n -i \"scoped|credentialIds|Fob confirmation|Renewal|pending|expired|label|title\" | head -40; git show origin/main:apps/web/src/lib/attestation-resend-logic.ts >/dev/null; git grep -n \"MAX_SCOPED_CONFIRMATION_REMINDERS =\" origin/main -- apps | head -2; ssh mac 'cat ~/pai-tmp/rx-open.sh' | sed -E 's/(postgres(ql)?:\\/\\/)[^ \"]*/\\1REDACTED/g' | head -60; rg -n \"^## \" ~/Documents/workspace/projects/accessbuddy/ISA.md | head -20",
+      "description": "Check member page confirmation labels, reminder cap, opener script"
+    },
+    "timestamp": "2026-11-22T09:23:50.190Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && git show \"origin/main:apps/web/src/app/t/[slug]/admin/members/[id]/attestation-section.tsx\" | sed -n 150,180p; sed -n 585,592p ~/Documents/workspace/projects/accessbuddy/ISA.md | cut -c1-260; tail -c 700 <(sed -n 585,623p ~/Documents/workspace/projects/accessbuddy/ISA.md)",
+      "description": "Confirm member page Re-send behaviour and ISA decision format"
+    },
+    "timestamp": "2026-11-22T09:24:06.659Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/ISA.md",
+      "old_string": "## Decisions\n\n",
+      "new_string": "## Decisions\n\n- 2026-11-22: Nick: \"check why Helen Osman's attestation is showing up twice in the list? She only has one fob.\" Diagnosis only, no code or data changed. The admin dashboard lists one row per pending `attestation_requests` record (no join fan-out; fob count is irrelevant), and nothing stops a second pending renewal row for the same member and season: `POST /members/[id]/renew` always inserts, the member page Re-send (`attestation-section.tsx` `handleResend`) re-sends by calling Renew again, and the Renew button allows a second click. The member page shows only one pending renewal (`pendings.find`), so the extra row is visible on the dashboard only. Production request log (30 days): three members got two 200 Renew calls 4 to 6 s apart (11, 15, 18 Nov); cron on a 7-day cycle heals a same-day pair to one row at lapse. Not verified: which of Helen's rows exist (logs carry no names, Interceptor extension would not connect, prod DB window not opened from a background job). A scoped fob confirmation alongside a renewal is the other possible cause and renders identically on the dashboard. Proposed, not built: Renew reuses a live pending renewal row (rotate token, re-send) instead of inserting; partial unique index on pending non-scoped (tenant, user, season); completing one row closes siblings; dashboard row labels fob confirmations.\n\n"
+    },
+    "timestamp": "2026-11-22T09:24:17.861Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/ISA.md",
+      "offset": 584,
+      "limit": 3
+    },
+    "timestamp": "2026-11-22T09:24:19.857Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/ISA.md",
+      "old_string": "## Decisions\n\n",
+      "new_string": "## Decisions\n\n- 2026-11-22: Nick: \"check why Helen Osman's attestation is showing up twice in the list? She only has one fob.\" Diagnosis only, no code or data changed. The admin dashboard lists one row per pending `attestation_requests` record (no join fan-out; fob count is irrelevant), and nothing stops a second pending renewal row for the same member and season: `POST /members/[id]/renew` always inserts, the member page Re-send (`attestation-section.tsx` `handleResend`) re-sends by calling Renew again, and the Renew button allows a second click. The member page shows only one pending renewal (`pendings.find`), so the extra row is visible on the dashboard only. Production request log (30 days): three members got two 200 Renew calls 4 to 6 s apart (11, 15, 18 Nov); cron on a 7-day cycle heals a same-day pair to one row at lapse. Not verified: which of Helen's rows exist (logs carry no names, Interceptor extension would not connect, prod DB window not opened from a background job). A scoped fob confirmation alongside a renewal is the other possible cause and renders identically on the dashboard. Proposed, not built: Renew reuses a live pending renewal row (rotate token, re-send) instead of inserting; partial unique index on pending non-scoped (tenant, user, season); completing one row closes siblings; dashboard row labels fob confirmations.\n\n"
+    },
+    "timestamp": "2026-11-22T09:24:25.049Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy/code && git fetch -q origin && git worktree list | head; git worktree add -q -b fix/renew-duplicate-attestations .worktrees/renew-dup origin/main 2>&1 | tail -2; cd .worktrees/renew-dup && git log --oneline -1 && ls packages/db/drizzle | tail -6 && tail -20 packages/db/drizzle/meta/_journal.json && cat packages/db/drizzle/0020*.sql && ls packages/db/drizzle/meta | tail -4 && rg -l \"renew|attestation\" --glob '*.test.*' apps packages | head -20 && cat package.json | rg -n '\"(test|typecheck|lint|build|db:[a-z]+)\"' ; rg -n '\"(test|typecheck|generate|migrate)[^\"]*\"' packages/db/package.json apps/web/package.json",
+      "description": "Create worktree branch and survey migrations and tests"
+    },
+    "timestamp": "2026-11-22T11:12:52.865Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cat \"apps/web/src/app/api/v1/t/[slug]/members/[id]/renew/route.ts\" | sed -n 1,30p; echo ==== force-renew test head; sed -n 1,90p apps/web/src/__tests__/force-renew.test.ts; echo ==== token route; sed -n 55,130p \"apps/web/src/app/api/v1/t/[slug]/attestations/[token]/route.ts\"; echo ==== queue-filter; rg -n -i \"attest\" apps/web/src/components/queue-filter.tsx; echo ==== row tail; sed -n 80,120p apps/web/src/components/attestation-pending-row.tsx; echo === reloadWith; rg -n \"reloadWith|sessionStorage\" -A8 \"apps/web/src/app/t/[slug]/admin/members/[id]/attestation-section.tsx\" | head -50; rg -n \"RenewButton\" -B3 -A8 \"apps/web/src/app/t/[slug]/admin/members/[id]/page.tsx\" | head -40",
+      "description": "Read renew route, test pattern, token route, UI components"
+    },
+    "timestamp": "2026-11-22T11:13:02.367Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"attestation_requests\" -B2 -A6 packages/db/src/rls.ts | head -40; rg -n \"FORCE|current_tenant_id\" packages/db/src/rls.ts | head -8; rg -n \"uniqueIndex\\(|\\.where\\(sql\" packages/db/src/schema/*.ts | head -8; rg -n \"DO \\\\$\\\\$|set_config\" packages/db/drizzle/*.sql | head -8; sed -n 90,200p apps/web/src/__tests__/force-renew.test.ts; ss -ltn | rg 54329; ls /tmp/ab-pg-scratch 2>/dev/null | head; rg -n \"DATABASE_URL\" apps/web/vitest.config.* apps/web/.env* 2>/dev/null | cut -c1-80 | sed -E 's#(postgres(ql)?://)[^@]*@#\\1***@#'; ls node_modules 2>/dev/null | head -3; sed -n 116,150p \"apps/web/src/app/t/[slug]/admin/members/[id]/attestation-section.tsx\"",
+      "description": "Check RLS, index conventions, test harness and DB availability"
+    },
+    "timestamp": "2026-11-22T11:13:39.348Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n -i \"54329|DATABASE_URL|ab-pg-scratch|migrate|bun install|skipped\" ~/.claude/projects/-home-nicholas-wood--claude/memory/project-accessbuddy-pr106-old-fob-retirement.md ~/.claude/projects/-home-nicholas-wood--claude/memory/project-accessbuddy-pr125-force-renew-staging.md | cut -c1-700 | sed -E 's#(postgres(ql)?://[^:]*:)[^@]*@#\\1***@#g'; sed -n 18,38p \"apps/web/src/app/api/v1/t/[slug]/members/[id]/resend-attestation/route.ts\"; sed -n 130,175p \"apps/web/src/app/api/v1/t/[slug]/members/[id]/resend-attestation/route.ts\"; sed -n 200,330p apps/web/src/__tests__/force-renew.test.ts | rg -n \"beforeAll|afterAll|import\\(|delete\\(\" | head -40",
+      "description": "Read test DB recipe, resend route permission, test setup pattern"
+    },
+    "timestamp": "2026-11-22T11:13:46.466Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cat > /home/nicholas-wood/.claude/jobs/6fff0ac7/tmp/patch1.ts <<'EOF'\nimport { readFileSync, writeFileSync } from \"fs\";\nconst p = \"apps/web/src/app/api/v1/t/[slug]/members/[id]/renew/route.ts\";\nlet s = readFileSync(p, \"utf8\");\nconst rep = (a: string, b: string) => { if (!s.includes(a)) throw new Error(\"missing: \" + a.slice(0, 60)); s = s.replace(a, b); };\nrep(`import { eq, and } from \"drizzle-orm\";`, `import { eq, and, isNull } from \"drizzle-orm\";`);\nrep(`import { clientEnv } from \"@/env\";\n`, `import { clientEnv } from \"@/env\";\n\n/**\n * A second Renew for the same member and season inside this window is a\n * repeated click, not a request to email the member again.\n */\nconst REPEAT_CLICK_WINDOW_MS = 60_000;\n`);\nrep(`    const [membership] = await tx\n      .select()\n      .from(tenantMemberships)\n      .where(\n        and(\n          eq(tenantMemberships.userId, userId),\n          eq(tenantMemberships.tenantId, tenant.id)\n        )\n      )\n      .limit(1);`, `    // Row lock: two Renew calls for the same member queue here, so the\n    // second one sees the first one's attestation instead of racing it.\n    const [membership] = await tx\n      .select()\n      .from(tenantMemberships)\n      .where(\n        and(\n          eq(tenantMemberships.userId, userId),\n          eq(tenantMemberships.tenantId, tenant.id)\n        )\n      )\n      .limit(1)\n      .for(\"update\");`);\nrep(`    const token = randomBytes(32).toString(\"hex\");\n    const tokenExpiresAt = new Date();\n    tokenExpiresAt.setDate(tokenExpiresAt.getDate() + tokenExpiryDays);\n\n    const [attestation] = await tx\n      .insert(attestationRequests)\n      .values({\n        tenantId: tenant.id,\n        userId,\n        season,\n        token,\n        tokenExpiresAt,\n        status: \"pending\",\n        initiatedBy: auth.user.id,\n      })\n      .returning();\n`, `    // A member has at most one pending renewal attestation per season (also\n    // enforced by a partial unique index). Renewing again re-issues the link\n    // on that same record rather than adding a second one, which used to put\n    // the member on the Requests page twice and email them two live links.\n    const [existing] = await tx\n      .select({ id: attestationRequests.id, updatedAt: attestationRequests.updatedAt })\n      .from(attestationRequests)\n      .where(\n        and(\n          eq(attestationRequests.tenantId, tenant.id),\n          eq(attestationRequests.userId, userId),\n          eq(attestationRequests.season, season),\n          eq(attestationRequests.status, \"pending\"),\n          isNull(attestationRequests.credentialIds)\n        )\n      )\n      .limit(1);\n\n    if (\n      existing &&\n      Date.now() - existing.updatedAt.getTime() < REPEAT_CLICK_WINDOW_MS\n    ) {\n      // Repeated click: the email from a moment ago stands. No second email,\n      // no new link, no second audit line.\n      return { id: existing.id, reused: true, emailed: false };\n    }\n\n    const token = randomBytes(32).toString(\"hex\");\n    const tokenExpiresAt = new Date();\n    tokenExpiresAt.setDate(tokenExpiresAt.getDate() + tokenExpiryDays);\n\n    const [attestation] = existing\n      ? await tx\n          .update(attestationRequests)\n          .set({ token, tokenExpiresAt, updatedAt: new Date() })\n          .where(eq(attestationRequests.id, existing.id))\n          .returning()\n      : await tx\n          .insert(attestationRequests)\n          .values({\n            tenantId: tenant.id,\n            userId,\n            season,\n            token,\n            tokenExpiresAt,\n            status: \"pending\",\n            initiatedBy: auth.user.id,\n          })\n          .returning();\n`);\nrep(`        attestationId: attestation.id,\n      },\n    });\n\n    return attestation;\n  });\n\n  return NextResponse.json({\n    attestationSent: true,\n    attestationId: result.id,\n  });`, `        attestationId: attestation.id,\n        ...(existing ? { reissued: true } : {}),\n      },\n    });\n\n    return { id: attestation.id, reused: !!existing, emailed: !!user?.email };\n  });\n\n  return NextResponse.json({\n    attestationSent: true,\n    attestationId: result.id,\n    // True when the member already had a pending attestation for this season\n    // and it was kept; \\`emailed\\` is false for a repeated click.\n    reused: result.reused,\n    emailed: result.emailed,\n  });`);\nwriteFileSync(p, s);\nEOF\nbun /home/nicholas-wood/.claude/jobs/6fff0ac7/tmp/patch1.ts && git diff --stat && sed -n 60,72p \"apps/web/src/app/api/v1/t/[slug]/members/[id]/renew/route.ts\"",
+      "description": "Apply reuse-pending-attestation change to the Renew route"
+    },
+    "timestamp": "2026-11-22T11:14:02.688Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cat > packages/db/drizzle/0022_attestation_one_pending_renewal.sql <<'EOF'\n-- A member has at most one pending renewal attestation per season.\n--\n-- Renew used to insert a new pending attestation on every call, so a repeated\n-- click, or the member page Re-send (which called Renew), left the member with\n-- two pending rows: listed twice on the admin Requests page and holding two\n-- live links. Renew now re-issues the link on the existing row; this index is\n-- the backstop.\n--\n-- Scoped confirmations (credential_ids set: an admin re-added a fob the\n-- member holds) are a separate thread and are not covered. They are already\n-- limited to one pending row per fob in the Add Credential route.\n\n-- 1. Close existing duplicates, keeping the newest row of each group (the\n--    link in the most recent email). Older rows become `expired`, the same\n--    state the nightly job gives a lapsed attestation. Done per tenant with\n--    the tenant context set, so it behaves the same whether or not the\n--    migrating role is subject to row-level security.\nDO $$\nDECLARE\n  t record;\nBEGIN\n  FOR t IN SELECT id FROM tenants LOOP\n    PERFORM set_config('app.current_tenant_id', t.id::text, true);\n    UPDATE attestation_requests a\n       SET status = 'expired', updated_at = now()\n     WHERE a.tenant_id = t.id\n       AND a.status = 'pending'\n       AND a.credential_ids IS NULL\n       AND EXISTS (\n         SELECT 1\n           FROM attestation_requests b\n          WHERE b.tenant_id = a.tenant_id\n            AND b.user_id = a.user_id\n            AND b.season = a.season\n            AND b.status = 'pending'\n            AND b.credential_ids IS NULL\n            AND (b.created_at, b.id) > (a.created_at, a.id)\n       );\n  END LOOP;\n  PERFORM set_config('app.current_tenant_id', '', true);\nEND $$;\n--> statement-breakpoint\nCREATE UNIQUE INDEX IF NOT EXISTS \"attestation_requests_one_pending_renewal\"\n  ON \"attestation_requests\" (\"tenant_id\", \"user_id\", \"season\")\n  WHERE \"status\" = 'pending' AND \"credential_ids\" IS NULL;\nEOF\ncat > /home/nicholas-wood/.claude/jobs/6fff0ac7/tmp/patch2.ts <<'EOF'\nimport { readFileSync, writeFileSync } from \"fs\";\nconst edit = (p: string, pairs: [string, string][]) => { let s = readFileSync(p, \"utf8\"); for (const [a, b] of pairs) { if (!s.includes(a)) throw new Error(p + \" missing: \" + a.slice(0, 60)); s = s.replace(a, b); } writeFileSync(p, s); };\nedit(\"packages/db/drizzle/meta/_journal.json\", [[`      \"tag\": \"0021_lockers\",\n      \"breakpoints\": true\n    }`, `      \"tag\": \"0021_lockers\",\n      \"breakpoints\": true\n    },\n    {\n      \"idx\": 22,\n      \"version\": \"7\",\n      \"when\": 1786000120000,\n      \"tag\": \"0022_attestation_one_pending_renewal\",\n      \"breakpoints\": true\n    }`]]);\nedit(\"packages/db/src/schema/attestations.ts\", [\n  [`  jsonb,\n  unique,\n} from \"drizzle-orm/pg-core\";`, `  jsonb,\n  uniqueIndex,\n} from \"drizzle-orm/pg-core\";\nimport { sql } from \"drizzle-orm\";`],\n  [`export const attestationRequests = pgTable(\"attestation_requests\", {`, `export const attestationRequests = pgTable(\n  \"attestation_requests\",\n  {`],\n  [`  updatedAt: timestamp(\"updated_at\", { withTimezone: true })\n    .notNull()\n    .defaultNow(),\n});`, `  updatedAt: timestamp(\"updated_at\", { withTimezone: true })\n    .notNull()\n    .defaultNow(),\n  },\n  (table) => [\n    // At most one pending renewal attestation per member and season. Scoped\n    // confirmations (credential_ids set) are a separate thread and exempt.\n    // Migration 0022.\n    uniqueIndex(\"attestation_requests_one_pending_renewal\")\n      .on(table.tenantId, table.userId, table.season)\n      .where(sql\\`\\${table.status} = 'pending' and \\${table.credentialIds} is null\\`),\n  ]\n);`],\n]);\nEOF\nbun /home/nicholas-wood/.claude/jobs/6fff0ac7/tmp/patch2.ts && sed -n 118,128p packages/db/src/schema/lockers.ts && rg -n \"0021|journal-expected|integrity\" packages/db/src/*.ts | head -8",
+      "description": "Add migration 0022, journal entry and schema index"
+    },
+    "timestamp": "2026-11-22T11:14:18.789Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sed -n 76,90p apps/web/src/components/queue-filter.tsx; sed -n 1,12p \"apps/web/src/app/t/[slug]/admin/page.tsx\"; rg -n \"inArray\" \"apps/web/src/app/t/[slug]/admin/page.tsx\" | head -3; rg -n \"let resent = 0;\" -B3 -A8 apps/web/src/app/api/cron/daily/route.ts | head -30",
+      "description": "Read exact anchors for cron and dashboard edits"
+    },
+    "timestamp": "2026-11-22T11:14:26.276Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cat > /home/nicholas-wood/.claude/jobs/6fff0ac7/tmp/patch3.ts <<'EOF'\nimport { readFileSync, writeFileSync } from \"fs\";\nconst edit = (p: string, pairs: [string, string][]) => { let s = readFileSync(p, \"utf8\"); for (const [a, b] of pairs) { if (!s.includes(a)) throw new Error(p + \" missing: \" + a.slice(0, 60)); s = s.replace(a, b); } writeFileSync(p, s); };\n\n// --- cron guard\nedit(\"apps/web/src/app/api/cron/daily/route.ts\", [\n  [`        let resent = 0;\n        for (const { latest: prev, cycle } of latest.values()) {\n          const membership = membershipByUser.get(prev.userId);\n          const user = userById.get(prev.userId);\n          if (!membership || !user) continue;\n\n          const isScoped = !!prev.credentialIds?.length;\n`, `        // Members who already hold a pending renewal attestation for a\n        // season. One pending renewal per member and season is a database\n        // invariant (migration 0022); never try to add a second, whatever the\n        // latest row by creation date says.\n        const pendingRenewal = new Set(\n          attestationRows\n            .filter((r) => r.status === \"pending\" && !r.credentialIds?.length)\n            .map((r) => \\`\\${r.userId}|\\${r.season}\\`)\n        );\n\n        let resent = 0;\n        for (const { latest: prev, cycle } of latest.values()) {\n          const membership = membershipByUser.get(prev.userId);\n          const user = userById.get(prev.userId);\n          if (!membership || !user) continue;\n\n          const isScoped = !!prev.credentialIds?.length;\n          if (!isScoped && pendingRenewal.has(\\`\\${prev.userId}|\\${prev.season}\\`)) continue;\n`],\n]);\n\n// --- dashboard: tell a fob confirmation from a renewal attestation\nconst page = \"apps/web/src/app/t/[slug]/admin/page.tsx\";\nedit(page, [\n  [`import { eq, and, desc, sql } from \"drizzle-orm\";`, `import { eq, and, desc, sql, inArray } from \"drizzle-orm\";`],\n  [`        createdAt: attestationRequests.createdAt,\n        memberFirstName: users.firstName,`, `        createdAt: attestationRequests.createdAt,\n        credentialIds: attestationRequests.credentialIds,\n        memberFirstName: users.firstName,`],\n  [`      .orderBy(desc(attestationRequests.createdAt));\n\n    return [requests, orphaned, pendingCredentials, pendingAtts] as const;`, `      .orderBy(desc(attestationRequests.createdAt));\n\n    // A scoped row is a fob confirmation (an admin re-added a fob the member\n    // holds), not a membership renewal. Name the fob so the two are not\n    // mistaken for one attestation listed twice.\n    const scopedIds = Array.from(\n      new Set(pendingAtts.flatMap((a) => a.credentialIds ?? []))\n    );\n    const scopedFobs = scopedIds.length\n      ? await tx\n          .select({\n            id: credentials.id,\n            serialNumber: credentials.serialNumber,\n            typeName: credentialTypes.name,\n          })\n          .from(credentials)\n          .leftJoin(credentialTypes, eq(credentials.credentialTypeId, credentialTypes.id))\n          .where(and(eq(credentials.tenantId, tenant.id), inArray(credentials.id, scopedIds)))\n      : [];\n    const fobLabelById = new Map(\n      scopedFobs.map((f) => [f.id, \\`\\${f.typeName ?? \"Fob\"} #\\${f.serialNumber}\\`])\n    );\n    const pendingAttsLabelled = pendingAtts.map((a) => ({\n      ...a,\n      fobLabel: a.credentialIds?.length\n        ? a.credentialIds.map((id) => fobLabelById.get(id) ?? \"Fob\").join(\", \")\n        : null,\n    }));\n\n    return [requests, orphaned, pendingCredentials, pendingAttsLabelled] as const;`],\n  [`          tokenExpiresAt: att.tokenExpiresAt?.toISOString() ?? null,\n          memberFirstName: att.memberFirstName,`, `          tokenExpiresAt: att.tokenExpiresAt?.toISOString() ?? null,\n          fobLabel: att.fobLabel,\n          memberFirstName: att.memberFirstName,`],\n]);\nedit(\"apps/web/src/components/queue-filter.tsx\", [\n  [`  tokenExpiresAt: string | null;\n  memberFirstName: string | null;`, `  tokenExpiresAt: string | null;\n  fobLabel?: string | null;\n  memberFirstName: string | null;`],\n]);\nedit(\"apps/web/src/components/attestation-pending-row.tsx\", [\n  [`    tokenExpiresAt: string | null;\n    memberFirstName: string | null;`, `    tokenExpiresAt: string | null;\n    /** Set for a fob confirmation (scoped attestation), e.g. \"Fob #123\". */\n    fobLabel?: string | null;\n    memberFirstName: string | null;`],\n  [`          Attestation pending for {attestation.season}`, `          {attestation.fobLabel\n            ? \\`Fob confirmation pending for \\${attestation.fobLabel}\\`\n            : \\`Membership renewal attestation pending for \\${attestation.season}\\`}`],\n  [`{resent && <p className=\"text-xs text-green-700 mt-1\">Attestation email sent.</p>}`, `{resent && (\n          <p className=\"text-xs text-green-700 mt-1\">\n            {attestation.fobLabel ? \"Fob confirmation email sent.\" : \"Attestation email sent.\"}\n          </p>\n        )}`],\n]);\n\n// --- member page: Re-send re-issues the pending attestation in place\nedit(\"apps/web/src/app/t/[slug]/admin/members/[id]/attestation-section.tsx\", [\n  [`      // A renewal attestation re-sends by triggering Renew again with the\n      // same season.\n      const res = await fetch(\n        \\`/api/v1/t/\\${tenantSlug}/members/\\${userId}/renew\\`,\n        {\n          method: \"POST\",\n          headers: { \"Content-Type\": \"application/json\" },\n          body: JSON.stringify({ season: pending.season }),\n        }\n      );`, `      // Re-issue the link on the pending attestation itself. This used to\n      // call Renew, which added a second pending attestation for the member.\n      const res = await fetch(\n        \\`/api/v1/t/\\${tenantSlug}/members/\\${userId}/resend-attestation\\`,\n        {\n          method: \"POST\",\n          headers: { \"Content-Type\": \"application/json\" },\n          body: JSON.stringify({ attestationId: pending.id }),\n        }\n      );`],\n]);\n\n// --- Renew button: reload so the admin sees the result of the click\nedit(\"apps/web/src/app/t/[slug]/admin/members/[id]/renew-button.tsx\", [\n  [`import { useRouter } from \"next/navigation\";\n`, ``],\n  [`  const router = useRouter();\n`, ``],\n  [`      if (data.attestationSent) {\n        setSeason(\"\");\n      }\n\n      router.refresh();\n    } catch (err) {\n      setError(err instanceof Error ? err.message : \"Something went wrong\");\n    } finally {\n      setSubmitting(false);\n    }`, `      // Reload rather than soft-refresh: a soft refresh left the page looking\n      // unchanged, which invited a second click on Renew. The Confirmations\n      // card shows this notice after the reload (same key it reads).\n      try {\n        sessionStorage.setItem(\n          \\`ab:member-confirmations-notice:\\${userId}\\`,\n          data.emailed === false\n            ? \"Membership renewed. The member already has a confirmation email from a moment ago, so no second one was sent.\"\n            : data.reused\n              ? \"Membership renewed. The member's pending confirmation was re-sent with a new link.\"\n              : \"Membership renewed. Confirmation email sent to the member.\"\n        );\n      } catch {\n        // Storage unavailable: the reload still shows the new state.\n      }\n      window.location.reload();\n    } catch (err) {\n      setError(err instanceof Error ? err.message : \"Something went wrong\");\n      setSubmitting(false);\n    }`],\n]);\nEOF\nbun /home/nicholas-wood/.claude/jobs/6fff0ac7/tmp/patch3.ts && git status --short",
+      "description": "Apply cron guard and UI changes"
+    },
+    "timestamp": "2026-11-22T11:14:49.116Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sed -n 201,270p apps/web/src/__tests__/force-renew.test.ts; rg -n \"it\\(|describe\" apps/web/src/__tests__/attestation-resend.test.ts | head -12; rg -n \"cron|GET\" apps/web/src/__tests__/lockers-cron.test.ts | head -12",
+      "description": "Read test setup block and cron test pattern"
+    },
+    "timestamp": "2026-11-22T11:14:55.887Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cat > /home/nicholas-wood/.claude/jobs/6fff0ac7/tmp/patch4.ts <<'EOF'\nimport { readFileSync, writeFileSync } from \"fs\";\nconst p = \"apps/web/src/app/t/[slug]/admin/members/[id]/renew-button.tsx\";\nlet s = readFileSync(p, \"utf8\");\nconst a = `          data.emailed === false\n            ? \"Membership renewed. The member already has a confirmation email from a moment ago, so no second one was sent.\"\n            : data.reused\n              ? \"Membership renewed. The member's pending confirmation was re-sent with a new link.\"\n              : \"Membership renewed. Confirmation email sent to the member.\"`;\nconst b = `          data.reused && data.emailed === false\n            ? \"Membership renewed. The member already has a confirmation email from a moment ago, so no second one was sent.\"\n            : data.emailed === false\n              ? \"Membership renewed. This member has no email address, so no confirmation email was sent.\"\n              : data.reused\n                ? \"Membership renewed. The member's pending confirmation was re-sent with a new link.\"\n                : \"Membership renewed. Confirmation email sent to the member.\"`;\nif (!s.includes(a)) throw new Error(\"missing\");\nwriteFileSync(p, s.replace(a, b));\nEOF\nbun /home/nicholas-wood/.claude/jobs/6fff0ac7/tmp/patch4.ts\ncat > apps/web/src/__tests__/renew-single-pending-attestation.test.ts <<'EOF'\nimport { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from \"vitest\";\nimport { and, eq, inArray } from \"drizzle-orm\";\nimport { readFileSync } from \"node:fs\";\nimport { resolve } from \"node:path\";\nimport { NextRequest } from \"next/server\";\n\n/**\n * A member has at most one pending renewal attestation per season.\n *\n * Nov 2026: Renew inserted a new pending attestation on every call, and the\n * member page Re-send called Renew, so a repeated click or a re-send left the\n * member listed twice on the admin Requests page with two live links\n * (production request log: three members with two 200 Renew calls 4 to 6\n * seconds apart in twelve days).\n *\n * Proves:\n *   (a) the first Renew creates one pending attestation and sends one email,\n *   (b) a second Renew moments later keeps that one row, keeps its link and\n *       sends no second email,\n *   (c) a Renew after the repeat-click window re-issues the link on the same\n *       row and emails the member again,\n *   (d) the database refuses a second pending renewal row for the same\n *       member and season (migration 0022),\n *   (e) a scoped fob confirmation may sit beside the renewal attestation,\n *   (f) once the attestation is no longer pending, Renew starts a new one,\n *   (g) the member page Re-send no longer goes through Renew.\n *\n * Auth, tenant and permissions are mocked so the handler runs directly;\n * everything below it hits the real database. Gated on DATABASE_URL.\n */\n\nconst hasDb = !!process.env.DATABASE_URL;\n\nconst ctx: { tenant: { id: string; slug: string } | null; actorId: string | null } = {\n  tenant: null,\n  actorId: null,\n};\n\nconst sentTemplates: string[] = [];\n\nvi.mock(\"@/lib/auth\", () => ({\n  getAuthUser: async () => ({\n    user: {\n      id: ctx.actorId,\n      firebaseUid: \"renew-once-fb\",\n      email: \"renew-once@example.com\",\n      firstName: \"Renew\",\n      lastName: \"Admin\",\n      phone: null,\n    },\n    memberships: [],\n    isGlobalAdmin: false,\n  }),\n}));\n\nvi.mock(\"@/lib/tenant\", () => ({\n  resolveTenant: async (slug: string) =>\n    ctx.tenant && slug === ctx.tenant.slug\n      ? {\n          id: ctx.tenant.id,\n          name: \"Renew Once Club\",\n          slug: ctx.tenant.slug,\n          settings: {},\n          timezone: \"Australia/Melbourne\",\n          logoUrl: null,\n          stripeAccountId: null,\n        }\n      : null,\n}));\n\nvi.mock(\"@/lib/permissions\", () => ({\n  checkPermission: () => ({ granted: true }),\n  checkMembership: () => ({ granted: true }),\n}));\n\nvi.mock(\"@/lib/services/email\", async (importOriginal) => {\n  const actual = await importOriginal<typeof import(\"@/lib/services/email\")>();\n  return {\n    ...actual,\n    sendTemplatedEmail: vi.fn(async (_to: string, template: string) => {\n      sentTemplates.push(template);\n      return { sent: true } as never;\n    }),\n    sendEmail: vi.fn(async () => ({ sent: true }) as never),\n  };\n});\n\nconst SEASON = \"2026/2027\";\n\ndescribe(\"member page Re-send wiring\", () => {\n  it(\"re-issues the pending attestation in place instead of calling Renew\", () => {\n    const section = readFileSync(\n      resolve(__dirname, \"../app/t/[slug]/admin/members/[id]/attestation-section.tsx\"),\n      \"utf8\"\n    );\n    const handleResend = section.slice(\n      section.indexOf(\"async function handleResend\"),\n      section.indexOf(\"if (attestations.length === 0\")\n    );\n    expect(handleResend).toContain(\"/resend-attestation\");\n    expect(handleResend).toContain(\"attestationId: pending.id\");\n    expect(handleResend).not.toContain(\"/renew`\");\n  });\n});\n\ndescribe.skipIf(!hasDb)(\"renew keeps one pending attestation per member and season\", () => {\n  let db: typeof import(\"@accessbuddy/db\").db;\n  let tenants: typeof import(\"@accessbuddy/db\").tenants;\n  let users: typeof import(\"@accessbuddy/db\").users;\n  let tenantMemberships: typeof import(\"@accessbuddy/db\").tenantMemberships;\n  let attestationRequests: typeof import(\"@accessbuddy/db\").attestationRequests;\n  let auditLog: typeof import(\"@accessbuddy/db\").auditLog;\n  let renew: typeof import(\"@/app/api/v1/t/[slug]/members/[id]/renew/route\").POST;\n\n  let tenant: { id: string; slug: string };\n  let admin: { id: string };\n  let member: { id: string };\n  let suffix: string;\n\n  async function post(season = SEASON) {\n    const request = new NextRequest(\n      `http://localhost/api/v1/t/${tenant.slug}/members/${member.id}/renew`,\n      {\n        method: \"POST\",\n        headers: { \"Content-Type\": \"application/json\" },\n        body: JSON.stringify({ season }),\n      }\n    );\n    const res = await renew(request, {\n      params: Promise.resolve({ slug: tenant.slug, id: member.id }),\n    });\n    return { status: res.status, json: await res.json() };\n  }\n\n  async function rows() {\n    return db\n      .select()\n      .from(attestationRequests)\n      .where(\n        and(eq(attestationRequests.tenantId, tenant.id), eq(attestationRequests.userId, member.id))\n      );\n  }\n\n  async function renewAudits() {\n    const all = await db\n      .select({ metadata: auditLog.metadata })\n      .from(auditLog)\n      .where(and(eq(auditLog.tenantId, tenant.id), eq(auditLog.entityId, member.id)));\n    return all.filter((r) => (r.metadata as Record<string, unknown> | null)?.action === \"renew\");\n  }\n\n  /** Move the pending row out of the repeat-click window. */\n  async function age(id: string) {\n    await db\n      .update(attestationRequests)\n      .set({ updatedAt: new Date(Date.now() - 5 * 60_000) })\n      .where(eq(attestationRequests.id, id));\n  }\n\n  beforeAll(async () => {\n    const dbPackage = await import(\"@accessbuddy/db\");\n    db = dbPackage.db;\n    tenants = dbPackage.tenants;\n    users = dbPackage.users;\n    tenantMemberships = dbPackage.tenantMemberships;\n    attestationRequests = dbPackage.attestationRequests;\n    auditLog = dbPackage.auditLog;\n\n    suffix = `${Date.now()}`;\n    const [t] = await db\n      .insert(tenants)\n      .values({ name: `Renew Once Club ${suffix}`, slug: `renew-once-${suffix}` })\n      .returning({ id: tenants.id, slug: tenants.slug });\n    tenant = t;\n    ctx.tenant = tenant;\n\n    const mkUser = async (tag: string, first: string, last: string) => {\n      const [u] = await db\n        .insert(users)\n        .values({\n          firebaseUid: `renew-once-${tag}-${suffix}`,\n          email: `renew-once-${tag}-${suffix}@example.com`,\n          firstName: first,\n          lastName: last,\n        })\n        .returning({ id: users.id });\n      return u;\n    };\n    admin = await mkUser(\"admin\", \"Renew\", \"Admin\");\n    member = await mkUser(\"member\", \"Mia\", \"Member\");\n    ctx.actorId = admin.id;\n\n    await db.insert(tenantMemberships).values({\n      tenantId: tenant.id,\n      userId: member.id,\n      status: \"active\",\n      currentSeason: \"2025/2026\",\n    });\n\n    ({ POST: renew } = await import(\"@/app/api/v1/t/[slug]/members/[id]/renew/route\"));\n  });\n\n  beforeEach(async () => {\n    sentTemplates.length = 0;\n    await db.delete(auditLog).where(eq(auditLog.tenantId, tenant.id));\n    await db.delete(attestationRequests).where(eq(attestationRequests.tenantId, tenant.id));\n  });\n\n  afterAll(async () => {\n    await db.delete(auditLog).where(eq(auditLog.tenantId, tenant.id));\n    await db.delete(attestationRequests).where(eq(attestationRequests.tenantId, tenant.id));\n    await db.delete(tenantMemberships).where(eq(tenantMemberships.tenantId, tenant.id));\n    await db.delete(tenants).where(eq(tenants.id, tenant.id));\n    await db.delete(users).where(inArray(users.id, [admin.id, member.id]));\n  });\n\n  it(\"(a) first Renew creates one pending attestation and sends one email\", async () => {\n    const res = await post();\n    expect(res.status).toBe(200);\n    expect(res.json).toMatchObject({ attestationSent: true, reused: false, emailed: true });\n\n    const all = await rows();\n    expect(all).toHaveLength(1);\n    expect(all[0]).toMatchObject({ status: \"pending\", season: SEASON, credentialIds: null });\n    expect(all[0].id).toBe(res.json.attestationId);\n    expect(sentTemplates).toEqual([\"attestationRequested\"]);\n    expect(await renewAudits()).toHaveLength(1);\n  });\n\n  it(\"(b) a repeated click keeps the one row and its link and sends nothing more\", async () => {\n    const first = await post();\n    const [before] = await rows();\n\n    const second = await post();\n    expect(second.status).toBe(200);\n    expect(second.json).toMatchObject({\n      attestationSent: true,\n      attestationId: first.json.attestationId,\n      reused: true,\n      emailed: false,\n    });\n\n    const all = await rows();\n    expect(all).toHaveLength(1);\n    expect(all[0].token).toBe(before.token);\n    expect(all[0].tokenExpiresAt.getTime()).toBe(before.tokenExpiresAt.getTime());\n    expect(sentTemplates).toEqual([\"attestationRequested\"]);\n    expect(await renewAudits()).toHaveLength(1);\n  });\n\n  it(\"(c) a later Renew re-issues the link on the same row and emails again\", async () => {\n    const first = await post();\n    const [before] = await rows();\n    await age(before.id);\n\n    const later = await post();\n    expect(later.json).toMatchObject({\n      attestationId: first.json.attestationId,\n      reused: true,\n      emailed: true,\n    });\n\n    const all = await rows();\n    expect(all).toHaveLength(1);\n    expect(all[0].id).toBe(before.id);\n    expect(all[0].status).toBe(\"pending\");\n    expect(all[0].token).not.toBe(before.token);\n    expect(all[0].tokenExpiresAt.getTime()).toBeGreaterThanOrEqual(before.tokenExpiresAt.getTime());\n    expect(sentTemplates).toEqual([\"attestationRequested\", \"attestationRequested\"]);\n\n    const audits = await renewAudits();\n    expect(audits).toHaveLength(2);\n    expect(\n      audits.filter((a) => (a.metadata as Record<string, unknown>).reissued === true)\n    ).toHaveLength(1);\n  });\n\n  it(\"(d) the database refuses a second pending renewal for the same member and season\", async () => {\n    await post();\n    await expect(\n      db.insert(attestationRequests).values({\n        tenantId: tenant.id,\n        userId: member.id,\n        season: SEASON,\n        token: `renew-once-dup-${suffix}`,\n        tokenExpiresAt: new Date(Date.now() + 86_400_000),\n        status: \"pending\",\n        initiatedBy: admin.id,\n      })\n    ).rejects.toThrow();\n    expect(await rows()).toHaveLength(1);\n  });\n\n  it(\"(e) a scoped fob confirmation may sit beside the renewal attestation\", async () => {\n    await post();\n    await db.insert(attestationRequests).values({\n      tenantId: tenant.id,\n      userId: member.id,\n      season: SEASON,\n      token: `renew-once-scoped-${suffix}`,\n      tokenExpiresAt: new Date(Date.now() + 86_400_000),\n      status: \"pending\",\n      initiatedBy: admin.id,\n      credentialIds: [\"00000000-0000-4000-8000-000000000001\"],\n    });\n    const [renewal] = (await rows()).filter((r) => !r.credentialIds?.length);\n    await age(renewal.id);\n\n    // Renew re-issues the renewal attestation and leaves the scoped one alone.\n    const again = await post();\n    expect(again.json.attestationId).toBe(renewal.id);\n\n    const all = await rows();\n    expect(all).toHaveLength(2);\n    const scoped = all.find((r) => r.credentialIds?.length);\n    expect(scoped).toMatchObject({ status: \"pending\", token: `renew-once-scoped-${suffix}` });\n  });\n\n  it(\"(f) once the attestation is no longer pending, Renew starts a new one\", async () => {\n    const first = await post();\n    await db\n      .update(attestationRequests)\n      .set({ status: \"completed\", completedAt: new Date() })\n      .where(eq(attestationRequests.id, first.json.attestationId));\n\n    const next = await post();\n    expect(next.json).toMatchObject({ reused: false, emailed: true });\n    expect(next.json.attestationId).not.toBe(first.json.attestationId);\n\n    const all = await rows();\n    expect(all).toHaveLength(2);\n    expect(all.filter((r) => r.status === \"pending\")).toHaveLength(1);\n  });\n});\nEOF\n(bun install --frozen-lockfile 2>&1 | tail -3)",
+      "description": "Fix notice wording, add test file, install dependencies"
+    },
+    "timestamp": "2026-11-22T11:15:34.585Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls /tmp/ab-pg-scratch/ /tmp/ab-pg-scratch/data 2>/dev/null | head -8; ps aux | rg -i \"postgres.*54329|ab-pg\" | rg -v rg | head -3 | cut -c1-200; rg -n \"password|user|database\" /tmp/ab-pg-scratch/run.ts ~/.claude/jobs/2e24043d/tmp/ab-pg/run.ts 2>/dev/null | head -8 | sed -E 's/(password: *\")[^\"]*/\\1***/'; which psql",
+      "description": "Check the embedded test Postgres is backed by live data"
+    },
+    "timestamp": "2026-11-22T11:15:42.137Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "export DATABASE_URL=postgres://accessbuddy:testpassword@127.0.0.1:54329/accessbuddy_test; W=$PWD; ls $W/node_modules/postgres >/dev/null 2>&1 && echo has-postgres || ls $W/packages/db/node_modules | head -5\ncat > /home/nicholas-wood/.claude/jobs/6fff0ac7/tmp/seed.ts <<EOF\nimport postgres from \"$W/packages/db/node_modules/postgres\";\nconst sql = postgres(process.env.DATABASE_URL!);\nconst mode = process.argv[2];\nconst slug = \"mig0022-fixture\";\nif (mode === \"seed\") {\n  const idx = await sql\\`select indexname from pg_indexes where indexname='attestation_requests_one_pending_renewal'\\`;\n  console.log(\"index before:\", idx.length);\n  const applied = await sql\\`select count(*)::int n from drizzle.__drizzle_migrations\\`;\n  console.log(\"migrations applied before:\", applied[0].n);\n  await sql\\`delete from attestation_requests where tenant_id in (select id from tenants where slug=\\${slug})\\`;\n  await sql\\`delete from tenants where slug=\\${slug}\\`;\n  await sql\\`delete from users where firebase_uid like 'mig0022-%'\\`;\n  const [t] = await sql\\`insert into tenants (name, slug) values ('Mig 0022', \\${slug}) returning id\\`;\n  const [u] = await sql\\`insert into users (firebase_uid, email, first_name, last_name) values ('mig0022-u', 'mig0022-u@example.com', 'M', 'U') returning id\\`;\n  const [v] = await sql\\`insert into users (firebase_uid, email, first_name, last_name) values ('mig0022-v', 'mig0022-v@example.com', 'M', 'V') returning id\\`;\n  const ins = (user: string, tok: string, created: string, status = \"pending\", cred: any = null, season = \"2026/2027\") =>\n    sql\\`insert into attestation_requests (tenant_id, user_id, season, token, token_expires_at, status, initiated_by, created_at, credential_ids)\n        values (\\${t.id}, \\${user}, \\${season}, \\${tok}, now() + interval '5 days', \\${status}, \\${u.id}, \\${created}, \\${cred === null ? null : sql.json(cred)})\\`;\n  await ins(u.id, \"mig-a-old\", \"2026-11-18T06:15:15Z\");\n  await ins(u.id, \"mig-a-new\", \"2026-11-18T06:15:19Z\");\n  await ins(u.id, \"mig-a-third\", \"2026-11-18T06:15:17Z\");\n  await ins(u.id, \"mig-a-scoped\", \"2026-11-18T06:15:20Z\", \"pending\", [\"00000000-0000-4000-8000-000000000002\"]);\n  await ins(u.id, \"mig-a-otherseason\", \"2026-11-18T06:15:21Z\", \"pending\", null, \"2025/2026\");\n  await ins(u.id, \"mig-a-done\", \"2026-11-18T06:15:22Z\", \"completed\");\n  await ins(v.id, \"mig-b-single\", \"2026-11-18T06:15:15Z\");\n  console.log(\"seeded\");\n} else {\n  const rows = await sql\\`select token, status from attestation_requests where token like 'mig-%' order by token\\`;\n  console.log(rows.map((r) => r.token + \"=\" + r.status).join(\"\\n\"));\n  const idx = await sql\\`select indexdef from pg_indexes where indexname='attestation_requests_one_pending_renewal'\\`;\n  console.log(idx[0]?.indexdef ?? \"NO INDEX\");\n  const dups = await sql\\`select count(*)::int n from (select 1 from attestation_requests where status='pending' and credential_ids is null group by tenant_id,user_id,season having count(*)>1) x\\`;\n  console.log(\"remaining duplicate groups:\", dups[0].n);\n  if (mode === \"clean\") {\n    await sql\\`delete from attestation_requests where token like 'mig-%'\\`;\n    await sql\\`delete from tenants where slug=\\${slug}\\`;\n    await sql\\`delete from users where firebase_uid like 'mig0022-%'\\`;\n    console.log(\"fixture removed\");\n  }\n}\nawait sql.end();\nEOF\nbun /home/nicholas-wood/.claude/jobs/6fff0ac7/tmp/seed.ts seed && (bun run db:migrate 2>&1 | tail -8) && bun /home/nicholas-wood/.claude/jobs/6fff0ac7/tmp/seed.ts clean",
+      "description": "Seed duplicate fixture, run migration, verify and clean up"
+    },
+    "timestamp": "2026-11-22T11:15:57.906Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "export DATABASE_URL=postgres://accessbuddy:testpassword@127.0.0.1:54329/accessbuddy_test; (bun run typecheck -- --force 2>&1 | tail -12); echo \"=== LINT\"; (bun run lint -- --force 2>&1 | rg -n \"error|warning|Tasks:|successful\" | tail -12)",
+      "description": "Run typecheck and lint on the final tree",
+      "timeout": 600000
+    },
+    "timestamp": "2026-11-22T11:16:03.656Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "export DATABASE_URL=postgres://accessbuddy:testpassword@127.0.0.1:54329/accessbuddy_test; bun run test -- --force > /home/nicholas-wood/.claude/jobs/6fff0ac7/tmp/test.out 2>&1; echo exit=$?; rg -n \"Test Files|Tests |skipped|FAIL|✗|×|Tasks:\" /home/nicholas-wood/.claude/jobs/6fff0ac7/tmp/test.out | tail -30; rg -n \"renew-single\" /home/nicholas-wood/.claude/jobs/6fff0ac7/tmp/test.out | head -5",
+      "description": "Run the full test suite against the test database",
+      "timeout": 600000
+    },
+    "timestamp": "2026-11-22T11:16:54.476Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "sed -n 793,803p /home/nicholas-wood/.claude/jobs/6fff0ac7/tmp/test.out | cut -c1-600; rg -n \"another member or another tenant\" -A45 apps/web/src/__tests__/lockers-season.test.ts | head -75",
+      "description": "Inspect the failing locker test"
+    },
+    "timestamp": "2026-11-22T11:17:28.587Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "rg -n \"async function mkAttestation|const mkAttestation\" -A16 apps/web/src/__tests__/lockers-season.test.ts | head -30; rg -n \"^import|drizzle-orm\" apps/web/src/__tests__/lockers-season.test.ts | head -8; rg -n \"mkAttestation\\(\" apps/web/src/__tests__/*.ts | wc -l; rg -n \"insert\\((d\\.)?attestationRequests\\)\" apps/web/src/__tests__/ packages -l",
+      "description": "Find attestation fixture helper in the locker test"
+    },
+    "timestamp": "2026-11-22T11:17:33.325Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/home/nicholas-wood/Documents/workspace/projects/accessbuddy/code/.worktrees/renew-dup/apps/web/src/__tests__/lockers-season.test.ts",
+      "old_string": "      expect((await allocRow(theirs.id)).endedAt).toBeNull();\n    }",
+      "new_string": "      expect((await allocRow(theirs.id)).endedAt).toBeNull();\n      // One pending renewal attestation per member and season (migration\n      // 0022): clear this one before the next case raises its own.\n      await d.db.delete(d.attestationRequests).where(eq(d.attestationRequests.id, id));\n    }"
+    },
+    "timestamp": "2026-11-22T11:17:36.496Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "export DATABASE_URL=postgres://accessbuddy:testpassword@127.0.0.1:54329/accessbuddy_test; (bun run typecheck -- --force 2>&1 | rg \"Tasks:|error\" | tail -4); bun run test -- --force > /home/nicholas-wood/.claude/jobs/6fff0ac7/tmp/test.out 2>&1; echo exit=$?; rg -n \"Test Files|Tests |skipped|FAIL|Tasks:\" /home/nicholas-wood/.claude/jobs/6fff0ac7/tmp/test.out | sed 's/\\x1b\\[[0-9;]*m//g' | tail -12",
+      "description": "Rerun typecheck and the full test suite on the final tree",
+      "timeout": 600000
+    },
+    "timestamp": "2026-11-22T11:17:38.707Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "git add -A && git status --short && git commit -q -F - <<'EOF'\nfix(renewals): keep one pending renewal attestation per member and season\n\nRenew inserted a new pending attestation on every call, and the member page\nRe-send worked by calling Renew, so a repeated click or a re-send left the\nmember listed twice on the admin Requests page and holding two live links.\nThe member page only ever showed one of them.\n\n- Renew re-issues the link on the member's existing pending renewal instead\n  of inserting. A repeat inside 60 seconds is treated as a repeated click:\n  no second email, no new link, no second audit line. The membership row is\n  locked so concurrent calls queue.\n- Migration 0022 closes existing duplicates (newest kept, older marked\n  expired, per tenant with the tenant context set) and adds a partial unique\n  index on pending non-scoped (tenant, user, season).\n- Member page Re-send uses resend-attestation on the pending row.\n- Renew button reloads the page and shows a notice, so the result of the\n  click is visible.\n- Nightly auto-resend never adds a renewal while one is pending.\n- Requests page names a fob confirmation (\"Fob confirmation pending for\n  Fob #123\") so it is not mistaken for a second renewal attestation.\nEOF\ngit log --oneline -1 && git push -q -u origin fix/renew-duplicate-attestations 2>&1 | tail -3; git status -sb | head -1",
+      "description": "Commit the fix and push the feature branch"
+    },
+    "timestamp": "2026-11-22T11:18:41.285Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cat > /home/nicholas-wood/.claude/jobs/6fff0ac7/tmp/pr-body.md <<'EOF'\n## Why\n\nA member could appear twice under Attestation Pending on the Requests page. Renew inserted a new pending attestation on every call, and the member page Re-send worked by calling Renew, so a repeated click or a re-send left two pending records and two live links. The member page only ever showed one of them.\n\nProduction request log, last 30 days: three members received two successful Renew calls 4 to 6 seconds apart (11, 15 and 18 November).\n\n## What changed\n\n- **Renew** re-issues the link on the member's existing pending renewal instead of inserting. A repeat inside 60 seconds is treated as a repeated click: no second email, no new link, no second audit line. The membership row is locked so concurrent calls queue.\n- **Migration 0022** closes existing duplicates (newest kept, older marked `expired`) and adds a partial unique index on pending non-scoped `(tenant_id, user_id, season)`.\n- **Member page Re-send** uses `resend-attestation` on the pending row.\n- **Renew button** reloads the page and shows a notice, so the result of the click is visible.\n- **Nightly auto-resend** never adds a renewal while one is pending.\n- **Requests page** names a fob confirmation (\"Fob confirmation pending for Fob #123\") so it is not mistaken for a second renewal attestation.\n\n## Things to know before merging\n\n- The migration marks the older row of each existing duplicate pair `expired`. A member holding both emails must use the most recent one; the older link will say it has expired.\n- A Re-send from the member page now writes the `attestation_resent` audit line rather than `renew`.\n- Scoped fob confirmations are not covered by the index. They are already limited to one pending row per fob in the Add Credential route.\n\n## Verification\n\n- Typecheck clean, lint 0 errors.\n- Full suite against Postgres: 1,265 passed, 0 skipped (web 1,196 including 7 new in `renew-single-pending-attestation.test.ts`).\n- Migration run against a seeded fixture: of three duplicate pending renewals the newest stayed pending and two became `expired`; scoped, other-season, completed and single rows untouched; index created; no duplicate groups left.\n- `lockers-season.test.ts`: one fixture created three pending attestations for the same member in a loop; it now clears each before the next.\n\nNot yet done: a browser pass on the live site after release.\nEOF\nscp -q /home/nicholas-wood/.claude/jobs/6fff0ac7/tmp/pr-body.md mac:pai-tmp/pr-renew-dup.md && ssh mac 'export GH_TOKEN=$(cat ~/.gh-token) && /opt/homebrew/bin/gh pr create --repo nicholas-wood/accessbuddy --base main --head fix/renew-duplicate-attestations --title \"fix(renewals): keep one pending renewal attestation per member and season\" --body-file ~/pai-tmp/pr-renew-dup.md' 2>&1 | tail -3",
+      "description": "Open the pull request via the Mac's GitHub CLI"
+    },
+    "timestamp": "2026-11-22T11:18:55.217Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ssh mac 'export GH_TOKEN=$(cat ~/.gh-token) && /opt/homebrew/bin/gh pr checks 139 --repo nicholas-wood/accessbuddy --watch --interval 20' 2>&1 | tail -12",
+      "description": "Watch CI checks on pull request 139",
+      "timeout": 600000
+    },
+    "timestamp": "2026-11-22T11:19:00.957Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd ~/Documents/workspace/projects/accessbuddy && bun -e '\nconst fs=require(\"fs\");const p=\"ISA.md\";let s=fs.readFileSync(p,\"utf8\");\nconst a=\"## Decisions\\n\\n\";\nconst e=\"- 2026-11-22: Nick: \\\"go, build the fix\\\" (duplicate pending attestations, entry below). Built on `fix/renew-duplicate-attestations` (bdb7421), PR #139, CI green, merge is Nick`s. Renew re-issues the link on the existing pending renewal (repeat inside 60 s = repeated click, no email); migration 0022 expires older duplicates (newest kept, per tenant with tenant context set) and adds partial unique index `attestation_requests_one_pending_renewal` on pending non-scoped (tenant, user, season); member page Re-send now calls `resend-attestation` (audit line `attestation_resent`, not `renew`); Renew button hard-reloads with a notice; nightly auto-resend skips a member with a pending renewal; Requests page row names a fob confirmation. Not built: closing siblings on completion (the index makes siblings impossible). Verified: 1,265 tests 0 skipped against embedded Postgres, migration run on a seeded duplicate fixture. Owed after release: Interceptor pass on Requests page and member page; confirm Helen Osman shows once. Delegation: built in the main session (single small change set, context already loaded); the 18 s Claude Code Review check is not a real review.\\n\\n\".replace(/`s/,\"’s\");\nif(!s.includes(a))throw new Error(\"anchor\");fs.writeFileSync(p,s.replace(a,a+e));'\nrg -c \"PR #139\" ISA.md\ncat > ~/.claude/projects/-home-nicholas-wood--claude/memory/project-accessbuddy-pr139-duplicate-attestations.md <<'EOF'\n---\nname: project-accessbuddy-pr139-duplicate-attestations\ndescription: AccessBuddy PR #139 (open 22 Nov 2026, CI green, merge is Nick's) stops duplicate pending renewal attestations; post-release Interceptor pass and Helen Osman check owed\nmetadata:\n  type: project\n---\n\nNick, 22 Nov 2026: \"check why Helen Osman's attestation is showing up twice in the list? She only has one fob\", then \"go, build the fix\". PR https://github.com/nicholas-wood/accessbuddy/pull/139, branch `fix/renew-duplicate-attestations` (bdb7421), worktree `code/.worktrees/renew-dup`.\n\nCause: `POST /members/[id]/renew` inserted a pending attestation on every call, the member page Re-send called Renew, and the member page showed only one pending renewal, so the duplicate was visible on the Requests page only. Prod request log showed three members with two 200 Renew calls 4 to 6 s apart (11, 15, 18 Nov). Helen's own rows were never confirmed (logs carry no names, Interceptor extension would not connect).\n\nFix: Renew re-issues the link on the existing pending renewal (repeat inside 60 s sends nothing); migration 0022 expires older duplicates and adds partial unique index `attestation_requests_one_pending_renewal` (pending, credential_ids null); Re-send uses `resend-attestation`; Renew button hard-reloads; cron skips a member with a pending renewal; Requests row names fob confirmations.\n\n**How to apply:**\n- After Nick merges and the release deploys: Interceptor pass on `/t/south-melb-lsc/admin` and a member page, and confirm Helen shows once. Members holding two emails must use the newer link (older row is marked expired by the migration).\n- Any test or script that inserts two pending non-scoped attestations for one member and season now hits the unique index (fixed one such loop in `lockers-season.test.ts`).\n- Diagnosis without DB or browser: `gcloud logging read` over `ssh mac` on POSTs to `/renew`, then the `members?q=` search just before each one names the member the admin was on. Related: [[gotcha-accessbuddy-prod-access]], [[project-accessbuddy-pr111-expiry-update-stage]].\n- The \"Claude Code Review\" check passing in under 20 s is not a review.\nEOF\necho '- [AccessBuddy PR #139 duplicate attestations](project-accessbuddy-pr139-duplicate-attestations.md) — Renew/Re-send inserted second pending attestation; fix + migration 0022 unique index, PR open 22 Nov CI green; Interceptor pass + Helen check owed after release' >> ~/.claude/projects/-home-nicholas-wood--claude/memory/MEMORY.md; tail -1 ~/.claude/projects/-home-nicholas-wood--claude/memory/MEMORY.md | cut -c1-80",
+      "description": "Record outcome in project ISA and memory"
+    },
+    "timestamp": "2026-11-22T11:23:48.838Z"
+  }
+]

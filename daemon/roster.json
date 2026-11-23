@@ -1,7 +1,7 @@
 {
   "proto": 1,
   "supervisorPid": 2762027,
-  "updatedAt": 1795349789853,
+  "updatedAt": 1795436610558,
   "workers": {
     "eb37ba0f": {
       "pid": 3600454,
@@ -74,102 +74,53 @@
       "replPid": 3600460,
       "replProcStart": "580744503"
     },
-    "788018bc": {
-      "pid": 2353478,
-      "procStart": "841161563",
-      "sessionId": "788018bc-fc6f-42e0-9af2-65f006fc3d63",
-      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/788018bc.sock",
-      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/88b912ed.pty.sock",
+    "9af638e9": {
+      "pid": 2914974,
+      "procStart": "843002757",
+      "sessionId": "9af638e9-3bc8-4a18-b390-383270d4eda0",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/9af638e9.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/cdf6b296.pty.sock",
       "cliVersion": "2.1.330",
-      "startedAt": 1795323122710,
+      "startedAt": 1795426163617,
       "attempt": 1,
       "cwd": "/home/nicholas-wood/.claude",
       "dispatch": {
         "proto": 1,
-        "short": "788018bc",
-        "nonce": "90b389bf",
-        "sessionId": "788018bc-fc6f-42e0-9af2-65f006fc3d63",
-        "createdAt": 1795323122703,
+        "short": "9af638e9",
+        "nonce": "55a7c39f",
+        "sessionId": "9af638e9-3bc8-4a18-b390-383270d4eda0",
+        "createdAt": 1795426163611,
         "source": "fleet",
         "cwd": "/home/nicholas-wood/.claude",
         "launch": {
-          "mode": "prompt",
-          "args": [
-            "--session-id",
-            "788018bc-fc6f-42e0-9af2-65f006fc3d63",
+          "mode": "resume",
+          "sessionId": "9af638e9-3bc8-4a18-b390-383270d4eda0",
+          "transcriptPath": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/9af638e9-3bc8-4a18-b390-383270d4eda0.jsonl",
+          "fork": false,
+          "flagArgs": [
             "--agent",
             "claude",
-            "--",
-            "IN access buddy, can we have the ability to have multiple emails against a memeber, with one selected as primary. Also the ability to merge two member accounts together."
+            "--permission-mode",
+            "acceptEdits",
+            "--model",
+            "fable[1m]"
           ],
-          "restoresTranscript": false
+          "restoresTranscript": true
         },
         "env": {},
         "isolation": "none",
         "respawnFlags": [
           "--agent",
-          "claude"
+          "claude",
+          "--permission-mode",
+          "acceptEdits",
+          "--model",
+          "fable[1m]"
         ],
         "agent": "claude",
         "seed": {
-          "intent": "IN access buddy, can we have the ability to have multiple emails against a memeber, with one selected as primary. Also the ability to merge two member accounts together."
-        },
-        "cols": 224,
-        "rows": 50
-      },
-      "decModes": [
-        2004,
-        2031,
-        1004,
-        1000,
-        1002,
-        1003,
-        1006
-      ],
-      "rvAuth": "9b0433e43a42f659c15126ac83c27cb7",
-      "ptyAuth": "8416e81645b93fd59e83d587cf9c31d2",
-      "replPid": 2353640,
-      "replProcStart": "841161580"
-    },
-    "6fff0ac7": {
-      "pid": 2655380,
-      "procStart": "842912958",
-      "sessionId": "6fff0ac7-e1f6-48a2-8601-426a4112f7cb",
-      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/6fff0ac7.sock",
-      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/6d9138dd.pty.sock",
-      "cliVersion": "2.1.330",
-      "startedAt": 1795339005652,
-      "attempt": 1,
-      "cwd": "/home/nicholas-wood/.claude",
-      "dispatch": {
-        "proto": 1,
-        "short": "6fff0ac7",
-        "nonce": "45d62f72",
-        "sessionId": "6fff0ac7-e1f6-48a2-8601-426a4112f7cb",
-        "createdAt": 1795339005647,
-        "source": "fleet",
-        "cwd": "/home/nicholas-wood/.claude",
-        "launch": {
-          "mode": "prompt",
-          "args": [
-            "--session-id",
-            "6fff0ac7-e1f6-48a2-8601-426a4112f7cb",
-            "--agent",
-            "claude",
-            "--",
-            "Can you please check why Helen Osman's attestation is showing up twice in the list? She only has one fob."
-          ],
-          "restoresTranscript": false
-        },
-        "env": {},
-        "isolation": "none",
-        "respawnFlags": [
-          "--agent",
-          "claude"
-        ],
-        "agent": "claude",
-        "seed": {
-          "intent": "Can you please check why Helen Osman's attestation is showing up twice in the list? She only has one fob."
+          "intent": "",
+          "name": "lsv-poc-consolidation"
         },
         "cols": 487,
         "rows": 77
@@ -183,10 +134,21 @@
         1003,
         1006
       ],
-      "rvAuth": "945cc7cb0e5231cca88e6558bc341fc9",
-      "ptyAuth": "94b7d873d65232589d2a20dc1a0aa47f",
-      "replPid": 2655391,
-      "replProcStart": "842912970"
+      "firedInteractiveMarks": [
+        {
+          "kind": "content_paint",
+          "msgsLoaded": 1267,
+          "msgsInJsonl": 1267,
+          "msgsRenderedAtFirstPaint": 1267
+        },
+        {
+          "kind": "prompt_idle"
+        }
+      ],
+      "rvAuth": "2de1a2acc5e1e3b53430f13e7a1399f1",
+      "ptyAuth": "1d920043c70fc914a59f1bb1e9b0e4fb",
+      "replPid": 2915032,
+      "replProcStart": "843002771"
     }
   }
 }

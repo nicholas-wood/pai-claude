@@ -1,0 +1,141 @@
+import { createConnection, type Socket } from "node:net";
+
+export const BOM_FTP_HOST = "ftp.bom.gov.au";
+export const BOM_FTP_DIR = "/anon/gen/fwo";
+export const BOM_USER_AGENT = "LSV-OSS-weather/1.0 (Life Saving Victoria operational tooling; nicholas.h.wood@outlook.com)";
+
+export const BOM_PRODUCTS = {
+  townPrecis: "IDV10753.xml",
+  townText: "IDV10752.xml",
+  metro: "IDV10751.xml",
+} as const;
+
+/**
+ * The Victorian UV alert: a UV index per town for today and the next three
+ * days. The three forecast products above repeat only tomorrow's line from
+ * it, so without this the sheet has Max UV for one day. Optional: if it
+ * cannot be fetched the job carries on with what the forecasts give.
+ */
+export const BOM_UV_PRODUCT = "IDZ00112.xml";
+export type BomXml = Record<keyof typeof BOM_PRODUCTS, string> & { uv?: string };
+
+const TIMEOUT_MS = 60_000;
+
+/**
+ * Minimal anonymous passive-mode FTP client on node:net. basic-ftp returned
+ * truncated bodies under the Bun runtime, and the three BOM files are the
+ * only thing this app ever fetches, so a 90-line RFC 959 client is simpler
+ * than another dependency. The anonymous password carries our User-Agent so
+ * the BOM can see who is fetching.
+ */
+class Ftp {
+  private sock!: Socket;
+  private buffer = "";
+  private waiters: ((line: string) => void)[] = [];
+
+  async connect(host: string, port = 21): Promise<void> {
+    this.sock = await new Promise<Socket>((resolve, reject) => {
+      const s = createConnection({ host, port }, () => resolve(s));
+      s.setTimeout(TIMEOUT_MS, () => s.destroy(new Error("FTP control timeout")));
+      s.once("error", reject);
+      s.setEncoding("utf8");
+      s.on("data", (chunk: string) => this.onData(chunk));
+    });
+    await this.expect(220);
+  }
+
+  private onData(chunk: string) {
+    this.buffer += chunk;
+    let idx: number;
+    while ((idx = this.buffer.indexOf("\r\n")) >= 0) {
+      const line = this.buffer.slice(0, idx);
+      this.buffer = this.buffer.slice(idx + 2);
+      // Skip multi-line continuation lines ("220-...") and keep the final "220 ".
+      if (/^\d{3}-/.test(line)) continue;
+      if (/^\d{3} /.test(line)) this.waiters.shift()?.(line);
+    }
+  }
+
+  private reply(): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error("FTP reply timeout")), TIMEOUT_MS);
+      this.waiters.push((line) => {
+        clearTimeout(t);
+        resolve(line);
+      });
+    });
+  }
+
+  private async expect(code: number, line?: string): Promise<string> {
+    const l = line ?? (await this.reply());
+    if (!l.startsWith(String(code))) throw new Error(`FTP expected ${code}, got: ${l}`);
+    return l;
+  }
+
+  async cmd(command: string, code: number): Promise<string> {
+    this.sock.write(`${command}\r\n`);
+    return this.expect(code);
+  }
+
+  async login(user: string, pass: string): Promise<void> {
+    const r = await this.cmd(`USER ${user}`, 331).catch((e: Error) => (e.message.includes("230") ? "230" : Promise.reject(e)));
+    if (r.startsWith("331")) await this.cmd(`PASS ${pass}`, 230);
+    await this.cmd("TYPE I", 200);
+  }
+
+  async retrieve(path: string): Promise<Buffer> {
+    const pasv = await this.cmd("PASV", 227);
+    const m = pasv.match(/\((\d+),(\d+),(\d+),(\d+),(\d+),(\d+)\)/);
+    if (!m) throw new Error(`Bad PASV reply: ${pasv}`);
+    const host = `${m[1]}.${m[2]}.${m[3]}.${m[4]}`;
+    const port = Number(m[5]) * 256 + Number(m[6]);
+    const chunks: Buffer[] = [];
+    const dataDone = new Promise<void>((resolve, reject) => {
+      const d = createConnection({ host, port });
+      d.setTimeout(TIMEOUT_MS, () => d.destroy(new Error("FTP data timeout")));
+      d.on("data", (c: Buffer) => chunks.push(Buffer.from(c)));
+      d.once("error", reject);
+      d.once("close", () => resolve());
+    });
+    this.sock.write(`RETR ${path}\r\n`);
+    await this.expect(150);
+    await dataDone;
+    await this.expect(226);
+    return Buffer.concat(chunks);
+  }
+
+  async quit(): Promise<void> {
+    try {
+      this.sock.write("QUIT\r\n");
+    } finally {
+      this.sock.destroy();
+    }
+  }
+}
+
+/**
+ * Fetch the three Victorian forecast products over the BOM's anonymous FTP.
+ * The www.bom.gov.au/fwo URLs block data-centre clients; FTP does not.
+ */
+export async function fetchBomProducts(): Promise<BomXml> {
+  const ftp = new Ftp();
+  const out: Partial<BomXml> = {};
+  try {
+    await ftp.connect(BOM_FTP_HOST);
+    await ftp.login("anonymous", BOM_USER_AGENT);
+    for (const [key, file] of Object.entries(BOM_PRODUCTS) as [keyof typeof BOM_PRODUCTS, string][]) {
+      const text = (await ftp.retrieve(`${BOM_FTP_DIR}/${file}`)).toString("utf8");
+      if (!text.includes("<product")) throw new Error(`${file} did not look like a BOM product (${text.length} bytes)`);
+      out[key] = text;
+    }
+    try {
+      const uv = (await ftp.retrieve(`${BOM_FTP_DIR}/${BOM_UV_PRODUCT}`)).toString("utf8");
+      if (uv.includes("<product")) out.uv = uv;
+    } catch (err) {
+      console.warn(`[weather] ${BOM_UV_PRODUCT} not fetched, UV limited to the forecast products: ${String(err)}`);
+    }
+  } finally {
+    await ftp.quit();
+  }
+  return out as BomXml;
+}

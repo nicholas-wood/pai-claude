@@ -1,0 +1,95 @@
+import type { BomFeed } from "./parse";
+
+/**
+ * Server-side port of the page's weather-feed logic. These functions are
+ * line-for-line ports of BOM_FEED, bomFeedSources(), windFromText(),
+ * compass() and bomFeedToGrid() in oss/src/ux/index.before-ux.html (the
+ * "weather feed" section build.py lifts into the page). If the page's
+ * versions change, change these to match; test/weather.test.ts pins the
+ * behaviour against saved BOM products.
+ */
+
+/** Area → [town for the numbers, town or "area:<metro>" for wind/UV/fire]. */
+export const BOM_FEED: Record<string, [string, string]> = {
+  Bass: ["Wonthaggi", "Wonthaggi"],
+  Peninsula: ["Mornington", "area:Mornington Peninsula"],
+  Gippsland: ["Lakes Entrance", "Bairnsdale"],
+  Kingston: ["Frankston", "Frankston"],
+  Bayside: ["Moorabbin", "area:Melbourne"],
+  "Port Phillip": ["Melbourne", "area:Melbourne"],
+  Geelong: ["Geelong", "area:Geelong and Surf Coast"],
+  "Surf Coast": ["Aireys Inlet", "area:Geelong and Surf Coast"],
+  Otway: ["Cape Otway", "Colac"],
+  Western: ["Warrnambool", "Warrnambool"],
+};
+
+/** The slice of config/settings the weather feed reads. */
+export type WeatherSettings = {
+  weatherAreas?: Record<string, string[]>;
+  weatherSites?: Record<string, { site?: string; bomTown?: string; bomText?: string }>;
+};
+
+/** One area's values for a day, as the weather sheet stores them (all strings). */
+export type RegionRec = { min?: string; max?: string; wind?: string; windDir?: string; rain?: string; uv?: string; fire?: string };
+/** date → area → values */
+export type FeedGrid = Record<string, Record<string, RegionRec>>;
+
+export function bomFeedSources(settings: WeatherSettings, r: string): [string, string] {
+  const s = settings.weatherSites?.[r] || {};
+  const d = BOM_FEED[r] || [s.site ?? "", s.site ?? ""];
+  return [s.bomTown || d[0], s.bomText || d[1]];
+}
+
+export function compass(s: string): string {
+  const map: Record<string, string> = { north: "N", south: "S", east: "E", west: "W", northerly: "N", southerly: "S", easterly: "E", westerly: "W" };
+  const words = (s || "")
+    .toLowerCase()
+    .replace(/winds?/g, "")
+    .split(/\s+to\s+|\s*\/\s*|\s+then\s+/)
+    .map((w) => w.trim())
+    .filter(Boolean);
+  const conv = (w: string) => w.replace(/(north|south|east|west)(erly)?/g, (m) => map[m.replace("erly", "")] || "").replace(/[^NSEW]/g, "");
+  return words.map(conv).filter(Boolean).join("-");
+}
+
+export function windFromText(t: string | undefined): { wind?: string; windDir?: string } {
+  if (!t) return {};
+  const spans = [...t.matchAll(/((?:(?:north|south|east|west)[a-z]*(?:\s+to\s+|\s*\/\s*)?)+)\s+(\d+)\s+to\s+(\d+)\s*km\/h/gi)];
+  if (!spans.length) return /light winds|winds? light/i.test(t) ? { wind: "Light", windDir: "" } : {};
+  const lo = Math.min(...spans.map((m) => +m[2]));
+  const hi = Math.max(...spans.map((m) => +m[3]));
+  const dirs: string[] = [];
+  for (const m of spans) for (const p of compass(m[1]).split("-")) if (p && !dirs.includes(p)) dirs.push(p);
+  return { wind: `${lo}-${hi}`, windDir: dirs.join("-") };
+}
+
+export function bomFeedToGrid(feed: BomFeed, days: string[], settings: WeatherSettings): { out: FeedGrid; missing: string[] } {
+  const out: FeedGrid = {};
+  const missing = new Set<string>();
+  for (const regions of Object.values(settings.weatherAreas || {})) {
+    for (const r of regions) {
+      const [town, txt] = bomFeedSources(settings, r);
+      const T = feed.towns?.[town];
+      const X = feed.towns?.[txt];
+      if (!T) missing.add(town);
+      if (!X) missing.add(txt.replace("area:", ""));
+      for (const d of days) {
+        const a = T?.[d] || {};
+        const b = X?.[d] || {};
+        const rec: RegionRec = {};
+        if (a.min) rec.min = a.min;
+        if (a.max) rec.max = a.max;
+        if (a.rain) rec.rain = a.rain.replace(/\s*mm/i, "").replace(/\s*to\s*/i, "-").replace(/^0-0$/, "0");
+        else if (a.max || a.pop) rec.rain = "0";
+        Object.assign(rec, windFromText(b.text));
+        // One addition to the page's logic: when the wind/UV source has no UV line for the day, use the
+        // numbers town's own line from the UV alert product (the feed carries it for four days).
+        const uv = (b.uvText || a.uvText || "").match(/UV Index (?:predicted to reach|of)\s*(\d+)/i);
+        if (uv) rec.uv = uv[1];
+        if (b.fire) rec.fire = b.fire;
+        if (Object.keys(rec).length) (out[d] ||= {})[r] = rec;
+      }
+    }
+  }
+  return { out, missing: [...missing] };
+}

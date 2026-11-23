@@ -1,0 +1,164 @@
+import { FieldValue } from "firebase-admin/firestore";
+import { appDb as adminDb } from "@lsv-poc/poc-auth/firebase";
+import { fetchBomProducts } from "./ftp";
+import { buildFeed, formatIssued, type BomFeed } from "./parse";
+import { bomFeedToGrid, type RegionRec, type WeatherSettings } from "./mapping";
+
+/**
+ * The weather job. Fetches the BOM feeds, projects them onto the areas in
+ * config/settings exactly as the page's "Fill from BOM" paste does, and
+ * writes weather/<YYYY-MM-DD> for today plus six days (Melbourne dates, the
+ * same seven days the Weather sheet shows).
+ *
+ * Doc shape, the page's own (views.js saveWeatherDay):
+ *   { date, regions: { <area>: { min, max, wind, windDir, rain, uv, fire } },
+ *     manual: ["<area>|<field>", ...], source: "BOM forecast issued <time>",
+ *     updatedAt: <ISO string>, updatedBy }
+ *
+ * A key in `manual` means a member typed that value. The job never touches
+ * those cells, never writes an empty value, and leaves every other field of
+ * the doc alone. Days saved before `manual` existed and not sourced from a
+ * BOM feed are treated as wholly typed by members (same rule as the page's
+ * manualKeys()).
+ */
+export type WeatherJobSummary = {
+  ok: true;
+  trigger: string;
+  issued: string;
+  days: number;
+  written: number;
+  skippedManual: number;
+  missing: string[];
+  dates: string[];
+};
+
+export const WEATHER_STATUS_DOC = "config/weatherStatus";
+const BOM_SOURCE_PREFIX = "BOM forecast issued ";
+const JOB_ACTOR = "bom-weather-job";
+/** Fields the sheet shows as cells; `fire` rides along un-tracked, as on the page. */
+const CELL_FIELDS = ["min", "max", "wind", "windDir", "rain", "uv"] as const;
+
+export function melbourneToday(now = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Melbourne", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+}
+
+export function addDays(date: string, n: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+export function weatherDays(now = new Date()): string[] {
+  const t = melbourneToday(now);
+  return Array.from({ length: 7 }, (_, i) => addDays(t, i));
+}
+
+export type WeatherDoc = {
+  date?: string;
+  regions?: Record<string, RegionRec>;
+  manual?: string[];
+  source?: string;
+  [k: string]: unknown;
+};
+
+export function manualKeys(w: WeatherDoc | undefined): string[] {
+  if (!w) return [];
+  if (Array.isArray(w.manual)) return w.manual;
+  if (/^BOM forecast issued/.test(w.source || "")) return [];
+  return Object.entries(w.regions || {}).flatMap(([r, rec]) =>
+    Object.entries(rec || {})
+      .filter(([k, v]) => k !== "fire" && v != null && v !== "")
+      .map(([k]) => `${r}|${k}`)
+  );
+}
+
+/** Pure merge for one day. Returns null when the doc would not change. */
+export function mergeBomDay(
+  date: string,
+  existing: WeatherDoc | undefined,
+  bom: Record<string, RegionRec> | undefined,
+  issuedLabel: string,
+  nowIso: string
+): { doc: WeatherDoc; written: number; skippedManual: number } | null {
+  const manual = new Set(manualKeys(existing));
+  const regions: Record<string, RegionRec> = JSON.parse(JSON.stringify(existing?.regions ?? {}));
+  let written = 0;
+  let skippedManual = 0;
+  for (const [area, rec] of Object.entries(bom ?? {})) {
+    for (const field of CELL_FIELDS) {
+      const value = rec[field];
+      if (value === undefined || value === null || value === "") continue;
+      if (manual.has(`${area}|${field}`)) {
+        skippedManual++;
+        continue;
+      }
+      regions[area] = regions[area] ?? {};
+      if (regions[area][field] !== value) {
+        regions[area][field] = value;
+        written++;
+      }
+    }
+    if (rec.fire && regions[area] && regions[area].fire !== rec.fire) {
+      regions[area].fire = rec.fire;
+      written++;
+    }
+  }
+  const hadManualField = Array.isArray(existing?.manual);
+  if (written === 0 && hadManualField) return null;
+  if (written === 0 && !existing) return null;
+  // Source says where the day's figures came from. A day that is wholly
+  // member-typed keeps its own source; otherwise it is the BOM issue.
+  const source = written > 0 ? `${BOM_SOURCE_PREFIX}${issuedLabel}` : existing?.source ?? `${BOM_SOURCE_PREFIX}${issuedLabel}`;
+  return {
+    doc: { ...(existing ?? {}), date, regions, manual: [...manual].sort(), source, updatedAt: nowIso, updatedBy: JOB_ACTOR },
+    written,
+    skippedManual,
+  };
+}
+
+export async function applyFeed(feed: BomFeed, trigger: string, now = new Date()): Promise<WeatherJobSummary> {
+  const db = adminDb();
+  const settingsSnap = await db.doc("config/settings").get();
+  const settings = (settingsSnap.data() ?? {}) as WeatherSettings;
+  if (!Object.keys(settings.weatherAreas ?? {}).length) {
+    throw new Error("config/settings has no weatherAreas yet. Import the OSSD spreadsheet or restore a data file first.");
+  }
+  const issuedLabel = formatIssued(feed.issued);
+  const dates = weatherDays(now);
+  const { out, missing } = bomFeedToGrid(feed, dates, settings);
+  let written = 0;
+  let skippedManual = 0;
+  for (const date of dates) {
+    const ref = db.collection("weather").doc(date);
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const merged = mergeBomDay(date, snap.exists ? (snap.data() as WeatherDoc) : undefined, out[date], issuedLabel, now.toISOString());
+      if (!merged) return;
+      written += merged.written;
+      skippedManual += merged.skippedManual;
+      tx.set(ref, merged.doc);
+    });
+  }
+  await db.doc(WEATHER_STATUS_DOC).set(
+    { lastRunAt: FieldValue.serverTimestamp(), lastTrigger: trigger, lastIssued: issuedLabel, lastWritten: written, lastSkippedManual: skippedManual, lastMissing: missing, lastDates: dates, lastError: null },
+    { merge: true }
+  );
+  return { ok: true, trigger, issued: issuedLabel, days: dates.length, written, skippedManual, missing, dates };
+}
+
+export async function runWeatherJob(opts: { trigger: string }): Promise<WeatherJobSummary> {
+  const started = Date.now();
+  try {
+    const xml = await fetchBomProducts();
+    const feed = buildFeed(xml);
+    const summary = await applyFeed(feed, opts.trigger);
+    console.log(`[weather] trigger=${opts.trigger} issued="${summary.issued}" days=${summary.days} written=${summary.written} skippedManual=${summary.skippedManual} missing=${summary.missing.join("|") || "-"} ms=${Date.now() - started}`);
+    return summary;
+  } catch (err) {
+    await adminDb()
+      .doc(WEATHER_STATUS_DOC)
+      .set({ lastErrorAt: FieldValue.serverTimestamp(), lastError: String(err), lastTrigger: opts.trigger }, { merge: true })
+      .catch(() => {});
+    throw err;
+  }
+}

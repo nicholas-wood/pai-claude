@@ -1,0 +1,72 @@
+"use client";
+
+import { sendSignInLinkToEmail } from "firebase/auth";
+import { useState } from "react";
+import { auth } from "@/lib/firebase-client";
+import { safeRedirect } from "@/lib/safe-redirect";
+
+/** Email-link sign-in against the shared LSV POC sign-in pool. Passwords are off. Access is allocated in the hub. */
+export default function SignIn() {
+  const [email, setEmail] = useState("");
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+
+  async function send() {
+    if (!email.trim()) return;
+    setState("sending");
+    try {
+      const redirect = safeRedirect(new URLSearchParams(window.location.search).get("redirect"));
+      await sendSignInLinkToEmail(auth, email.trim(), {
+        url: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirect)}`,
+        handleCodeInApp: true,
+      });
+      window.localStorage.setItem("emailForSignIn", email.trim());
+      setState("sent");
+    } catch {
+      setState("error");
+    }
+  }
+
+  return (
+    <main className="auth-shell">
+      <div className="auth-card">
+        <h1>Operational Service Summary</h1>
+        <p className="sub">Life Saving Victoria. Sign in with your email, no password needed.</p>
+        {state === "sent" ? (
+          <div className="sent">
+            <div className="icon">✉</div>
+            <p>
+              <strong>Check your email</strong>
+            </p>
+            <p className="hint">
+              We sent a sign-in link to <strong>{email}</strong>. Open it in this browser. It can be used once.
+            </p>
+            <div className="row">
+              <button className="link" onClick={() => setState("idle")}>
+                Use a different email
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <label htmlFor="email">Email address</label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="email"
+              autoFocus
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && send()}
+              placeholder="you@example.com"
+            />
+            <button className="primary" onClick={send} disabled={state === "sending" || !email.trim()}>
+              {state === "sending" ? "Sending..." : "Send sign-in link"}
+            </button>
+            {state === "error" && <p className="error">We could not send the link. Try again shortly.</p>}
+            <p className="hint">We will email you a sign-in link.</p>
+          </>
+        )}
+      </div>
+    </main>
+  );
+}

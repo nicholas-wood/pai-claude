@@ -1,0 +1,7 @@
+import { logoutResponse } from "@lsv-poc/poc-auth";
+import { origin, secureCookie } from "@/lib/deps";
+
+export const dynamic = "force-dynamic";
+
+/** Clears the session cookie and lands on sign-in. The page's own "log out" link goes to /sign-out, which also ends the browser's Firebase session. */
+export const GET = () => logoutResponse(`${origin()}/sign-in`, secureCookie());

@@ -15,3 +15,5 @@ What the standalone attempt left behind, reported by the lsv-poc-consolidation s
 - Dead Terraform working copy with a `prod.tfvars` at `mac:~/pai-tmp/limsoc-pa`.
 
 Why it was replaced: see [[feedback-separate-apps-stay-separate]] for the first correction, then Nick's later decision to consolidate all LSV POCs in one project.
+
+For how to change the app now (page source, reference group name, shipping), see [[project-poc-permissions]].

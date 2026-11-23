@@ -1,0 +1,29 @@
+import { readCookie } from "@lsv-poc/poc-auth";
+import { adminApp } from "@lsv-poc/poc-auth/firebase";
+import { getAuth } from "firebase-admin/auth";
+import { APP_CLAIM, gate, json, log, sameOrigin } from "@/lib/deps";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Mint a Firebase custom token so the browser Firestore SDK can authenticate
+ * when it has no Firebase session of its own (cleared site data, another
+ * browser profile sharing the cookie). The role is copied from the session
+ * the gate has just verified, including any hub downgrade; nothing is read
+ * from the request. Signing goes through IAM signBlob as this app's own
+ * runtime account (modules/poc-app `client_access`), not Firebase Auth admin.
+ *
+ * POST only, same-origin only, never cached.
+ */
+export async function POST(request: Request) {
+  if (!sameOrigin(request)) return json(403, { error: "Forbidden" });
+  const a = await gate().check(readCookie(request.headers.get("cookie")), "member");
+  if (!a.ok) return json(a.status, { error: a.reason });
+  try {
+    const token = await getAuth(adminApp()).createCustomToken(a.user.uid, { [APP_CLAIM]: a.user.role });
+    return json(200, { token });
+  } catch (err) {
+    log.error("custom token mint failed", { err, uid: a.user.uid });
+    return json(503, { error: "Try again shortly" });
+  }
+}

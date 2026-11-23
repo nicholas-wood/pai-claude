@@ -1,0 +1,5 @@
+import { appId, json } from "@/lib/deps";
+
+export const dynamic = "force-dynamic";
+
+export const GET = () => json(200, { ok: true, app: appId, version: process.env.NEXT_PUBLIC_APP_VERSION ?? "dev", time: new Date().toISOString() });

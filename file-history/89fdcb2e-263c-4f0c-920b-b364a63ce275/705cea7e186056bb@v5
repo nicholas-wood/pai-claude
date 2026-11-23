@@ -1,0 +1,95 @@
+#!/usr/bin/env bun
+/**
+ * Live Firestore rules probe for the app's named database (no emulator here).
+ *
+ *   APP_URL=https://service-summary.poc.nicholaswood.com.au NEXT_PUBLIC_FIREBASE_API_KEY=<key> bun run scripts/rules-probe.ts
+ *
+ * Uses throwaway accounts whose claims are set on the custom token, and the
+ * Firestore REST API with each account's ID token, so the deployed rules
+ * decide every call. Covers: no token, no claim, the old bare claims,
+ * another POC's claim, a member, a member the hub has revoked
+ * (platformAccess/<uid>.role == null), a downgraded admin, and the
+ * server-only collections. Cleans up what it creates.
+ */
+import { getFirestore } from "firebase-admin/firestore";
+import { adminAuth, check, DATABASE, finish, idTokenForUid, PROJECT } from "./lib-probe";
+
+const BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/${DATABASE}/documents`;
+const adminDb = getFirestore(DATABASE);
+const stamp = Date.now().toString(36);
+const U = { member: `probe-member-${stamp}`, admin: `probe-admin-${stamp}`, revoked: `probe-revoked-${stamp}`, downgraded: `probe-down-${stamp}`, none: `probe-none-${stamp}`, bare: `probe-bare-${stamp}`, other: `probe-other-${stamp}` };
+
+type Tok = string | null;
+const call = (method: string, path: string, token: Tok, body?: unknown) =>
+  fetch(`${BASE}/${path}`, { method, headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body ? JSON.stringify(body) : undefined });
+const fields = (o: Record<string, string>) => ({ fields: Object.fromEntries(Object.entries(o).map(([k, v]) => [k, { stringValue: v }])) });
+const read = (path: string, t: Tok) => call("GET", path, t);
+const write = (path: string, t: Tok, uid: string, extra: Record<string, string> = {}) => call("PATCH", path, t, fields({ updatedBy: uid, updatedAt: new Date().toISOString(), ...extra }));
+const del = (path: string, t: Tok) => call("DELETE", path, t);
+const denied = async (name: string, p: Promise<Response>) => { const r = await p; check(name, r.status === 403 || r.status === 401, String(r.status)); };
+const allowed = async (name: string, p: Promise<Response>) => { const r = await p; check(name, r.status === 200, `${r.status} ${r.status === 200 ? "" : (await r.text()).slice(0, 120)}`); };
+
+const unit = `units/ZZ-PROBE-${stamp}`;
+try {
+  await denied("no token: read units", read("units", null));
+  await denied("no token: read a weather day", read("weather/2026-01-01", null));
+
+  const none = await idTokenForUid(U.none);
+  await denied("signed in, no claim: read units", read("units", none));
+  await denied("signed in, no claim: write unit", write(unit, none, U.none));
+
+  const bare = await idTokenForUid(U.bare, { member: true, admin: true });
+  await denied("bare member/admin claims: read units", read("units", bare));
+  await denied("bare member/admin claims: write unit", write(unit, bare, U.bare));
+  await denied("bare member/admin claims: delete config/settings", del("config/settings", bare));
+
+  const other = await idTokenForUid(U.other, { poc_permissions: "admin", poc_oss: "owner" });
+  await denied("another POC's claim, unknown role here: read units", read("units", other));
+
+  const member = await idTokenForUid(U.member, { poc_oss: "member" });
+  await allowed("member: read units", read("units", member));
+  await allowed("member: read profiles", read("profiles", member));
+  await allowed("member: stamped write", write(unit, member, U.member, { code: "ZZ" }));
+  await denied("member: write stamped as someone else", write(unit, member, "someone-else"));
+  await denied("member: write with no updatedAt", call("PATCH", unit, member, fields({ updatedBy: U.member })));
+  await denied("member: write weather with a bad id", write("weather/not-a-date", member, U.member));
+  await allowed("member: write weather with a date id", write("weather/2099-01-01", member, U.member));
+  await denied("member: write config/weatherStatus", write("config/weatherStatus", member, U.member));
+  await denied("member: delete config/settings (admin only)", del("config/settings", member));
+  await denied("member: write profiles", write(`profiles/${U.member}`, member, U.member, { name: "x" }));
+  await denied("member: read platformAccess", read(`platformAccess/${U.member}`, member));
+  await denied("member: write own platformAccess", write(`platformAccess/${U.member}`, member, U.member, { role: "admin" }));
+  await denied("member: read rateLimitBuckets", read("rateLimitBuckets", member));
+  await denied("member: write an unknown collection", write(`members/x@example.com`, member, U.member));
+
+  // The hub's record with a role keeps access; role null ends it at once, with the token still valid.
+  await adminDb.doc(`platformAccess/${U.member}`).set({ role: "member", updatedAt: Date.now(), email: "probe@example.invalid" });
+  await allowed("member with a hub record naming a role: read units", read("units", member));
+
+  const revoked = await idTokenForUid(U.revoked, { poc_oss: "member" });
+  await allowed("before revoke: read units", read("units", revoked));
+  await adminDb.doc(`platformAccess/${U.revoked}`).set({ role: null, updatedAt: Date.now(), email: "probe@example.invalid" });
+  await denied("after hub revoke, same token: read units", read("units", revoked));
+  await denied("after hub revoke, same token: write unit", write(unit, revoked, U.revoked));
+
+  const admin = await idTokenForUid(U.admin, { poc_oss: "admin" });
+  const tmpCfg = "config/contacts";
+  const before = await adminDb.doc(tmpCfg).get();
+  await allowed("admin: stamped write to config/contacts", write(tmpCfg, admin, U.admin));
+  const down = await idTokenForUid(U.downgraded, { poc_oss: "admin" });
+  await adminDb.doc(`platformAccess/${U.downgraded}`).set({ role: "member", updatedAt: Date.now(), email: "probe@example.invalid" });
+  await denied("admin downgraded by the hub: delete config/contacts", del(tmpCfg, down));
+  await allowed("admin downgraded by the hub: still reads as a member", read("units", down));
+  if (before.exists) await adminDb.doc(tmpCfg).set(before.data()!);
+  else await adminDb.doc(tmpCfg).delete();
+
+  await allowed("member: delete own probe unit", del(unit, member));
+} finally {
+  for (const uid of Object.values(U)) {
+    await adminAuth.deleteUser(uid).catch(() => {});
+    await adminDb.doc(`platformAccess/${uid}`).delete().catch(() => {});
+  }
+  await adminDb.doc(unit).delete().catch(() => {});
+  await adminDb.doc("weather/2099-01-01").delete().catch(() => {});
+}
+finish();

@@ -1,0 +1,24 @@
+import { readCookie } from "@lsv-poc/poc-auth";
+import { gate, json, log, rateLimiter, sameOrigin } from "@/lib/deps";
+import { runWeatherJob } from "@/lib/weather/job";
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+/**
+ * "Refresh from BOM now". Member session, same-origin, and limited to two
+ * runs a minute across all members so the BOM's FTP is not hammered.
+ */
+export async function POST(request: Request) {
+  if (!sameOrigin(request)) return json(403, { error: "Forbidden" });
+  const a = await gate().check(readCookie(request.headers.get("cookie")), "member");
+  if (!a.ok) return json(a.status, { error: a.reason });
+  const rl = await rateLimiter().check("global", { namespace: "weather.refresh", windowSeconds: 60, max: 2 });
+  if (!rl.ok) return json(429, { error: "A refresh ran a moment ago. Try again shortly." }, { "Retry-After": String(rl.retryAfter) });
+  try {
+    return json(200, await runWeatherJob({ trigger: `manual:${a.user.email}` }));
+  } catch (err) {
+    log.error("manual weather refresh failed", { err, by: a.user.email });
+    return json(502, { error: "BOM refresh failed" });
+  }
+}

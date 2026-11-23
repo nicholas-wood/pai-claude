@@ -1,0 +1,150 @@
+import { createPrivateKey, createPublicKey, randomUUID, sign, verify } from "node:crypto";
+import { parseRole, type AppRole } from "./claims";
+import { LOG_EVENTS, type Logger } from "./log";
+import { safeRedirect } from "./safe-redirect";
+import { sessionSetCookie, signSession } from "./session";
+
+/**
+ * Hub handoff: one sign-in at the hub opens every POC allocated to you.
+ *
+ * The hub signs a short-lived, single-use pass ("ticket") that says "uid U,
+ * email E, holds role R in app A". The browser carries it to that POC's
+ * /auth/handoff, which checks it and then sets its OWN `__session` cookie,
+ * exactly as an email-link sign-in would. POC sessions stay separate; the
+ * individual email-link sign-in on each POC is unchanged.
+ *
+ * Why an asymmetric signature (Ed25519): a POC only ever holds the hub's
+ * public key, so it can check a ticket but cannot make one. A compromised
+ * POC therefore cannot let itself, or anyone, into another POC.
+ *
+ * What stops misuse of a ticket:
+ *   - aud: valid for exactly one app id;
+ *   - exp: 60 seconds, and never accepted if issued for longer;
+ *   - jti: the receiver records it and refuses a second use;
+ *   - the role comes from the hub's source of truth at the moment of launch,
+ *     and the POC's per-request override check still applies afterwards, so
+ *     a revoke in the hub ends the session as it does for any other sign-in.
+ */
+export const HANDOFF_TTL_SECONDS = 60;
+const PREFIX = "poch1";
+const CLOCK_SKEW_SECONDS = 5;
+
+export type HandoffClaims = { aud: string; sub: string; email: string; role: AppRole };
+export type HandoffTicket = HandoffClaims & { v: 1; iat: number; exp: number; jti: string };
+
+/** PEM (PKCS8) Ed25519 private key -> PEM (SPKI) public key. The hub serves this; POCs fetch it. */
+export function handoffPublicKey(privateKeyPem: string): string {
+  return createPublicKey(createPrivateKey(privateKeyPem)).export({ type: "spki", format: "pem" }).toString();
+}
+
+export function signHandoff(claims: HandoffClaims, privateKeyPem: string, nowSeconds = Math.floor(Date.now() / 1000), jti: string = randomUUID()): string {
+  const key = createPrivateKey(privateKeyPem);
+  if (key.asymmetricKeyType !== "ed25519") throw new Error("Handoff signing key must be Ed25519");
+  const ticket: HandoffTicket = { v: 1, aud: claims.aud, sub: claims.sub, email: claims.email.toLowerCase().trim(), role: claims.role, iat: nowSeconds, exp: nowSeconds + HANDOFF_TTL_SECONDS, jti };
+  const body = Buffer.from(JSON.stringify(ticket));
+  return `${PREFIX}.${body.toString("base64url")}.${sign(null, body, key).toString("base64url")}`;
+}
+
+/** Null unless the signature is the hub's, the ticket is for this app, and it is inside its 60 seconds. Does not check reuse. */
+export function verifyHandoff(value: string | null | undefined, publicKeyPem: string, appId: string, nowSeconds = Math.floor(Date.now() / 1000)): HandoffTicket | null {
+  if (!value || value.length > 2048) return null;
+  const parts = value.split(".");
+  if (parts.length !== 3 || parts[0] !== PREFIX) return null;
+  let body: Buffer;
+  let ok = false;
+  try {
+    body = Buffer.from(parts[1], "base64url");
+    const key = createPublicKey(publicKeyPem);
+    if (key.asymmetricKeyType !== "ed25519") return null;
+    ok = verify(null, body, key, Buffer.from(parts[2], "base64url"));
+  } catch {
+    return null;
+  }
+  if (!ok) return null;
+  let p: Record<string, unknown>;
+  try {
+    p = JSON.parse(body.toString());
+  } catch {
+    return null;
+  }
+  const role = parseRole(p.role);
+  if (p.v !== 1 || p.aud !== appId || !role) return null;
+  if (typeof p.sub !== "string" || !p.sub || typeof p.email !== "string" || !p.email || typeof p.jti !== "string" || p.jti.length < 8 || p.jti.length > 64) return null;
+  if (typeof p.iat !== "number" || typeof p.exp !== "number") return null;
+  if (p.exp - p.iat > HANDOFF_TTL_SECONDS) return null; // never honour a long-lived ticket, whoever signed it
+  if (p.iat > nowSeconds + CLOCK_SKEW_SECONDS || p.exp < nowSeconds) return null;
+  return { v: 1, aud: appId, sub: p.sub, email: p.email, role, iat: p.iat, exp: p.exp, jti: p.jti };
+}
+
+/** Fetches the hub's public key and keeps it for ten minutes. `force` skips the cache (used once after a failed check, for key rotation). */
+export function hubKeyFetcher(hubUrl: string, ttlMs = 10 * 60_000, fetchImpl: typeof fetch = fetch) {
+  let cached: { pem: string; at: number } | null = null;
+  return async (force = false): Promise<string> => {
+    if (!force && cached && Date.now() - cached.at < ttlMs) return cached.pem;
+    const r = await fetchImpl(`${hubUrl.replace(/\/$/, "")}/api/handoff/key`, { headers: { Accept: "application/json" } });
+    if (!r.ok) throw new Error(`hub key fetch failed: ${r.status}`);
+    const b = (await r.json()) as { publicKey?: unknown };
+    if (typeof b.publicKey !== "string" || !b.publicKey.includes("PUBLIC KEY")) throw new Error("hub key response malformed");
+    cached = { pem: b.publicKey, at: Date.now() };
+    return cached.pem;
+  };
+}
+
+export type HandoffReceiverOptions = {
+  appId: string;
+  secret: () => string;
+  /** The app's public origin; every redirect is built from it, never from the request host. */
+  appUrl: string;
+  hubPublicKey: (force?: boolean) => Promise<string>;
+  /** Record the ticket id; resolve false if it was already recorded. Must be atomic. */
+  consumeTicket: (jti: string, expiresAtSeconds: number) => Promise<boolean>;
+  log: Logger;
+  secureCookie: boolean;
+  now?: () => number;
+};
+
+/**
+ * GET /auth/handoff?ticket=...&redirect=/path -> 303 into the app with the
+ * `__session` cookie, or 303 to this app's own sign-in page with no cookie.
+ * A failure never loops back to the hub: `hub=failed` tells the sign-in page
+ * to show the individual sign-in form.
+ */
+export function createHandoffReceiver(o: HandoffReceiverOptions) {
+  const now = o.now ?? (() => Math.floor(Date.now() / 1000));
+  const base = o.appUrl.replace(/\/$/, "");
+  const to = (path: string, cookie?: string) =>
+    new Response(null, { status: 303, headers: { Location: `${base}${path}`, "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer", ...(cookie ? { "Set-Cookie": cookie } : {}) } });
+  const refuse = (reason: string, extra: Record<string, unknown> = {}) => {
+    o.log.warn("hub handoff refused", { event: LOG_EVENTS.signInFailed, reason, via: "handoff", ...extra });
+    return to("/sign-in?hub=failed");
+  };
+
+  return async function GET(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const value = url.searchParams.get("ticket");
+    const redirect = safeRedirect(url.searchParams.get("redirect"));
+    if (!value) return refuse("no_ticket");
+
+    let ticket: HandoffTicket | null = null;
+    try {
+      ticket = verifyHandoff(value, await o.hubPublicKey(), o.appId, now());
+      // One retry with a fresh key, so a hub key rotation does not lock people out for ten minutes.
+      if (!ticket) ticket = verifyHandoff(value, await o.hubPublicKey(true), o.appId, now());
+    } catch (err) {
+      return refuse("hub_key_unavailable", { err });
+    }
+    if (!ticket) return refuse("invalid_ticket");
+
+    let fresh: boolean;
+    try {
+      fresh = await o.consumeTicket(ticket.jti, ticket.exp);
+    } catch (err) {
+      return refuse("ticket_store_unavailable", { err, uid: ticket.sub });
+    }
+    if (!fresh) return refuse("ticket_reused", { uid: ticket.sub });
+
+    const cookie = signSession({ app: o.appId, uid: ticket.sub, email: ticket.email, role: ticket.role }, o.secret(), now());
+    o.log.info("sign-in", { event: LOG_EVENTS.signInOk, uid: ticket.sub, role: ticket.role, via: "handoff" });
+    return to(redirect, sessionSetCookie(cookie, o.secureCookie));
+  };
+}

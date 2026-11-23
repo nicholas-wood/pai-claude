@@ -1,0 +1,85 @@
+import { readCookie, SITE_HEADERS } from "@lsv-poc/poc-auth";
+import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { APP_CLAIM, appId, gate, origin, readProfile } from "@/lib/deps";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Serves the Operational Service Summary page at the root of its hostname.
+ *
+ * The page is the built artifact (oss/index.html), an HTML fragment, wrapped
+ * in a document shell with three injections made per request: a nonce on
+ * every script tag, the signed-in member's name and logout URL for the
+ * chooser, and the Firebase config plus bridge script that replace claude.ai
+ * storage. No page bytes leave the server without a verified session whose
+ * role the hub has not since revoked.
+ */
+let cachedHtml: string | null = null;
+function loadPage(): string {
+  if (cachedHtml && process.env.NODE_ENV === "production") return cachedHtml;
+  cachedHtml = readFileSync(resolve(process.cwd(), "oss/index.html"), "utf8");
+  return cachedHtml;
+}
+
+const respond = (body: string | null, status: number, headers: Record<string, string>) =>
+  new Response(body, { status, headers: { ...SITE_HEADERS, "Cache-Control": "private, no-store", ...headers } });
+
+function message(status: number, title: string, text: string) {
+  return respond(
+    `<!doctype html><html lang="en-AU"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title></head><body style="font:16px system-ui;max-width:560px;margin:48px auto;padding:0 16px"><h1>${title}</h1><p>${text}</p><p><a href="/sign-out">Sign out</a></p></body></html>`,
+    status,
+    { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'" }
+  );
+}
+
+export async function GET(request: Request) {
+  const a = await gate().check(readCookie(request.headers.get("cookie")), "member");
+  if (!a.ok && a.status === 401) return respond(null, 303, { Location: `${origin()}/sign-in` });
+  if (!a.ok && a.status === 403) return message(403, "No access", "Your access does not include the Operational Service Summary. Ask the platform administrator to allocate it to you in the hub.");
+  if (!a.ok) return message(503, "Temporarily unavailable", "Try again shortly.");
+
+  const profile = await readProfile(a.user.uid, a.user.email);
+  const nonce = randomBytes(16).toString("base64");
+  const bootstrap = {
+    firebase: {
+      apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? "",
+      authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? "",
+      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "",
+      appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? "",
+    },
+    database: process.env.FIRESTORE_DATABASE ?? `poc-${appId}`,
+    claim: APP_CLAIM,
+    user: { id: a.user.uid, email: a.user.email, displayName: profile.name, role: a.user.role },
+  };
+  const head =
+    `<script nonce="${nonce}">` +
+    `window.OSS_USER_NAME=${JSON.stringify(profile.name)};` +
+    `window.OSS_LOGOUT_URL="/sign-out";` +
+    `window.OSS_BOOTSTRAP=${JSON.stringify(bootstrap).replace(/</g, "\\u003c")};` +
+    `</script>` +
+    `<script nonce="${nonce}" src="/vendor/bridge.js"></script>`;
+
+  const page = loadPage().replace(/<script\b(?![^>]*\bnonce=)/gi, `<script nonce="${nonce}"`);
+  const html =
+    `<!doctype html>\n<html lang="en-AU">\n<head>\n<meta charset="utf-8">\n` +
+    `<meta name="viewport" content="width=device-width, initial-scale=1">\n<meta name="robots" content="noindex">\n<link rel="icon" href="data:,">\n` +
+    `${head}\n${page}`;
+
+  const csp = [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}'`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "connect-src 'self' https://firestore.googleapis.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com wss://firestore.googleapis.com",
+    "frame-src 'none'",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join("; ");
+
+  return respond(html, 200, { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": csp });
+}

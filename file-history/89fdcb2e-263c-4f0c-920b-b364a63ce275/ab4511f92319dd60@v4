@@ -1,0 +1,44 @@
+{
+  "name": "lsv-service-summary",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Life Saving Victoria Operational Service Summary: an LSV POC platform tenant (app id oss) on Cloud Run with Firestore.",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "bun run build:bridge && next build",
+    "build:bridge": "bun build src/bridge/bridge.ts --outfile public/vendor/bridge.js --target browser --minify",
+    "start": "bun server.js",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "vendor": "bun run scripts/vendor.ts",
+    "seed": "bun run scripts/seed.ts",
+    "weather": "bun run scripts/weather.ts",
+    "build:page": "cd oss/src/ux && python3 build.py && cp index.html ../../index.html",
+    "probe": "bun run scripts/probe.ts"
+  },
+  "dependencies": {
+    "fast-xml-parser": "5.12.1",
+    "firebase": "11.10.0",
+    "firebase-admin": "13.10.0",
+    "next": "15.5.29",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "@lsv-poc/poc-auth": "file:vendor/poc-auth",
+    "jose": "5.9.6"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "@types/node": "22.15.3",
+    "@types/react": "19.1.9",
+    "@types/react-dom": "19.1.7",
+    "playwright": "1.65.1",
+    "typescript": "5.8.3"
+  },
+  "overrides": {
+    "uuid": "11.1.1",
+    "postcss": "8.5.33",
+    "sharp": "0.35.5",
+    "@grpc/grpc-js": "1.14.7",
+    "fast-xml-parser": "5.12.1"
+  }
+}
