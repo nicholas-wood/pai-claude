@@ -1,7 +1,7 @@
 {
   "proto": 1,
-  "supervisorPid": 1647598,
-  "updatedAt": 1795519711372,
+  "supervisorPid": 668886,
+  "updatedAt": 1795571551939,
   "workers": {
     "eb37ba0f": {
       "pid": 3600454,
@@ -117,6 +117,7 @@
           "--model",
           "fable[1m]"
         ],
+        "fromRoster": true,
         "agent": "claude",
         "seed": {
           "intent": "",
@@ -150,34 +151,34 @@
       "replPid": 1628339,
       "replProcStart": "860669276"
     },
-    "64af022a": {
-      "pid": 1650125,
-      "procStart": "860683897",
-      "sessionId": "64af022a-9db8-483c-9774-50c9480e5f0b",
-      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/64af022a.sock",
-      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/56a70166.pty.sock",
+    "9af638e9": {
+      "pid": 1666189,
+      "procStart": "860689202",
+      "sessionId": "9af638e9-3bc8-4a18-b390-383270d4eda0",
+      "rendezvousSock": "/tmp/cc-daemon-1000/14adf565/rv/9af638e9.sock",
+      "ptySock": "/tmp/cc-daemon-1000/14adf565/spare/17b7ed1a.pty.sock",
       "cliVersion": "2.1.331",
-      "startedAt": 1795515870119,
+      "startedAt": 1795566301464,
       "attempt": 1,
       "cwd": "/home/nicholas-wood/.claude",
       "dispatch": {
         "proto": 1,
-        "short": "64af022a",
-        "nonce": "1594d894",
-        "sessionId": "64af022a-9db8-483c-9774-50c9480e5f0b",
-        "createdAt": 1795515870114,
+        "short": "9af638e9",
+        "nonce": "f74a9623",
+        "sessionId": "9af638e9-3bc8-4a18-b390-383270d4eda0",
+        "createdAt": 1795566301457,
         "source": "fleet",
         "cwd": "/home/nicholas-wood/.claude",
         "launch": {
           "mode": "resume",
-          "sessionId": "64af022a-9db8-483c-9774-50c9480e5f0b",
-          "transcriptPath": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/64af022a-9db8-483c-9774-50c9480e5f0b.jsonl",
+          "sessionId": "9af638e9-3bc8-4a18-b390-383270d4eda0",
+          "transcriptPath": "/home/nicholas-wood/.claude/projects/-home-nicholas-wood--claude/9af638e9-3bc8-4a18-b390-383270d4eda0.jsonl",
           "fork": false,
           "flagArgs": [
             "--agent",
             "claude",
             "--permission-mode",
-            "acceptEdits",
+            "auto",
             "--model",
             "fable[1m]"
           ],
@@ -189,17 +190,18 @@
           "--agent",
           "claude",
           "--permission-mode",
-          "acceptEdits",
+          "auto",
           "--model",
           "fable[1m]"
         ],
         "agent": "claude",
         "seed": {
           "intent": "",
-          "name": "limsoc-permission-assist-deploy"
+          "name": "lsv-poc-consolidation"
         },
         "cols": 168,
-        "rows": 50
+        "rows": 50,
+        "fromRoster": true
       },
       "decModes": [
         2004,
@@ -213,18 +215,18 @@
       "firedInteractiveMarks": [
         {
           "kind": "content_paint",
-          "msgsLoaded": 1009,
-          "msgsInJsonl": 1009,
-          "msgsRenderedAtFirstPaint": 1009
+          "msgsLoaded": 1671,
+          "msgsInJsonl": 1671,
+          "msgsRenderedAtFirstPaint": 1671
         },
         {
           "kind": "prompt_idle"
         }
       ],
-      "rvAuth": "4d0074744efdbf1b78a56132d7420ec3",
-      "ptyAuth": "5da5c8c5b5f8c607381205a173e6ebb5",
-      "replPid": 1650140,
-      "replProcStart": "860683907"
+      "rvAuth": "264fbffa2bcf6de94277ea65dc3c7906",
+      "ptyAuth": "130b0aed95c2e36bdc7ea41b74943776",
+      "replPid": 1666247,
+      "replProcStart": "860689213"
     }
   }
 }
